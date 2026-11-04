@@ -84,8 +84,8 @@ def sha256(text: str) -> str:
 
 def verify_synthetic() -> tuple[int, int]:
     sql = (ROOT / "sql/002_synthetic_knowledge_seed.sql").read_text(encoding="utf-8")
-    docs = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_documents (")
-    chunks = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_chunks (")
+    docs = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_documents")
+    chunks = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_chunks")
     if len(docs) != 12:
         raise ValueError(f"Expected 12 synthetic documents, found {len(docs)}")
     if len(chunks) != 24:
@@ -124,9 +124,9 @@ def verify_verified_external() -> tuple[int, int, int]:
     totals = [0, 0, 0]
     for relative_path, expected_sources, expected_docs, expected_chunks in batches:
         sql = (ROOT / relative_path).read_text(encoding="utf-8")
-        sources = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_sources (")
-        docs = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_documents (")
-        chunks = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_chunks (")
+        sources = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_sources")
+        docs = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_documents")
+        chunks = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_chunks")
         if len(sources) != expected_sources:
             raise ValueError(
                 f"{relative_path}: expected {expected_sources} external sources, found {len(sources)}"
