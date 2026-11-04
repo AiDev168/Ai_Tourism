@@ -18,12 +18,64 @@ if (-not (Test-Path $LegacySource)) {
 }
 
 # Refuse to adopt unrelated resources that happen to use this package's fixed names.
-$existingContainerProject = & docker container inspect ai-tourism-postgres --format '{{ index .Config.Labels "com.docker.compose.project" }}' 2>$null
-if ($LASTEXITCODE -eq 0 -and (($existingContainerProject | Out-String).Trim() -ne 'ai-tourism-db')) {
+# Read Docker's JSON output instead of using a Go template with a quoted label key.
+# The latter is not passed reliably to docker.exe by Windows PowerShell 5.1.
+function Get-DockerComposeProjectLabel {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('container', 'volume')]
+        [string]$ResourceType,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ResourceName
+    )
+
+    $inspectOutput = & docker $ResourceType inspect $ResourceName 2>$null
+    $inspectExitCode = $LASTEXITCODE
+
+    # A non-zero exit means the named resource is not inspectable. Compose will
+    # report an unavailable Docker Engine when startup is attempted below.
+    if ($inspectExitCode -ne 0) {
+        return $null
+    }
+
+    try {
+        $inspectObjects = @(($inspectOutput -join [Environment]::NewLine) | ConvertFrom-Json -ErrorAction Stop)
+    }
+    catch {
+        throw "Docker returned invalid JSON while inspecting $ResourceType '$ResourceName': $($_.Exception.Message)"
+    }
+
+    if ($inspectObjects.Count -ne 1) {
+        throw "Expected one inspect result for $ResourceType '$ResourceName'; received $($inspectObjects.Count)."
+    }
+
+    if ($ResourceType -eq 'container') {
+        $labels = $inspectObjects[0].Config.Labels
+    }
+    else {
+        $labels = $inspectObjects[0].Labels
+    }
+
+    if ($null -eq $labels) {
+        return ''
+    }
+
+    $labelProperty = $labels.PSObject.Properties['com.docker.compose.project']
+    if ($null -eq $labelProperty) {
+        return ''
+    }
+
+    return [string]$labelProperty.Value
+}
+
+$existingContainerProject = Get-DockerComposeProjectLabel -ResourceType 'container' -ResourceName 'ai-tourism-postgres'
+if ($null -ne $existingContainerProject -and $existingContainerProject -ne 'ai-tourism-db') {
     throw 'A container named ai-tourism-postgres exists but is not owned by Compose project ai-tourism-db. It will not be modified.'
 }
-$existingVolumeProject = & docker volume inspect ai_tourism_pgdata --format '{{ index .Labels "com.docker.compose.project" }}' 2>$null
-if ($LASTEXITCODE -eq 0 -and (($existingVolumeProject | Out-String).Trim() -ne 'ai-tourism-db')) {
+
+$existingVolumeProject = Get-DockerComposeProjectLabel -ResourceType 'volume' -ResourceName 'ai_tourism_pgdata'
+if ($null -ne $existingVolumeProject -and $existingVolumeProject -ne 'ai-tourism-db') {
     throw 'A volume named ai_tourism_pgdata exists but is not owned by Compose project ai-tourism-db. It will not be reused or modified.'
 }
 
