@@ -116,56 +116,84 @@ def verify_synthetic() -> tuple[int, int]:
 
 
 def verify_verified_external() -> tuple[int, int, int]:
-    sql = (ROOT / "sql/005_verified_unesco_destination_seed.sql").read_text(encoding="utf-8")
-    sources = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_sources (")
-    docs = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_documents (")
-    chunks = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_chunks (")
-    if len(sources) != 22:
-        raise ValueError(f"Expected 22 external provenance sources, found {len(sources)}")
-    if len(docs) != 10:
-        raise ValueError(f"Expected 10 verified-external documents, found {len(docs)}")
-    if len(chunks) != 20:
-        raise ValueError(f"Expected 20 verified-external chunks, found {len(chunks)}")
-    document_keys: set[str] = set()
-    for i, row in enumerate(docs):
-        if len(row) != 5:
-            raise ValueError(f"External document CTE row {i} has {len(row)} fields; expected 5")
-        key = sql_text_literal(row[0], f"external document {i}.key")
-        content = sql_text_literal(row[3], f"{key}.content")
-        declared = sql_text_literal(row[4], f"{key}.sha256")
-        if not key.startswith("unesco-") or key in document_keys:
-            raise ValueError(f"Invalid/duplicate external document key: {key}")
-        if sha256(content) != declared:
-            raise ValueError(f"External document SHA-256 mismatch: {key}")
-        document_keys.add(key)
-    chunk_counts: dict[str, int] = {}
-    for i, row in enumerate(chunks):
-        if len(row) != 5:
-            raise ValueError(f"External chunk CTE row {i} has {len(row)} fields; expected 5")
-        destination_key = sql_text_literal(row[0], f"external chunk {i}.destination_key")
-        content = sql_text_literal(row[2], f"external chunk {i}.content")
-        declared = sql_text_literal(row[3], f"external chunk {i}.sha256")
-        if sha256(content) != declared:
-            raise ValueError(f"External chunk SHA-256 mismatch: {destination_key} / chunk {i}")
-        if destination_key not in {k.removesuffix("-doc") for k in document_keys}:
-            raise ValueError(f"Chunk references unknown destination key: {destination_key}")
-        chunk_counts[destination_key] = chunk_counts.get(destination_key, 0) + 1
-    if len(chunk_counts) != 10 or set(chunk_counts.values()) != {2}:
-        raise ValueError(f"Expected exactly two external chunks per destination; got {chunk_counts}")
-    # Every factual source must be explicit and non-synthetic, and its link is an official/reputable URL.
-    for i, row in enumerate(sources):
-        if len(row) != 7:
-            raise ValueError(f"External source row {i} has {len(row)} fields; expected 7")
-        name = sql_text_literal(row[0], f"source {i}.name")
-        url = sql_text_literal(row[4], f"source {i}.url")
-        if row[2] != "'verified'" or row[6] != "FALSE":
-            raise ValueError(f"External source {name} is not verified/non-synthetic")
-        if row[3] != 'NULL':
-            raise ValueError(f"External source {name} has an uncalibrated numeric reliability score")
-        if not url.startswith("https://"):
-            raise ValueError(f"External source {name} has non-HTTPS URL")
-    return len(sources), len(docs), len(chunks)
+    """Verify every curated external batch independently, then aggregate totals."""
+    batches = [
+        ("sql/005_verified_unesco_destination_seed.sql", 22, 10, 20),
+        ("sql/006_verified_unesco_destination_seed_batch2.sql", 16, 7, 14),
+    ]
+    totals = [0, 0, 0]
+    for relative_path, expected_sources, expected_docs, expected_chunks in batches:
+        sql = (ROOT / relative_path).read_text(encoding="utf-8")
+        sources = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_sources (")
+        docs = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_documents (")
+        chunks = extract_values_rows(sql, "INSERT INTO knowledge.knowledge_chunks (")
+        if len(sources) != expected_sources:
+            raise ValueError(
+                f"{relative_path}: expected {expected_sources} external sources, found {len(sources)}"
+            )
+        if len(docs) != expected_docs:
+            raise ValueError(
+                f"{relative_path}: expected {expected_docs} factual documents, found {len(docs)}"
+            )
+        if len(chunks) != expected_chunks:
+            raise ValueError(
+                f"{relative_path}: expected {expected_chunks} factual chunks, found {len(chunks)}"
+            )
 
+        document_keys: set[str] = set()
+        for i, row in enumerate(docs):
+            if len(row) != 5:
+                raise ValueError(
+                    f"{relative_path}: external document CTE row {i} has {len(row)} fields; expected 5"
+                )
+            key = sql_text_literal(row[0], f"{relative_path} document {i}.key")
+            content = sql_text_literal(row[3], f"{key}.content")
+            declared = sql_text_literal(row[4], f"{key}.sha256")
+            if not key.startswith("unesco-") or key in document_keys:
+                raise ValueError(f"Invalid/duplicate external document key: {key}")
+            if sha256(content) != declared:
+                raise ValueError(f"External document SHA-256 mismatch: {key}")
+            document_keys.add(key)
+
+        chunk_counts: dict[str, int] = {}
+        for i, row in enumerate(chunks):
+            if len(row) != 5:
+                raise ValueError(
+                    f"{relative_path}: external chunk CTE row {i} has {len(row)} fields; expected 5"
+                )
+            destination_key = sql_text_literal(row[0], f"{relative_path} chunk {i}.destination_key")
+            content = sql_text_literal(row[2], f"{destination_key} chunk {i}.content")
+            declared = sql_text_literal(row[3], f"{destination_key} chunk {i}.sha256")
+            if sha256(content) != declared:
+                raise ValueError(f"External chunk SHA-256 mismatch: {destination_key} / chunk {i}")
+            if destination_key not in {k.removesuffix("-doc") for k in document_keys}:
+                raise ValueError(f"Chunk references unknown destination key: {destination_key}")
+            chunk_counts[destination_key] = chunk_counts.get(destination_key, 0) + 1
+        if len(chunk_counts) != expected_docs or set(chunk_counts.values()) != {2}:
+            raise ValueError(
+                f"{relative_path}: expected exactly two chunks per factual destination; got {chunk_counts}"
+            )
+
+        # Every factual source must be explicit, non-synthetic and HTTPS-backed.
+        for i, row in enumerate(sources):
+            if len(row) != 7:
+                raise ValueError(
+                    f"{relative_path}: external source row {i} has {len(row)} fields; expected 7"
+                )
+            name = sql_text_literal(row[0], f"{relative_path} source {i}.name")
+            url = sql_text_literal(row[4], f"{name}.url")
+            if row[2] != "'verified'" or row[6] != "FALSE":
+                raise ValueError(f"External source {name} is not verified/non-synthetic")
+            if row[3] != "NULL":
+                raise ValueError(f"External source {name} has an uncalibrated numeric reliability score")
+            if not url.startswith("https://"):
+                raise ValueError(f"External source {name} has non-HTTPS URL")
+
+        totals[0] += len(sources)
+        totals[1] += len(docs)
+        totals[2] += len(chunks)
+
+    return tuple(totals)
 
 def main() -> int:
     try:
