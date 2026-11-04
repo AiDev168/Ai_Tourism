@@ -15,6 +15,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def extract_values_rows(sql: str, insert_prefix: str) -> list[list[str]]:
+    """Extract VALUES rows after an INSERT table name.
+
+    Pass the table name without its opening column-list parenthesis. SQL files
+    may put that parenthesis on the same line or on the next line.
+    """
     start = sql.find(insert_prefix)
     if start < 0:
         raise ValueError(f"INSERT statement not found: {insert_prefix}")
@@ -195,13 +200,33 @@ def verify_verified_external() -> tuple[int, int, int]:
 
     return tuple(totals)
 
+def verify_multiline_insert_parser() -> None:
+    """Guard against SQL formatting changes that caused the Batch 2 failure."""
+    fixture = """
+INSERT INTO knowledge.knowledge_sources
+    (source_name, notes)
+VALUES
+    ('source one', 'comma, inside text'),
+    ('source two', 'escaped ''quote'' inside text');
+"""
+    rows = extract_values_rows(fixture, "INSERT INTO knowledge.knowledge_sources")
+    if len(rows) != 2 or len(rows[0]) != 2 or len(rows[1]) != 2:
+        raise ValueError("Multiline INSERT parser regression fixture returned unexpected rows")
+    if sql_text_literal(rows[0][1], "fixture row 1") != "comma, inside text":
+        raise ValueError("Multiline INSERT parser did not preserve commas inside SQL text")
+    if sql_text_literal(rows[1][1], "fixture row 2") != "escaped 'quote' inside text":
+        raise ValueError("Multiline INSERT parser did not unescape SQL doubled quotes")
+
+
 def main() -> int:
     try:
+        verify_multiline_insert_parser()
         s_docs, s_chunks = verify_synthetic()
         e_sources, e_docs, e_chunks = verify_verified_external()
     except Exception as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
+    print("PASS: multiline SQL INSERT formatting and quoted-text parsing verified.")
     print(f"PASS: {s_docs} synthetic document hashes verified.")
     print(f"PASS: {s_chunks} synthetic chunk hashes and character counts verified.")
     print("PASS: all synthetic RAG fixtures are explicitly test_only and is_synthetic=true.")
