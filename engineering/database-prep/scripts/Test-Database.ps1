@@ -63,7 +63,8 @@ try {
     foreach ($seed in @(
         @{ Id = '0002_synthetic_knowledge_seed'; File = '002_synthetic_knowledge_seed.sql'; Path = '/opt/ai-tourism/sql/002_synthetic_knowledge_seed.sql' },
         @{ Id = '0003_synthetic_e2e_seed'; File = '003_synthetic_e2e_seed.sql'; Path = '/opt/ai-tourism/sql/003_synthetic_e2e_seed.sql' },
-        @{ Id = '0005_verified_unesco_destination_seed'; File = '005_verified_unesco_destination_seed.sql'; Path = '/opt/ai-tourism/sql/005_verified_unesco_destination_seed.sql' }
+        @{ Id = '0005_verified_unesco_destination_seed'; File = '005_verified_unesco_destination_seed.sql'; Path = '/opt/ai-tourism/sql/005_verified_unesco_destination_seed.sql' },
+        @{ Id = '0006_verified_unesco_destination_seed_batch2'; File = '006_verified_unesco_destination_seed_batch2.sql'; Path = '/opt/ai-tourism/sql/006_verified_unesco_destination_seed_batch2.sql' }
     )) {
         $localPath = Join-Path $PackageRoot (Join-Path 'sql' $seed.File)
         $seedHash = (Get-FileHash -LiteralPath $localPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -93,6 +94,9 @@ try {
 
     Write-Host "`n========== VERIFIED EXTERNAL DATASET / PROVENANCE ==========" -ForegroundColor Cyan
     Invoke-PsqlFile '/opt/ai-tourism/sql/tests/007_verified_external_dataset.sql'
+
+    Write-Host "`n========== SECOND VERIFIED EXTERNAL DATASET BATCH ==========" -ForegroundColor Cyan
+    Invoke-PsqlFile '/opt/ai-tourism/sql/tests/008_verified_external_dataset_batch2.sql'
 
     Write-Host "`n========== COMPLETE EXPECTED VS ACTUAL ROW COUNTS ==========" -ForegroundColor Cyan
     Invoke-PsqlFile '/opt/ai-tourism/sql/reports/final_row_counts.sql'
