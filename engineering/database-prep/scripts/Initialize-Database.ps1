@@ -30,17 +30,34 @@ function Get-DockerComposeProjectLabel {
         [string]$ResourceName
     )
 
-    $inspectOutput = & docker $ResourceType inspect $ResourceName 2>$null
-    $inspectExitCode = $LASTEXITCODE
-
-    # A non-zero exit means the named resource is not inspectable. Compose will
-    # report an unavailable Docker Engine when startup is attempted below.
-    if ($inspectExitCode -ne 0) {
-        return $null
+    # Windows PowerShell 5.1 converts native stderr into PowerShell error
+    # records. With this script's Stop preference, even the expected
+    # "No such container/volume" response can terminate the script.
+    # Temporarily use Continue and capture both streams so we can inspect the
+    # native exit code and distinguish an absent resource from a real CLI error.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $inspectOutput = @(& docker $ResourceType inspect $ResourceName 2>&1)
+        $inspectExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
     }
 
+    if ($inspectExitCode -ne 0) {
+        $diagnostic = ($inspectOutput | Out-String).Trim()
+        if ($diagnostic -match '(?i)(no such container|no such volume|no such object|container .* not found|volume .* not found)') {
+            return $null
+        }
+        throw "Docker inspect failed for $ResourceType '$ResourceName' (exit $inspectExitCode): $diagnostic"
+    }
+
+    # A successful inspect must contain JSON only. Do not silently treat
+    # malformed output as an absent resource.
     try {
-        $inspectObjects = @(($inspectOutput -join [Environment]::NewLine) | ConvertFrom-Json -ErrorAction Stop)
+        $inspectJson = ($inspectOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+        $inspectObjects = @($inspectJson | ConvertFrom-Json -ErrorAction Stop)
     }
     catch {
         throw "Docker returned invalid JSON while inspecting $ResourceType '$ResourceName': $($_.Exception.Message)"
