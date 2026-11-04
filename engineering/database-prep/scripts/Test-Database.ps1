@@ -49,7 +49,8 @@ try {
         @{ Id = '0002_synthetic_knowledge_seed'; File = '002_synthetic_knowledge_seed.sql' },
         @{ Id = '0003_synthetic_e2e_seed'; File = '003_synthetic_e2e_seed.sql' },
         @{ Id = '0004_app_role_grants'; File = '004_app_role_grants.sql' },
-        @{ Id = '0005_verified_unesco_destination_seed'; File = '005_verified_unesco_destination_seed.sql' }
+        @{ Id = '0005_verified_unesco_destination_seed'; File = '005_verified_unesco_destination_seed.sql' },
+        @{ Id = '0006_verified_unesco_destination_seed_batch2'; File = '006_verified_unesco_destination_seed_batch2.sql' }
     )
     foreach ($migration in $migrationSet) {
         $localPath = Join-Path $PackageRoot (Join-Path 'sql' $migration.File)
