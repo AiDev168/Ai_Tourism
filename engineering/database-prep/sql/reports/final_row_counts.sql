@@ -43,14 +43,14 @@ WITH actual(table_name, actual_count) AS (
     ('travel.trip_interests', 3),
     ('travel.itineraries', 1),
     ('travel.itinerary_stops', 6),
-    ('knowledge.knowledge_sources', 24),
-    ('knowledge.destinations', 37),
-    ('knowledge.destination_sources', 49),
-    ('knowledge.destination_tags', 67),
+    ('knowledge.knowledge_sources', 40),
+    ('knowledge.destinations', 44),
+    ('knowledge.destination_sources', 65),
+    ('knowledge.destination_tags', 88),
     ('knowledge.destination_categories', 12),
-    ('knowledge.destination_category_map', 23),
-    ('knowledge.knowledge_documents', 22),
-    ('knowledge.knowledge_chunks', 44),
+    ('knowledge.destination_category_map', 30),
+    ('knowledge.knowledge_documents', 29),
+    ('knowledge.knowledge_chunks', 58),
     ('knowledge.embedding_spaces', 0),
     ('knowledge.chunk_embeddings', 0),
     ('recommendation.recommendation_requests', 1),
@@ -61,8 +61,8 @@ WITH actual(table_name, actual_count) AS (
     ('operations.feedback', 1),
     ('operations.ai_model_calls', 0),
     ('operations.audit_events', 0),
-    ('operations.dataset_import_batches', 4),
-    ('system.schema_migrations', 6)
+    ('operations.dataset_import_batches', 5),
+    ('system.schema_migrations', 7)
 )
 SELECT e.table_name,
        a.actual_count,
@@ -101,14 +101,14 @@ BEGIN
             ('travel','trip_interests',3),
             ('travel','itineraries',1),
             ('travel','itinerary_stops',6),
-            ('knowledge','knowledge_sources',24),
-            ('knowledge','destinations',37),
-            ('knowledge','destination_sources',49),
-            ('knowledge','destination_tags',67),
+            ('knowledge','knowledge_sources',40),
+            ('knowledge','destinations',44),
+            ('knowledge','destination_sources',65),
+            ('knowledge','destination_tags',88),
             ('knowledge','destination_categories',12),
-            ('knowledge','destination_category_map',23),
-            ('knowledge','knowledge_documents',22),
-            ('knowledge','knowledge_chunks',44),
+            ('knowledge','destination_category_map',30),
+            ('knowledge','knowledge_documents',29),
+            ('knowledge','knowledge_chunks',58),
             ('knowledge','embedding_spaces',0),
             ('knowledge','chunk_embeddings',0),
             ('recommendation','recommendation_requests',1),
@@ -119,8 +119,8 @@ BEGIN
             ('operations','feedback',1),
             ('operations','ai_model_calls',0),
             ('operations','audit_events',0),
-            ('operations','dataset_import_batches',4),
-            ('system','schema_migrations',6)
+            ('operations','dataset_import_batches',5),
+            ('system','schema_migrations',7)
         ) AS x(schema_name, table_name, expected_count)
     LOOP
         IF to_regclass(format('%I.%I', item.schema_name, item.table_name)) IS NULL THEN
@@ -136,10 +136,10 @@ BEGIN
         END IF;
     END LOOP;
 
-    IF total_actual <> 329 OR total_expected <> 329 THEN
-        RAISE EXCEPTION 'Total row-count mismatch: expected 329, found % (manifest total %)',
+    IF total_actual <> 419 OR total_expected <> 419 THEN
+        RAISE EXCEPTION 'Total row-count mismatch: expected 419, found % (manifest total %)',
             total_actual, total_expected;
     END IF;
 
-    RAISE NOTICE 'PASS: all 30 expected tables have exact per-table counts; total rows = 329.';
+    RAISE NOTICE 'PASS: all 30 expected tables have exact per-table counts; total rows = 419.';
 END $$;
