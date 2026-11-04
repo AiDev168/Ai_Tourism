@@ -15,12 +15,17 @@ BEGIN
        AND location IS NOT NULL;
     IF n <> 10 THEN RAISE EXCEPTION 'Expected 10 externally sourced UNESCO destinations held for editorial review; found %', n; END IF;
 
-    SELECT COUNT(*) INTO n
-      FROM knowledge.knowledge_sources
-     WHERE source_name LIKE 'UNESCO WHC %'
-       AND verification_status='verified' AND is_synthetic=FALSE
-       AND url LIKE 'https://whc.unesco.org/%';
-    IF n <> 20 THEN RAISE EXCEPTION 'Expected 20 official UNESCO property/map sources; found %', n; END IF;
+    -- Keep this first-batch assertion scoped to its ten destinations.
+    -- Later UNESCO batches add sources to the same global source table.
+    SELECT COUNT(DISTINCT s.source_id) INTO n
+      FROM knowledge.knowledge_sources s
+      JOIN knowledge.destination_sources ds ON ds.source_id=s.source_id
+      JOIN knowledge.destinations d ON d.destination_id=ds.destination_id
+     WHERE d.destination_key LIKE 'unesco-%-v1'
+       AND s.source_name LIKE 'UNESCO WHC %'
+       AND s.verification_status='verified' AND s.is_synthetic=FALSE
+       AND s.url LIKE 'https://whc.unesco.org/%';
+    IF n <> 20 THEN RAISE EXCEPTION 'Expected 20 official UNESCO property/map sources for the first batch; found %', n; END IF;
 
     SELECT COUNT(*) INTO n
       FROM knowledge.destination_sources ds
