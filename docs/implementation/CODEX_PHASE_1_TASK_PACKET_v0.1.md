@@ -1,5 +1,7 @@
 # Codex Task Packet — Phase 1: Technical Skeleton
 
+> **Superseded / historical snapshot (2026-11-05).** The owner approved ADR-0005 and requested a high visual-quality PWA. Use [Task Packet v0.2](CODEX_PHASE_1_TASK_PACKET_v0.2.md) and [PWA Visual Design Brief](../design/PWA_VISUAL_DESIGN_BRIEF_v0.1.md) for current implementation instructions.
+
 - **Packet version:** 0.1
 - **Project:** `AiDev168/Ai_Tourism`
 - **Prepared from:** Phase 0 design package, current database baseline and repository guardrails
