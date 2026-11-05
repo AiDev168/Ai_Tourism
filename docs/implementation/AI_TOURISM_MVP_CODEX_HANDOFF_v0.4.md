@@ -804,7 +804,7 @@ The broad reference documents contain material beyond the MVP. Codex must follow
 
 ## 19. Immediate next engineering action
 
-**Phase 0 design package prepared:** the repository now contains ADRs 0001–0007, the 30-table ERD, an OpenAPI MVP v1 draft, the security/privacy boundary and a bounded Codex Phase 1 packet. The database gate is also green at 30 tables / 419 rows. The next action is owner review of ADR-0005 (PWA/React/TypeScript/FastAPI/native Windows recommendation) and ADR-0006 (authentication/session alternatives). Codex may perform a read-only preflight and implementation plan now; it must not scaffold or install dependencies until those decisions are explicitly approved. After approval, start Phase 1 on an owner-approved feature branch, not `main`.
+**Phase 0 design package prepared:** the repository now contains ADRs 0001–0007, the 30-table ERD, an OpenAPI MVP v1 draft, the security/privacy boundary and a bounded Codex Phase 1 packet. The database gate is also green at 30 tables / 419 rows. The next action is owner review of ADR-0005 (PWA/React/TypeScript/FastAPI/native Windows recommendation) and ADR-0006 (authentication/session alternatives). Codex may perform a read-only preflight and implementation plan now. Phase 1 scaffold/install work requires approval of ADR-0005; ADR-0006 may remain open until Phase 2, but no authentication or user-data endpoints may be implemented before it is accepted. After ADR-0005 approval, start Phase 1 on an owner-approved feature branch, not `main`.
 
 This handoff remains provider- and embedding-model-neutral. Model selection is not a gate for the MVP architecture, and changes to a model must not require rewriting the application domain.
 
@@ -825,7 +825,7 @@ This handoff remains provider- and embedding-model-neutral. Model selection is n
 | External integration MVP scope | Accepted | ADR-0007; allowlisted outbound links only; no in-app booking/payment. Provider choices remain open. |
 | 30-table / 419-row database test gate | Passed | All SQL tests 000–008 and exact per-table report passed; final runner output `ALL DATABASE PRE-CODEX CHECKS PASSED.` |
 | ERD, OpenAPI and security/privacy design | Prepared | `docs/architecture/ERD_MVP_v0.1.md`, `docs/api/openapi-mvp-v1.yaml`, `docs/security/SECURITY_PRIVACY_BOUNDARIES_v0.1.md`. |
-| Codex Phase 1 task packet | Prepared — gated | `docs/implementation/CODEX_PHASE_1_TASK_PACKET_v0.1.md`; read-only preflight may begin, implementation waits for ADR-0005/0006 approval. |
+| Codex Phase 1 task packet | Prepared — gated | `docs/implementation/CODEX_PHASE_1_TASK_PACKET_v0.1.md`; read-only preflight may begin, scaffold waits for ADR-0005 approval; ADR-0006 is a Phase 2 gate. |
 | Semantic Persian RAG evaluation | Deferred by design | Owner-approved RAG implementation and its evaluation suite are integrated later; storage tests do not prove semantic quality. |
 | Application implementation | Not started | Phase 1 awaits owner decisions; no code scaffold is authorized by this handoff alone. |
 
