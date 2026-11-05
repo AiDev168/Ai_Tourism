@@ -33,4 +33,4 @@ Later, only when justified and approved
 - Phase 0 architecture and design documents are prepared.
 - The owner-run database suite passed: PostgreSQL 17, PostGIS 3.6.4, pgvector 0.8.7; 30 tables and 419 rows; SQL tests 000–008 all passed.
 - No application runtime has been implemented yet.
-- Phase 1 scaffold is gated on owner approval of ADR-0005 (client/backend stack) and ADR-0006 (authentication/session strategy).
+- Phase 1 scaffold is gated on owner approval of ADR-0005 (client/backend stack). ADR-0006 (authentication/session strategy) must be accepted before Phase 2 introduces authenticated user-data endpoints.
