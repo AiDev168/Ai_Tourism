@@ -793,7 +793,7 @@ These are the genuine product/operational decisions that cannot be safely guesse
 
 The implementation baseline is derived from the repository's existing documents, with recommendations explicitly separated from source requirements:
 
-- `README.md` — says the repository is an architecture/documentation baseline and that domain models, database schemas, API/event/agent contracts, state machines, security boundaries, deployment topology and implementation architecture remain to be designed.
+- `README.md` — repository entry point and current status; links to the source architecture references and the Phase 0 design package.
 - `docs/reference/AI_Travel_Advisor_Reference_Architecture.md` — product vision, MVP/RAG, mobile/product features, API and broader future platform capabilities.
 - `docs/reference/ARCHITECTURE_ANALYSIS.md` — maturity assessment, modular-monolith MVP recommendation, target hybrid/agentic evolution and missing implementation artifacts.
 - `database/tourism_points.sql` — provisional source-separated seed whose records remain pending/unverified with missing coordinates.
