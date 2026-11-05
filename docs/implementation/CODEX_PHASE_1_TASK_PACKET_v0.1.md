@@ -30,7 +30,7 @@ Then report:
 - tests and local commands;
 - risks and decisions still blocking implementation.
 
-**Do not infer approval from this packet.** ADR-0005 is Proposed and ADR-0006 is Open. If the owner has not explicitly approved/replaced the client/backend choices and authentication/session strategy, stop after the read-only preflight and plan. Do not install dependencies, scaffold a framework, or expose user-data endpoints.
+**Do not infer approval from this packet.** ADR-0005 is Proposed. If the owner has not explicitly approved/replaced the client/backend choices, stop after the read-only preflight and plan. ADR-0006 may remain Open during Phase 1 because authentication belongs to Phase 2; do not implement authentication, expose user-data endpoints or ship anonymous placeholders until ADR-0006 is accepted. Do not install dependencies or scaffold a framework before ADR-0005 is approved.
 
 ## 2. Approved scope boundary
 
@@ -66,7 +66,7 @@ Do not pin arbitrary "latest" dependency versions. Check compatibility, select s
 
 Keep these as internal packages in one backend deployment. Codex must propose a concrete directory tree before creating it.
 
-- `identity` — future auth integration seam; no provider implementation before ADR-0006.
+- `identity` — future auth integration seam; no provider implementation before ADR-0006. Phase 1 must not expose authenticated user-data routes.
 - `conversation` — conversation/message use cases; Phase 1 only creates the package boundary.
 - `trip` — structured trip requirements/constraints; Phase 1 only creates the package boundary.
 - `catalog` / `knowledge` — approved destination read contract and provenance boundary.
@@ -177,5 +177,5 @@ Phase 1 is complete only when:
 
 ## 11. Exact Codex execution prompt
 
-> Read the repository guardrails and every document listed in section 1 of this packet. Start with a read-only preflight and return the branch/HEAD/status, current tooling inventory, proposed directory tree, files to change, test plan and unresolved owner decisions. Do not edit or install anything until the owner explicitly approves ADR-0005 and ADR-0006. Once approved, implement only Phase 1 from this packet as a modular-monolith technical skeleton. Preserve the already passing 30-table/419-row database; do not reset, recreate, or change its schema. Use the application database role, keep all external provider calls disabled/faked in normal tests, and implement only safe health/readiness endpoints until authentication is approved. Do not work on main, commit, push, merge, open a PR or deploy without explicit authorization. Finish with exact diffs, commands, exit statuses, tests, unverified items and next gate.
+ > Read the repository guardrails and every document listed in section 1 of this packet. Start with a read-only preflight and return the branch/HEAD/status, current tooling inventory, proposed directory tree, files to change, test plan and unresolved owner decisions. Do not edit, install dependencies or scaffold until the owner explicitly approves ADR-0005. ADR-0006 may remain open; do not implement authentication or expose user-data endpoints until it is accepted. Once ADR-0005 is approved, implement only Phase 1 from this packet as a modular-monolith technical skeleton. Preserve the already passing 30-table/419-row database; do not reset, recreate, or change its schema. Use the application database role, keep all external provider calls disabled/faked in normal tests, and implement only safe health/readiness endpoints until authentication is approved. Do not work on main, commit, push, merge, open a PR or deploy without explicit authorization. Finish with exact diffs, commands, exit statuses, tests, unverified items and next gate.
 
