@@ -2,42 +2,35 @@
 
 AI Tourism / AI Travel Advisor — architecture baseline and design repository.
 
-## Architecture documents
+## Architecture and implementation documents
 
-- [AI Travel Advisor Reference Architecture](docs/reference/AI_Travel_Advisor_Reference_Architecture.md) — complete Markdown transcription of the supplied reference architecture document.
-- [Architecture Analysis & Proposed Target Architecture](docs/reference/ARCHITECTURE_ANALYSIS.md) — database/data model proposal, alternative architecture options, recommended hybrid architecture, hierarchical agentic swarm/orchestration design, and assessment of the current architecture maturity.
+- [AI Travel Advisor Reference Architecture](docs/reference/AI_Travel_Advisor_Reference_Architecture.md) — supplied product and target-architecture reference.
+- [Architecture Analysis](docs/reference/ARCHITECTURE_ANALYSIS.md) — architecture maturity, options and long-term evolutionary target.
+- [Phase 0 Architecture Package](docs/architecture/README.md) — ADR index, ERD, API contract and security/privacy boundaries.
+- [MVP Codex Handoff v0.4](docs/implementation/AI_TOURISM_MVP_CODEX_HANDOFF_v0.4.md) — current implementation boundary, database gate and owner decisions.
+- [Codex Phase 1 Task Packet](docs/implementation/CODEX_PHASE_1_TASK_PACKET_v0.1.md) — bounded technical-skeleton instructions, gated on owner approval.
 
-## Recommended architecture direction
+## MVP architecture decision
 
-The current recommendation is:
-
-**Hybrid Architecture + Hierarchical Agentic Swarm + Central Orchestrator + Deterministic Decision Core + Event-Driven Side Plane**
-
-The implementation path should remain evolutionary:
+**The MVP uses a modular monolith with explicit internal module boundaries and a deterministic decision core.** The Hybrid / Hierarchical Agentic Swarm / Event-Driven architecture in the reference documents remains a longer-term evolution direction, not a Phase 1 requirement. See [ADR-0001](docs/architecture/decisions/ADR-0001-mvp-modular-monolith.md).
 
 ```text
 MVP
-  → Modular Monolith
-  → PostgreSQL + pgvector
-  → Redis
-  → Object Storage
-  → synchronous decision core
-  → asynchronous analytics / notification / audit
+  → mobile-first Persian client (technology selection pending owner approval)
+  → modular-monolith backend
+  → PostgreSQL + PostGIS + pgvector
+  → replaceable LLM / Embedding / Retrieval adapters
+  → deterministic eligibility, constraints, scoring and ranking
 
-Scale-up
-  → selective service extraction
-  → event bus
-  → independent AI/agent workers
-  → data warehouse
-
-Advanced Agentic phase
-  → hierarchical dynamic swarm
-  → DAG orchestration
-  → explicit agent contracts
-  → deterministic safety / constraint / scoring core
-  → traceable XAI
+Later, only when justified and approved
+  → selective service extraction / async side plane
+  → event bus / agent orchestration
+  → hierarchical agentic workflows
 ```
 
-## Status
+## Status — 2026-11-05
 
-The repository is currently an architecture/documentation baseline. Detailed domain models, database schemas, API/event contracts, agent contracts, state machines, security boundaries, deployment topology and implementation architecture are the next design artifacts.
+- Phase 0 architecture and design documents are prepared.
+- The owner-run database suite passed: PostgreSQL 17, PostGIS 3.6.4, pgvector 0.8.7; 30 tables and 419 rows; SQL tests 000–008 all passed.
+- No application runtime has been implemented yet.
+- Phase 1 scaffold is gated on owner approval of ADR-0005 (client/backend stack) and ADR-0006 (authentication/session strategy).
