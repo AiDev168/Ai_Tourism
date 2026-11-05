@@ -1,5 +1,7 @@
 # AI Tourism — MVP Implementation Blueprint & Codex Handoff
 
+> **Superseded snapshot (2026-11-05).** The owner has since approved PWA + React + TypeScript + FastAPI + Python 3.13 and a high-quality visual design brief. Use [Handoff v0.5](AI_TOURISM_MVP_CODEX_HANDOFF_v0.5.md) as the current source of truth.
+
 **Document status:** Phase 0 implementation blueprint and Codex handoff; database gate and design artifacts owner-reviewed  
 **Version:** 0.4  
 **Repository:** `AiDev168/Ai_Tourism`  
