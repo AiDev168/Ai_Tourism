@@ -3,7 +3,7 @@
 - **Version:** 0.1
 - **Status:** Phase 0 design baseline; legal and product policies remain open
 - **Applies to:** MVP design and Phase 1 technical skeleton
-- **Sources:** root `AGENTS.md`; Handoff v0.3 sections 3, 7, 9–13 and 17; current database DDL; architecture reference security and deployment sections.
+- **Sources:** root `AGENTS.md`; Handoff v0.5 sections 3, 7, 9–13 and 17; current database DDL; architecture reference security and deployment sections; `docs/design/PWA_VISUAL_DESIGN_BRIEF_v0.1.md`.
 
 ## 1. Security objectives
 
@@ -140,6 +140,8 @@ Until that policy is decided, the endpoint remains a documented future route onl
 | Abuse/rate-limit thresholds | Enabling real AI calls or public access |
 
 ## 10. Phase 1 minimum-security scope
+
+The visual implementation must also follow `docs/design/PWA_VISUAL_DESIGN_BRIEF_v0.1.md`, including WCAG 2.2 AA target, reduced-motion support, keyboard/focus behavior, legible Persian typography and mobile responsive testing. Visual polish must not weaken accessibility or expose data.
 
 Phase 1 may implement:
 
