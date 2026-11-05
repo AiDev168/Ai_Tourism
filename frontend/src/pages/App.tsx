@@ -32,7 +32,6 @@ function PhotoCredit({ source, author, label }: { source: string; author: string
 
 export function App() {
   const { locale, setLocale, t } = useLocale();
-  const [query, setQuery] = useState('');
   const [destination, setDestination] = useState('');
   const [durationDays, setDurationDays] = useState('');
   const [requirements, setRequirements] = useState<TripRequirements | null>(null);
@@ -65,7 +64,6 @@ export function App() {
     const requestText = promptRef.current?.value ?? String(formData.get('requestText') ?? requestTextRef.current);
     const currentDestination = String(formData.get('destination') ?? '');
     const currentDurationDays = String(formData.get('durationDays') ?? '');
-    setQuery(requestText);
     setDestination(currentDestination);
     setDurationDays(currentDurationDays);
 
@@ -98,7 +96,9 @@ export function App() {
   };
 
   const clearTripDraft = () => {
-    setQuery(''); setDestination(''); setDurationDays(''); setError('');
+    if (promptRef.current) promptRef.current.value = '';
+    requestTextRef.current = '';
+    setDestination(''); setDurationDays(''); setError('');
     setClarifications([]); setRequirements(null);
   };
   const tripCopy = tripMessages[locale];
@@ -140,9 +140,8 @@ export function App() {
                 name="requestText"
                 rows={2}
                 maxLength={1200}
-                value={query}
-                onInput={event => { requestTextRef.current = event.currentTarget.value; }}
-                onChange={event => { requestTextRef.current = event.currentTarget.value; setQuery(event.currentTarget.value); setRequirements(null); setClarifications([]); setError(''); }}
+                defaultValue=""
+                onInput={event => { requestTextRef.current = event.currentTarget.value; setRequirements(null); setClarifications([]); setError(''); }}
                 placeholder={t('promptPlaceholder')}
                 aria-describedby={error ? 'form-error' : undefined}
                 aria-invalid={error ? true : undefined}
@@ -178,6 +177,7 @@ export function App() {
                 <p>{tripCopy.capturedLocal}</p>
                 <dl>
                   <div><dt>{tripCopy.summaryDestination}</dt><dd dir="auto">{requirements.destination}</dd></div>
+                  <div className="trip-summary-request"><dt>{tripCopy.summaryRequest}</dt><dd dir="auto">{requirements.requestText}</dd></div>
                   <div><dt>{tripCopy.summaryDuration}</dt><dd>{tripCopy.durationDays.replace('{value}', formatNumber(locale, requirements.durationDays))}</dd></div>
                 </dl>
               </section>}
