@@ -3,7 +3,7 @@
 - **Packet version:** 0.1
 - **Project:** `AiDev168/Ai_Tourism`
 - **Prepared from:** Phase 0 design package, current database baseline and repository guardrails
-- **Status:** Ready for preflight and plan review; implementation is gated by owner decisions in ADR-0005 and ADR-0006.
+- **Status:** Read-only preflight may begin now; Phase 1 implementation is gated on ADR-0005 approval. ADR-0006 is a Phase 2 gate before authentication or user-data routes.
 - **Target outcome:** A minimal, testable technical skeleton — not a complete travel-advisor feature set.
 
 ## 1. Mandatory first action: inspect, do not code
@@ -177,5 +177,5 @@ Phase 1 is complete only when:
 
 ## 11. Exact Codex execution prompt
 
- > Read the repository guardrails and every document listed in section 1 of this packet. Start with a read-only preflight and return the branch/HEAD/status, current tooling inventory, proposed directory tree, files to change, test plan and unresolved owner decisions. Do not edit, install dependencies or scaffold until the owner explicitly approves ADR-0005. ADR-0006 may remain open; do not implement authentication or expose user-data endpoints until it is accepted. Once ADR-0005 is approved, implement only Phase 1 from this packet as a modular-monolith technical skeleton. Preserve the already passing 30-table/419-row database; do not reset, recreate, or change its schema. Use the application database role, keep all external provider calls disabled/faked in normal tests, and implement only safe health/readiness endpoints until authentication is approved. Do not work on main, commit, push, merge, open a PR or deploy without explicit authorization. Finish with exact diffs, commands, exit statuses, tests, unverified items and next gate.
+> Read the repository guardrails and every document listed in section 1 of this packet. Start with a read-only preflight and return the branch/HEAD/status, current tooling inventory, proposed directory tree, files to change, test plan and unresolved owner decisions. Do not edit, install dependencies or scaffold until the owner explicitly approves ADR-0005. ADR-0006 may remain open; do not implement authentication or expose user-data endpoints until it is accepted. Once ADR-0005 is approved, implement only Phase 1 from this packet as a modular-monolith technical skeleton. Preserve the already passing 30-table/419-row database; do not reset, recreate, or change its schema. Use the application database role, keep all external provider calls disabled/faked in normal tests, and implement only safe health/readiness endpoints until authentication is approved. Do not work on main, commit, push, merge, open a PR or deploy without explicit authorization. Finish with exact diffs, commands, exit statuses, tests, unverified items and next gate.
 
