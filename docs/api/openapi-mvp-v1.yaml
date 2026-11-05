@@ -8,8 +8,10 @@ info:
     implemented or deployed. It captures the MVP route candidates from the
     implementation handoff and makes data/publication boundaries explicit.
 
-    SECURITY GATE: Every /api/v1 route requires authenticated identity and
-    object-level authorization before implementation or release. The identity
+    SECURITY GATE: User-owned /api/v1 routes require authenticated identity and
+    object-level authorization before implementation or release. Published
+    catalogue reads may be public only after the verified/editorially-approved
+    publication gate is enforced. The identity
     provider and session scheme are unresolved in ADR-0006, so this document
     intentionally does not pretend a concrete bearer/cookie mechanism has been
     selected. Codex must not implement these routes as anonymous endpoints.
@@ -198,8 +200,8 @@ paths:
         verified, non-synthetic rows. The 15 legacy rows and 17 UNESCO rows
         currently marked needs_review must remain excluded. Synthetic QA rows
         must never be returned.
-      x-authentication-required: true
-      x-implementation-gate: ADR-0006
+      x-authentication-required: false
+      x-publication-gate: verified-and-editorially-approved-and-non-synthetic
       parameters:
         - name: q
           in: query
@@ -254,8 +256,8 @@ paths:
       tags: [Catalogue]
       operationId: getDestination
       summary: Read one approved destination
-      x-authentication-required: true
-      x-implementation-gate: ADR-0006
+      x-authentication-required: false
+      x-publication-gate: verified-and-editorially-approved-and-non-synthetic
       responses:
         '200':
           description: Published destination with source summaries.
@@ -607,7 +609,7 @@ components:
               maximum: 180
             coordinate_role:
               type: string
-              enum: [representative_point, visitor_entrance]
+              enum: [property_reference, representative_point, visitor_entrance]
     Destination:
       allOf:
         - $ref: '#/components/schemas/DestinationSummary'
@@ -630,12 +632,6 @@ components:
         url:
           type: string
           format: uri
-        verified_at:
-          type: [string, 'null']
-          format: date-time
-        freshness_status:
-          type: string
-          enum: [current, stale, unknown]
     DestinationPage:
       type: object
       additionalProperties: false
@@ -760,9 +756,6 @@ components:
         recommendation_id:
           type: string
           format: uuid
-        at_least_one_resource_reference:
-          description: At least one resource reference must be provided, matching the database check constraint.
-          type: boolean
     FeedbackAccepted:
       type: object
       additionalProperties: false
@@ -775,7 +768,7 @@ components:
           type: string
           format: date-time
 
-x-security-status: unresolved-mechanism; all /api/v1 operations require authentication and object-level authorization before implementation or release
+x-security-status: unresolved-mechanism; all user-owned /api/v1 operations require authentication and object-level authorization; published catalogue reads may be public only after publication gating
 x-deferred-contracts:
   - Authentication/session scheme (ADR-0006)
   - SSE event schema and disconnect/cancellation/idempotency semantics
