@@ -25,18 +25,24 @@ flowchart LR
     AUTH[Authentication and authorization]
     DOMAIN[Conversation, trip, catalog and decision modules]
     DB[(PostgreSQL / PostGIS / pgvector)]
-    LLM[Approved remote LLM adapter]
+    GATEWAY[AI Provider Gateway / application routing]
+    PROVIDERS[Admin-configured provider profiles]
+    SECRETS[Protected secret store]
     EXT[Weather / maps / booking providers]
-    ADMIN[Trusted content import and editorial workflow]
+    ADMIN[Authenticated primary system administrator]
+    EDITOR[Trusted content import and editorial workflow]
 
     U --> PWA
     PWA -->|HTTPS only| API
     API --> AUTH
     AUTH --> DOMAIN
     DOMAIN -->|parameterized DB access, app role| DB
-    DOMAIN -->|minimized prompt, bounded schema| LLM
+    DOMAIN -->|typed capability request| GATEWAY
+    GATEWAY -->|configured route only| PROVIDERS
+    GATEWAY -->|secret reference| SECRETS
+    ADMIN -->|protected config, test, activate, rollback| GATEWAY
     DOMAIN -->|typed provider adapters| EXT
-    ADMIN -->|versioned reviewed imports| DB
+    EDITOR -->|versioned reviewed imports| DB
 
     classDef trust fill:#f5f5f5,stroke:#555,color:#111
     class U,PWA trust
@@ -60,6 +66,11 @@ Authentication method and session mechanism are unresolved in [ADR-0006](../arch
 - Use secure session handling after a mechanism is chosen: expiry, logout, revocation, recovery, CSRF defense where cookie-based and safe browser storage rules.
 - Rate-limit authentication, verification-code or magic-link issuance, message submissions, recommendations and remote AI calls.
 - Keep administrative content import and editorial approval privileges outside ordinary user roles.
+- Treat AI provider management as a separate privileged control plane. Only the authenticated primary system administrator may manage profiles, models, credentials, connection tests, activation, deactivation, rollback or failover policy; anonymous and ordinary-user sessions have no access.
+- Do not expose provider/model identifiers, endpoints, credentials, routing/failover details or provider/infrastructure status through ordinary-user APIs or PWA surfaces. Provider-specific failures map to provider-neutral safe errors.
+- Provider credentials are server-side, protected at rest, and retrieved by secret reference. Secret values must not appear in public responses, browser storage, bundles, logs or audit records.
+- Apply provider configuration changes as validated, versioned runtime updates with controlled rollback; audit actor, action, profile/version reference, outcome and time without recording secret values.
+- Never enable automatic failover unless an administrator explicitly configures the policy. Local-to-remote fallback is not an implicit default.
 - Do not implement authenticated endpoints as anonymous placeholders. Until ADR-0006 is accepted, Phase 1 can expose only non-user-data infrastructure health endpoints.
 
 ## 4. Data classification and handling
@@ -83,6 +94,7 @@ Authentication method and session mechanism are unresolved in [ADR-0006](../arch
 | Synthetic or unreviewed destination leak | Production views and queries require approved status, verified provenance and non-synthetic data | Existing publication gate tests plus API-level tests |
 | Open redirect / malicious booking URL | Client supplies a known link identifier; backend resolves active allowlisted target | Reject arbitrary URLs and inactive/non-allowlisted link IDs |
 | Secret or PII leakage in logs/errors | Structured redaction; safe exception mapping; no prompt/body dumps by default | Secret-pattern and PII redaction tests; log inspection |
+| Unauthorized provider administration or silent provider failover | Separate admin authorization gate; audited, versioned changes; explicit failover policy; provider-neutral public errors | Negative authorization tests, audit review and failover-policy tests |
 | Cost exhaustion / abuse | Per-user/global quotas, request bounds, timeouts, bounded retries and circuit behavior | Rate-limit, timeout and provider-failure tests |
 | Database credential escalation | Dedicated least-privilege application role; owner role only for administration/migrations | Existing role-security SQL test plus connection-level tests |
 | Cross-environment data leakage | Separate credentials and datasets for dev/test/staging/prod | Configuration validation and deployment review |
@@ -123,6 +135,7 @@ Until that policy is decided, the endpoint remains a documented future route onl
 
 - Propagate one correlation/request ID across API, conversation, retrieval, decision and provider adapters.
 - Log event type, outcome, latency and provider/model alias; omit raw message text and secrets by default.
+- Restrict provider/model aliases and operational health to trusted operations/admin roles. Audit provider configuration changes without secret values; public product responses contain no provider or infrastructure details.
 - Never return stack traces, SQL details, provider credentials or internal hostnames in user-facing errors.
 - Establish measured latency/error/cost baselines before promising SLOs.
 - Define who can inspect operational logs and audit records; apply retention and access controls.
@@ -133,6 +146,7 @@ Until that policy is decided, the endpoint remains a documented future route onl
 | Decision | Needed before |
 |---|---|
 | Authentication and session mechanism / provider | Any authenticated user-data endpoint |
+| Primary administrator authentication, authorization, bootstrap/recovery and audit access | Any provider-management interface or route |
 | Privacy notice, legal basis, retention and deletion policy | Real user data / public pilot |
 | LLM provider, data region and processing terms | Sending real user conversation to a remote provider |
 | Hosting region, secrets management and backup design | Staging/production |
@@ -153,3 +167,4 @@ Phase 1 may implement:
 - deterministic tests proving that no external paid provider is called by default.
 
 Phase 1 must not implement a placeholder authentication scheme, public user-data endpoints, account deletion, real LLM calls or provider credentials in the browser.
+Phase 1 must not expose provider-management routes or provider/infrastructure diagnostics to ordinary product traffic. Deployed liveness/readiness probes are restricted to trusted operations; the provider gateway/control plane is a later-phase gate under ADR-0008 and ADR-0006.

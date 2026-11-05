@@ -6,6 +6,12 @@
 **Repository baseline originally reviewed:** `main` at `f242bbb649f04adc86944a3e95a2428f76367e46`. **Current main observed on 2026-11-05:** `8b157e5b12e9a35b314dc0503ed5cacdf9f5d69f`; the active feature branch contains this main commit. The latest feature-branch/main relationship is checked separately before each implementation task; this document does not authorize writes to `main`.  
 **Purpose:** Convert the existing architecture references into a bounded, testable MVP implementation plan. This document is not authorization to modify `main`, deploy infrastructure, incur API costs, download models, or change other projects.
 
+## Owner-approved multilingual requirement
+
+The PWA supports Persian (`fa-IR`, default RTL), English (`en-US`, LTR), and Arabic (`ar`, RTL) from the first implementation phase. All user-facing interface strings and states are localized, with an accessible selector, correct document language/direction, logical CSS, mixed-script resilience, and locale-aware date/number/currency formatting. No runtime translation API is used. Phase 1 establishes the locale contract for future assistant requests and does not invoke an LLM. UI-only examples are visibly marked as non-production fixtures.
+
+The final MVP must not be called multilingual-ready until both user-facing destination content and assistant responses are supported and quality-tested in all three languages. This is a later content/assistant release gate, separate from the Phase 1 UI foundation.
+
 ---
 
 ## 1. Executive direction
@@ -34,6 +40,7 @@ The following constraints have been stated by the project owner:
 10. The factual dataset now includes 17 Iranian UNESCO World Heritage properties across two batches, 38 source/map/admin references, 17 Persian paraphrased documents and 34 chunks. All 17 destinations remain `needs_review` and must not be returned by production views until editorial approval. The existing 15 supplied destinations remain unverified; the 12 QA destinations are fabricated test fixtures.
 11. On 2026-11-05 the owner approved the Phase 1 technology stack: installable mobile-first PWA, React + TypeScript, FastAPI + Python 3.13, and native Windows app processes for the first local workflow.
 12. The owner explicitly requires the PWA to be highly polished visually as well as fast and usable. `docs/design/PWA_VISUAL_DESIGN_BRIEF_v0.1.md` is the binding starting design brief for the Contemporary Iranian Travel Editorial art direction, Persian RTL typography/layout, photography, responsive composition, accessibility, performance and visual QA.
+13. All AI capabilities use the server-side AI Provider Gateway. Provider/model configuration is exclusively administrative; ordinary users never configure, select, inspect or see provider/model names, endpoints, credentials, routing, failover or infrastructure status. See accepted ADR-0008.
 
 ### 1.2 Owner-approved stack and remaining choices
 
@@ -111,7 +118,7 @@ Do not implement these just because they appear in the broad reference architect
 
 ```text
 Phone / Browser
-  └── Mobile-first PWA (Persian RTL)
+  └── Mobile-first PWA (fa-IR default RTL; en-US LTR; ar RTL)
         │ HTTPS
         ▼
 Backend API — Modular Monolith
@@ -650,7 +657,7 @@ Deliverables:
 - non-sensitive liveness/readiness endpoints;
 - explicit modular-monolith module boundaries;
 - request/correlation ID and structured redacted logs;
-- a token-based design system and high-fidelity Persian RTL PWA shell following `docs/design/PWA_VISUAL_DESIGN_BRIEF_v0.1.md`;
+- a token-based design system and high-fidelity three-language PWA shell following `docs/design/PWA_VISUAL_DESIGN_BRIEF_v0.1.md`;
 - Home/discovery plus representative conversation, recommendation and itinerary visual layouts;
 - optimized licensed imagery strategy and responsive typography;
 - screenshot review pack at 360/390/430/768/1024/1440 CSS px;
@@ -702,9 +709,15 @@ Do not conduct another standalone embedding model benchmark or rewrite the RAG a
 
 ### Phase 5 — Remote LLM conversation and itinerary drafting
 
+This phase is gated by the accepted centralized provider-management requirement in ADR-0008 and an approved administrator authentication/authorization design. Ordinary product APIs remain provider-agnostic; provider-specific failures map to safe, stable product errors.
+
 Deliverables:
 
-- provider adapter configured server-side;
+- server-side AI Provider Gateway with independently configurable Chat, Vision, Embedding and optional Reranking capabilities;
+- protected administrator-only control plane for multiple provider profiles, model configuration, secure credential management, connection testing, activation/deactivation, runtime-safe configuration changes and controlled rollback;
+- audited provider/profile changes and an explicitly configured failover policy; local-to-remote fallback is never implicit;
+- protected-at-rest provider secrets that never enter client bundles, browser storage, public responses, logs or audit values;
+- provider-neutral user-facing errors and tests proving ordinary users cannot inspect or change provider configuration;
 - structured extraction/clarification and source-grounded explanation;
 - streaming response contract (SSE recommended);
 - token/cost/latency instrumentation and per-user limits;
@@ -779,6 +792,7 @@ These are the genuine product/operational decisions that cannot be safely guesse
 | Select frontend build tool/package manager and pin compatible versions | Needed for reproducible React/PWA builds; Vite is the default candidate | During Phase 1 preflight; report rationale |
 | Initial target market/geographic coverage | Defines data model defaults, currency/calendar, source coverage and pilot data | Before catalog/pilot |
 | Authentication method (phone OTP, email, federated login) and SMS/email provider | Affects account UX, cost and security | Before Phase 2 |
+| Primary administrator authentication, authorization, secure bootstrap/recovery and audit access | Required to protect provider configuration and prevent anonymous/ordinary-user access | Before implementing provider control plane |
 | Remote LLM provider/model and deployment-region compatibility | Affects latency, cost, availability and data handling | Before live AI integration/staging |
 | Whether embeddings run on the backend host or through a remote API | Affects deployment resources and network/cost | Before production retrieval deployment; not needed for interface design |
 | Maps provider (deep links only vs routing API) | Determines accuracy and cost of distance/ETA claims | Before maps/routing integration |
@@ -816,7 +830,7 @@ The broad reference documents contain material beyond the MVP. Codex must follow
 
 **Phase 0 is prepared and its core technology decision is owner-approved.** The next action is Phase 1 implementation on an owner-approved feature branch. Codex must first perform its read-only preflight, verify installed Node/Python tooling, propose exact frontend build/package versions, then implement only the scope in `docs/implementation/CODEX_PHASE_1_TASK_PACKET_v0.2.md`. The PWA must satisfy `docs/design/PWA_VISUAL_DESIGN_BRIEF_v0.1.md`; visual quality is a first-class acceptance gate, not a later cosmetic phase.
 
-Authentication/session remains open under ADR-0006 and is not implemented in Phase 1. Remote LLM, embeddings, retrieval, weather, maps, paid APIs, production hosting and booking providers remain replaceable/open decisions. Model selection is not a gate for the MVP architecture.
+Authentication/session remains open under ADR-0006 and is not implemented in Phase 1. ADR-0008 accepts centralized, administrator-only provider management; its control plane cannot be implemented until the administrator authentication/authorization design is approved. Remote LLM, embeddings, retrieval, weather, maps, paid APIs, production hosting and booking providers remain replaceable/open decisions. No provider/model details or infrastructure health belong in ordinary-user product surfaces.
 
 ---
 

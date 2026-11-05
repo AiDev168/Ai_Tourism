@@ -1,0 +1,404 @@
+{
+  "generatedAt": "2026-11-05T06:49:16.147Z",
+  "browser": "Installed Google Chrome, headless",
+  "cases": 18,
+  "failures": [],
+  "results": [
+    {
+      "locale": "fa-IR",
+      "width": 360,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "layout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "mixedScriptLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "editLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/fa-IR/360.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 390,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "layout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "mixedScriptLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "editLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/fa-IR/390.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 430,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "layout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "mixedScriptLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "editLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/fa-IR/430.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 768,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "layout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "mixedScriptLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "editLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/fa-IR/768.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 1024,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "layout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "mixedScriptLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "editLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/fa-IR/1024.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 1440,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "layout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "mixedScriptLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "editLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/fa-IR/1440.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 360,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "layout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "mixedScriptLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "editLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/en-US/360.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 390,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "layout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "mixedScriptLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "editLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/en-US/390.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 430,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "layout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "mixedScriptLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "editLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/en-US/430.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 768,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "layout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "mixedScriptLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "editLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/en-US/768.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 1024,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "layout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "mixedScriptLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "editLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/en-US/1024.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 1440,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "layout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "mixedScriptLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "editLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/en-US/1440.png"
+    },
+    {
+      "locale": "ar",
+      "width": 360,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "layout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "mixedScriptLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "editLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/ar/360.png"
+    },
+    {
+      "locale": "ar",
+      "width": 390,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "layout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "mixedScriptLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "editLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/ar/390.png"
+    },
+    {
+      "locale": "ar",
+      "width": 430,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "layout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "mixedScriptLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "editLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/ar/430.png"
+    },
+    {
+      "locale": "ar",
+      "width": 768,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "layout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "mixedScriptLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "editLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/ar/768.png"
+    },
+    {
+      "locale": "ar",
+      "width": 1024,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "layout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "mixedScriptLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "editLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/ar/1024.png"
+    },
+    {
+      "locale": "ar",
+      "width": 1440,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "layout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "mixedScriptLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "editLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "imageLoaded": true,
+      "accessibility": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/ar/1440.png"
+    }
+  ]
+}

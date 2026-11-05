@@ -7,6 +7,20 @@ info:
     implemented or deployed. It captures the MVP route candidates from the
     implementation handoff and makes data/publication boundaries explicit.
 
+    Locale contract: clients send `Accept-Language` using `fa-IR` (default),
+    `en-US`, or `ar`. Assistant language uses the same locale identifier.
+    Phase 1 implements no assistant operation and makes no LLM calls.
+
+    Provider boundary: all future AI requests pass through the server-side AI
+    Provider Gateway. Ordinary-user routes never expose provider names, model
+    identifiers, endpoints, credentials, routing/failover configuration or
+    infrastructure/provider status. Provider-specific failures map to safe,
+    provider-neutral product errors. Administrative provider-management routes
+    are not defined by this public API contract and require an approved
+    administrator authentication/authorization design before implementation.
+    Provider secrets remain server-side and protected at rest; they must never
+    appear in browser storage, client bundles, public responses or logs.
+
     SECURITY GATE: User-owned /api/v1 routes require authenticated identity and
     object-level authorization before implementation or release. Read-only
     published-catalogue routes may be public only after the verified,
@@ -498,8 +512,8 @@ components:
       properties:
         language_code:
           type: string
-          default: fa
-          enum: [fa, en]
+          default: fa-IR
+          enum: [fa-IR, en-US, ar]
         channel:
           type: string
           default: pwa

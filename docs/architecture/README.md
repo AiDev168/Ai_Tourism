@@ -33,4 +33,4 @@ The reference architecture includes future capabilities such as agent orchestrat
 - **Open:** no implementation choice has been made; alternatives and decision criteria are documented.
 - **Superseded:** retained for history but replaced by a later ADR.
 
-No ADR marked Proposed or Open should be treated as permission to implement the choice. ADR-0005 is now Accepted by the owner; ADR-0006 remains Open and gates authenticated user-data APIs in Phase 2.
+No ADR marked Proposed or Open should be treated as permission to implement the choice. ADR-0005 is accepted by the owner; ADR-0006 remains Open and gates authenticated user-data APIs in Phase 2. ADR-0008 records the accepted centralized AI Provider Gateway requirement; implementation of its protected admin control plane also requires an approved administrator authentication/authorization design.

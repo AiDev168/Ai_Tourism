@@ -35,13 +35,23 @@ Then report:
 
 ## 2. Approved scope boundary
 
+### Owner-approved three-language requirement
+
+Phase 1 must deliver complete interface localization for Persian (`fa-IR`, default RTL), English (`en-US`, LTR), and Arabic (`ar`, RTL). All navigation, controls, forms, validation, loading/error/empty/offline states, warnings, and UI fixture labels are included. The accessible locale selector must update document language/direction; use logical CSS properties, test mixed-script and long strings, and use locale-aware `Intl` date/number/currency formatting. No external translation API is used at runtime. The API contract carries the selected locale for future assistant responses, but Phase 1 makes no LLM calls.
+
+This is distinct from the later MVP release gate: destination content and assistant responses must also be available and quality-tested in all three languages before the product may be described as multilingual-ready. That gate includes native-quality review of factual destination content, not just translated chrome.
+
+### Centralized AI provider requirement (accepted; later-phase implementation)
+
+Per ADR-0008, all future Chat, Vision, Embedding and optional Reranking requests must pass through the server-side AI Provider Gateway. Phase 1 makes no model calls and does not implement provider settings, provider/model selection, provider status, or admin routes. The PWA must not display provider names, model identifiers, endpoints, credentials, routing/failover details, or infrastructure/provider health. The later control plane is administrator-only and is gated on an approved admin authentication/authorization design; the gateway owns routing, configuration audit, explicit failover policy, runtime activation and rollback.
+
 Phase 1 is a polished, testable technical skeleton with a high-quality Persian PWA shell. It is not a complete travel-advisor feature set. Deliver:
 
 - backend application entry point and configuration validation;
 - explicit modular-monolith package/module layout;
 - non-sensitive liveness and readiness endpoints;
 - database connection configuration and a safe connectivity/readiness check using the least-privilege application role;
-- a visually distinctive, mobile-first Persian RTL PWA shell following `docs/design/PWA_VISUAL_DESIGN_BRIEF_v0.1.md`; include high-fidelity Home/discovery and representative conversation, recommendation and itinerary layouts;
+- a visually distinctive, mobile-first multilingual PWA shell (Persian default RTL, English LTR, Arabic RTL) following `docs/design/PWA_VISUAL_DESIGN_BRIEF_v0.1.md`; include Home/discovery and representative conversation, recommendation and itinerary layouts;
 - request/correlation ID propagation and structured redacted logs;
 - `.env.example` with placeholders and local developer commands;
 - a small token-based design system and reusable visual primitives;
@@ -50,6 +60,8 @@ Phase 1 is a polished, testable technical skeleton with a high-quality Persian P
 - mobile performance baseline and WCAG 2.2 AA accessibility review.
 
 Do not implement the complete conversation journey, authentication provider, RAG, LLM, recommendation algorithm, working itinerary generation, weather, live maps/routing, booking partner integration or privacy deletion in Phase 1. Representative screens may use isolated, clearly labelled UI-only fixtures; never connect review-required or synthetic seed destinations to a public recommendation API.
+
+Do not expose operational liveness/readiness or provider/infrastructure health through ordinary-user product traffic in a deployed environment. Probes are for trusted operations only.
 
 ## 3. Approved stack and bounded tooling choice
 
@@ -182,7 +194,7 @@ Phase 1 is complete only when:
 2. A fresh developer can configure local placeholders, start the existing database and run documented checks without affecting other projects.
 3. Liveness/readiness endpoints work and do not leak internals.
 4. Backend modules have explicit dependency direction and no cross-module database/secret shortcuts.
-5. The PWA shell is visually distinctive, Persian RTL, mobile-first and aligned with the approved visual brief; its page layouts are deliberately composed rather than based on generic dashboard templates.
+5. The PWA shell is visually distinctive, supports all three locales and directions, is mobile-first, and follows the approved visual brief; layouts are deliberately composed rather than based on generic dashboard templates.
 6. The screenshot pack covers 360/390/430/768/1024/1440 CSS px; no core page has overflow, clipped controls, broken bidi, overlapping composer or unstable image layout.
 7. Performance measurements and accessibility checks are recorded; Core Web Vitals targets and WCAG 2.2 AA gaps are reported with remediation plans.
 8. App-role DB connectivity is tested; no migration or seed count drift occurred.

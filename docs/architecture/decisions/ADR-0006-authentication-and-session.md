@@ -26,6 +26,7 @@ Session options to compare include secure `HttpOnly` cookies with appropriate `S
 4. Session expiry, logout, revocation, credential recovery and account disablement have explicit behavior.
 5. Browser storage must not contain provider secrets or long-lived credentials that are accessible to script.
 6. Rate limits and abuse controls protect login, OTP/magic-link issuance, message submission and expensive provider calls.
+7. The administrator interface for AI provider management requires a separately approved administrator authentication and authorization policy. Ordinary-user identity and anonymous sessions never imply administrative access; no provider-management route may ship before the admin policy is accepted and tested.
 
 ## Open owner decisions
 
@@ -34,6 +35,7 @@ Session options to compare include secure `HttpOnly` cookies with appropriate `S
 - cookie-session vs token-based session;
 - account linking, recovery, logout and revocation behavior;
 - minimum account/profile fields and consent categories.
+- primary system administrator identity, authorization boundary, secure bootstrap/recovery, and administrative audit access (required before implementing the ADR-0008 control plane).
 
 ## Implementation gate
 

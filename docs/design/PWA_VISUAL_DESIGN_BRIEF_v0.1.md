@@ -7,6 +7,14 @@
 - **Implementation stack:** React + TypeScript; backend FastAPI + Python 3.13
 - **Product boundary:** MVP modular monolith; no agent swarm, booking/payment engine or live provider dependency in Phase 1
 
+## Multilingual interface requirement (owner-approved)
+
+The interface ships with complete Persian (`fa-IR`, default RTL), English (`en-US`, LTR), and Arabic (`ar`, RTL) support. This is a first-release foundation, not a Persian-only shell with later translation placeholders. Navigation, forms, validation, loading/empty/error/offline states, warnings, itinerary and fixture text must be translated together. The language control is keyboard accessible; selection updates the root `lang` and `dir` attributes. Layout uses CSS logical properties, supports mixed-script names and long strings, and formats dates, numbers and currency through `Intl`. No runtime translation service is permitted.
+
+Font fallback must cover Arabic, Persian and Latin glyphs without depending on a remote font service. UI-only destination examples are clearly labelled as fixtures and are not production facts. Phase 1 establishes a locale-aware API contract but performs no LLM calls. The final MVP release is not multilingual-ready until destination content and assistant responses are supported and quality-tested in all three languages.
+
+The Phase 1 visual uses a locally bundled imagined hero composite and CSS illustration cards. They are decorative UI fixtures and must never be represented as documentary destination imagery.
+
 ## 1. Design intent — a travel product, not an admin dashboard
 
 The PWA must feel like a thoughtfully art-directed travel publication with the utility of a fast modern product. It should evoke the anticipation of discovering a place, then make planning feel calm, clear and trustworthy.
