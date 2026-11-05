@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { formatDate, formatNumber, interfaceActions, statusPreview, type Locale } from '../i18n/messages';
+import { tripMessages } from '../i18n/tripMessages';
+import { createTripRequirements, type TripRequirements } from '../trip/tripIntake';
 import { useLocale } from '../i18n/LocaleContext';
 
 const languageName: Record<Locale, string> = { 'fa-IR': 'فارسی', 'en-US': 'English', ar: 'العربية' };
 
 const photos = {
-  hero: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Naqsh-e_Jahan_Square%2C_Isfahan_02.jpg/1280px-Naqsh-e_Jahan_Square%2C_Isfahan_02.jpg',
-  kashan: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/77/Fin_Garden%2C_Kashan%2C_Iran.jpg/1280px-Fin_Garden%2C_Kashan%2C_Iran.jpg',
-  yazd: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/Windcatchers_in_Yazd.jpg/1280px-Windcatchers_in_Yazd.jpg',
-  qeshm: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Hara_forests_of_Qeshm_-_1.jpg/1280px-Hara_forests_of_Qeshm_-_1.jpg'
+  hero: '/images/naghshe-jahan-1280.webp',
+  kashan: '/images/fin-garden-1280.webp',
+  yazd: '/images/yazd-windcatchers-1280.webp',
+  qeshm: '/images/qeshm-hara-1280.webp'
 };
 
 const photoSources = {
@@ -31,8 +33,11 @@ function PhotoCredit({ source, author, label }: { source: string; author: string
 export function App() {
   const { locale, setLocale, t } = useLocale();
   const [query, setQuery] = useState('');
+  const [destination, setDestination] = useState('');
+  const [durationDays, setDurationDays] = useState('');
+  const [requirements, setRequirements] = useState<TripRequirements | null>(null);
+  const [clarifications, setClarifications] = useState<Array<'destination' | 'duration'>>([]);
   const [error, setError] = useState('');
-  const [sent, setSent] = useState(false);
   const [heroImageFailed, setHeroImageFailed] = useState(false);
   const [itineraryEditing, setItineraryEditing] = useState(false);
   const [itineraryNotes, setItineraryNotes] = useState(['', '', '']);
@@ -50,13 +55,34 @@ export function App() {
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!query.trim()) {
-      setError(t('formRequired'));
+    const result = createTripRequirements({ requestText: query, destination, durationDays });
+    if (result.kind === 'invalid') {
+      const messageKey = {
+        'request-required': 'requestRequired',
+        'request-too-long': 'requestTooLong',
+        'destination-too-long': 'destinationTooLong',
+        'duration-invalid': 'durationInvalid',
+      } as const;
+      setError(tripMessages[locale][messageKey[result.reason]]);
+      setClarifications([]);
+      setRequirements(null);
       return;
     }
     setError('');
-    setSent(true);
+    if (result.kind === 'clarification') {
+      setRequirements(null);
+      setClarifications(result.missing);
+      return;
+    }
+    setClarifications([]);
+    setRequirements(result.requirements);
   };
+
+  const clearTripDraft = () => {
+    setQuery(''); setDestination(''); setDurationDays(''); setError('');
+    setClarifications([]); setRequirements(null);
+  };
+  const tripCopy = tripMessages[locale];
 
   return (
     <>
@@ -92,17 +118,46 @@ export function App() {
               <textarea
                 id="trip-prompt"
                 rows={2}
+                maxLength={1200}
                 value={query}
-                onChange={event => setQuery(event.target.value)}
+                onChange={event => { setQuery(event.target.value); setRequirements(null); setClarifications([]); setError(''); }}
                 placeholder={t('promptPlaceholder')}
                 aria-describedby={error ? 'form-error' : undefined}
               />
+              <div className="trip-fields">
+                <div>
+                  <label htmlFor="trip-destination">{tripCopy.destinationLabel}</label>
+                  <input id="trip-destination" autoComplete="off" maxLength={120} value={destination}
+                    onChange={event => { setDestination(event.target.value); setRequirements(null); setClarifications([]); setError(''); }}
+                    placeholder={tripCopy.destinationPlaceholder} />
+                </div>
+                <div>
+                  <label htmlFor="trip-duration">{tripCopy.durationLabel}</label>
+                  <select id="trip-duration" value={durationDays}
+                    onChange={event => { setDurationDays(event.target.value); setRequirements(null); setClarifications([]); setError(''); }}>
+                    <option value="">{tripCopy.durationOptional}</option>
+                    {[1, 2, 3].map(days => <option key={days} value={days}>{tripCopy.durationDays.replace('{value}', formatNumber(locale, days))}</option>)}
+                  </select>
+                </div>
+              </div>
               {error && <p id="form-error" className="form-error" role="alert">{error}</p>}
               <button type="submit" className="primary">
                 {t('startPlanning')} <span aria-hidden="true">↗</span>
               </button>
-              {sent && <p className="notice" role="status">{t('noApi')}</p>}
-              <p className="fixture-pill">{t('noApi')}</p>
+              <p className="fixture-pill">{tripCopy.sessionNotice}</p>
+              {!!clarifications.length && <section className="trip-response" aria-live="polite" aria-labelledby="clarification-title">
+                <h2 id="clarification-title">{tripCopy.clarificationTitle}</h2>
+                <ul>{clarifications.map(field => <li key={field}>{field === 'destination' ? tripCopy.askDestination : tripCopy.askDuration}</li>)}</ul>
+              </section>}
+              {requirements && <section className="trip-response trip-summary" aria-live="polite" aria-labelledby="captured-title">
+                <div className="trip-summary-heading"><h2 id="captured-title">{tripCopy.capturedTitle}</h2>
+                  <button className="text-button" type="button" onClick={clearTripDraft}>{tripCopy.clearDraft}</button></div>
+                <p>{tripCopy.capturedLocal}</p>
+                <dl>
+                  <div><dt>{tripCopy.summaryDestination}</dt><dd dir="auto">{requirements.destination}</dd></div>
+                  <div><dt>{tripCopy.summaryDuration}</dt><dd>{tripCopy.durationDays.replace('{value}', formatNumber(locale, requirements.durationDays))}</dd></div>
+                </dl>
+              </section>}
             </form>
           </div>
 
@@ -110,6 +165,9 @@ export function App() {
             {heroImageFailed ? (
               <div className="image-fallback" role="img" aria-label={t('imageFallback')}>{t('imageFallback')}</div>
             ) : (
+              <picture>
+              <source type="image/avif" srcSet="/images/naghshe-jahan-640.avif 640w, /images/naghshe-jahan-960.avif 960w, /images/naghshe-jahan-1280.avif 1280w" sizes="(max-width: 900px) 100vw, 55vw" />
+              <source type="image/webp" srcSet="/images/naghshe-jahan-640.webp 640w, /images/naghshe-jahan-960.webp 960w, /images/naghshe-jahan-1280.webp 1280w" sizes="(max-width: 900px) 100vw, 55vw" />
               <img
                 className="hero-photo"
                 src={photos.hero}
@@ -120,6 +178,7 @@ export function App() {
                 decoding="async"
                 onError={() => setHeroImageFailed(true)}
               />
+              </picture>
             )}
             <div className="hero-photo-shade" aria-hidden="true" />
             <figcaption className="hero-photo-caption">
@@ -136,13 +195,12 @@ export function App() {
               <h2>{t('featured')}</h2>
               <p>{t('featuredSub')}</p>
             </div>
-            <a href="#discover" className="text-link">{t('seeAll')} <span>↗</span></a>
           </div>
 
           <div className="cards">
             <article className="place-card card-kashan">
               <figure className="card-image">
-                <img src={photos.kashan} alt={t('cardOneImageAlt')} width="1280" height="1230" loading="lazy" decoding="async" />
+                <picture><source type="image/avif" srcSet="/images/fin-garden-640.avif 640w, /images/fin-garden-960.avif 960w, /images/fin-garden-1280.avif 1280w" sizes="(max-width: 720px) 100vw, 33vw" /><source type="image/webp" srcSet="/images/fin-garden-640.webp 640w, /images/fin-garden-960.webp 960w, /images/fin-garden-1280.webp 1280w" sizes="(max-width: 720px) 100vw, 33vw" /><img src={photos.kashan} alt={t('cardOneImageAlt')} width="1280" height="1230" loading="lazy" decoding="async" /></picture>
                 <span className="image-stamp">01</span>
               </figure>
               <div className="card-copy">
@@ -154,7 +212,7 @@ export function App() {
 
             <article className="place-card card-yazd">
               <figure className="card-image">
-                <img src={photos.yazd} alt={t('cardTwoImageAlt')} width="1280" height="738" loading="lazy" decoding="async" />
+                <picture><source type="image/avif" srcSet="/images/yazd-windcatchers-640.avif 640w, /images/yazd-windcatchers-960.avif 960w, /images/yazd-windcatchers-1280.avif 1280w" sizes="(max-width: 720px) 100vw, 33vw" /><source type="image/webp" srcSet="/images/yazd-windcatchers-640.webp 640w, /images/yazd-windcatchers-960.webp 960w, /images/yazd-windcatchers-1280.webp 1280w" sizes="(max-width: 720px) 100vw, 33vw" /><img src={photos.yazd} alt={t('cardTwoImageAlt')} width="1280" height="738" loading="lazy" decoding="async" /></picture>
                 <span className="image-stamp">02</span>
               </figure>
               <div className="card-copy">
@@ -166,7 +224,7 @@ export function App() {
 
             <article className="place-card card-qeshm">
               <figure className="card-image">
-                <img src={photos.qeshm} alt={t('cardThreeImageAlt')} width="1280" height="960" loading="lazy" decoding="async" />
+                <picture><source type="image/avif" srcSet="/images/qeshm-hara-640.avif 640w, /images/qeshm-hara-960.avif 960w, /images/qeshm-hara-1280.avif 1280w" sizes="(max-width: 720px) 100vw, 33vw" /><source type="image/webp" srcSet="/images/qeshm-hara-640.webp 640w, /images/qeshm-hara-960.webp 960w, /images/qeshm-hara-1280.webp 1280w" sizes="(max-width: 720px) 100vw, 33vw" /><img src={photos.qeshm} alt={t('cardThreeImageAlt')} width="1280" height="960" loading="lazy" decoding="async" /></picture>
                 <span className="image-stamp">03</span>
               </figure>
               <div className="card-copy">
@@ -190,7 +248,6 @@ export function App() {
               <span className="assistant-avatar">ر</span>
               <div><small>{t('assistant')}</small><p>{t('assistantText')}</p></div>
             </div>
-            <div className="chat-input"><span>{t('yourMessage')}</span><button aria-label={t('send')}>↑</button></div>
             <small className="fixture-note">{t('sample')}</small>
             <details className="state-preview">
               <summary>{statusPreview[locale]}</summary>
@@ -221,6 +278,7 @@ export function App() {
               <p className="eyebrow">{t('itinerary')}</p>
               <h2>{t('itineraryTitle')}</h2>
             </div>
+            <span className="fixture-tag">UI</span>
             <button
               className="outline"
               type="button"

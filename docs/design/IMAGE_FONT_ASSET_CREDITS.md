@@ -13,7 +13,7 @@ This manifest records the visual assets referenced by the PWA. The destination p
 
 License: https://creativecommons.org/licenses/by-sa/4.0/
 
-The interface links each visible credit to the relevant Commons file page and shows the author plus license. Images currently load from the canonical upload.wikimedia.org thumbnail host at 1280px. Before public production deployment, vendor optimized same-origin WebP/AVIF versions and preserve all compatible attribution/license metadata.
+The interface links each visible credit to the relevant Commons file page and shows the author plus CC BY-SA 4.0 license. The source thumbnail was downloaded from the canonical upload.wikimedia.org thumbnail URL and is self-hosted in `frontend/public/images/` as responsive 640px, 960px, and 1280px WebP and AVIF variants. Visible attribution and source links remain attached to each use.
 
 ## Typeface
 
@@ -27,4 +27,4 @@ The interface links each visible credit to the relevant Commons file page and sh
 - Font details: https://fontsource.org/fonts/estedad/about
 - License: https://openfontlicense.org/
 
-The current refresh loads the version-pinned variable-weight stylesheet from jsDelivr. Before production sign-off, add the package to frontend/package.json, regenerate package-lock.json, import its CSS through the Vite entry point and serve WOFF2 files from the app origin. This removes third-party runtime font dependence and makes offline caching explicit.
+Estedad Variable 5.3.0's Arabic and Latin WOFF2 subsets and SIL OFL 1.1 license are vendored under `frontend/public/fonts/`; the local subset CSS is `estedad.css`. The runtime jsDelivr dependency has been removed. The font CSS and subsets are included in the service-worker offline asset list.
