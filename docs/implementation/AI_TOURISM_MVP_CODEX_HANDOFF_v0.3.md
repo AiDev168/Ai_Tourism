@@ -1,5 +1,7 @@
 # AI Tourism — MVP Implementation Blueprint & Codex Handoff
 
+> **Superseded / historical snapshot (2026-11-05).** This v0.3 document predates the owner-run 419-row database validation and the Phase 0 design package. Do not use its pending-test status or next-action instructions. Use [Handoff v0.4](AI_TOURISM_MVP_CODEX_HANDOFF_v0.4.md) as the current source of truth.
+
 **Document status:** Pre-Codex implementation blueprint, database-preparation status updated after owner-run base validation  
 **Version:** 0.3  
 **Repository:** `AiDev168/Ai_Tourism`  
