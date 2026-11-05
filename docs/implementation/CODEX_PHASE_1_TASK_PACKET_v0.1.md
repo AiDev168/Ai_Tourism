@@ -17,7 +17,7 @@ Before editing, Codex must read:
 5. `docs/architecture/ERD_MVP_v0.1.md`
 6. `docs/api/openapi-mvp-v1.yaml`
 7. `docs/security/SECURITY_PRIVACY_BOUNDARIES_v0.1.md`
-8. `docs/implementation/AI_TOURISM_MVP_CODEX_HANDOFF_v0.4.md` (after this packet is merged into the current handoff)
+8. `docs/implementation/AI_TOURISM_MVP_CODEX_HANDOFF_v0.4.md`
 9. `docs/reference/AI_Travel_Advisor_Reference_Architecture.md`
 10. `docs/reference/ARCHITECTURE_ANALYSIS.md`
 
