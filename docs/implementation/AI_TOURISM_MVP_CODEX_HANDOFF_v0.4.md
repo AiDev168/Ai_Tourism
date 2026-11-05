@@ -3,7 +3,7 @@
 **Document status:** Phase 0 implementation blueprint and Codex handoff; database gate and design artifacts owner-reviewed  
 **Version:** 0.4  
 **Repository:** `AiDev168/Ai_Tourism`  
-**Repository baseline reviewed:** `main` at `f242bbb649f04adc86944a3e95a2428f76367e46` (reported clean and aligned with `origin/main` in the project preflight)  
+**Repository baseline originally reviewed:** `main` at `f242bbb649f04adc86944a3e95a2428f76367e46`. **Current main observed on 2026-11-05:** `8b157e5b12e9a35b314dc0503ed5cacdf9f5d69f`; the active feature branch contains this main commit and is 42 commits ahead / 0 behind at the time of this check. This task made no writes to `main`.  
 **Purpose:** Convert the existing architecture references into a bounded, testable MVP implementation plan. This document is not authorization to modify `main`, deploy infrastructure, incur API costs, download models, or change other projects.
 
 ---
