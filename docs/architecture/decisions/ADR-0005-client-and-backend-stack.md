@@ -2,7 +2,7 @@
 
 - **Status:** Accepted — owner approval recorded 2026-11-05
 - **Decision date:** 2026-11-05
-- **Sources:** `README.md`; `docs/reference/AI_Travel_Advisor_Reference_Architecture.md`; `docs/reference/ARCHITECTURE_ANALYSIS.md`; `docs/implementation/AI_TOURISM_MVP_CODEX_HANDOFF_v0.3.md` sections 9, 13 and 17.
+- **Sources:** `README.md`; `docs/reference/AI_Travel_Advisor_Reference_Architecture.md`; `docs/reference/ARCHITECTURE_ANALYSIS.md`; `docs/implementation/AI_TOURISM_MVP_CODEX_HANDOFF_v0.5.md` sections 9, 13 and 17.
 
 ## Context
 
