@@ -11,7 +11,7 @@ This folder turns the repository's reference architecture, architecture analysis
 1. [Architecture decision records](decisions/README.md) — what is decided, proposed, or explicitly open.
 2. [MVP ERD v0.1](ERD_MVP_v0.1.md) — relationship view of the current 30-table database schema.
 3. [OpenAPI MVP v1 draft](../api/openapi-mvp-v1.yaml) — initial API boundary; authentication and streaming details remain gated decisions.
-4. [PWA visual design brief](../design/PWA_VISUAL_DESIGN_BRIEF_v0.1.md) — owner-approved art direction, page layouts, responsive behavior, performance and accessibility acceptance criteria.
+4. [PWA design package](../design/README.md) — owner-approved art direction and visual brief, page layouts, responsive behavior, performance and accessibility acceptance criteria.
 5. [Security and privacy boundaries](../security/SECURITY_PRIVACY_BOUNDARIES_v0.1.md) — trust boundaries, abuse cases, data handling and unresolved policy choices.
 6. [Codex Phase 1 task packet](../implementation/CODEX_PHASE_1_TASK_PACKET_v0.2.md) — bounded implementation instructions for the approved technical skeleton.
 
