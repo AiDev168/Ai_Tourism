@@ -39,7 +39,7 @@ C:\Projects\Ai_Tourism\
 
 ## اجرا
 
-PowerShell را از ریشه مخزن باز کن:
+PowerShell را از ریشه مخزن باز کن. **برای دیتابیس موجود این پروژه که در 2026-11-05 با ۳۰ جدول و ۴۱۹ ردیف PASS شده است، Initialize را دوباره اجرا نکن؛ فقط برای ساخت یک محیط Development کاملاً جدید از دستور Initialize استفاده کن و برای کنترل وضعیت محیط فعلی `Test-Database.ps1` کافی است.**
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
