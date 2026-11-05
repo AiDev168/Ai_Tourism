@@ -43,6 +43,7 @@ export function App() {
   const [itineraryNotes, setItineraryNotes] = useState(['', '', '']);
   const [online, setOnline] = useState(navigator.onLine);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const requestTextRef = useRef('');
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -61,7 +62,7 @@ export function App() {
     // useful for rendering, but it must not be the only source of submitted
     // text: FormData captures the exact values currently visible to the user.
     const formData = new FormData(event.currentTarget);
-    const requestText = String(formData.get('requestText') ?? '');
+    const requestText = promptRef.current?.value ?? String(formData.get('requestText') ?? requestTextRef.current);
     const currentDestination = String(formData.get('destination') ?? '');
     const currentDurationDays = String(formData.get('durationDays') ?? '');
     setQuery(requestText);
@@ -140,7 +141,8 @@ export function App() {
                 rows={2}
                 maxLength={1200}
                 value={query}
-                onChange={event => { setQuery(event.target.value); setRequirements(null); setClarifications([]); setError(''); }}
+                onInput={event => { requestTextRef.current = event.currentTarget.value; }}
+                onChange={event => { requestTextRef.current = event.currentTarget.value; setQuery(event.currentTarget.value); setRequirements(null); setClarifications([]); setError(''); }}
                 placeholder={t('promptPlaceholder')}
                 aria-describedby={error ? 'form-error' : undefined}
                 aria-invalid={error ? true : undefined}
