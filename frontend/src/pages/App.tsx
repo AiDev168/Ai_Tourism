@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { formatDate, formatNumber, interfaceActions, statusPreview, type Locale } from '../i18n/messages';
 import { tripMessages } from '../i18n/tripMessages';
 import { createTripRequirements, type TripRequirements } from '../trip/tripIntake';
@@ -42,6 +42,7 @@ export function App() {
   const [itineraryEditing, setItineraryEditing] = useState(false);
   const [itineraryNotes, setItineraryNotes] = useState(['', '', '']);
   const [online, setOnline] = useState(navigator.onLine);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -53,9 +54,25 @@ export function App() {
     };
   }, []);
 
-  const submit = (event: React.FormEvent) => {
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = createTripRequirements({ requestText: query, destination, durationDays });
+
+    // Read the live form controls at the submit boundary. React state remains
+    // useful for rendering, but it must not be the only source of submitted
+    // text: FormData captures the exact values currently visible to the user.
+    const formData = new FormData(event.currentTarget);
+    const requestText = String(formData.get('requestText') ?? '');
+    const currentDestination = String(formData.get('destination') ?? '');
+    const currentDurationDays = String(formData.get('durationDays') ?? '');
+    setQuery(requestText);
+    setDestination(currentDestination);
+    setDurationDays(currentDurationDays);
+
+    const result = createTripRequirements({
+      requestText,
+      destination: currentDestination,
+      durationDays: currentDurationDays,
+    });
     if (result.kind === 'invalid') {
       const messageKey = {
         'request-required': 'requestRequired',
@@ -66,6 +83,7 @@ export function App() {
       setError(tripMessages[locale][messageKey[result.reason]]);
       setClarifications([]);
       setRequirements(null);
+      if (result.reason === 'request-required') promptRef.current?.focus();
       return;
     }
     setError('');
@@ -116,24 +134,27 @@ export function App() {
             <form className="trip-form" onSubmit={submit} noValidate>
               <label htmlFor="trip-prompt">{t('promptLabel')}</label>
               <textarea
+                ref={promptRef}
                 id="trip-prompt"
+                name="requestText"
                 rows={2}
                 maxLength={1200}
                 value={query}
                 onChange={event => { setQuery(event.target.value); setRequirements(null); setClarifications([]); setError(''); }}
                 placeholder={t('promptPlaceholder')}
                 aria-describedby={error ? 'form-error' : undefined}
+                aria-invalid={error ? true : undefined}
               />
               <div className="trip-fields">
                 <div>
                   <label htmlFor="trip-destination">{tripCopy.destinationLabel}</label>
-                  <input id="trip-destination" autoComplete="off" maxLength={120} value={destination}
+                  <input id="trip-destination" name="destination" autoComplete="off" maxLength={120} value={destination}
                     onChange={event => { setDestination(event.target.value); setRequirements(null); setClarifications([]); setError(''); }}
                     placeholder={tripCopy.destinationPlaceholder} />
                 </div>
                 <div>
                   <label htmlFor="trip-duration">{tripCopy.durationLabel}</label>
-                  <select id="trip-duration" value={durationDays}
+                  <select id="trip-duration" name="durationDays" value={durationDays}
                     onChange={event => { setDurationDays(event.target.value); setRequirements(null); setClarifications([]); setError(''); }}>
                     <option value="">{tripCopy.durationOptional}</option>
                     {[1, 2, 3].map(days => <option key={days} value={days}>{tripCopy.durationDays.replace('{value}', formatNumber(locale, days))}</option>)}
