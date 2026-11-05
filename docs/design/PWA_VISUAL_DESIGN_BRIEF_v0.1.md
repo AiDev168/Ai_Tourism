@@ -249,3 +249,12 @@ Reject:
 - [ ] No user data or credentials are cached in the service worker by default.
 - [ ] Lighthouse/performance and accessibility checks are documented with their environment.
 - [ ] Screenshot pack and visual QA findings are included in the delivery report.
+
+
+## 13. Selected visual assets — November 2026 refresh
+
+The initial CSS-drawn destination placeholders have been replaced by documentary photographs for Naqsh-e Jahan Square (Isfahan), Fin Garden (Kashan), Yazd windcatchers, and the Hara mangrove forests (Qeshm). Author and license details are recorded in IMAGE_FONT_ASSET_CREDITS.md and linked beside the photos.
+
+The selected interface typeface is Estedad Variable, pinned to Fontsource package release 5.3.0. It supports Arabic and Latin subsets and variable weights 100–900 under the SIL Open Font License 1.1. For this remote visual refresh, a version-pinned Fontsource stylesheet is loaded. Before production sign-off, bundle the font as a pinned frontend dependency and serve its files same-origin for offline reliability.
+
+Photographs are currently loaded from resized Wikimedia Commons thumbnails and credited in the interface. Their source pages and CC BY-SA 4.0 terms are in IMAGE_FONT_ASSET_CREDITS.md. Before production deployment, vendor optimized local WebP/AVIF copies through the frontend asset pipeline while preserving attribution and compatible license notices.
