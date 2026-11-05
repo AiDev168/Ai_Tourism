@@ -46,7 +46,7 @@ BEGIN
 
     -- Exact dataset counts. These checks fail loudly if a seed is incomplete or duplicated.
     SELECT COUNT(*) INTO v_count FROM knowledge.knowledge_sources;
-    IF v_count <> 40 THEN RAISE EXCEPTION 'Expected 40 sources (legacy + synthetic + 38 UNESCO provenance records), found %', v_count; END IF;
+    IF v_count <> 58 THEN RAISE EXCEPTION 'Expected 58 sources (baseline 40 + Shiraz dataset 18), found %', v_count; END IF;
     SELECT COUNT(*) INTO v_count FROM knowledge.knowledge_sources
      WHERE source_name = 'Supplied tourism-points dataset (project attachment)'
        AND verification_status = 'pending' AND is_synthetic = FALSE;
@@ -57,14 +57,14 @@ BEGIN
     IF v_count <> 1 THEN RAISE EXCEPTION 'The QA source must remain explicitly synthetic and pending'; END IF;
 
     SELECT COUNT(*) INTO v_count FROM knowledge.destinations;
-    IF v_count <> 44 THEN RAISE EXCEPTION 'Expected 44 destinations (15 unverified + 12 synthetic + 17 UNESCO), found %', v_count; END IF;
+    IF v_count <> 66 THEN RAISE EXCEPTION 'Expected 66 destinations (baseline 44 + 22 Shiraz entities), found %', v_count; END IF;
 
     SELECT COUNT(*) INTO v_count FROM knowledge.destinations
      WHERE record_origin = 'user_supplied_unverified'
        AND verification_status = 'pending'
        AND status = 'needs_review'
        AND latitude IS NULL AND longitude IS NULL;
-    IF v_count <> 15 THEN RAISE EXCEPTION 'Expected 15 pending legacy destinations with no coordinates, found %', v_count; END IF;
+    IF v_count <> 14 THEN RAISE EXCEPTION 'Expected 14 untouched pending legacy destinations with no coordinates; Maragheh Observatory is enriched in migration 0007; found %', v_count; END IF;
 
     SELECT COUNT(*) INTO v_count FROM knowledge.destinations
      WHERE record_origin = 'verified_external' AND verification_status = 'verified'
@@ -80,12 +80,12 @@ BEGIN
     IF v_count <> 12 THEN RAISE EXCEPTION 'Expected 12 synthetic test-only destinations, found %', v_count; END IF;
 
     SELECT COUNT(*) INTO v_count FROM knowledge.destination_sources;
-    IF v_count <> 65 THEN RAISE EXCEPTION 'Expected 65 destination-source links (27 prior + 38 UNESCO), found %', v_count; END IF;
+    IF v_count <> 116 THEN RAISE EXCEPTION 'Expected 116 destination-source links (baseline 65 + 51 Shiraz relationships), found %', v_count; END IF;
     SELECT COUNT(DISTINCT destination_id) INTO v_count FROM knowledge.destination_sources;
-    IF v_count <> 44 THEN RAISE EXCEPTION 'Every seeded destination must have provenance; covered %', v_count; END IF;
+    IF v_count <> 66 THEN RAISE EXCEPTION 'Every seeded destination must have provenance; covered %', v_count; END IF;
 
     SELECT COUNT(*) INTO v_count FROM knowledge.destination_tags;
-    IF v_count <> 88 THEN RAISE EXCEPTION 'Expected 88 unique destination tags, found %', v_count; END IF;
+    IF v_count <> 208 THEN RAISE EXCEPTION 'Expected 208 unique destination tags after the Shiraz dataset, found %', v_count; END IF;
 
     SELECT COUNT(*) INTO v_count FROM knowledge.destination_categories;
     IF v_count <> 12 THEN RAISE EXCEPTION 'Expected 12 controlled taxonomy categories, found %', v_count; END IF;
@@ -94,22 +94,22 @@ BEGIN
     IF v_count <> 12 THEN RAISE EXCEPTION 'All 12 canonical taxonomy categories must be active; found %', v_count; END IF;
 
     SELECT COUNT(*) INTO v_count FROM knowledge.destination_category_map;
-    IF v_count <> 30 THEN RAISE EXCEPTION 'Expected 30 category mappings (12 synthetic QA + 18 curated UNESCO), found %', v_count; END IF;
+    IF v_count <> 47 THEN RAISE EXCEPTION 'Expected 47 category mappings (baseline 30 + 17 Shiraz mappings), found %', v_count; END IF;
     SELECT COUNT(*) INTO v_count FROM knowledge.destination_category_map
      WHERE is_synthetic = TRUE AND mapping_source = 'synthetic_fixture';
     IF v_count <> 12 THEN RAISE EXCEPTION 'Exactly 12 QA category mappings must be marked synthetic'; END IF;
     SELECT COUNT(*) INTO v_count FROM knowledge.destination_category_map WHERE is_synthetic = FALSE;
-    IF v_count <> 18 THEN RAISE EXCEPTION 'Expected 18 curated UNESCO category mappings, found %', v_count; END IF;
+    IF v_count <> 35 THEN RAISE EXCEPTION 'Expected 35 non-synthetic curated category mappings (18 UNESCO + 17 Shiraz), found %', v_count; END IF;
 
     SELECT COUNT(*) INTO v_count FROM knowledge.knowledge_documents;
-    IF v_count <> 29 THEN RAISE EXCEPTION 'Expected 29 knowledge documents (12 synthetic + 17 verified external), found %', v_count; END IF;
+    IF v_count <> 52 THEN RAISE EXCEPTION 'Expected 52 knowledge documents (12 synthetic + 40 verified external), found %', v_count; END IF;
     SELECT COUNT(*) INTO v_count FROM knowledge.knowledge_documents WHERE is_synthetic = FALSE AND record_origin = 'verified_external' AND ingestion_status = 'processed';
-    IF v_count <> 17 THEN RAISE EXCEPTION 'Expected 17 verified external documents, found %', v_count; END IF;
+    IF v_count <> 40 THEN RAISE EXCEPTION 'Expected 40 verified external documents, found %', v_count; END IF;
 
     SELECT COUNT(*) INTO v_count FROM knowledge.knowledge_chunks;
-    IF v_count <> 58 THEN RAISE EXCEPTION 'Expected 58 chunks (24 synthetic + 34 verified external), found %', v_count; END IF;
+    IF v_count <> 81 THEN RAISE EXCEPTION 'Expected 81 chunks (24 synthetic + 57 verified external), found %', v_count; END IF;
     SELECT COUNT(*) INTO v_count FROM knowledge.knowledge_chunks WHERE is_synthetic = FALSE;
-    IF v_count <> 34 THEN RAISE EXCEPTION 'Expected 34 verified external chunks, found %', v_count; END IF;
+    IF v_count <> 57 THEN RAISE EXCEPTION 'Expected 57 verified external chunks, found %', v_count; END IF;
 
     IF EXISTS (
         SELECT 1
@@ -192,15 +192,15 @@ BEGIN
     SELECT COUNT(*) INTO v_count FROM operations.audit_events;
     IF v_count <> 0 THEN RAISE EXCEPTION 'Expected 0 audit rows; no live application action occurred, found %', v_count; END IF;
     SELECT COUNT(*) INTO v_count FROM operations.dataset_import_batches;
-    IF v_count <> 5 THEN RAISE EXCEPTION 'Expected 5 dataset batches, found %', v_count; END IF;
+    IF v_count <> 6 THEN RAISE EXCEPTION 'Expected 6 dataset batches, found %', v_count; END IF;
     SELECT COUNT(*) INTO v_count FROM operations.dataset_import_batches
-     WHERE batch_key IN ('legacy-user-supplied-destinations-v1', 'synthetic-knowledge-fixtures-v1', 'synthetic-e2e-flow-v1', 'verified-unesco-iran-sites-v1', 'verified-unesco-iran-sites-v2');
-    IF v_count <> 5 THEN RAISE EXCEPTION 'Expected all five named dataset import batches, found %', v_count; END IF;
+     WHERE batch_key IN ('legacy-user-supplied-destinations-v1', 'synthetic-knowledge-fixtures-v1', 'synthetic-e2e-flow-v1', 'verified-unesco-iran-sites-v1', 'verified-unesco-iran-sites-v2', 'shiraz-dalahoo-wikipedia-v1');
+    IF v_count <> 6 THEN RAISE EXCEPTION 'Expected all six named dataset import batches, found %', v_count; END IF;
     IF (SELECT source_checksum FROM operations.dataset_import_batches
         WHERE batch_key = 'legacy-user-supplied-destinations-v1') IS NULL
     THEN RAISE EXCEPTION 'Legacy import batch must preserve the source SQL checksum'; END IF;
     SELECT COUNT(*) INTO v_count FROM system.schema_migrations;
-    IF v_count <> 7 THEN RAISE EXCEPTION 'Expected 7 tracked baseline/migration entries, found %', v_count; END IF;
+    IF v_count <> 8 THEN RAISE EXCEPTION 'Expected 8 tracked baseline/migration entries, found %', v_count; END IF;
 
     SELECT COUNT(*) INTO v_count FROM knowledge.production_destinations;
     IF v_count <> 0 THEN RAISE EXCEPTION 'Verified UNESCO seeds must remain unpublished until explicit review'; END IF;

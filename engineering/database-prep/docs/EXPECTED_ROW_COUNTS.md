@@ -1,8 +1,8 @@
-# شمارش دقیق مورد انتظار دیتابیس — Pre-Codex v0.3
+# شمارش دقیق مورد انتظار دیتابیس — Shiraz integration v0.4
 
 این سند Manifest قطعی Seedهای Pre-Codex پس از Migration شماره 0006 است. تست `sql/tests/001_schema_seed_invariants.sql` تعداد جدول‌ها و تعدادهای ثابت اصلی را کنترل می‌کند و `sql/reports/final_row_counts.sql` تعداد واقعی و مورد انتظار هر جدول را گزارش می‌کند. هر اختلافی باید Fail شود؛ تعداد مورد انتظار هرگز برای سبز شدن تست به‌صورت خودکار تغییر نمی‌کند.
 
-**۳۰ جدول متعلق به پروژه، ۴۱۹ ردیف مورد انتظار پس از اعمال Migration 0006.** ردیف‌های صفر عمدی هستند؛ Embedding واقعی، کلیک خروجی، فراخوانی LLM و رویداد Audit تا زمان وقوع واقعی نباید ساخته شوند.
+**۳۰ جدول متعلق به پروژه، ۶۹۵ ردیف مورد انتظار پس از اعمال Migration 0007.** این مقدار، ۲۲ مقصد جدید و تکمیل یک ردیف موجود مراغه، ۱۸ منبع، ۵۱ رابطهٔ مقصد/منبع، ۱۲۰ برچسب خالص، ۱۷ نگاشت دسته، ۲۳ سند و ۲۳ Chunk، و یک Batch و یک سابقهٔ Migration جدید را نسبت به Baseline 0006 منعکس می‌کند. ردیف‌های صفر عمدی هستند؛ Embedding واقعی، کلیک خروجی، فراخوانی LLM و رویداد Audit تا زمان وقوع واقعی نباید ساخته شوند.
 
 | Schema | Table | Expected rows |
 |---|---|---:|
@@ -16,14 +16,14 @@
 | `travel` | `trip_interests` | 3 |
 | `travel` | `itineraries` | 1 |
 | `travel` | `itinerary_stops` | 6 |
-| `knowledge` | `knowledge_sources` | 40 |
-| `knowledge` | `destinations` | 44 |
-| `knowledge` | `destination_sources` | 65 |
-| `knowledge` | `destination_tags` | 88 |
+| `knowledge` | `knowledge_sources` | 58 |
+| `knowledge` | `destinations` | 66 |
+| `knowledge` | `destination_sources` | 116 |
+| `knowledge` | `destination_tags` | 208 |
 | `knowledge` | `destination_categories` | 12 |
-| `knowledge` | `destination_category_map` | 30 |
-| `knowledge` | `knowledge_documents` | 29 |
-| `knowledge` | `knowledge_chunks` | 58 |
+| `knowledge` | `destination_category_map` | 47 |
+| `knowledge` | `knowledge_documents` | 52 |
+| `knowledge` | `knowledge_chunks` | 81 |
 | `knowledge` | `embedding_spaces` | 0 |
 | `knowledge` | `chunk_embeddings` | 0 |
 | `recommendation` | `recommendation_requests` | 1 |
@@ -34,23 +34,24 @@
 | `operations` | `feedback` | 1 |
 | `operations` | `ai_model_calls` | 0 |
 | `operations` | `audit_events` | 0 |
-| `operations` | `dataset_import_batches` | 5 |
-| `system` | `schema_migrations` | 7 |
+| `operations` | `dataset_import_batches` | 6 |
+| `system` | `schema_migrations` | 8 |
 
-| **TOTAL** | **30 project-owned tables** | **419** |
+| **TOTAL** | **30 project-owned tables** | **695** |
 
 ## ترکیب داده‌ها
 
-- **۱۵ مقصد قدیمی پروژه:** منتقل‌شده از `database/tourism_points.sql`؛ همگی `needs_review`، منبع اولیه pending و بدون مختصات تأییدشده.
+- **۱۴ مقصد قدیمی باقی‌مانده از پروژه:** از `database/tourism_points.sql`؛ همگی `needs_review`، منبع اولیه pending و بدون مختصات تأییدشده. هویت هر ۱۵ ردیف اصلی حفظ شده؛ رصدخانهٔ مراغه یکی از همان ردیف‌هاست که با Migration 0007 منبع‌دار شد و وضعیتش همچنان `needs_review` است.
 - **۱۲ مقصد QA مصنوعی + ۱۲ سند + ۲۴ Chunk:** صرفاً برای تست؛ همه با `is_synthetic=true`، منشأ `synthetic_fixture` و وضعیت `test_only`.
-- **۱۷ مقصد میراث جهانی منبع‌دار + ۱۷ سند فارسی + ۳۴ Chunk:** ۱۰ رکورد Batch اول و ۷ رکورد Batch دوم. منابع رسمی بررسی شده‌اند و `verification_status=verified` دارند، اما تمام مقصدها عمداً `status=needs_review` باقی می‌مانند و در Viewهای Production/RAG منتشر نمی‌شوند.
-- **۴۰ منبع اطلاعات:** ۱ منبع Legacy، ۱ منبع Synthetic، ۳۴ صفحه/نقشه رسمی UNESCO (دو منبع برای هر یک از ۱۷ اثر) و ۴ مرجع رسمی تکمیلی برای کنترل موقعیت اداری.
-- **۶۵ پیوند مقصد/منبع:** ۲۷ پیوند Legacy و QA، به‌اضافه ۳۸ پیوند مربوط به ۱۷ اثر واقعی.
-- **۸۸ برچسب مقصد:** ۶۷ برچسب قبلی به‌اضافه ۲۱ برچسب منبع‌دار Batch دوم.
-- **۳۰ نگاشت دسته‌بندی:** ۱۲ نگاشت Synthetic QA و ۱۸ نگاشت دسته‌بندی برای ۱۷ رکورد واقعی.
+- **۴۰ مقصد منبع‌دار و در انتظار بازبینی:** ۱۷ اثر میراث جهانی و ۲۳ موجودیت پایلوت شیراز/مراغه. همه `verified_external`, غیرمصنوعی و `needs_review` هستند و در Viewهای Production/RAG منتشر نمی‌شوند.
+- **۵۸ منبع اطلاعات:** ۴۰ منبع Baseline و ۱۸ منبع ثبت‌شده در Shiraz Dataset.
+- **۱۱۶ پیوند مقصد/منبع:** ۶۵ پیوند Baseline و ۵۱ رابطهٔ جدید پایلوت (شامل روابط discovery).
+- **۲۰۸ برچسب مقصد:** ۸۸ برچسب Baseline و ۱۲۰ برچسب خالص جدید، پس از حذف دو برچسب بی‌پشتوانهٔ مراغه.
+- **۴۷ نگاشت دسته‌بندی:** ۳۰ نگاشت Baseline و ۱۷ نگاشت جدید برای مقصدهای پایلوت و رصدخانهٔ مراغه.
+- **۵۲ سند فارسی + ۸۱ Chunk:** ۲۹/۵۸ در Baseline و ۲۳/۲۳ جدید. داده‌های جدید یک Chunk برای هر سند دارند.
 - **یک گراف E2E مصنوعی:** کاربر، رضایت، ترجیحات، مکالمه و پیام‌ها، سفر و محدودیت‌ها، پیشنهادها و امتیازها، برنامه سفر و بازخورد.
-- **۵ Batch ورود داده:** ورودی قدیمی، Fixture دانشی، گراف E2E، UNESCO Batch اول و UNESCO Batch دوم.
-- **۷ سابقه Migration:** یک Baseline مربوط به SQL قدیمی و شش Migration کنترل‌شده.
+- **۶ Batch ورود داده:** پنج Baseline و یک Shiraz dataset batch.
+- **۸ سابقه Migration:** یک Baseline مربوط به SQL قدیمی و هفت Migration کنترل‌شده.
 
 ## Batch دوم داده منبع‌دار
 

@@ -50,7 +50,8 @@ try {
         @{ Id = '0003_synthetic_e2e_seed'; File = '003_synthetic_e2e_seed.sql' },
         @{ Id = '0004_app_role_grants'; File = '004_app_role_grants.sql' },
         @{ Id = '0005_verified_unesco_destination_seed'; File = '005_verified_unesco_destination_seed.sql' },
-        @{ Id = '0006_verified_unesco_destination_seed_batch2'; File = '006_verified_unesco_destination_seed_batch2.sql' }
+        @{ Id = '0006_verified_unesco_destination_seed_batch2'; File = '006_verified_unesco_destination_seed_batch2.sql' },
+        @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; File = '007_shiraz_dalahoo_wikipedia_dataset_v1.sql' }
     )
     foreach ($migration in $migrationSet) {
         $localPath = Join-Path $PackageRoot (Join-Path 'sql' $migration.File)
@@ -97,6 +98,9 @@ try {
 
     Write-Host "`n========== SECOND VERIFIED EXTERNAL DATASET BATCH ==========" -ForegroundColor Cyan
     Invoke-PsqlFile '/opt/ai-tourism/sql/tests/008_verified_external_dataset_batch2.sql'
+
+    Write-Host "`n========== SHIRAZ DATASET INTEGRATION / PUBLICATION GATE ==========" -ForegroundColor Cyan
+    Invoke-PsqlFile '/opt/ai-tourism/sql/tests/009_shiraz_dataset_integration.sql'
 
     Write-Host "`n========== COMPLETE EXPECTED VS ACTUAL ROW COUNTS ==========" -ForegroundColor Cyan
     Invoke-PsqlFile '/opt/ai-tourism/sql/reports/final_row_counts.sql'

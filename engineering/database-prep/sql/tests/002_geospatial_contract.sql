@@ -42,8 +42,8 @@ BEGIN
     IF EXISTS (SELECT 1 FROM knowledge.destinations WHERE destination_key LIKE 'qa-%' AND coordinate_role <> 'test_fixture') THEN
         RAISE EXCEPTION 'Every synthetic coordinate must be explicitly marked test_fixture';
     END IF;
-    IF EXISTS (SELECT 1 FROM knowledge.destinations WHERE destination_key LIKE 'legacy-%' AND (latitude IS NOT NULL OR longitude IS NOT NULL OR coordinate_role <> 'unknown')) THEN
-        RAISE EXCEPTION 'Legacy unverified records must not gain invented coordinates';
+    IF EXISTS (SELECT 1 FROM knowledge.destinations WHERE record_origin = 'user_supplied_unverified' AND (latitude IS NOT NULL OR longitude IS NOT NULL OR coordinate_role <> 'unknown')) THEN
+        RAISE EXCEPTION 'Unenriched legacy unverified records must not gain invented coordinates';
     END IF;
 
     SELECT COUNT(*) INTO v_neighbor_count

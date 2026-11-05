@@ -31,7 +31,7 @@ BEGIN
       FROM knowledge.destination_sources ds
       JOIN knowledge.destinations d ON d.destination_id=ds.destination_id
      WHERE d.destination_key LIKE 'unesco-%-v1';
-    IF n <> 22 THEN RAISE EXCEPTION 'Expected 22 source links for the 10 UNESCO sites; found %', n; END IF;
+    IF n <> 24 THEN RAISE EXCEPTION 'Expected 22 original source links plus two Shiraz discovery-only nearby links for the 10 UNESCO sites; found %', n; END IF;
 
     SELECT COUNT(*) INTO n
       FROM knowledge.destination_sources ds
@@ -138,5 +138,5 @@ BEGIN
              OR c.content_sha256 <> encode(sha256(convert_to(c.content,'UTF8')),'hex'))
     ) THEN RAISE EXCEPTION 'A stored factual chunk character count or hash is invalid'; END IF;
 
-    RAISE NOTICE 'PASS: 10 UNESCO factual records, 20 official and 2 supplemental provenance links, exact source/document links, coordinates, 10 docs, 20 chunks, hashes and editorial publication gate.';
+    RAISE NOTICE 'PASS: 10 UNESCO factual records, 20 official and 2 supplemental provenance links, two separate nearby discovery links, exact source/document links, coordinates, 10 docs, 20 chunks, hashes and editorial publication gate.';
 END $$;

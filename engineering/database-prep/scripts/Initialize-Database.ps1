@@ -196,7 +196,8 @@ try {
         @{ Id = '0003_synthetic_e2e_seed'; File = '003_synthetic_e2e_seed.sql'; Path = '/opt/ai-tourism/sql/003_synthetic_e2e_seed.sql' },
         @{ Id = '0004_app_role_grants'; File = '004_app_role_grants.sql'; Path = '/opt/ai-tourism/sql/004_app_role_grants.sql' },
         @{ Id = '0005_verified_unesco_destination_seed'; File = '005_verified_unesco_destination_seed.sql'; Path = '/opt/ai-tourism/sql/005_verified_unesco_destination_seed.sql' },
-        @{ Id = '0006_verified_unesco_destination_seed_batch2'; File = '006_verified_unesco_destination_seed_batch2.sql'; Path = '/opt/ai-tourism/sql/006_verified_unesco_destination_seed_batch2.sql' }
+        @{ Id = '0006_verified_unesco_destination_seed_batch2'; File = '006_verified_unesco_destination_seed_batch2.sql'; Path = '/opt/ai-tourism/sql/006_verified_unesco_destination_seed_batch2.sql' },
+        @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; File = '007_shiraz_dalahoo_wikipedia_dataset_v1.sql'; Path = '/opt/ai-tourism/sql/007_shiraz_dalahoo_wikipedia_dataset_v1.sql' }
     )
 
     foreach ($migration in $migrations) {
