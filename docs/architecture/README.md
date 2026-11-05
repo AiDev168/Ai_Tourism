@@ -1,6 +1,6 @@
 # AI Tourism — Phase 0 Architecture Artifacts
 
-**Status:** Phase 0 design package, version 0.1  
+**Status:** Phase 0 design package, version 0.2; Phase 1 stack owner-approved  
 **Baseline branch:** `fix/initialize-database-powershell-inspect-v1`  
 **Database gate:** Owner-run Pre-Codex v0.3 checks passed on 2026-11-05; 30 tables / 419 rows.
 
@@ -11,8 +11,9 @@ This folder turns the repository's reference architecture, architecture analysis
 1. [Architecture decision records](decisions/README.md) — what is decided, proposed, or explicitly open.
 2. [MVP ERD v0.1](ERD_MVP_v0.1.md) — relationship view of the current 30-table database schema.
 3. [OpenAPI MVP v1 draft](../api/openapi-mvp-v1.yaml) — initial API boundary; authentication and streaming details remain gated decisions.
-4. [Security and privacy boundaries](../security/SECURITY_PRIVACY_BOUNDARIES_v0.1.md) — trust boundaries, abuse cases, data handling and unresolved policy choices.
-5. [Codex Phase 1 task packet](../implementation/CODEX_PHASE_1_TASK_PACKET_v0.1.md) — bounded instructions for the technical skeleton after required owner choices are confirmed.
+4. [PWA visual design brief](../design/PWA_VISUAL_DESIGN_BRIEF_v0.1.md) — owner-approved art direction, page layouts, responsive behavior, performance and accessibility acceptance criteria.
+5. [Security and privacy boundaries](../security/SECURITY_PRIVACY_BOUNDARIES_v0.1.md) — trust boundaries, abuse cases, data handling and unresolved policy choices.
+6. [Codex Phase 1 task packet](../implementation/CODEX_PHASE_1_TASK_PACKET_v0.2.md) — bounded implementation instructions for the approved technical skeleton.
 
 ## Source precedence
 
@@ -32,4 +33,4 @@ The reference architecture includes future capabilities such as agent orchestrat
 - **Open:** no implementation choice has been made; alternatives and decision criteria are documented.
 - **Superseded:** retained for history but replaced by a later ADR.
 
-No ADR marked Proposed or Open should be treated as permission to implement the choice.
+No ADR marked Proposed or Open should be treated as permission to implement the choice. ADR-0005 is now Accepted by the owner; ADR-0006 remains Open and gates authenticated user-data APIs in Phase 2.
