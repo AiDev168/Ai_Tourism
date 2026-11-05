@@ -62,7 +62,10 @@ try {
         format: image.currentSrc.split('.').at(-1),
       })));
 
-      await page.locator('#trip-prompt').fill(prompts[locale]);
+      const promptField = page.locator('#trip-prompt');
+      await promptField.focus();
+      await promptField.pressSequentially(prompts[locale]);
+      const promptInputLength = [...(await promptField.inputValue()).trim()].length;
       await page.locator('.trip-form button[type="submit"]').click();
       const clarificationCount = await page.locator('.trip-response li').count();
       await page.locator('#trip-destination').fill('Shiraz شیراز شيراز القاهرة Cairo');
@@ -128,7 +131,7 @@ try {
       await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
       await mkdir(resolve(output, locale), { recursive: true });
       await page.screenshot({ path: resolve(output, locale, `${width}.png`), fullPage: true, animations: 'disabled' });
-      results.push({ locale, width, direction, title, fontStatus, imageStatus, clarificationCount, intakeReady, intakeSummary, validationVisible,
+      results.push({ locale, width, direction, title, fontStatus, imageStatus, promptInputLength, clarificationCount, intakeReady, intakeSummary, validationVisible,
         mixedDestinationLayout, mixedScriptLayout, editLayout, keyboardFocus, reducedMotion, accessibility, externalRequests, errors,
         screenshot: relative(root, resolve(output, locale, `${width}.png`)).replaceAll('\\', '/') });
       await page.close();
@@ -139,7 +142,7 @@ try {
   const failures = results.filter(item => item.direction !== expectedDirection(item.locale) || !item.title ||
     item.mixedDestinationLayout.document > item.width || item.mixedScriptLayout.document > item.width || item.editLayout.document > item.width ||
     !item.fontStatus.loaded || item.fontStatus.resources.length < 2 || item.imageStatus.some(image => !image.loaded || !image.local) ||
-    item.clarificationCount !== 1 || !item.intakeReady || !item.validationVisible || !item.keyboardFocus ||
+    item.promptInputLength < 5 || item.clarificationCount !== 1 || !item.intakeReady || !item.validationVisible || !item.keyboardFocus ||
     !item.reducedMotion.preference || item.reducedMotion.transition !== '1e-05s' || item.accessibility.length ||
     item.externalRequests.length || item.errors.length);
   const report = { generatedAt: new Date().toISOString(), browser: 'Installed Google Chrome, headless', cases: results.length,
