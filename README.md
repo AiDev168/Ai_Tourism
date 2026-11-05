@@ -8,7 +8,7 @@ AI Tourism / AI Travel Advisor — architecture baseline and design repository.
 - [Architecture Analysis](docs/reference/ARCHITECTURE_ANALYSIS.md) — architecture maturity, options and long-term evolutionary target.
 - [Phase 0 Architecture Package](docs/architecture/README.md) — ADR index, ERD, API contract and security/privacy boundaries.
 - [MVP Codex Handoff v0.5](docs/implementation/AI_TOURISM_MVP_CODEX_HANDOFF_v0.5.md) — current implementation boundary, approved stack and verified database gate.
-- [PWA Visual Design Brief](docs/design/PWA_VISUAL_DESIGN_BRIEF_v0.1.md) — owner-approved design direction, visual quality, performance and accessibility bar.
+- [PWA Design Package](docs/design/README.md) — owner-approved design direction, visual quality, performance and accessibility bar.
 - [Codex Phase 1 Task Packet v0.2](docs/implementation/CODEX_PHASE_1_TASK_PACKET_v0.2.md) — approved Phase 1 implementation and visual QA requirements.
 
 ## MVP architecture decision
