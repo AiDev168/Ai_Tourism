@@ -2,7 +2,6 @@ openapi: 3.1.0
 info:
   title: AI Tourism MVP API
   version: 0.1.0
-  summary: Draft contract for the first Persian travel-advisor journey
   description: |
     This is a Phase 0 design contract, not a statement that these routes are
     implemented or deployed. It captures the MVP route candidates from the
