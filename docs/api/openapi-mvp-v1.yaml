@@ -8,13 +8,12 @@ info:
     implementation handoff and makes data/publication boundaries explicit.
 
     SECURITY GATE: User-owned /api/v1 routes require authenticated identity and
-    object-level authorization before implementation or release. Published
-    catalogue reads may be public only after the verified/editorially-approved
-    publication gate is enforced. The identity
-    provider and session scheme are unresolved in ADR-0006, so this document
-    intentionally does not pretend a concrete bearer/cookie mechanism has been
-    selected. Codex must not implement these routes as anonymous endpoints.
-    User-owned routes must not be exposed anonymously. Published, read-only catalogue routes may be public only when strict editorial-publication and non-synthetic filters are enforced.
+    object-level authorization before implementation or release. Read-only
+    published-catalogue routes may be public only after the verified,
+    editorially-approved and non-synthetic publication gate is enforced. The
+    identity provider and session scheme are unresolved in ADR-0006, so this
+    document does not pretend a concrete bearer/cookie mechanism has been
+    selected. Codex must not implement user-owned routes as anonymous endpoints.
 
     STREAMING GATE: Message submission is shown as a JSON request/response
     baseline. SSE is the preferred future streaming direction, but event names,
