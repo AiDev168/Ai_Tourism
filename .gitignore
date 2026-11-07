@@ -7,6 +7,8 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+.env.*
+.env.example
 .Python
 build/
 develop-eggs/
@@ -151,6 +153,7 @@ activemq-data/
 .env
 .envrc
 .venv
+.env
 env/
 venv/
 ENV/
@@ -219,9 +222,7 @@ __marimo__/
 .venv/
 __pycache__/
 *.py[cod]
-.env
-.env.*
-!.env.example
+.env.example
 node_modules/
 frontend/dist/
 frontend/.vite/

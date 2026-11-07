@@ -42,7 +42,7 @@ class ChallengeRequest(BaseModel):
 
 class ChallengeResponse(BaseModel):
     challenge_id: UUID | None
-    status: str = "accepted"
+    status: Literal["accepted", "unavailable"]
     message: str = "If sign-in can proceed, a code will be sent."
 
 
@@ -120,7 +120,10 @@ def request_challenge(
         return _unavailable()
     except InvalidPhoneNumber:
         return JSONResponse(status_code=422, content={"error": {"code": "invalid_phone"}})
-    return ChallengeResponse(challenge_id=result.challenge_id)
+    return ChallengeResponse(
+        challenge_id=result.challenge_id,
+        status="accepted" if result.accepted else "unavailable",
+    )
 
 
 @router.post("/otp/verify", response_model=SessionResponse)

@@ -13,7 +13,7 @@ from app.api.health import router as health_router
 from app.api.catalogue import router as catalogue_router
 from app.api.auth import router as auth_router
 from app.modules.identity.auth_service import AuthenticationUnavailable
-from app.modules.identity.sms import DisabledSmsAdapter, FakeSmsAdapter
+from app.modules.identity.sms import DisabledSmsAdapter, FakeSmsAdapter, SmsIrSandboxAdapter
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -22,7 +22,13 @@ app = FastAPI(title="AI Tourism API", version="0.1.0")
 app.include_router(health_router)
 app.include_router(catalogue_router)
 app.include_router(auth_router)
-app.state.sms_adapter = FakeSmsAdapter() if settings.auth_sms_adapter == "fake" else DisabledSmsAdapter()
+if settings.auth_sms_adapter == "fake":
+    app.state.sms_adapter = FakeSmsAdapter()
+elif settings.auth_sms_adapter == "sms_ir_sandbox":
+    # The key is server-only and Settings rejects Sandbox mode in production.
+    app.state.sms_adapter = SmsIrSandboxAdapter(settings.sms_ir_api_key.get_secret_value())
+else:
+    app.state.sms_adapter = DisabledSmsAdapter()
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 
@@ -54,6 +60,8 @@ async def request_context(request: Request, call_next):
         logger.error("request.failed", extra={"request_id": request_id, "result": "error"})
         response = JSONResponse(status_code=500, content={"error": {"code": "internal_error"}})
     response.headers["X-Request-ID"] = request_id
+    if request.url.path.startswith("/api/v1/auth/"):
+        response.headers["Cache-Control"] = "no-store"
     logger.info(
         "request.completed",
         extra={"request_id": request_id, "result": str(response.status_code),

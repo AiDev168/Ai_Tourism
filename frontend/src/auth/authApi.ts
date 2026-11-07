@@ -21,7 +21,9 @@ export class AuthApiError extends Error {
 
 export const authApi = {
   me: () => request<AuthSession>('/me'),
-  requestCode: (phone_number: string, locale: string) => request<{ challenge_id: string | null; status: string }>(
+  requestCode: (phone_number: string, locale: string) => request<{
+    challenge_id: string | null; status: 'accepted' | 'unavailable'; message: string;
+  }>(
     '/otp/challenges', { method: 'POST', body: JSON.stringify({ phone_number, locale }) },
   ),
   verify: (challenge_id: string, code: string) => request<AuthSession>(

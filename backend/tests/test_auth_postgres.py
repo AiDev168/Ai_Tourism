@@ -23,7 +23,7 @@ from app.api.auth import router as auth_router
 from app.modules.identity.auth_service import AuthenticationService
 from app.modules.identity.auth_repository import AuthRepository
 from app.modules.identity.authorization import Principal, require_capability_dependency, require_owner_dependency
-from app.modules.identity.sms import FakeSmsAdapter
+from app.modules.identity.sms import FakeSmsAdapter, SmsDeliveryError, SmsFailureCategory
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("AUTH_INTEGRATION_TESTS") != "1",
@@ -32,8 +32,14 @@ pytestmark = pytest.mark.skipif(
 
 
 TEST_PHONES = tuple(
-    f"+98912{number:07d}" for number in secrets.SystemRandom().sample(range(10_000_000), 4)
+    f"+98912{number:07d}" for number in secrets.SystemRandom().sample(range(10_000_000), 5)
 )
+
+
+class FailingSmsAdapter:
+    def send(self, message, *, timeout_seconds):
+        del message, timeout_seconds
+        raise SmsDeliveryError(SmsFailureCategory.PROVIDER_UNAVAILABLE)
 
 
 def _required_env(name: str) -> str:
@@ -248,6 +254,40 @@ def test_postgres_otp_session_atomicity_and_revocation():
         assert failed["failed_attempts"] == settings.auth_otp_max_attempts
         assert failed["locked_at"] is not None
         assert evidence_count == 0
+
+
+def test_failed_sms_delivery_cannot_be_verified_or_create_identity_evidence():
+    settings = make_settings()
+    repository = AuthRepository(settings)
+    service = AuthenticationService(settings, FailingSmsAdapter(), repository)
+
+    result = service.issue(TEST_PHONES[4], "integration-ip-delivery-failure", "en-US")
+    assert result.accepted is False
+    assert result.challenge_id is None
+
+    with connect(settings) as conn:
+        challenge = conn.execute(
+            """SELECT challenge_id, delivery_status FROM identity.otp_challenges
+               WHERE phone_e164=%s ORDER BY created_at DESC LIMIT 1""",
+            (TEST_PHONES[4],),
+        ).fetchone()
+        assert challenge is not None
+        assert challenge["delivery_status"] == "failed"
+        challenge_id = challenge["challenge_id"]
+
+    assert service.verify(challenge_id, "123456", "integration-ip-delivery-failure") is None
+    with connect(settings) as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM identity.users WHERE phone_e164=%s", (TEST_PHONES[4],)
+        ).fetchone()["count"] == 0
+        assert conn.execute(
+            "SELECT COUNT(*) FROM identity.verified_phones WHERE phone_e164=%s", (TEST_PHONES[4],)
+        ).fetchone()["count"] == 0
+        assert conn.execute(
+            """SELECT COUNT(*) FROM identity.web_sessions s
+               JOIN identity.users u ON u.user_id=s.user_id WHERE u.phone_e164=%s""",
+            (TEST_PHONES[4],),
+        ).fetchone()["count"] == 0
 
 
 def test_actual_fastapi_flow_uses_app_role_and_secure_cookie():

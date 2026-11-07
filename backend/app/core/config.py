@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     database_connect_timeout_seconds: int = Field(default=2, ge=1, le=10)
     auth_enabled: bool = False
     auth_sms_adapter: str = "disabled"
+    sms_ir_api_key: SecretStr | None = None
     auth_otp_hmac_secret: SecretStr | None = None
     auth_csrf_secret: SecretStr | None = None
     auth_rate_limit_secret: SecretStr | None = None
@@ -54,15 +55,23 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_auth_configuration(self):
-        if self.auth_sms_adapter not in {"disabled", "fake"}:
-            raise ValueError("AUTH_SMS_ADAPTER must be disabled or fake; no production adapter exists")
+        if self.auth_sms_adapter not in {"disabled", "fake", "sms_ir_sandbox"}:
+            raise ValueError("AUTH_SMS_ADAPTER must be disabled, fake, or sms_ir_sandbox")
         if self.app_env.lower() == "production":
             if self.auth_enabled:
-                raise ValueError("Authentication cannot be enabled in production without an approved SMS adapter")
+                raise ValueError("Authentication is disabled in production pending separate SMS authorization")
             if not self.auth_cookie_secure:
                 raise ValueError("AUTH_COOKIE_SECURE must be true in production")
         if self.auth_sms_adapter == "fake" and self.app_env.lower() not in {"development", "test"}:
             raise ValueError("The fake SMS adapter is restricted to development and tests")
+        if self.auth_sms_adapter == "sms_ir_sandbox":
+            if self.app_env.lower() not in {"development", "test"}:
+                raise ValueError("SMS.ir Sandbox is restricted to development and tests")
+            if self.sms_ir_api_key is None:
+                raise ValueError("SMS_IR_API_KEY is required for the SMS.ir Sandbox adapter")
+            key = self.sms_ir_api_key.get_secret_value()
+            if not key or key != key.strip() or "\r" in key or "\n" in key:
+                raise ValueError("SMS_IR_API_KEY is invalid for the SMS.ir Sandbox adapter")
         if self.auth_enabled:
             for name in ("auth_otp_hmac_secret", "auth_csrf_secret", "auth_rate_limit_secret"):
                 secret = getattr(self, name)
@@ -72,7 +81,7 @@ class Settings(BaseSettings):
                 raise ValueError("Both authentication session lifetimes must be configured")
             if self.auth_session_idle_seconds > self.auth_session_absolute_seconds:
                 raise ValueError("Session idle lifetime cannot exceed absolute lifetime")
-            if self.auth_sms_adapter != "fake":
+            if self.auth_sms_adapter == "disabled":
                 raise ValueError("Authentication is enabled without an available SMS delivery adapter")
             if not self.auth_allowed_origins.strip():
                 raise ValueError("AUTH_ALLOWED_ORIGINS must contain at least one exact origin")

@@ -37,7 +37,7 @@ export function AuthPanel({ locale }: { locale: Locale }) {
     try {
       const result = await authApi.requestCode(phone, locale);
       if (!result.challenge_id) {
-        setError(copy.rateLimited);
+        setError(copy.requestUnavailable);
       } else {
         setChallengeId(result.challenge_id); setPhase('code'); setNotice(copy.codeSent);
       }

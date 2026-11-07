@@ -14,7 +14,11 @@ from app.main import app
 from app.modules.identity.auth_service import AuthenticationService
 from app.modules.identity.authorization import AuthorizationDenied, Principal, require_capability, require_owner
 from app.modules.identity.phone import InvalidPhoneNumber, normalize_iranian_mobile
-from app.modules.identity.sms import FakeSmsAdapter
+from app.modules.identity.sms import (
+    FakeSmsAdapter,
+    SmsDeliveryError,
+    SmsFailureCategory,
+)
 
 
 def auth_settings(**overrides) -> Settings:
@@ -86,6 +90,12 @@ class MemoryAuthRepository:
         self.sessions.pop(token_hash, None)
 
 
+class FailingSmsAdapter:
+    def send(self, message, *, timeout_seconds):
+        del message, timeout_seconds
+        raise SmsDeliveryError(SmsFailureCategory.RATE_LIMITED)
+
+
 def test_phone_normalization_accepts_iranian_formats_and_localized_digits():
     expected = "+989121234567"
     for value in ("09121234567", "+989121234567", "00989121234567", "۰۹۱۲۱۲۳۴۵۶۷", "+٩٨ ٩١٢ ١٢٣ ٤٥٦٧"):
@@ -116,6 +126,7 @@ def test_phone_otp_flow_never_returns_code_or_raw_session_in_json(caplog):
         with TestClient(app, base_url="https://testserver") as client:
             issue = client.post("/api/v1/auth/otp/challenges", json={"phone_number": "۰۹۱۲۱۲۳۴۵۶۷", "locale": "fa-IR"})
             assert issue.status_code == 202
+            assert issue.headers["cache-control"] == "no-store"
             challenge = issue.json()["challenge_id"]
             message = sms.take_messages()[0]
             code = re.search(r"\d{6}", message.body).group()
@@ -125,6 +136,7 @@ def test_phone_otp_flow_never_returns_code_or_raw_session_in_json(caplog):
 
             verified = client.post("/api/v1/auth/otp/verify", json={"challenge_id": challenge, "code": code})
             assert verified.status_code == 200
+            assert verified.headers["cache-control"] == "no-store"
             assert verified.json()["user"]["phone_verified"] is True
             assert "csrf_token" in verified.json()
             assert "session" not in verified.text.lower()
@@ -137,6 +149,7 @@ def test_phone_otp_flow_never_returns_code_or_raw_session_in_json(caplog):
 
             restored = client.get("/api/v1/auth/me")
             assert restored.status_code == 200
+            assert restored.headers["cache-control"] == "no-store"
             assert restored.json()["user"]["user_id"] == verified.json()["user"]["user_id"]
             csrf = restored.json()["csrf_token"]
             assert client.post("/api/v1/auth/logout", headers={"X-CSRF-Token": csrf, "Origin": "https://testserver"}).status_code == 204
@@ -163,6 +176,36 @@ def test_csrf_and_expired_sessions_fail_closed():
             rejected = client.post("/api/v1/auth/logout", headers={"Origin": "https://evil.example", "X-CSRF-Token": login.json()["csrf_token"]})
             assert rejected.status_code == 403
             assert client.get("/api/v1/auth/me").status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_failed_sms_delivery_returns_no_challenge_and_no_authenticated_state():
+    settings = auth_settings()
+    repository = MemoryAuthRepository()
+    service = AuthenticationService(settings, FailingSmsAdapter(), repository)  # type: ignore[arg-type]
+    result = service.issue("09121234567", "test-ip", "en-US")
+    assert result.challenge_id is None
+    assert result.accepted is False
+    challenge_id = next(iter(repository.challenges))
+    assert repository.challenges[challenge_id]["delivery_status"] == "failed"
+    assert service.verify(challenge_id, "123456", "test-ip") is None
+    assert repository.users == {}
+    assert repository.sessions == {}
+
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_auth_service] = lambda: service
+    try:
+        response = TestClient(app).post(
+            "/api/v1/auth/otp/challenges",
+            json={"phone_number": "09121234567", "locale": "en-US"},
+        )
+        assert response.status_code == 202
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json()["challenge_id"] is None
+        assert response.json()["status"] == "unavailable"
+        assert "provider" not in response.text.lower()
+        assert "api key" not in response.text.lower()
     finally:
         app.dependency_overrides.clear()
 

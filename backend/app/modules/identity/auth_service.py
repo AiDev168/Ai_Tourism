@@ -76,22 +76,28 @@ class AuthenticationService:
             window_seconds=self.settings.auth_rate_window_seconds,
         )
         if not allowed:
-            return ChallengeResult(challenge_id=None)
+            return ChallengeResult(challenge_id=None, accepted=False)
         sms_text = {
             "fa-IR": f"کد ورود راه‌گرد: {code}",
             "en-US": f"Rahgard sign-in code: {code}",
             "ar": f"رمز تسجيل الدخول إلى راه‌گرد: {code}",
         }
-        message = SmsMessage(recipient=phone, body=sms_text.get(locale, sms_text["fa-IR"]))
+        message = SmsMessage(
+            recipient=phone,
+            verification_code=code,
+            purpose="login",
+            locale=locale,
+            body=sms_text.get(locale, sms_text["fa-IR"]),
+        )
         try:
             self.sms.send(message, timeout_seconds=3.0)
             self.repository.mark_delivery_sent(challenge_id)
         except (SmsDeliveryError, TimeoutError):
             self.repository.mark_delivery_failed(challenge_id)
-            return ChallengeResult(challenge_id=challenge_id)
+            return ChallengeResult(challenge_id=None, accepted=False)
         except Exception:
             self.repository.mark_delivery_failed(challenge_id)
-            return ChallengeResult(challenge_id=challenge_id)
+            return ChallengeResult(challenge_id=None, accepted=False)
         finally:
             del code
             del message
