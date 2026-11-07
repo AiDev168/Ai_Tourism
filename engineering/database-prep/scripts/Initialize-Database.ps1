@@ -1,9 +1,12 @@
 [CmdletBinding()]
 param(
-    [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
+    [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path,
+    [switch]$ApplyPendingMigrationsToExistingDatabase
 )
 
 $ErrorActionPreference = 'Stop'
+$LifecycleModule = Join-Path $PSScriptRoot 'Database-Lifecycle.psm1'
+Import-Module $LifecycleModule -Force
 $PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $LegacySource = Join-Path $ProjectRoot 'database\tourism_points.sql'
 $LegacyDir = Join-Path $PackageRoot 'legacy'
@@ -158,15 +161,78 @@ try {
         return (($result | Out-String).Trim())
     }
 
+    # Classify existing data before bootstrap, seed, checksum-ledger, or import
+    # writes. Only a truly empty database, exact 0006, or exact 0007 is accepted.
+    $ledgerExists = Get-PsqlScalar "SELECT CASE WHEN to_regclass('system.schema_migrations') IS NULL THEN 'no' ELSE 'yes' END;"
+    $projectTableCount = Get-PsqlScalar "SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname IN ('identity','conversation','travel','knowledge','recommendation','integration','operations','system');"
+    $projectSchemaCount = Get-PsqlScalar "SELECT COUNT(*) FROM pg_catalog.pg_namespace WHERE nspname IN ('identity','conversation','travel','knowledge','recommendation','integration','operations','system');"
+    $projectExtensionCount = Get-PsqlScalar "SELECT COUNT(*) FROM pg_catalog.pg_extension WHERE extname IN ('postgis','vector');"
+    $databaseState = ''
+    if ($ledgerExists -eq 'no' -and $projectTableCount -eq '0' -and $projectSchemaCount -eq '0' -and $projectExtensionCount -eq '0') {
+        $databaseState = 'fresh'
+    }
+    elseif ($ledgerExists -ne 'yes') {
+        throw "Database has partial or unexpected state without a migration ledger ($projectSchemaCount project schemas, $projectTableCount project tables, $projectExtensionCount project extensions). Initialization stopped without applying migrations. Inspect this database manually."
+    }
+    else {
+        $appliedIds = @((Get-PsqlScalar "SELECT COALESCE(string_agg(migration_id, ',' ORDER BY migration_id), '') FROM system.schema_migrations;").Split(',', [StringSplitOptions]::RemoveEmptyEntries))
+        $state = Resolve-DatabaseLifecycleState -AppliedMigrationIds $appliedIds
+        $databaseState = $state.Name
+        $expectedMigrations = $state.MigrationIds
+
+        $migrationFiles = @(
+            @{ Id = '0000_legacy_tourism_points_baseline'; Path = $LegacySource },
+            @{ Id = '0001_core_schema'; Path = (Join-Path $PackageRoot 'sql\001_core_schema.sql') },
+            @{ Id = '0002_synthetic_knowledge_seed'; Path = (Join-Path $PackageRoot 'sql\002_synthetic_knowledge_seed.sql') },
+            @{ Id = '0003_synthetic_e2e_seed'; Path = (Join-Path $PackageRoot 'sql\003_synthetic_e2e_seed.sql') },
+            @{ Id = '0004_app_role_grants'; Path = (Join-Path $PackageRoot 'sql\004_app_role_grants.sql') },
+            @{ Id = '0005_verified_unesco_destination_seed'; Path = (Join-Path $PackageRoot 'sql\005_verified_unesco_destination_seed.sql') },
+            @{ Id = '0006_verified_unesco_destination_seed_batch2'; Path = (Join-Path $PackageRoot 'sql\006_verified_unesco_destination_seed_batch2.sql') },
+            @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; Path = (Join-Path $PackageRoot 'sql\007_shiraz_dalahoo_wikipedia_dataset_v1.sql') }
+        ) | Where-Object { $_.Id -in $expectedMigrations }
+        foreach ($migration in $migrationFiles) {
+            $localHash = (Get-FileHash -LiteralPath $migration.Path -Algorithm SHA256).Hash.ToLowerInvariant()
+            $databaseHash = Get-PsqlScalar "SELECT COALESCE((SELECT sha256 FROM system.schema_migrations WHERE migration_id = '$($migration.Id)'), '');"
+            if ($databaseHash -ne $localHash) {
+                throw "Migration checksum mismatch for $($migration.Id). Initialization stopped without applying pending migrations."
+            }
+        }
+
+        Write-Host "Validating existing database state $databaseState without applying migrations..." -ForegroundColor Cyan
+        Invoke-PsqlFile '/opt/ai-tourism/sql/reports/final_row_counts.sql'
+        if ($state.IncludesShiraz) {
+            $initializationAction = Resolve-DatabaseInitializationAction -State $databaseState -ApplyPendingMigrationsToExistingDatabase:$ApplyPendingMigrationsToExistingDatabase
+        }
+        elseif ($ApplyPendingMigrationsToExistingDatabase) {
+            $initializationAction = Resolve-DatabaseInitializationAction -State $databaseState -ApplyPendingMigrationsToExistingDatabase
+        }
+        else {
+            $initializationAction = Resolve-DatabaseInitializationAction -State $databaseState
+        }
+
+        if ($initializationAction -eq 'already-integrated') {
+            Write-Host 'Database already has the validated 0007 / 695-row state. No changes are needed.' -ForegroundColor Green
+            return
+        }
+        if ($initializationAction -eq 'apply-pending-0007') {
+            Write-Host 'Explicit opt-in received for applying pending Migration 0007 to the validated 0006 database.' -ForegroundColor Yellow
+        }
+    }
+
     function Register-Migration([string]$MigrationId, [string]$Hash) {
         $sql = "INSERT INTO system.schema_migrations (migration_id, sha256) VALUES ('$MigrationId', '$Hash') ON CONFLICT (migration_id) DO NOTHING;"
         & docker compose --project-name ai-tourism-db --env-file $EnvFile exec -T db psql -X -v ON_ERROR_STOP=1 -U ai_tourism_owner -d ai_tourism_dev -c $sql
         if ($LASTEXITCODE -ne 0) { throw "Could not register migration $MigrationId" }
     }
 
-    Write-Host "`n========== EXTENSIONS AND MIGRATION CONTROL ==========" -ForegroundColor Cyan
-    & docker compose --project-name ai-tourism-db --env-file $EnvFile exec -T db psql -X -v ON_ERROR_STOP=1 -v "app_user=$($envValues['POSTGRES_APP_USER'])" -v "app_password=$($envValues['POSTGRES_APP_PASSWORD'])" -U ai_tourism_owner -d ai_tourism_dev -f '/opt/ai-tourism/sql/000_bootstrap.sql'
-    if ($LASTEXITCODE -ne 0) { throw 'Bootstrap failed: extensions, migration ledger or application role.' }
+    if ($databaseState -eq 'fresh') {
+        Write-Host "`n========== EXTENSIONS AND MIGRATION CONTROL ==========" -ForegroundColor Cyan
+        & docker compose --project-name ai-tourism-db --env-file $EnvFile exec -T db psql -X -v ON_ERROR_STOP=1 -v "app_user=$($envValues['POSTGRES_APP_USER'])" -v "app_password=$($envValues['POSTGRES_APP_PASSWORD'])" -U ai_tourism_owner -d ai_tourism_dev -f '/opt/ai-tourism/sql/000_bootstrap.sql'
+        if ($LASTEXITCODE -ne 0) { throw 'Bootstrap failed: extensions, migration ledger or application role.' }
+    }
+    else {
+        Write-Host 'Existing database state validated; bootstrap and legacy seed are skipped.' -ForegroundColor DarkGreen
+    }
 
     $legacyId = '0000_legacy_tourism_points_baseline'
     $legacyHash = (Get-FileHash -LiteralPath $LegacySource -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -227,9 +293,11 @@ try {
 
     # The import ledger is created by migration 001 and seeded by migration 002.
     # Record the source SQL checksum only after that table and batch row exist.
-    $batchChecksumSql = "UPDATE operations.dataset_import_batches SET source_checksum = '$legacyHash' WHERE batch_key = 'legacy-user-supplied-destinations-v1';"
-    & docker compose --project-name ai-tourism-db --env-file $EnvFile exec -T db psql -X -v ON_ERROR_STOP=1 -U ai_tourism_owner -d ai_tourism_dev -c $batchChecksumSql
-    if ($LASTEXITCODE -ne 0) { throw 'Could not store the original tourism SQL checksum in the dataset import ledger.' }
+    if ($databaseState -eq 'fresh') {
+        $batchChecksumSql = "UPDATE operations.dataset_import_batches SET source_checksum = '$legacyHash' WHERE batch_key = 'legacy-user-supplied-destinations-v1';"
+        & docker compose --project-name ai-tourism-db --env-file $EnvFile exec -T db psql -X -v ON_ERROR_STOP=1 -U ai_tourism_owner -d ai_tourism_dev -c $batchChecksumSql
+        if ($LASTEXITCODE -ne 0) { throw 'Could not store the original tourism SQL checksum in the dataset import ledger.' }
+    }
     $storedBatchChecksum = Get-PsqlScalar "SELECT COALESCE((SELECT source_checksum FROM operations.dataset_import_batches WHERE batch_key = 'legacy-user-supplied-destinations-v1'), '');"
     if ($storedBatchChecksum -ne $legacyHash) { throw 'Legacy import ledger checksum verification failed.' }
 

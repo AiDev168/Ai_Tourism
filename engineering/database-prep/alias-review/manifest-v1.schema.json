@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-tourism.invalid/schemas/destination-alias-manifest-v1.json",
+  "title": "AI Tourism destination alias review manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifest_version", "entries"],
+  "properties": {
+    "manifest_version": { "const": 1 },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "destination_key", "locale", "canonical_display_name", "alias",
+          "alias_type", "source_reference", "editorial_status", "review_notes"
+        ],
+        "properties": {
+          "destination_key": { "type": "string", "minLength": 1, "maxLength": 240 },
+          "locale": { "enum": ["fa-IR", "en-US", "ar"] },
+          "canonical_display_name": { "type": "string", "minLength": 1, "maxLength": 240 },
+          "alias": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "alias_type": { "enum": ["canonical_display_name", "spelling_variant", "alternate_script_name", "exonym"] },
+          "source_reference": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "editorial_status": { "enum": ["proposed", "draft", "in_review", "approved", "rejected", "duplicate"] },
+          "review_notes": { "type": "string", "maxLength": 2000 }
+        }
+      }
+    }
+  }
+}

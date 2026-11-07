@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatDate, formatNumber, interfaceActions, statusPreview, type Locale } from '../i18n/messages';
 import { tripMessages } from '../i18n/tripMessages';
-import { createTripRequirements, type TripRequirements } from '../trip/tripIntake';
+import { destinationResolutionMessages } from '../i18n/destinationResolutionMessages';
+import { createTripRequirements, MAX_TRIP_DURATION_DAYS, type TripRequirements } from '../trip/tripIntake';
+import { confirmDestinationCandidate, resolveDestinationNames, type DestinationResolution } from '../trip/destinationResolution';
+import { ApiDestinationCatalogPort } from '../trip/destinationCatalogApi';
 import { useLocale } from '../i18n/LocaleContext';
+
+const destinationCatalog = new ApiDestinationCatalogPort();
 
 const languageName: Record<Locale, string> = { 'fa-IR': 'فارسی', 'en-US': 'English', ar: 'العربية' };
 
@@ -32,10 +37,11 @@ function PhotoCredit({ source, author, label }: { source: string; author: string
 
 export function App() {
   const { locale, setLocale, t } = useLocale();
-  const [destination, setDestination] = useState('');
-  const [durationDays, setDurationDays] = useState('');
   const [requirements, setRequirements] = useState<TripRequirements | null>(null);
-  const [clarifications, setClarifications] = useState<Array<'destination' | 'duration'>>([]);
+  const [destinationResolution, setDestinationResolution] = useState<DestinationResolution | null>(null);
+  const [catalogueLoading, setCatalogueLoading] = useState(false);
+  const [clarifications, setClarifications] = useState<TripRequirements['missingRequired']>([]);
+  const [ambiguities, setAmbiguities] = useState<TripRequirements['ambiguousRequired']>([]);
   const [error, setError] = useState('');
   const [heroImageFailed, setHeroImageFailed] = useState(false);
   const [itineraryEditing, setItineraryEditing] = useState(false);
@@ -43,6 +49,27 @@ export function App() {
   const [online, setOnline] = useState(navigator.onLine);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const requestTextRef = useRef('');
+  const catalogueRequestVersion = useRef(0);
+
+  const loadDestinationResolution = (phrases: readonly string[] | null, requestLocale: Locale) => {
+    const requestVersion = ++catalogueRequestVersion.current;
+    if (!phrases?.length) {
+      setDestinationResolution(null);
+      setCatalogueLoading(false);
+      return;
+    }
+    setDestinationResolution(null);
+    setCatalogueLoading(true);
+    void destinationCatalog.load().then(catalogue => {
+      if (catalogueRequestVersion.current !== requestVersion) return;
+      setDestinationResolution(resolveDestinationNames(phrases, requestLocale, catalogue));
+      setCatalogueLoading(false);
+    }).catch(() => {
+      if (catalogueRequestVersion.current !== requestVersion) return;
+      setDestinationResolution(resolveDestinationNames(phrases, requestLocale, { kind: 'unavailable' }));
+      setCatalogueLoading(false);
+    });
+  };
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -62,44 +89,42 @@ export function App() {
     // text: FormData captures the exact values currently visible to the user.
     const formData = new FormData(event.currentTarget);
     const requestText = promptRef.current?.value ?? String(formData.get('requestText') ?? requestTextRef.current);
-    const currentDestination = String(formData.get('destination') ?? '');
-    const currentDurationDays = String(formData.get('durationDays') ?? '');
-    setDestination(currentDestination);
-    setDurationDays(currentDurationDays);
-
-    const result = createTripRequirements({
-      requestText,
-      destination: currentDestination,
-      durationDays: currentDurationDays,
-    });
+    const result = createTripRequirements({ requestText, locale });
     if (result.kind === 'invalid') {
+      catalogueRequestVersion.current += 1;
+      setCatalogueLoading(false);
       const messageKey = {
         'request-required': 'requestRequired',
         'request-too-long': 'requestTooLong',
-        'destination-too-long': 'destinationTooLong',
-        'duration-invalid': 'durationInvalid',
+        'duration-too-long': 'durationTooLong',
       } as const;
-      setError(tripMessages[locale][messageKey[result.reason]]);
+      setError(tripMessages[locale][messageKey[result.reason]].replace('{value}', formatNumber(locale, MAX_TRIP_DURATION_DAYS)));
       setClarifications([]);
+      setAmbiguities([]);
       setRequirements(null);
+      setDestinationResolution(null);
       if (result.reason === 'request-required') promptRef.current?.focus();
       return;
     }
     setError('');
     if (result.kind === 'clarification') {
-      setRequirements(null);
-      setClarifications(result.missing);
+      setRequirements(result.requirements);
+      loadDestinationResolution(result.requirements.destinations.value, locale);
+      setClarifications(result.requirements.missingRequired);
+      setAmbiguities(result.requirements.ambiguousRequired);
       return;
     }
     setClarifications([]);
+    setAmbiguities([]);
     setRequirements(result.requirements);
+    loadDestinationResolution(result.requirements.destinations.value, locale);
   };
 
   const clearTripDraft = () => {
+    catalogueRequestVersion.current += 1;
     if (promptRef.current) promptRef.current.value = '';
     requestTextRef.current = '';
-    setDestination(''); setDurationDays(''); setError('');
-    setClarifications([]); setRequirements(null);
+    setError(''); setClarifications([]); setAmbiguities([]); setRequirements(null); setDestinationResolution(null); setCatalogueLoading(false);
   };
   const tripCopy = tripMessages[locale];
 
@@ -133,52 +158,64 @@ export function App() {
             <h1>{t('heroTitle').split('\n').map((line, index) => <span key={index}>{line}<br /></span>)}</h1>
             <p className="hero-body">{t('heroBody')}</p>
             <form className="trip-form" onSubmit={submit} noValidate>
-              <label htmlFor="trip-prompt">{t('promptLabel')}</label>
+              <label htmlFor="trip-prompt">{tripCopy.requestLabel}</label>
+              <p className="trip-form-help" id="trip-prompt-help">{tripCopy.requestHelp}</p>
               <textarea
                 ref={promptRef}
                 id="trip-prompt"
                 name="requestText"
-                rows={2}
+                rows={4}
                 maxLength={1200}
                 defaultValue=""
-                onInput={event => { requestTextRef.current = event.currentTarget.value; setRequirements(null); setClarifications([]); setError(''); }}
-                placeholder={t('promptPlaceholder')}
-                aria-describedby={error ? 'form-error' : undefined}
+                onInput={event => { catalogueRequestVersion.current += 1; requestTextRef.current = event.currentTarget.value; setRequirements(null); setClarifications([]); setAmbiguities([]); setDestinationResolution(null); setCatalogueLoading(false); setError(''); }}
+                placeholder={tripCopy.placeholder}
+                aria-describedby={error ? 'form-error trip-prompt-help' : 'trip-prompt-help'}
                 aria-invalid={error ? true : undefined}
               />
-              <div className="trip-fields">
-                <div>
-                  <label htmlFor="trip-destination">{tripCopy.destinationLabel}</label>
-                  <input id="trip-destination" name="destination" autoComplete="off" maxLength={120} value={destination}
-                    onChange={event => { setDestination(event.target.value); setRequirements(null); setClarifications([]); setError(''); }}
-                    placeholder={tripCopy.destinationPlaceholder} />
-                </div>
-                <div>
-                  <label htmlFor="trip-duration">{tripCopy.durationLabel}</label>
-                  <select id="trip-duration" name="durationDays" value={durationDays}
-                    onChange={event => { setDurationDays(event.target.value); setRequirements(null); setClarifications([]); setError(''); }}>
-                    <option value="">{tripCopy.durationOptional}</option>
-                    {[1, 2, 3].map(days => <option key={days} value={days}>{tripCopy.durationDays.replace('{value}', formatNumber(locale, days))}</option>)}
-                  </select>
-                </div>
-              </div>
               {error && <p id="form-error" className="form-error" role="alert">{error}</p>}
               <button type="submit" className="primary">
-                {t('startPlanning')} <span aria-hidden="true">↗</span>
+                {tripCopy.submit} <span aria-hidden="true">↗</span>
               </button>
               <p className="fixture-pill">{tripCopy.sessionNotice}</p>
               {!!clarifications.length && <section className="trip-response" aria-live="polite" aria-labelledby="clarification-title">
                 <h2 id="clarification-title">{tripCopy.clarificationTitle}</h2>
-                <ul>{clarifications.map(field => <li key={field}>{field === 'destination' ? tripCopy.askDestination : tripCopy.askDuration}</li>)}</ul>
+                <ul>{clarifications.map(field => <li key={field}>{field === 'destination' ? tripCopy.askDestination : tripCopy.askDuration}</li>)}
+                  {ambiguities.map(field => <li key={field}>{field === 'destination' ? tripCopy.askAmbiguousDestination : tripCopy.askAmbiguousDuration}</li>)}</ul>
               </section>}
               {requirements && <section className="trip-response trip-summary" aria-live="polite" aria-labelledby="captured-title">
                 <div className="trip-summary-heading"><h2 id="captured-title">{tripCopy.capturedTitle}</h2>
                   <button className="text-button" type="button" onClick={clearTripDraft}>{tripCopy.clearDraft}</button></div>
                 <p>{tripCopy.capturedLocal}</p>
+                {catalogueLoading && <p className="destination-catalogue-loading" role="status">{destinationResolutionMessages[locale].loading}</p>}
+                {destinationResolution && <section className="destination-resolution" data-resolution={destinationResolution.kind} aria-live="polite">
+                  {destinationResolution.items.map((item, index) => {
+                    const copy = destinationResolutionMessages[locale];
+                    if (item.kind === 'catalogue-unavailable') return <p key={index}>{copy.unavailable} <bdi>{item.originalPhrase}</bdi></p>;
+                    if (item.kind === 'catalogue-empty') return <p key={index}>{copy.empty} <bdi>{item.originalPhrase}</bdi></p>;
+                    if (item.kind === 'not-found') return <p key={index}>{copy.notFound.replace('{phrase}', item.originalPhrase)}</p>;
+                    if (item.kind === 'resolved') return <p key={index} dir="auto">{item.destination.canonicalName}</p>;
+                    if (item.kind === 'confirmed') return <p key={index} dir="auto">{item.destination.canonicalName} · {copy.selected}</p>;
+                    return <fieldset key={index} className="destination-choice">
+                      <legend>{copy.ambiguous.replace('{phrase}', item.originalPhrase)}</legend>
+                      {item.candidates.map(candidate => <label key={candidate.destinationId} dir="auto">
+                        <input type="radio" name={`destination-choice-${index}`} value={candidate.destinationId}
+                          checked={false}
+                          onChange={() => setDestinationResolution(current => current ? confirmDestinationCandidate(current, index, candidate.destinationId) : current)} />
+                        <span>{[candidate.localizedNames[locale] ?? candidate.canonicalName, candidate.cityName, candidate.provinceName].filter(Boolean).join(' · ')}</span>
+                      </label>)}
+                      <p>{copy.none}</p>
+                    </fieldset>;
+                  })}
+                </section>}
                 <dl>
-                  <div><dt>{tripCopy.summaryDestination}</dt><dd dir="auto">{requirements.destination}</dd></div>
+                  <div><dt>{tripCopy.summaryDestination}</dt><dd dir="auto">{requirements.destinations.value?.join(' → ') ?? tripCopy.unknown}</dd></div>
                   <div className="trip-summary-request"><dt>{tripCopy.summaryRequest}</dt><dd dir="auto">{requirements.requestText}</dd></div>
-                  <div><dt>{tripCopy.summaryDuration}</dt><dd>{tripCopy.durationDays.replace('{value}', formatNumber(locale, requirements.durationDays))}</dd></div>
+                  <div><dt>{tripCopy.summaryDuration}</dt><dd>{requirements.durationDays.value === null ? tripCopy.unknown : tripCopy.durationDays.replace('{value}', formatNumber(locale, requirements.durationDays.value))}</dd></div>
+                  <div><dt>{tripCopy.summaryTravelers}</dt><dd>{requirements.travelerCount.value === null ? tripCopy.unknown : formatNumber(locale, requirements.travelerCount.value)}</dd></div>
+                  <div><dt>{tripCopy.summaryBudget}</dt><dd dir="auto">{requirements.budget.value?.raw ?? tripCopy.unknown}</dd></div>
+                  <div><dt>{tripCopy.summaryInterests}</dt><dd dir="auto">{requirements.interests.value?.join('، ') ?? tripCopy.unknown}</dd></div>
+                  <div><dt>{tripCopy.summaryDates}</dt><dd dir="auto">{requirements.travelDates.value ? `${requirements.travelDates.value.start} – ${requirements.travelDates.value.end}` : tripCopy.unknown}</dd></div>
+                  <div><dt>{tripCopy.summaryConstraints}</dt><dd dir="auto">{requirements.constraints.value?.join('، ') ?? tripCopy.unknown}</dd></div>
                 </dl>
               </section>}
             </form>

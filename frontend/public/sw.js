@@ -12,6 +12,9 @@ self.addEventListener('activate', event => event.waitUntil(Promise.all([
 ])));
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return;
+  // The production catalogue is dynamic. Never cache empty, stale, or user-visible
+  // API responses in the shared PWA shell cache.
+  if (new URL(event.request.url).pathname.startsWith('/api/')) return;
 
   // Always ask the server for the latest app shell while online. A cache-first
   // navigation can replay a production index.html on a Vite dev server, whose

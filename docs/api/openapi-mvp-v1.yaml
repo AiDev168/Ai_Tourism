@@ -37,7 +37,8 @@ info:
 
     The schema uses UUID identifiers for user/conversation/trip/recommendation
     records and integer identifiers for destination catalogue rows, matching
-    the current PostgreSQL schema.
+    the current PostgreSQL schema. The implemented read-only destination
+    catalogue returns IDs as decimal strings to avoid JavaScript int64 loss.
   contact:
     name: AI Tourism project
   license:
@@ -88,6 +89,42 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /api/v1/catalog/destinations:
+    get:
+      tags: [Catalogue]
+      operationId: listPublishedDestinations
+      summary: Read the complete bounded published spatial catalogue
+      description: |
+        Public, read-only response backed only by knowledge.production_destinations
+        and knowledge.production_destination_sources. It contains no trip text,
+        descriptions, internal publication flags, or raw source records. An empty
+        approved view returns 200 with an empty complete list. If the database is
+        unavailable, the projection is invalid, or more than the fixed server
+        limit is present, returns the same sanitized 503 response rather than a
+        truncated candidate set. This endpoint contains spatial destinations
+        only; non-spatial foods/products require a separate approved contract.
+      security: []
+      x-authentication-required: false
+      x-publication-boundary: knowledge.production_destinations
+      responses:
+        '200':
+          description: Complete bounded published destination catalogue, possibly empty.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailableDestinationCatalogue'
+        '503':
+          description: Catalogue is unavailable or exceeds the complete-response bound.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogueUnavailable'
   /api/v1/conversations:
     post:
       tags: [Conversations]
@@ -622,6 +659,98 @@ components:
             coordinate_role:
               type: string
               enum: [property_reference, representative_point, visitor_entrance]
+    AvailableDestinationCatalogue:
+      type: object
+      additionalProperties: false
+      required: [status, complete, count, items]
+      properties:
+        status:
+          type: string
+          const: available
+        complete:
+          type: boolean
+          const: true
+        count:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        items:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/PublishedDestinationCandidate'
+    PublishedDestinationCandidate:
+      type: object
+      additionalProperties: false
+      required: [destination_id, destination_key, canonical_name, localized_names, aliases, destination_type, province_name, city_name]
+      properties:
+        destination_id:
+          type: string
+          pattern: '^[0-9]+$'
+          description: Decimal PostgreSQL bigint encoded as a string for JavaScript safety.
+        destination_key:
+          type: string
+          maxLength: 240
+        canonical_name:
+          type: string
+          maxLength: 240
+        localized_names:
+          type: object
+          additionalProperties: false
+          required: [fa-IR, en-US, ar]
+          properties:
+            fa-IR:
+              type: [string, 'null']
+              maxLength: 240
+            en-US:
+              type: [string, 'null']
+              maxLength: 240
+            ar:
+              type: [string, 'null']
+              maxLength: 240
+        aliases:
+          type: array
+          maxItems: 32
+          items:
+            type: object
+            additionalProperties: false
+            required: [locale, value, alias_type]
+            properties:
+              locale:
+                type: string
+                enum: [fa-IR, en-US, ar]
+              value:
+                type: string
+                maxLength: 200
+              alias_type:
+                type: string
+                enum: [canonical_display_name, spelling_variant, alternate_script_name, exonym]
+          description: Explicitly approved records from the version-controlled locale-tagged review manifest.
+        destination_type:
+          type: string
+          maxLength: 64
+        province_name:
+          type: string
+          maxLength: 240
+        city_name:
+          type: [string, 'null']
+          maxLength: 240
+    CatalogueUnavailable:
+      type: object
+      additionalProperties: false
+      required: [status, error]
+      properties:
+        status:
+          type: string
+          const: unavailable
+        error:
+          type: object
+          additionalProperties: false
+          required: [code]
+          properties:
+            code:
+              type: string
+              const: catalogue_unavailable
     Destination:
       allOf:
         - $ref: '#/components/schemas/DestinationSummary'

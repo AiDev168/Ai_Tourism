@@ -31,51 +31,61 @@ WITH actual(table_name, actual_count) AS (
     UNION ALL SELECT 'operations.audit_events', COUNT(*) FROM operations.audit_events
     UNION ALL SELECT 'operations.dataset_import_batches', COUNT(*) FROM operations.dataset_import_batches
     UNION ALL SELECT 'system.schema_migrations', COUNT(*) FROM system.schema_migrations
-), expected(table_name, expected_count) AS (
+), state AS (
+    SELECT EXISTS (
+        SELECT 1 FROM system.schema_migrations
+        WHERE migration_id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'
+    ) AS shiraz_applied
+), expected(table_name, expected_0006, expected_0007) AS (
     VALUES
-    ('identity.users', 1::BIGINT),
-    ('identity.user_consents', 1),
-    ('identity.user_preferences', 3),
-    ('conversation.conversations', 1),
-    ('conversation.messages', 4),
-    ('travel.trips', 1),
-    ('travel.trip_constraints', 3),
-    ('travel.trip_interests', 3),
-    ('travel.itineraries', 1),
-    ('travel.itinerary_stops', 6),
-    ('knowledge.knowledge_sources', 58),
-    ('knowledge.destinations', 66),
-    ('knowledge.destination_sources', 116),
-    ('knowledge.destination_tags', 208),
-    ('knowledge.destination_categories', 12),
-    ('knowledge.destination_category_map', 47),
-    ('knowledge.knowledge_documents', 52),
-    ('knowledge.knowledge_chunks', 81),
-    ('knowledge.embedding_spaces', 0),
-    ('knowledge.chunk_embeddings', 0),
-    ('recommendation.recommendation_requests', 1),
-    ('recommendation.recommendations', 3),
-    ('recommendation.recommendation_score_components', 9),
-    ('integration.external_links', 3),
-    ('integration.outbound_clicks', 0),
-    ('operations.feedback', 1),
-    ('operations.ai_model_calls', 0),
-    ('operations.audit_events', 0),
-    ('operations.dataset_import_batches', 6),
-    ('system.schema_migrations', 8)
+    ('identity.users', 1::BIGINT, 1::BIGINT),
+    ('identity.user_consents', 1, 1),
+    ('identity.user_preferences', 3, 3),
+    ('conversation.conversations', 1, 1),
+    ('conversation.messages', 4, 4),
+    ('travel.trips', 1, 1),
+    ('travel.trip_constraints', 3, 3),
+    ('travel.trip_interests', 3, 3),
+    ('travel.itineraries', 1, 1),
+    ('travel.itinerary_stops', 6, 6),
+    ('knowledge.knowledge_sources', 40, 58),
+    ('knowledge.destinations', 44, 66),
+    ('knowledge.destination_sources', 65, 116),
+    ('knowledge.destination_tags', 88, 208),
+    ('knowledge.destination_categories', 12, 12),
+    ('knowledge.destination_category_map', 30, 47),
+    ('knowledge.knowledge_documents', 29, 52),
+    ('knowledge.knowledge_chunks', 58, 81),
+    ('knowledge.embedding_spaces', 0, 0),
+    ('knowledge.chunk_embeddings', 0, 0),
+    ('recommendation.recommendation_requests', 1, 1),
+    ('recommendation.recommendations', 3, 3),
+    ('recommendation.recommendation_score_components', 9, 9),
+    ('integration.external_links', 3, 3),
+    ('integration.outbound_clicks', 0, 0),
+    ('operations.feedback', 1, 1),
+    ('operations.ai_model_calls', 0, 0),
+    ('operations.audit_events', 0, 0),
+    ('operations.dataset_import_batches', 5, 6),
+    ('system.schema_migrations', 7, 8)
+), expected_for_state AS (
+    SELECT table_name,
+           CASE WHEN state.shiraz_applied THEN expected_0007 ELSE expected_0006 END AS expected_count,
+           state.shiraz_applied
+    FROM expected CROSS JOIN state
 )
 SELECT e.table_name,
        a.actual_count,
        e.expected_count,
        CASE WHEN a.actual_count = e.expected_count THEN 'PASS' ELSE 'FAIL' END AS result
-FROM expected e
+FROM expected_for_state e
 JOIN actual a USING (table_name)
 
 UNION ALL
 
 SELECT 'TOTAL', SUM(a.actual_count), SUM(e.expected_count),
        CASE WHEN SUM(a.actual_count) = SUM(e.expected_count) THEN 'PASS' ELSE 'FAIL' END
-FROM expected e
+FROM expected_for_state e
 JOIN actual a USING (table_name)
 ORDER BY 1;
 
@@ -88,40 +98,48 @@ DECLARE
     actual_rows BIGINT;
     total_actual BIGINT := 0;
     total_expected BIGINT := 0;
+    has_shiraz BOOLEAN;
 BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM system.schema_migrations
+        WHERE migration_id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'
+    ) INTO has_shiraz;
+
     FOR item IN
-        SELECT * FROM (VALUES
-            ('identity','users',1::BIGINT),
-            ('identity','user_consents',1),
-            ('identity','user_preferences',3),
-            ('conversation','conversations',1),
-            ('conversation','messages',4),
-            ('travel','trips',1),
-            ('travel','trip_constraints',3),
-            ('travel','trip_interests',3),
-            ('travel','itineraries',1),
-            ('travel','itinerary_stops',6),
-            ('knowledge','knowledge_sources',58),
-            ('knowledge','destinations',66),
-            ('knowledge','destination_sources',116),
-            ('knowledge','destination_tags',208),
-            ('knowledge','destination_categories',12),
-            ('knowledge','destination_category_map',47),
-            ('knowledge','knowledge_documents',52),
-            ('knowledge','knowledge_chunks',81),
-            ('knowledge','embedding_spaces',0),
-            ('knowledge','chunk_embeddings',0),
-            ('recommendation','recommendation_requests',1),
-            ('recommendation','recommendations',3),
-            ('recommendation','recommendation_score_components',9),
-            ('integration','external_links',3),
-            ('integration','outbound_clicks',0),
-            ('operations','feedback',1),
-            ('operations','ai_model_calls',0),
-            ('operations','audit_events',0),
-            ('operations','dataset_import_batches',6),
-            ('system','schema_migrations',8)
-        ) AS x(schema_name, table_name, expected_count)
+        SELECT schema_name, table_name,
+               CASE WHEN has_shiraz THEN expected_0007 ELSE expected_0006 END AS expected_count
+        FROM (VALUES
+            ('identity','users',1::BIGINT,1::BIGINT),
+            ('identity','user_consents',1,1),
+            ('identity','user_preferences',3,3),
+            ('conversation','conversations',1,1),
+            ('conversation','messages',4,4),
+            ('travel','trips',1,1),
+            ('travel','trip_constraints',3,3),
+            ('travel','trip_interests',3,3),
+            ('travel','itineraries',1,1),
+            ('travel','itinerary_stops',6,6),
+            ('knowledge','knowledge_sources',40,58),
+            ('knowledge','destinations',44,66),
+            ('knowledge','destination_sources',65,116),
+            ('knowledge','destination_tags',88,208),
+            ('knowledge','destination_categories',12,12),
+            ('knowledge','destination_category_map',30,47),
+            ('knowledge','knowledge_documents',29,52),
+            ('knowledge','knowledge_chunks',58,81),
+            ('knowledge','embedding_spaces',0,0),
+            ('knowledge','chunk_embeddings',0,0),
+            ('recommendation','recommendation_requests',1,1),
+            ('recommendation','recommendations',3,3),
+            ('recommendation','recommendation_score_components',9,9),
+            ('integration','external_links',3,3),
+            ('integration','outbound_clicks',0,0),
+            ('operations','feedback',1,1),
+            ('operations','ai_model_calls',0,0),
+            ('operations','audit_events',0,0),
+            ('operations','dataset_import_batches',5,6),
+            ('system','schema_migrations',7,8)
+        ) AS x(schema_name, table_name, expected_0006, expected_0007)
     LOOP
         IF to_regclass(format('%I.%I', item.schema_name, item.table_name)) IS NULL THEN
             RAISE EXCEPTION 'Expected table %.% is missing', item.schema_name, item.table_name;
@@ -136,10 +154,13 @@ BEGIN
         END IF;
     END LOOP;
 
-    IF total_actual <> 695 OR total_expected <> 695 THEN
-        RAISE EXCEPTION 'Total row-count mismatch: expected 695, found % (manifest total %)',
+    IF has_shiraz AND (total_actual <> 695 OR total_expected <> 695) THEN
+        RAISE EXCEPTION 'Migration 0007 state requires exactly 695 rows, found % (manifest total %)',
+            total_actual, total_expected;
+    ELSIF NOT has_shiraz AND (total_actual <> 419 OR total_expected <> 419) THEN
+        RAISE EXCEPTION 'Migration 0006 state requires exactly 419 rows, found % (manifest total %)',
             total_actual, total_expected;
     END IF;
 
-    RAISE NOTICE 'PASS: all 30 expected tables have exact per-table counts; total rows = 695.';
+    RAISE NOTICE 'PASS: all 30 expected tables match the migration-ledger state; total rows = %.', total_actual;
 END $$;

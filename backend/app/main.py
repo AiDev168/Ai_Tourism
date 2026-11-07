@@ -9,12 +9,14 @@ from fastapi.responses import JSONResponse
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.api.health import router as health_router
+from app.api.catalogue import router as catalogue_router
 
 settings = get_settings()
 configure_logging(settings.log_level)
 logger = logging.getLogger("ai_tourism")
 app = FastAPI(title="AI Tourism API", version="0.1.0")
 app.include_router(health_router)
+app.include_router(catalogue_router)
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 

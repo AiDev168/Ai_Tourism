@@ -1,10 +1,12 @@
 [CmdletBinding()]
-param()
+param(
+    [string]$ContainerName = 'ai-tourism-postgres',
+    [string]$DatabaseName = 'ai_tourism_dev'
+)
 
 $ErrorActionPreference = 'Stop'
 $PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$EnvFile = Join-Path $PackageRoot '.env'
-if (-not (Test-Path $EnvFile)) { throw 'Database .env is missing. Run Initialize-Database.ps1 first.' }
+Import-Module (Join-Path $PSScriptRoot 'Database-Lifecycle.psm1') -Force
 
 Push-Location $PackageRoot
 try {
@@ -15,21 +17,25 @@ try {
     & py -3.13 (Join-Path $PackageRoot 'scripts\Validate-Seed-Data.py')
     if ($LASTEXITCODE -ne 0) { throw 'Offline seed content validation failed.' }
 
-    $health = (& docker inspect --format '{{.State.Health.Status}}' ai-tourism-postgres 2>$null | Out-String).Trim()
-    if ($health -ne 'healthy') { throw "ai-tourism-postgres is not healthy (state: '$health'). Start it with Initialize-Database.ps1." }
+    $containerState = (& docker inspect --format '{{.State.Status}}' $ContainerName 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $containerState -ne 'running') {
+        throw "Database container '$ContainerName' is not running (state: '$containerState'). Start the intended database before validation."
+    }
+    & docker exec $ContainerName pg_isready -U ai_tourism_owner -d $DatabaseName | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Database '$DatabaseName' in '$ContainerName' is not accepting connections." }
 
     function Invoke-PsqlFile([string]$ContainerPath, [string]$MigrationHash = '') {
-        $psqlArgs = @('-X', '-v', 'ON_ERROR_STOP=1', '-U', 'ai_tourism_owner', '-d', 'ai_tourism_dev')
+        $psqlArgs = @('-X', '-v', 'ON_ERROR_STOP=1', '-U', 'ai_tourism_owner', '-d', $DatabaseName)
         if (-not [string]::IsNullOrWhiteSpace($MigrationHash)) {
             $psqlArgs += @('-v', "migration_hash=$MigrationHash")
         }
         $psqlArgs += @('-f', $ContainerPath)
-        & docker compose --project-name ai-tourism-db --env-file $EnvFile exec -T db psql @psqlArgs
+        & docker exec $ContainerName psql @psqlArgs
         if ($LASTEXITCODE -ne 0) { throw "SQL test/seed failed: $ContainerPath" }
     }
 
     function Get-PsqlScalar([string]$Sql) {
-        $result = & docker compose --project-name ai-tourism-db --env-file $EnvFile exec -T db psql -X -A -t -U ai_tourism_owner -d ai_tourism_dev -c $Sql
+        $result = & docker exec $ContainerName psql -X -A -t -U ai_tourism_owner -d $DatabaseName -c $Sql
         if ($LASTEXITCODE -ne 0) { throw "Database scalar query failed: $Sql" }
         return (($result | Out-String).Trim())
     }
@@ -43,34 +49,34 @@ try {
     if ($storedLegacyHash -ne $legacyHash) { throw 'Imported legacy-source checksum does not match database import manifest.' }
     Write-Host 'PASS: original project tourism_points.sql checksum matches the imported batch ledger.' -ForegroundColor Green
 
-    Write-Host "`n========== MIGRATION CHECKSUM / SEED IDEMPOTENCY CHECK ==========" -ForegroundColor Cyan
+    Write-Host "`n========== DATABASE STATE / MIGRATION CHECKSUM PREFLIGHT ==========" -ForegroundColor Cyan
+    $appliedIds = @((Get-PsqlScalar "SELECT COALESCE(string_agg(migration_id, ',' ORDER BY migration_id), '') FROM system.schema_migrations;").Split(',', [StringSplitOptions]::RemoveEmptyEntries))
+    $state = Resolve-DatabaseLifecycleState -AppliedMigrationIds $appliedIds
+    $databaseState = "$($state.Name) / $($state.ExpectedRows) rows"
+    $expectedMigrations = $state.MigrationIds
+
     $migrationSet = @(
-        @{ Id = '0001_core_schema'; File = '001_core_schema.sql' },
-        @{ Id = '0002_synthetic_knowledge_seed'; File = '002_synthetic_knowledge_seed.sql' },
-        @{ Id = '0003_synthetic_e2e_seed'; File = '003_synthetic_e2e_seed.sql' },
-        @{ Id = '0004_app_role_grants'; File = '004_app_role_grants.sql' },
-        @{ Id = '0005_verified_unesco_destination_seed'; File = '005_verified_unesco_destination_seed.sql' },
-        @{ Id = '0006_verified_unesco_destination_seed_batch2'; File = '006_verified_unesco_destination_seed_batch2.sql' },
-        @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; File = '007_shiraz_dalahoo_wikipedia_dataset_v1.sql' }
-    )
+        @{ Id = '0000_legacy_tourism_points_baseline'; Path = $LegacySource },
+        @{ Id = '0001_core_schema'; Path = (Join-Path $PackageRoot 'sql\001_core_schema.sql') },
+        @{ Id = '0002_synthetic_knowledge_seed'; Path = (Join-Path $PackageRoot 'sql\002_synthetic_knowledge_seed.sql') },
+        @{ Id = '0003_synthetic_e2e_seed'; Path = (Join-Path $PackageRoot 'sql\003_synthetic_e2e_seed.sql') },
+        @{ Id = '0004_app_role_grants'; Path = (Join-Path $PackageRoot 'sql\004_app_role_grants.sql') },
+        @{ Id = '0005_verified_unesco_destination_seed'; Path = (Join-Path $PackageRoot 'sql\005_verified_unesco_destination_seed.sql') },
+        @{ Id = '0006_verified_unesco_destination_seed_batch2'; Path = (Join-Path $PackageRoot 'sql\006_verified_unesco_destination_seed_batch2.sql') },
+        @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; Path = (Join-Path $PackageRoot 'sql\007_shiraz_dalahoo_wikipedia_dataset_v1.sql') }
+    ) | Where-Object { $_.Id -in $expectedMigrations }
     foreach ($migration in $migrationSet) {
-        $localPath = Join-Path $PackageRoot (Join-Path 'sql' $migration.File)
-        $localHash = (Get-FileHash -LiteralPath $localPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $localHash = (Get-FileHash -LiteralPath $migration.Path -Algorithm SHA256).Hash.ToLowerInvariant()
         $databaseHash = Get-PsqlScalar "SELECT COALESCE((SELECT sha256 FROM system.schema_migrations WHERE migration_id = '$($migration.Id)'), '');"
         if ($databaseHash -ne $localHash) { throw "Applied migration checksum differs from local file: $($migration.Id)" }
     }
 
-    # Re-run only idempotent seed migrations to prove they do not duplicate data.
-    foreach ($seed in @(
-        @{ Id = '0002_synthetic_knowledge_seed'; File = '002_synthetic_knowledge_seed.sql'; Path = '/opt/ai-tourism/sql/002_synthetic_knowledge_seed.sql' },
-        @{ Id = '0003_synthetic_e2e_seed'; File = '003_synthetic_e2e_seed.sql'; Path = '/opt/ai-tourism/sql/003_synthetic_e2e_seed.sql' },
-        @{ Id = '0005_verified_unesco_destination_seed'; File = '005_verified_unesco_destination_seed.sql'; Path = '/opt/ai-tourism/sql/005_verified_unesco_destination_seed.sql' },
-        @{ Id = '0006_verified_unesco_destination_seed_batch2'; File = '006_verified_unesco_destination_seed_batch2.sql'; Path = '/opt/ai-tourism/sql/006_verified_unesco_destination_seed_batch2.sql' }
-    )) {
-        $localPath = Join-Path $PackageRoot (Join-Path 'sql' $seed.File)
-        $seedHash = (Get-FileHash -LiteralPath $localPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        Invoke-PsqlFile $seed.Path $seedHash
-    }
+    Write-Host "PASS: exact migration ledger/checksums identify $databaseState." -ForegroundColor Green
+
+    # The report derives its exact 419/695-row manifest from the ledger and
+    # fails closed on partial imports, count drift, or the wrong row state.
+    Write-Host "`n========== EXACT STATE ROW-COUNT PREFLIGHT ==========" -ForegroundColor Cyan
+    Invoke-PsqlFile '/opt/ai-tourism/sql/reports/final_row_counts.sql'
 
     Write-Host "`n========== DATABASE ENGINE / EXTENSION VERSIONS ==========" -ForegroundColor Cyan
     Invoke-PsqlFile '/opt/ai-tourism/sql/tests/000_extension_versions.sql'
@@ -99,8 +105,13 @@ try {
     Write-Host "`n========== SECOND VERIFIED EXTERNAL DATASET BATCH ==========" -ForegroundColor Cyan
     Invoke-PsqlFile '/opt/ai-tourism/sql/tests/008_verified_external_dataset_batch2.sql'
 
-    Write-Host "`n========== SHIRAZ DATASET INTEGRATION / PUBLICATION GATE ==========" -ForegroundColor Cyan
-    Invoke-PsqlFile '/opt/ai-tourism/sql/tests/009_shiraz_dataset_integration.sql'
+    if ($state.IncludesShiraz) {
+        Write-Host "`n========== SHIRAZ DATASET INTEGRATION / PUBLICATION GATE ==========" -ForegroundColor Cyan
+        Invoke-PsqlFile '/opt/ai-tourism/sql/tests/009_shiraz_dataset_integration.sql'
+    }
+    else {
+        Write-Host 'PASS: Migration 0007 is absent; Shiraz migration/test were not applied or executed.' -ForegroundColor Green
+    }
 
     Write-Host "`n========== COMPLETE EXPECTED VS ACTUAL ROW COUNTS ==========" -ForegroundColor Cyan
     Invoke-PsqlFile '/opt/ai-tourism/sql/reports/final_row_counts.sql'

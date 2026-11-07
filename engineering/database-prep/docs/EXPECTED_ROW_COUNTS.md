@@ -1,45 +1,50 @@
-# شمارش دقیق مورد انتظار دیتابیس — Shiraz integration v0.4
+# شمارش دقیق مورد انتظار دیتابیس — وضعیت‌های 0006 و 0007
 
-این سند Manifest قطعی Seedهای Pre-Codex پس از Migration شماره 0006 است. تست `sql/tests/001_schema_seed_invariants.sql` تعداد جدول‌ها و تعدادهای ثابت اصلی را کنترل می‌کند و `sql/reports/final_row_counts.sql` تعداد واقعی و مورد انتظار هر جدول را گزارش می‌کند. هر اختلافی باید Fail شود؛ تعداد مورد انتظار هرگز برای سبز شدن تست به‌صورت خودکار تغییر نمی‌کند.
+این سند دو وضعیت معتبر و دقیق دیتابیس را تعریف می‌کند. وضعیت فعلی دیتابیس Development مشترک مالک، Migration 0006 با ۳۰ جدول و ۴۱۹ ردیف است؛ Migration 0007 هنوز روی آن اجرا نشده است. وضعیت 0007 با ۶۹۵ ردیف یک ارتقای اختیاری است و فقط پس از تأیید جداگانهٔ مالک مجاز است. تست `sql/tests/001_schema_seed_invariants.sql` و گزارش `sql/reports/final_row_counts.sql` وضعیت را از Migration ledger تشخیص می‌دهند و تعداد دقیق همان وضعیت را بررسی می‌کنند. هر اختلاف باید Fail شود؛ تعداد مورد انتظار هرگز برای سبز شدن تست به‌صورت خودکار تغییر نمی‌کند.
 
-**۳۰ جدول متعلق به پروژه، ۶۹۵ ردیف مورد انتظار پس از اعمال Migration 0007.** این مقدار، ۲۲ مقصد جدید و تکمیل یک ردیف موجود مراغه، ۱۸ منبع، ۵۱ رابطهٔ مقصد/منبع، ۱۲۰ برچسب خالص، ۱۷ نگاشت دسته، ۲۳ سند و ۲۳ Chunk، و یک Batch و یک سابقهٔ Migration جدید را نسبت به Baseline 0006 منعکس می‌کند. ردیف‌های صفر عمدی هستند؛ Embedding واقعی، کلیک خروجی، فراخوانی LLM و رویداد Audit تا زمان وقوع واقعی نباید ساخته شوند.
+**وضعیت A — Migration 0006:** ۳۰ جدول / ۴۱۹ ردیف؛ Migration 0007 غایب.
 
-| Schema | Table | Expected rows |
-|---|---|---:|
-| `identity` | `users` | 1 |
-| `identity` | `user_consents` | 1 |
-| `identity` | `user_preferences` | 3 |
-| `conversation` | `conversations` | 1 |
-| `conversation` | `messages` | 4 |
-| `travel` | `trips` | 1 |
-| `travel` | `trip_constraints` | 3 |
-| `travel` | `trip_interests` | 3 |
-| `travel` | `itineraries` | 1 |
-| `travel` | `itinerary_stops` | 6 |
-| `knowledge` | `knowledge_sources` | 58 |
-| `knowledge` | `destinations` | 66 |
-| `knowledge` | `destination_sources` | 116 |
-| `knowledge` | `destination_tags` | 208 |
-| `knowledge` | `destination_categories` | 12 |
-| `knowledge` | `destination_category_map` | 47 |
-| `knowledge` | `knowledge_documents` | 52 |
-| `knowledge` | `knowledge_chunks` | 81 |
-| `knowledge` | `embedding_spaces` | 0 |
-| `knowledge` | `chunk_embeddings` | 0 |
-| `recommendation` | `recommendation_requests` | 1 |
-| `recommendation` | `recommendations` | 3 |
-| `recommendation` | `recommendation_score_components` | 9 |
-| `integration` | `external_links` | 3 |
-| `integration` | `outbound_clicks` | 0 |
-| `operations` | `feedback` | 1 |
-| `operations` | `ai_model_calls` | 0 |
-| `operations` | `audit_events` | 0 |
-| `operations` | `dataset_import_batches` | 6 |
-| `system` | `schema_migrations` | 8 |
+**وضعیت B — Migration 0007:** ۳۰ جدول / ۶۹۵ ردیف؛ دقیقاً ۲۲ مقصد جدید و تکمیل یک ردیف مراغه، ۱۸ منبع، ۵۱ رابطهٔ مقصد/منبع، ۱۲۰ برچسب خالص، ۱۷ نگاشت دسته، ۲۳ سند و ۲۳ Chunk، یک Batch و یک سابقهٔ Migration افزوده شده است. صفرهای Embedding، کلیک خروجی، LLM و Audit عمدی هستند.
 
-| **TOTAL** | **30 project-owned tables** | **695** |
+| Schema | Table | 0006 baseline | 0007 Shiraz |
+|---|---|---:|---:|
+| `identity` | `users` | 1 | 1 |
+| `identity` | `user_consents` | 1 | 1 |
+| `identity` | `user_preferences` | 3 | 3 |
+| `conversation` | `conversations` | 1 | 1 |
+| `conversation` | `messages` | 4 | 4 |
+| `travel` | `trips` | 1 | 1 |
+| `travel` | `trip_constraints` | 3 | 3 |
+| `travel` | `trip_interests` | 3 | 3 |
+| `travel` | `itineraries` | 1 | 1 |
+| `travel` | `itinerary_stops` | 6 | 6 |
+| `knowledge` | `knowledge_sources` | 40 | 58 |
+| `knowledge` | `destinations` | 44 | 66 |
+| `knowledge` | `destination_sources` | 65 | 116 |
+| `knowledge` | `destination_tags` | 88 | 208 |
+| `knowledge` | `destination_categories` | 12 | 12 |
+| `knowledge` | `destination_category_map` | 30 | 47 |
+| `knowledge` | `knowledge_documents` | 29 | 52 |
+| `knowledge` | `knowledge_chunks` | 58 | 81 |
+| `knowledge` | `embedding_spaces` | 0 | 0 |
+| `knowledge` | `chunk_embeddings` | 0 | 0 |
+| `recommendation` | `recommendation_requests` | 1 | 1 |
+| `recommendation` | `recommendations` | 3 | 3 |
+| `recommendation` | `recommendation_score_components` | 9 | 9 |
+| `integration` | `external_links` | 3 | 3 |
+| `integration` | `outbound_clicks` | 0 | 0 |
+| `operations` | `feedback` | 1 | 1 |
+| `operations` | `ai_model_calls` | 0 | 0 |
+| `operations` | `audit_events` | 0 | 0 |
+| `operations` | `dataset_import_batches` | 5 | 6 |
+| `system` | `schema_migrations` | 7 | 8 |
+
+| **TOTAL** | **30 project-owned tables** | **419** | **695** |
 
 ## ترکیب داده‌ها
+
+- **وضعیت فعلی دیتابیس مشترک مالک:** Migration 0006، ۳۰ جدول و ۴۱۹ ردیف؛ Migration 0007 در ledger وجود ندارد و این سند یا Validator آن را اعمال نمی‌کند.
+- **وضعیت اختیاری پس از 0007:** ۳۰ جدول و ۶۹۵ ردیف؛ فقط با opt-in صریح پس از تأیید جداگانهٔ مالک. برای دیتابیس موجود 0006، Initialize در حالت پیش‌فرض باید پیش از هر Migration متوقف شود.
 
 - **۱۴ مقصد قدیمی باقی‌مانده از پروژه:** از `database/tourism_points.sql`؛ همگی `needs_review`، منبع اولیه pending و بدون مختصات تأییدشده. هویت هر ۱۵ ردیف اصلی حفظ شده؛ رصدخانهٔ مراغه یکی از همان ردیف‌هاست که با Migration 0007 منبع‌دار شد و وضعیتش همچنان `needs_review` است.
 - **۱۲ مقصد QA مصنوعی + ۱۲ سند + ۲۴ Chunk:** صرفاً برای تست؛ همه با `is_synthetic=true`، منشأ `synthetic_fixture` و وضعیت `test_only`.

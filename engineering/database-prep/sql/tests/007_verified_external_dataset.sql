@@ -3,7 +3,16 @@
 DO $$
 DECLARE
     n BIGINT;
+    expected_source_links BIGINT;
 BEGIN
+    IF EXISTS (
+        SELECT 1 FROM system.schema_migrations
+        WHERE migration_id='0007_shiraz_dalahoo_wikipedia_dataset_v1'
+    ) THEN
+        expected_source_links := 24;
+    ELSE
+        expected_source_links := 22;
+    END IF;
     SELECT COUNT(*) INTO n
       FROM knowledge.destinations
      WHERE destination_key LIKE 'unesco-%-v1'
@@ -31,7 +40,9 @@ BEGIN
       FROM knowledge.destination_sources ds
       JOIN knowledge.destinations d ON d.destination_id=ds.destination_id
      WHERE d.destination_key LIKE 'unesco-%-v1';
-    IF n <> 24 THEN RAISE EXCEPTION 'Expected 22 original source links plus two Shiraz discovery-only nearby links for the 10 UNESCO sites; found %', n; END IF;
+    IF n <> expected_source_links THEN
+        RAISE EXCEPTION 'Expected % UNESCO source links for the detected migration state, found %', expected_source_links, n;
+    END IF;
 
     SELECT COUNT(*) INTO n
       FROM knowledge.destination_sources ds

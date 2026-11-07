@@ -1,5 +1,7 @@
 # MVP functionality audit and dependency-ordered plan
 
+> **Implementation update (2026-11-05):** The previous destination input and 1–3 day dropdown have been replaced with one natural-language request field and deterministic multilingual extraction. See [Natural-language trip intake V2 and retrieval readiness](NATURAL_LANGUAGE_TRIP_INTAKE_V2_AND_RETRIEVAL_READINESS.md) for parser behavior, regression coverage, verified publication counts, and retrieval blockers. Recommendations remain unavailable because production destination candidates are zero.
+
 - **Status:** implementation audit for feature branch `fix/initialize-database-powershell-inspect-v1`
 - **Baseline:** visual refresh `2646d19f0bb71bd1b8b6b3161c2cdd1695b2b0fd`
 - **Scope:** distinguish working UI behavior from fixture presentation and sequence the next product capabilities within ADR-0006/0008 and the data-publication boundaries.
@@ -25,7 +27,7 @@ The home inspiration cards, sample dialogue, and itinerary remain visibly marked
 
 ## First safe vertical slice
 
-The local trip-intake interaction validates a short request, captures an explicitly entered destination, recognizes an explicit one-to-three-day duration in English, Persian or Arabic numerals/words, asks for missing destination or duration details, and displays the user-reviewed structured draft. It stays in React memory only: no request text is persisted, sent to the backend, sent to a model, or treated as verified destination data. Clearing or reloading the page discards it. It performs no destination recommendation.
+The current local trip-intake interaction has one natural-language field, preserves the original request, extracts destination(s), explicit duration (days/weeks, default technical cap 365 days), selected explicit optional fields and shows a localized summary or clarification. It supports Persian, English and Arabic text and digits. It stays in React memory only: no request text is persisted, sent to the backend, sent to a model, or treated as verified destination data. Clearing or reloading the page discards it. It performs no destination recommendation. The deterministic parser is heuristic with a limited destination alias list; see the V2 audit for tested behavior and limits.
 
 ## Dependency-ordered product plan
 

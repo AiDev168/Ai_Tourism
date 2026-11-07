@@ -4,17 +4,18 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '../..');
-const output = resolve(root, 'artifacts/visual-qa');
+const output = resolve(root, 'artifacts/visual-qa-v2');
 const executablePath = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const vite = resolve(root, 'frontend/node_modules/vite/bin/vite.js');
 const server = spawn(process.execPath, [vite, 'preview', '--host', '127.0.0.1', '--port', '4179', '--strictPort'], { cwd: resolve(root, 'frontend'), stdio: 'ignore' });
 const locales = ['fa-IR', 'en-US', 'ar'];
 const widths = [360, 390, 430, 768, 1024, 1440];
 const prompts = {
-  'fa-IR': 'برای یک سفر سه روز در شیراز با ریتمی آرام برنامه می‌خواهم.',
-  'en-US': 'I would like three days in Shiraz, at a quiet pace.',
-  ar: 'أرغب في رحلة ثلاثة أيام في شيراز بإيقاع هادئ.',
+  'fa-IR': 'سفر ۳ روزه به شیراز به همراه خانواده',
+  'en-US': 'Plan a three-day family trip to Shiraz.',
+  ar: 'رحلة لمدة ثلاثة أيام إلى شيراز مع العائلة.',
 };
+const scenarioDays = [4, 7, 14, 30];
 const mixedScript = 'Shiraz شیراز شيراز القاهرة Cairo · Latin فارسی العربية ';
 const results = [];
 let browser;
@@ -35,8 +36,10 @@ try {
       const page = await browser.newPage({ viewport: { width, height: 900 }, deviceScaleFactor: 1 });
       await page.emulateMedia({ reducedMotion: 'reduce' });
       const errors = [];
+      const sameOrigin404s = [];
       const externalRequests = [];
       page.on('pageerror', error => errors.push(error.message));
+      page.on('response', response => { if (response.status() === 404 && new URL(response.url()).origin === 'http://127.0.0.1:4179') sameOrigin404s.push({ url: response.url(), status: response.status() }); });
       page.on('request', request => {
         if (new URL(request.url()).origin !== 'http://127.0.0.1:4179') externalRequests.push(request.url());
       });
@@ -68,23 +71,36 @@ try {
       const promptInputLength = [...(await promptField.inputValue()).trim()].length;
       await page.locator('.trip-form button[type="submit"]').click();
       const clarificationCount = await page.locator('.trip-response li').count();
-      await page.locator('#trip-destination').fill('Shiraz شیراز شيراز القاهرة Cairo');
+      const separateFieldsRemoved = await page.locator('#trip-destination, #trip-duration').count() === 0;
       await page.locator('.trip-form button[type="submit"]').click();
       const intakeReady = await page.locator('#captured-title').count() === 1;
+      await page.locator('.destination-resolution').waitFor({ state: 'visible', timeout: 5000 });
       const intakeSummary = intakeReady ? await page.locator('.trip-summary').innerText() : '';
       const capturedRequestText = intakeReady && intakeSummary.includes(prompts[locale]);
-      await page.locator('.text-button').click();
+      const catalogueResolutionState = await page.locator('.destination-resolution').getAttribute('data-resolution');
+      const catalogueStateShown = ['catalogue-unavailable', 'catalogue-empty'].includes(catalogueResolutionState);
+      if (locale === 'fa-IR' && width === 360) {
+        await mkdir(resolve(output, 'scenarios'), { recursive: true });
+        await page.screenshot({ path: resolve(output, 'scenarios', 'fa-IR-exact-intake-360.png'), fullPage: true, animations: 'disabled' });
+      }
+      await page.locator('#trip-prompt').fill(locale === 'fa-IR' ? 'شیراز' : locale === 'ar' ? 'شيراز' : 'Shiraz');
+      const staleSummaryCleared = await page.locator('.trip-summary').count() === 0;
+      const staleResolutionCleared = await page.locator('.destination-resolution').count() === 0;
       await page.locator('.trip-form button[type="submit"]').click();
-      const validationVisible = await page.locator('#form-error[role="alert"]').count() === 1;
-      await page.locator('.text-button').count().then(async count => { if (count) await page.locator('.text-button').click(); });
-
+      const clarificationShown = await page.locator('.trip-response li').count() > 0;
+      const daysScenarios = [];
+      for (const days of scenarioDays) {
+        const scenario = locale === 'fa-IR' ? `برای ${new Intl.NumberFormat(locale).format(days)} روز به شیراز سفر می‌کنم` : locale === 'ar' ? `رحلة إلى شيراز لمدة ${new Intl.NumberFormat(locale).format(days)} أيام` : `Travel to Shiraz for ${days} days`;
+        await page.locator('#trip-prompt').fill(scenario);
+        await page.locator('.trip-form button[type="submit"]').click();
+        await page.locator('.destination-resolution').waitFor({ state: 'visible', timeout: 5000 });
+        const summary = await page.locator('.trip-summary').innerText().catch(() => '');
+        const hasCatalogueState = ['catalogue-unavailable', 'catalogue-empty'].includes(await page.locator('.destination-resolution').getAttribute('data-resolution'));
+        daysScenarios.push({ days, ready: summary.length > 0, preservesText: summary.includes(scenario), includesLocalizedDayCount: summary.includes(new Intl.NumberFormat(locale).format(days)), hasCatalogueState });
+      }
       await page.locator('#trip-prompt').fill(prompts[locale]);
-      await page.locator('#trip-destination').fill(mixedScript.repeat(2));
-      await page.locator('#trip-duration').selectOption('1');
       await page.locator('.trip-form button[type="submit"]').click();
       const mixedDestinationLayout = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
-      await page.locator('.text-button').click();
-
       await page.locator('#trip-prompt').fill(mixedScript.repeat(10));
       const mixedScriptLayout = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
       await page.locator('#trip-prompt').fill('');
@@ -132,7 +148,7 @@ try {
       await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
       await mkdir(resolve(output, locale), { recursive: true });
       await page.screenshot({ path: resolve(output, locale, `${width}.png`), fullPage: true, animations: 'disabled' });
-      results.push({ locale, width, direction, title, fontStatus, imageStatus, promptInputLength, clarificationCount, intakeReady, intakeSummary, capturedRequestText, validationVisible,
+      results.push({ locale, width, direction, title, fontStatus, imageStatus, promptInputLength, clarificationCount, intakeReady, intakeSummary, capturedRequestText, catalogueResolutionState, catalogueStateShown, staleSummaryCleared, staleResolutionCleared, clarificationShown, separateFieldsRemoved, daysScenarios, sameOrigin404s,
         mixedDestinationLayout, mixedScriptLayout, editLayout, keyboardFocus, reducedMotion, accessibility, externalRequests, errors,
         screenshot: relative(root, resolve(output, locale, `${width}.png`)).replaceAll('\\', '/') });
       await page.close();
@@ -143,9 +159,9 @@ try {
   const failures = results.filter(item => item.direction !== expectedDirection(item.locale) || !item.title ||
     item.mixedDestinationLayout.document > item.width || item.mixedScriptLayout.document > item.width || item.editLayout.document > item.width ||
     !item.fontStatus.loaded || item.fontStatus.resources.length < 2 || item.imageStatus.some(image => !image.loaded || !image.local) ||
-    item.promptInputLength < 5 || item.clarificationCount !== 1 || !item.intakeReady || !item.capturedRequestText || !item.validationVisible || !item.keyboardFocus ||
+    item.promptInputLength < 5 || item.clarificationCount !== 0 || !item.intakeReady || !item.capturedRequestText || !item.catalogueStateShown || !item.staleSummaryCleared || !item.staleResolutionCleared || !item.clarificationShown || !item.separateFieldsRemoved || item.daysScenarios.some(test=>!test.ready||!test.preservesText||!test.includesLocalizedDayCount||!test.hasCatalogueState) || !item.keyboardFocus ||
     !item.reducedMotion.preference || item.reducedMotion.transition !== '1e-05s' || item.accessibility.length ||
-    item.externalRequests.length || item.errors.length);
+    item.externalRequests.length || item.errors.length || item.sameOrigin404s.length);
   const report = { generatedAt: new Date().toISOString(), browser: 'Installed Google Chrome, headless', cases: results.length,
     offlineCheck, failures, results };
   await mkdir(output, { recursive: true });

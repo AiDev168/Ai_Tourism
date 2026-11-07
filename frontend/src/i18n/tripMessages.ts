@@ -1,39 +1,7 @@
 import type { Locale } from './messages';
-
 export const tripMessages = {
-  'fa-IR': {
-    destinationLabel: 'مقصدی که در نظر داری', destinationPlaceholder: 'نام شهر یا منطقه',
-    durationLabel: 'مدت سفر', durationOptional: 'هنوز مشخص نیست', durationDays: '{value} روز',
-    sessionNotice: 'پیش‌نویس فقط در همین صفحه نگه داشته می‌شود؛ ارسال یا ذخیره نمی‌شود.',
-    clarificationTitle: 'برای ساختن پیش‌نویس، این موارد را روشن کن:', askDestination: 'کدام شهر یا منطقه را در نظر داری؟', askDuration: 'سفر چند روزه است؟ (۱ تا ۳ روز)',
-    capturedTitle: 'نیازهای سفرت ثبت شد', capturedLocal: 'این یک پیش‌نویس موقت در همین نشست است؛ هنوز مقصد یا اطلاعات سفر تأیید نشده‌اند.',
-    summaryDestination: 'مقصد واردشده', summaryDuration: 'مدت درخواستی', summaryRequest: 'شرح درخواست', clearDraft: 'پاک‌کردن پیش‌نویس',
-    requestRequired: 'شرح سفر باید دست‌کم ۵ نویسه داشته باشد.', requestTooLong: 'شرح سفر بیش از حد طولانی است؛ حداکثر ۱۲۰۰ نویسه مجاز است.', destinationTooLong: 'نام مقصد حداکثر می‌تواند ۱۲۰ نویسه باشد.', durationInvalid: 'مدت سفر باید از ۱ تا ۳ روز باشد.',
-    daysInvalid: 'مدت سفر باید از ۱ تا ۳ روز باشد.', durationDetected: 'مدت سفر از متن درخواست تشخیص داده شد.',
-    fixtureLabel: 'تصویر نمایشی · مقصد تأییدشده یا پیشنهاد واقعی نیست',
-  },
-  'en-US': {
-    destinationLabel: 'Destination you have in mind', destinationPlaceholder: 'City or region name',
-    durationLabel: 'Trip length', durationOptional: 'Not sure yet', durationDays: '{value} days',
-    sessionNotice: 'This draft stays on this page only. It is not sent or saved.',
-    clarificationTitle: 'A couple of details will help shape your draft:', askDestination: 'Which city or region are you considering?', askDuration: 'How long is the trip? (1 to 3 days)',
-    capturedTitle: 'Trip requirements captured', capturedLocal: 'This is a temporary draft in this session. The destination and travel details are not verified.',
-    summaryDestination: 'Destination entered', summaryDuration: 'Requested length', summaryRequest: 'Trip description', clearDraft: 'Clear draft',
-    requestRequired: 'Please describe your trip in at least 5 characters.', requestTooLong: 'The trip description is too long. The limit is 1,200 characters.', destinationTooLong: 'Destination names must be 120 characters or fewer.', durationInvalid: 'Trip length must be from 1 to 3 days.',
-    daysInvalid: 'Trip length must be between 1 and 3 days.', durationDetected: 'Trip length was recognized from your request.',
-    fixtureLabel: 'Illustrative only · not a verified destination or live recommendation',
-  },
-  ar: {
-    destinationLabel: 'الوجهة التي تفكر فيها', destinationPlaceholder: 'اسم المدينة أو المنطقة',
-    durationLabel: 'مدة الرحلة', durationOptional: 'لم تحدد بعد', durationDays: '{value} أيام',
-    sessionNotice: 'تبقى هذه المسودة في هذه الصفحة فقط؛ لا تُرسل ولا تُحفظ.',
-    clarificationTitle: 'نحتاج إلى توضيح بعض التفاصيل لإعداد المسودة:', askDestination: 'أي مدينة أو منطقة تفكر فيها؟', askDuration: 'كم تستغرق الرحلة؟ (من يوم إلى ٣ أيام)',
-    capturedTitle: 'تم تسجيل متطلبات الرحلة', capturedLocal: 'هذه مسودة مؤقتة ضمن الجلسة. الوجهة وتفاصيل السفر غير مؤكدة.',
-    summaryDestination: 'الوجهة التي أدخلتها', summaryDuration: 'المدة المطلوبة', summaryRequest: 'وصف الرحلة', clearDraft: 'مسح المسودة',
-    requestRequired: 'يرجى وصف الرحلة بخمسة أحرف على الأقل.', requestTooLong: 'وصف الرحلة طويل جدًا؛ الحد الأقصى ١٢٠٠ حرف.', destinationTooLong: 'يجب ألا يتجاوز اسم الوجهة ١٢٠ حرفًا.', durationInvalid: 'يجب أن تكون مدة الرحلة من يوم إلى ٣ أيام.',
-    daysInvalid: 'يجب أن تكون مدة الرحلة من يوم إلى ٣ أيام.', durationDetected: 'تم التعرف على مدة الرحلة من وصفك.',
-    fixtureLabel: 'للتوضيح فقط · ليست وجهة موثقة أو توصية مباشرة',
-  },
-} satisfies Record<Locale, Record<string, string>>;
-
-export type TripMessageKey = keyof typeof tripMessages['fa-IR'];
+ 'fa-IR': {requestLabel:'شرح کامل سفر',requestHelp:'مقصد، مدت سفر، تعداد همراهان، بودجه و علایقت را هر طور راحتی در یک متن بنویس.',placeholder:'مثلاً: برای ۷ روز با خانواده به شیراز سفر می‌کنیم. ۴ نفر هستیم، بودجه‌مان ۳۰ میلیون تومان است و به باغ‌های تاریخی و غذاهای محلی علاقه داریم.',submit:'استخراج نیازهای سفر',sessionNotice:'این پیش‌نویس فقط در همین صفحه می‌ماند و ذخیره یا ارسال نمی‌شود.',clarificationTitle:'برای ادامه، این موارد را روشن کن:',askDestination:'کدام مقصد یا مقصدها را در نظر داری؟',askDuration:'مدت سفر چند روز است؟',askAmbiguousDestination:'چند مقصد ممکن است؛ لطفاً مقصد یا ترتیب سفر را روشن کن.',askAmbiguousDuration:'مدت‌های متفاوتی در متن آمده؛ کدام‌یک را در نظر داری؟',capturedTitle:'برداشت ما از سفرت',capturedLocal:'این فقط استخراج از متن خودت است؛ نام مقصد تأیید یا راستی‌آزمایی نشده است.',summaryDestination:'مقصدها (به ترتیب)',summaryDuration:'مدت درخواستی',durationDays:'{value} روز',summaryRequest:'متن اصلی درخواست',summaryTravelers:'تعداد همراهان',summaryBudget:'بودجه و واحد گفته‌شده',summaryInterests:'علایق گفته‌شده',summaryDates:'تاریخ سفر',summaryConstraints:'ترجیحات و محدودیت‌ها',unknown:'در متن مشخص نشده',unverified:'تأییدنشده',clearDraft:'پاک‌کردن پیش‌نویس',requestRequired:'شرح سفر را بنویس.',requestTooLong:'شرح سفر بیش از ۱۲۰۰ نویسه است.',durationTooLong:'مدت از سقف فنی {value} روز بیشتر است. لطفاً بازه کوتاه‌تری وارد کن.',fixtureLabel:'محتوای نمایشی · توصیه یا داده مقصد واقعی نیست'},
+ 'en-US': {requestLabel:'Tell us about your trip',requestHelp:'Write naturally in one message. Include destinations, trip length, travelers, budget, and interests if you know them.',placeholder:'For example: Plan a 7-day family trip to Shiraz for four people, with a budget of 30 million IRR. We enjoy historic gardens and local food.',submit:'Understand my trip',sessionNotice:'This draft stays on this page only; it is not sent or saved.',clarificationTitle:'Please clarify these details to continue:',askDestination:'Which destination or destinations do you have in mind?',askDuration:'How many days should the trip last?',askAmbiguousDestination:'More than one destination may fit. Please clarify the place or route order.',askAmbiguousDuration:'Different trip lengths appear in your message. Which one should I use?',capturedTitle:'What we understood about your trip',capturedLocal:'This is an extraction from your own text. Destinations have not been verified.',summaryDestination:'Destinations (in order)',summaryDuration:'Requested duration',durationDays:'{value} days',summaryRequest:'Original request',summaryTravelers:'Travelers',summaryBudget:'Budget and stated unit',summaryInterests:'Stated interests',summaryDates:'Travel dates',summaryConstraints:'Preferences and constraints',unknown:'Not specified in your message',unverified:'Unverified',clearDraft:'Clear draft',requestRequired:'Please describe the trip.',requestTooLong:'The trip description is over 1,200 characters.',durationTooLong:'The duration exceeds the technical limit of {value} days. Please enter a shorter trip.',fixtureLabel:'Illustrative content · not a real recommendation or verified destination'},
+ ar: {requestLabel:'صِف رحلتك كاملة',requestHelp:'اكتب رسالة واحدة بطريقتك، واذكر الوجهة والمدة وعدد المسافرين والميزانية والاهتمامات إن عرفتَها.',placeholder:'مثال: نخطط لرحلة عائلية لمدة ٧ أيام إلى شيراز لأربعة أشخاص، بميزانية محددة، ونحب الحدائق التاريخية والطعام المحلي.',submit:'استخلص متطلبات الرحلة',sessionNotice:'تبقى هذه المسودة في هذه الصفحة فقط؛ لا تُرسل ولا تُحفظ.',clarificationTitle:'يرجى توضيح هذه التفاصيل للمتابعة:',askDestination:'ما الوجهة أو الوجهات التي تفكر فيها؟',askDuration:'كم يومًا ستستغرق الرحلة؟',askAmbiguousDestination:'قد تشير الرسالة إلى أكثر من وجهة؛ يرجى توضيح المكان أو ترتيب المسار.',askAmbiguousDuration:'وردت مدد مختلفة في رسالتك؛ أي مدة تقصد؟',capturedTitle:'ما فهمناه عن رحلتك',capturedLocal:'هذا استخلاص من نصك فقط؛ لم يتم التحقق من الوجهات.',summaryDestination:'الوجهات بالترتيب',summaryDuration:'المدة المطلوبة',durationDays:'{value} أيام',summaryRequest:'نص الطلب الأصلي',summaryTravelers:'عدد المسافرين',summaryBudget:'الميزانية والوحدة المذكورة',summaryInterests:'الاهتمامات المذكورة',summaryDates:'تواريخ السفر',summaryConstraints:'التفضيلات والقيود',unknown:'غير محدد في رسالتك',unverified:'غير موثقة',clearDraft:'مسح المسودة',requestRequired:'يرجى وصف الرحلة.',requestTooLong:'وصف الرحلة يتجاوز ١٢٠٠ حرف.',durationTooLong:'تتجاوز المدة الحد التقني البالغ {value} يومًا. يرجى إدخال مدة أقصر.',fixtureLabel:'محتوى توضيحي · ليس توصية فعلية أو وجهة موثقة'}
+} satisfies Record<Locale,Record<string,string>>;
+export type TripMessageKey=keyof typeof tripMessages['fa-IR'];
