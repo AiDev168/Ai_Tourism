@@ -11,10 +11,11 @@ Import-Module (Join-Path $PSScriptRoot 'Database-Lifecycle.psm1') -Force
 Push-Location $PackageRoot
 try {
     Write-Host "`n========== OFFLINE SEED CONTENT VALIDATION ==========" -ForegroundColor Cyan
-    if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
-        throw 'Python launcher "py" is required for the offline seed hash/character-count validator.'
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        throw 'uv is required to run the project-pinned offline seed validator.'
     }
-    & py -3.13 (Join-Path $PackageRoot 'scripts\Validate-Seed-Data.py')
+    $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
+    & uv run --offline --project $ProjectRoot --no-sync python (Join-Path $PackageRoot 'scripts\Validate-Seed-Data.py')
     if ($LASTEXITCODE -ne 0) { throw 'Offline seed content validation failed.' }
 
     $containerState = (& docker inspect --format '{{.State.Status}}' $ContainerName 2>$null | Out-String).Trim()
@@ -52,7 +53,7 @@ try {
     Write-Host "`n========== DATABASE STATE / MIGRATION CHECKSUM PREFLIGHT ==========" -ForegroundColor Cyan
     $appliedIds = @((Get-PsqlScalar "SELECT COALESCE(string_agg(migration_id, ',' ORDER BY migration_id), '') FROM system.schema_migrations;").Split(',', [StringSplitOptions]::RemoveEmptyEntries))
     $state = Resolve-DatabaseLifecycleState -AppliedMigrationIds $appliedIds
-    $databaseState = "$($state.Name) / $($state.ExpectedRows) rows"
+    $databaseState = "$($state.Name) / $($state.ExpectedRows) immutable seed+ledger rows"
     $expectedMigrations = $state.MigrationIds
 
     $migrationSet = @(
@@ -74,8 +75,8 @@ try {
 
     Write-Host "PASS: exact migration ledger/checksums identify $databaseState." -ForegroundColor Green
 
-    # The report derives its exact 419/695-row manifest from the ledger and
-    # fails closed on partial imports, count drift, or the wrong row state.
+    # The report validates the exact immutable seed/ledger manifest and lists
+    # mutable identity/authentication activity separately.
     Write-Host "`n========== EXACT STATE ROW-COUNT PREFLIGHT ==========" -ForegroundColor Cyan
     Invoke-PsqlFile '/opt/ai-tourism/sql/reports/final_row_counts.sql'
 

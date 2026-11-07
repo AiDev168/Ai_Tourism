@@ -3,7 +3,7 @@ from __future__ import annotations
 import hmac
 import re
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -169,7 +169,7 @@ def test_csrf_and_expired_sessions_fail_closed():
 
 def test_authorization_is_server_scoped_and_provider_admin_fails_closed():
     user_id, another_id = uuid4(), uuid4()
-    principal = Principal(user_id=user_id)
+    principal = Principal(user_id=user_id, session_id=uuid4())
     require_owner(principal, user_id)
     with pytest.raises(AuthorizationDenied):
         require_owner(principal, another_id)
@@ -179,12 +179,69 @@ def test_authorization_is_server_scoped_and_provider_admin_fails_closed():
     assert response.status_code == 404
 
 
+def test_principal_api_ignores_client_identity_and_capability_claims():
+    from fastapi import Depends, FastAPI
+
+    from app.api.auth import authenticated_user
+    from app.modules.identity.auth_service import AuthenticatedUser
+    from app.modules.identity.authorization import (
+        require_capability_dependency,
+        require_owner_dependency,
+    )
+
+    server_user = AuthenticatedUser(uuid4(), "+989121234567", uuid4())
+    api = FastAPI()
+    api.dependency_overrides[authenticated_user] = lambda: server_user
+
+    @api.get("/resources/{owner_id}")
+    def read_owned_resource(
+        owner_id: UUID,
+        principal: Principal = Depends(require_owner_dependency()),
+    ):
+        return {"user_id": str(principal.user_id), "owner_id": str(owner_id)}
+
+    @api.get("/restricted")
+    def read_restricted(
+        principal: Principal = Depends(require_capability_dependency("marketplace:review")),
+    ):
+        return {"user_id": str(principal.user_id)}
+
+    client = TestClient(api)
+    allowed = client.get(
+        f"/resources/{server_user.user_id}",
+        params={"user_id": str(uuid4()), "organization_id": str(uuid4()), "is_admin": "true"},
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["user_id"] == str(server_user.user_id)
+
+    impersonation = client.get(f"/resources/{uuid4()}", params={"user_id": str(server_user.user_id)})
+    assert impersonation.status_code == 403
+    capability_claim = client.get(
+        "/restricted",
+        params={"capabilities": "marketplace:review", "role": "admin", "is_admin": "true"},
+    )
+    assert capability_claim.status_code == 403
+
+
 def test_authenticated_client_cannot_submit_identity_or_capability_fields():
     from app.api.auth import ChallengeRequest
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
         ChallengeRequest(phone_number="09121234567", user_id=str(uuid4()), is_admin=True)
+
+
+def test_postgres_integration_guard_rejects_shared_database_without_connecting(monkeypatch):
+    from test_auth_postgres import make_settings
+
+    monkeypatch.setenv("AUTH_TEST_DATABASE_HOST", "127.0.0.1")
+    monkeypatch.setenv("AUTH_TEST_DATABASE_PORT", "55436")
+    monkeypatch.setenv("AUTH_TEST_DATABASE_NAME", "ai_tourism_dev")
+    monkeypatch.setenv("AUTH_TEST_DATABASE_USER", "ai_tourism_app")
+    monkeypatch.setenv("AUTH_TEST_DATABASE_PASSWORD", "test-only")
+    monkeypatch.setenv("AUTH_TEST_DATABASE_MARKER", "a" * 32)
+    with pytest.raises(RuntimeError, match="unique ai_tourism_auth_test"):
+        make_settings()
 
 
 def test_authentication_disabled_fails_closed():

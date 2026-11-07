@@ -70,17 +70,6 @@ BEGIN
         RAISE EXCEPTION 'Migration ledger entry count does not match the exact 0006/0007/0008 state; found %', v_count;
     END IF;
 
-    IF v_has_auth THEN
-        SELECT COUNT(*) INTO v_count FROM identity.otp_challenges;
-        IF v_count <> 0 THEN RAISE EXCEPTION 'Authentication migration baseline must contain no OTP challenges'; END IF;
-        SELECT COUNT(*) INTO v_count FROM identity.verified_phones;
-        IF v_count <> 0 THEN RAISE EXCEPTION 'Authentication migration must not mark legacy phones verified'; END IF;
-        SELECT COUNT(*) INTO v_count FROM identity.web_sessions;
-        IF v_count <> 0 THEN RAISE EXCEPTION 'Authentication migration baseline must contain no sessions'; END IF;
-        SELECT COUNT(*) INTO v_count FROM identity.auth_rate_limits;
-        IF v_count <> 0 THEN RAISE EXCEPTION 'Authentication migration baseline must contain no rate-limit history'; END IF;
-    END IF;
-
     SELECT COUNT(*) INTO v_count FROM knowledge.knowledge_sources;
     IF (v_has_shiraz AND v_count <> 58) OR (NOT v_has_shiraz AND v_count <> 40) THEN
         RAISE EXCEPTION 'Expected 40 sources at 0006 or 58 at 0007; found %', v_count;

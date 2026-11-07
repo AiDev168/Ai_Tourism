@@ -41,6 +41,8 @@
 
 | **TOTAL** | **30 project-owned tables** | **419** | **695** |
 
+The `identity.users` value above is the immutable synthetic QA identity seed count, not a cap on real users. Repeatable validation counts only that synthetic seed row in the exact seed manifest and reports non-synthetic users separately. After Migration 0008, OTP challenges, verified-phone evidence, web sessions, and rate-limit rows are runtime data and may be non-empty. Validation checks their schema, permissions, provenance/time boundary, and migration state; it does not require them to remain empty. The `420` / `696` totals shown for 0006+0008 / 0007+0008 describe the clean post-migration baseline before runtime authentication activity.
+
 ## ترکیب داده‌ها
 
 - **وضعیت فعلی دیتابیس مشترک مالک:** Migration 0006، ۳۰ جدول و ۴۱۹ ردیف؛ Migration 0007 در ledger وجود ندارد و این سند یا Validator آن را اعمال نمی‌کند.

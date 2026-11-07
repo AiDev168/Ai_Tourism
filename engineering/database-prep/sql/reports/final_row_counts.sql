@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 
 WITH actual(table_name, actual_count) AS (
-    SELECT 'identity.users', COUNT(*)::BIGINT FROM identity.users
+    SELECT 'identity.users (synthetic seed)', COUNT(*)::BIGINT FROM identity.users WHERE is_synthetic=TRUE
     UNION ALL SELECT 'identity.user_consents', COUNT(*) FROM identity.user_consents
     UNION ALL SELECT 'identity.user_preferences', COUNT(*) FROM identity.user_preferences
     UNION ALL SELECT 'conversation.conversations', COUNT(*) FROM conversation.conversations
@@ -40,7 +40,7 @@ WITH actual(table_name, actual_count) AS (
             WHERE migration_id = '0008_authentication_foundation') AS auth_applied
 ), expected(table_name, expected_0006, expected_0007) AS (
     VALUES
-    ('identity.users', 1::BIGINT, 1::BIGINT),
+    ('identity.users (synthetic seed)', 1::BIGINT, 1::BIGINT),
     ('identity.user_consents', 1, 1),
     ('identity.user_preferences', 3, 3),
     ('conversation.conversations', 1, 1),
@@ -87,12 +87,34 @@ JOIN actual a USING (table_name)
 
 UNION ALL
 
-SELECT 'TOTAL', SUM(a.actual_count), SUM(e.expected_count),
+SELECT 'IMMUTABLE_TOTAL', SUM(a.actual_count), SUM(e.expected_count),
        CASE WHEN SUM(a.actual_count) = SUM(e.expected_count) THEN 'PASS' ELSE 'FAIL' END
 FROM expected_for_state e
 JOIN actual a USING (table_name)
 ORDER BY 1;
 
+
+-- Runtime identity/auth rows are reported, not compared with seed counts.
+DO $$
+DECLARE
+    runtime_count BIGINT;
+    has_auth BOOLEAN;
+BEGIN
+    SELECT COUNT(*) INTO runtime_count FROM identity.users WHERE is_synthetic=FALSE;
+    RAISE NOTICE 'RUNTIME rows (not seed assertions): non-synthetic identity.users=%', runtime_count;
+    SELECT EXISTS (SELECT 1 FROM system.schema_migrations
+                   WHERE migration_id='0008_authentication_foundation') INTO has_auth;
+    IF has_auth THEN
+        EXECUTE 'SELECT COUNT(*) FROM identity.otp_challenges' INTO runtime_count;
+        RAISE NOTICE 'RUNTIME rows: identity.otp_challenges=%', runtime_count;
+        EXECUTE 'SELECT COUNT(*) FROM identity.verified_phones' INTO runtime_count;
+        RAISE NOTICE 'RUNTIME rows: identity.verified_phones=%', runtime_count;
+        EXECUTE 'SELECT COUNT(*) FROM identity.web_sessions' INTO runtime_count;
+        RAISE NOTICE 'RUNTIME rows: identity.web_sessions=%', runtime_count;
+        EXECUTE 'SELECT COUNT(*) FROM identity.auth_rate_limits' INTO runtime_count;
+        RAISE NOTICE 'RUNTIME rows: identity.auth_rate_limits=%', runtime_count;
+    END IF;
+END $$;
 
 -- The report above is also a release gate: fail the psql process on any
 -- per-table mismatch or missing table, not merely print a FAIL label.
@@ -112,6 +134,8 @@ BEGIN
     ) INTO has_shiraz;
     SELECT EXISTS (SELECT 1 FROM system.schema_migrations
                    WHERE migration_id = '0008_authentication_foundation') INTO has_auth;
+    -- Counts only the immutable synthetic identity seed; real users and
+    -- authentication activity are reported separately below.
     required_total := CASE WHEN has_shiraz THEN 695 ELSE 419 END + CASE WHEN has_auth THEN 1 ELSE 0 END;
 
     FOR item IN
@@ -155,8 +179,12 @@ BEGIN
         IF to_regclass(format('%I.%I', item.schema_name, item.table_name)) IS NULL THEN
             RAISE EXCEPTION 'Expected table %.% is missing', item.schema_name, item.table_name;
         END IF;
-        EXECUTE format('SELECT COUNT(*) FROM %I.%I', item.schema_name, item.table_name)
-            INTO actual_rows;
+        IF item.schema_name='identity' AND item.table_name='users' THEN
+            SELECT COUNT(*) INTO actual_rows FROM identity.users WHERE is_synthetic=TRUE;
+        ELSE
+            EXECUTE format('SELECT COUNT(*) FROM %I.%I', item.schema_name, item.table_name)
+                INTO actual_rows;
+        END IF;
         total_actual := total_actual + actual_rows;
         total_expected := total_expected + item.expected_count;
         IF actual_rows <> item.expected_count THEN
@@ -182,5 +210,5 @@ BEGIN
         RAISE EXCEPTION 'Authentication tables exist without Migration 0008 ledger entry';
     END IF;
 
-    RAISE NOTICE 'PASS: exact ledger state row-count manifest; total rows = %.', total_actual;
+    RAISE NOTICE 'PASS: immutable seed and migration row-count manifest; total = % (runtime identities/auth rows excluded).', total_actual;
 END $$;

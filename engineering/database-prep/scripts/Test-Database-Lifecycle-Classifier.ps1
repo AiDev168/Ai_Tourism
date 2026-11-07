@@ -53,6 +53,7 @@ $actionCases = @(
     @{ Name = '0006 explicit auth opt-in skips optional 0007'; State = '0006'; AuthOptIn = $true; Expected = 'apply-auth-0008-from-0006'; Error = $false },
     @{ Name = '0007 explicit auth opt-in'; State = '0007'; AuthOptIn = $true; Expected = 'apply-auth-0008-from-0007'; Error = $false },
     @{ Name = '0006 auth migration is already present'; State = '0006-auth'; Expected = 'already-authenticated'; Error = $false },
+    @{ Name = '0007 auth migration is already present'; State = '0007-auth'; Expected = 'already-authenticated'; Error = $false },
     @{ Name = '0007 is a read-only no-op'; State = '0007'; OptIn = $false; Expected = 'already-integrated'; Error = $false }
 )
 foreach ($case in $actionCases) {
