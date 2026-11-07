@@ -1,17 +1,58 @@
 # Authentication, Session, and Administrator Bootstrap Decision Brief v1.0
 
-- **Status:** Technical decision brief — Owner Decision Required
+- **Status:** High-level owner decisions recorded; operational and security details remain open
 - **Prepared:** 2026-11-07
 - **Scope:** Read-only implementation inventory and documentation-only options/recommendations for ADR-0006 and the administrator-authentication gate in ADR-0008
-- **Repository baseline inspected:** `fix/initialize-database-powershell-inspect-v1` at `6f62daca62cbd70ce7fdad885f1b5d040c3227b1`; upstream `origin/fix/initialize-database-powershell-inspect-v1`, 0 ahead / 0 behind
+- **Historical repository baseline for the original implementation audit:** `fix/initialize-database-powershell-inspect-v1` at `6f62daca62cbd70ce7fdad885f1b5d040c3227b1`; this is not a claim about the current checkout
 
 ## Executive summary
 
-Authentication is **not implemented**. The schema has identity/contact fields and a password-hash slot, but there is no login or verification flow, session/token implementation, role or membership authorization, administrator bootstrap, recovery process, or auth test coverage. The API contract documents authentication as a future gate; it does not implement that gate.
+Authentication remains **unimplemented**, but the owner has now selected the high-level initial domestic authentication and session direction. The schema has identity/contact fields and a password-hash slot, but there is no login or verification flow, session/token implementation, role or membership authorization, administrator bootstrap, recovery process, or auth test coverage. The API contract documents authentication as a future gate; it does not implement that gate.
 
-**Technical recommendation, subject to owner approval:** for the current same-origin React PWA and FastAPI modular monolith, prefer an opaque server-managed session conveyed in a `Secure`, `HttpOnly`, appropriately `SameSite` cookie, with CSRF protection for state-changing requests, server-derived identity, explicit idle/absolute expiry, revocation, and object-level authorization. Keep the identity-provider choice open. For administrator bootstrap, evaluate an operator-controlled, one-time private provisioning ceremony after authentication is selected; never use a public first-user claim endpoint or built-in credentials.
+**Owner-approved direction:** Iranian phone OTP over a provider-neutral SMS boundary; opaque PostgreSQL-backed server sessions in a host-only `Secure`, `HttpOnly`, `SameSite=Lax` cookie; separate scoped identity/authorization capabilities; mandatory additional authentication for privileged administrator operations, with TOTP preferred for evaluation; and private, operator-controlled, one-time first-admin provisioning. No SMS vendor is selected.
 
-This is a decision brief, not an amendment to [ADR-0006](decisions/ADR-0006-authentication-and-session.md) or [ADR-0008](decisions/ADR-0008-centralized-ai-provider-management.md). The marketplace ADRs remain proposals. **Task 3 is not ready for protected implementation** until the owner resolves the decisions and minimum infrastructure gates in Section 9.
+The detailed boundaries and unresolved gates are recorded in [ADR-0006](decisions/ADR-0006-authentication-and-session.md) and the [implementation contract](AUTHENTICATION_SESSION_AND_ADMIN_BOOTSTRAP_IMPLEMENTATION_CONTRACT_v1.0.md). ADR-0008 remains authoritative for AI Provider administration. The marketplace ADRs remain proposals. **Protected Task 3 is not ready** until the authentication/session foundation and required security tests are implemented and operational gates are resolved.
+
+## Owner decision outcome — 2026-11-07
+
+This section records decisions explicitly approved by the owner on 2026-11-07. It supersedes only the matching open questions/recommendations in the earlier option analysis; it does not imply that implementation or unresolved operational details are approved.
+
+### Accepted owner decisions
+
+- Initial authentication supports tourists travelling inside Iran using Iranian `+98` phone numbers, represented in E.164-compatible form. International tourist authentication is deferred.
+- SMS phone OTP is the primary and only initial login method. Email/password, email magic links, and federated login are deferred.
+- A phone number is verified only after successful OTP verification. A stored `phone_e164` value does not itself prove verification and phone verification does not prove legal identity or company ownership.
+- OTP delivery uses a provider-neutral SMS adapter. Automated tests use a deterministic fake adapter. No SMS vendor, credentials, or production calls are selected/authorized. Vendor selection requires delivery tests across MCI, Irancell, and Rightel and review of deliverability, cost, rate limits, support, and recovery implications.
+- Sessions are opaque, high-entropy, server-managed and PostgreSQL-backed. The browser receives the identifier only in a host-only `Secure`, `HttpOnly`, `SameSite=Lax` cookie. Validation, expiry, logout, and revocation are server-side. No Redis without measured evidence and separate approval. No long-lived JavaScript-readable session credential.
+- Unsafe cookie-authenticated requests require explicit CSRF protection.
+- A traveler and partner employee may share one user identity, but traveler rights and partner membership/roles are independently granted. Partner authority requires explicit organization membership. Client-supplied IDs/roles/admin flags never establish authority; enforce object ownership and tenant isolation in the backend.
+- Privileged administrator operations require an additional authentication factor; SMS/passwordless OTP alone is insufficient. TOTP is the preferred candidate, but enrollment/recovery/backup/device replacement details are not approved.
+- Primary platform administration, marketplace governance, partner membership, traveler permissions, and AI Provider administration are separate capabilities. ADR-0008 remains authoritative for AI Provider control.
+- First-admin provisioning must be private, operator-controlled, and one-time. No public first-user claim endpoint, default credential, anonymous admin, or shared admin account.
+
+### Technical recommendations (not additional owner decisions)
+
+- Use the same-origin PWA/API topology where practical to simplify cookie scope and CSRF/origin controls.
+- Use a typed server-derived principal followed by explicit object, tenant, and capability checks.
+- Consider a synchronizer CSRF token held server-side and in client memory, sent in a custom request header, alongside strict Origin validation for unsafe requests. Exact mechanism remains open.
+- Use a private, attributable enrollment ceremony with expiry/replay protection and audited disablement for first-admin bootstrap; the owner approved the private/operator-controlled/one-time boundary, not a particular command, deployment console, or credential technology.
+
+### Open operational and security decisions
+
+- SMS vendor, sender/routes, commercial terms, production credentials, representative-network test results, and explicit production activation.
+- OTP settings: six digits, five-minute validity, five failed attempts, and 60-second resend are proposed defaults only. Rate-limit dimensions and budgets also require security review.
+- Session idle/absolute lifetimes, rotation triggers, concurrent-device policy, and cleanup/retention.
+- Exact CSRF mechanism, Origin/Referer policy, trusted proxy/TLS setup, and cookie deployment configuration.
+- Traveler phone-loss recovery, phone replacement/reassignment, duplicate accounts, and phone/account linking. No self-service recovery flow is approved.
+- Administrator TOTP enrollment, recovery, backup codes, and device replacement. Security review must also confirm whether SMS OTP plus TOTP meets the intended independent-factor assurance; both are possession-channel OTP methods, so do not claim independent-factor MFA without that review.
+- Detailed first-admin recovery and break-glass controls, including approvers, separation of duties, audit and revocation.
+
+### Implementation gates
+
+- No protected user, partner, marketplace-admin, or provider-admin operation until the authentication/session foundation and relevant security tests are implemented.
+- No production SMS delivery until vendor selection follows the required network tests and the owner explicitly authorizes production use.
+- No privileged admin routes until mandatory additional-factor behavior, private first-admin provisioning, recovery, role authorization, and audit controls are approved, implemented, and tested.
+- Partner Task 3 waits for Task 2.3 completion, production-capable OTP delivery testing/authorization, admin gates, and cross-user/cross-organization authorization tests.
 
 ## 1. Status vocabulary and evidence
 
@@ -51,7 +92,7 @@ The nullable `password_hash` column is a storage affordance, not a choice of pas
 
 No database was accessed. This is a source/configuration inventory only; it does not assert live database state or deployment behavior.
 
-## 2. End-user authentication options
+## 2. End-user authentication options (historical comparison before owner decision)
 
 No provider availability, delivery pricing, or regional reachability is assumed. These must be checked against the owner-selected pilot geography, legal/privacy requirements, and actual delivery contracts before selection.
 
@@ -67,11 +108,11 @@ No provider availability, delivery pricing, or regional reachability is assumed.
 
 **Technical facts:** Phone and email methods depend on external delivery channels for verification/recovery. Federated identity moves some authentication responsibility to an external issuer but does not remove application authorization obligations. Adding methods increases account-linking and recovery complexity.
 
-**Assumptions:** The first client is a same-origin PWA; the initial target geography, user access patterns, delivery providers, cost tolerances, and legal requirements are not established by this audit.
+**Assumptions:** The first client is a same-origin PWA. User access patterns, delivery providers, cost tolerances, and detailed legal/privacy requirements still require validation. The owner has selected domestic Iranian tourist scope; this does not establish delivery-provider reachability.
 
-**Owner decisions:** Select an authentication method (or deliberately limited combination), identity/delivery provider(s), account identifier policy, verification rules, supported regions/languages, recovery and account-linking behavior, and privacy/retention terms. Do not infer region availability or price from these options.
+**Owner decisions recorded above:** Iranian phone OTP as the only initial method, E.164-compatible `+98` representation, PostgreSQL-backed opaque sessions in the specified cookie direction, independent scoped authorization, mandatory additional administrator authentication, and private one-time first-admin provisioning. **Still open:** vendors, operating parameters, recovery/account-linking rules, CSRF details, session lifetimes, and detailed administrator MFA/recovery policy.
 
-## 3. Session architecture options
+## 3. Session architecture options (historical comparison before owner decision)
 
 | Dimension | Secure HttpOnly cookie with server-managed session | Short-lived access token with refresh-token rotation |
 |---|---|---|
@@ -85,9 +126,9 @@ No provider availability, delivery pricing, or regional reachability is assumed.
 | Operational cost | Session storage availability, cleanup, key/cookie configuration, CSRF policy, and session monitoring | Token signing/verification key lifecycle, refresh store, rotation/reuse response, revocation policy, and potentially online lookups |
 | Cross-origin/API clients | Same-origin deployment is simplest. Cross-origin credentials require exact CORS/origin/cookie configuration | Bearer tokens can suit multiple clients, but issuers/audiences/scopes and secure token distribution still need design |
 
-### 3.1 Proposed session baseline (not accepted)
+### 3.1 Owner-approved session direction and open implementation details
 
-Recommend evaluating an **opaque, high-entropy session identifier in a `Secure`, `HttpOnly`, host-only cookie**, with session state validated server-side by FastAPI. Set a deliberate `SameSite` policy and require CSRF protection for every unsafe method. The session repository/storage technology, cookie domain/path, idle and absolute lifetimes, rotation triggers, and session listing behavior remain owner decisions; do not silently add Redis or assume a deployed session database exists.
+The owner approved an **opaque, high-entropy server-managed session persisted in PostgreSQL**, delivered through a host-only `Secure`, `HttpOnly`, `SameSite=Lax` cookie and validated/revoked server-side. Do not add Redis without measured evidence and separate approval. Unsafe requests require CSRF defenses. Session lifetime, rotation triggers, device listing/revocation policy, exact CSRF mechanism, and deployment attributes beyond this baseline remain open.
 
 This direction fits a same-origin React PWA and modular monolith because it keeps long-lived credentials out of JavaScript and makes server-side revocation straightforward. It does not prevent XSS from making requests as the user, so CSP/output safety and least-privilege APIs remain necessary. It does not prevent CSRF unless CSRF defenses are correctly implemented. If the owner prioritizes multiple native clients or cross-origin APIs, short-lived access tokens with rotated refresh credentials remain a viable alternative, subject to equivalent browser-storage and revocation protections.
 
@@ -117,10 +158,10 @@ ADR-0008 requires the primary system administrator to be authenticated and autho
 | Public “first user becomes admin” endpoint | Easy initial setup | Race-to-claim, internet exposure, deployment misconfiguration, and permanent privilege capture | Reject; prohibited by this brief |
 | Hardcoded/default admin credential or shared account | Simple in a demo | Secret leakage, no attribution, difficult rotation/revocation, and unsafe recovery | Reject; prohibited |
 | Direct database role/row edit | Can work during emergency operations | Bypasses application policy and may omit audit/verification; schema/role semantics are not designed | Not a routine bootstrap path; do not use without a separately approved and audited break-glass procedure |
-| Operator-controlled one-time provisioning ceremony | Private, attributable, can avoid a public claim endpoint | Requires a secure operator channel, proofing of the intended identity, a controlled deployment procedure, audit, expiry/replay protection, and reliable disablement | Recommended option to evaluate; no command, endpoint, credential format, or storage technology selected here |
+| Operator-controlled one-time provisioning ceremony | Private, attributable, can avoid a public claim endpoint | Requires a secure operator channel, proofing of the intended identity, a controlled deployment procedure, audit, expiry/replay protection, and reliable disablement | Owner-approved boundary; exact command/deployment procedure, proofing, recovery, and audit details remain open |
 | Pre-provisioned trusted identity-provider group/claim | Can centralize workforce identity and strong authentication | Depends on selected provider, issuer configuration, group lifecycle, outage/recovery, regional availability, and correct claim mapping | Viable alternative if an approved identity provider and organization policy are selected |
 
-**Recommended ceremony, subject to owner/security approval:** an authorized operator initiates a private, one-time bootstrap process for a named primary-admin identity; the person proves control through the selected authentication method and any separately approved stronger verification; the action is time-bounded, single-use, audited without credential material, and disabled after successful enrollment. There must be no anonymous/public HTTP bootstrap path, default credentials, or hidden bypass. This recommendation does not decide whether the operational mechanism is a local command, deployment console action, or trusted provider group.
+**Owner-approved boundary; implementation details open:** first-administrator provisioning is private, operator-controlled, and one-time. There must be no anonymous/public HTTP bootstrap path, default credentials, or hidden bypass. A named identity must be verified through the eventually approved authentication/MFA process; the owner has not selected whether the operator mechanism is a local command, deployment console action, or another private control, nor the detailed proofing, recovery, audit, expiry, or disablement procedure.
 
 ### 4.3 Recovery and emergency access options
 
@@ -175,36 +216,33 @@ The role names and exact permission matrix in the [Partner Marketplace Domain Co
 | Secret exposure in logs/config/browser | Secret management chosen before deployment; configuration redaction; allowlisted structured logging; no auth/provider tokens in URLs, client bundles, analytics, or error responses |
 | Deployment origin/proxy misconfiguration | Production HTTPS, trusted proxy configuration, secure headers, exact origin/CORS policy, cookie scope review, no mixed-content paths, and deployment-level tests |
 
-## 7. Recommended baseline architecture (subject to owner approval)
+## 7. Accepted baseline and proposed technical details
 
-1. **Keep provider selection open.** Select the user authentication method only after the owner chooses the pilot geography, verifies delivery/identity-provider reachability and operating terms, and approves account recovery and privacy requirements. Prefer one primary method at first; defer optional methods until account linking and recovery are explicitly designed.
-2. **Use a same-origin PWA/API where practical.** This reduces cross-origin cookie and CORS complexity. The actual production topology is not present in the inspected repository and must be designed separately.
-3. **Prefer an opaque server-managed cookie session for this PWA.** Use Secure/HttpOnly/host-only attributes, a deliberate SameSite policy, CSRF protection, session rotation, idle plus absolute expiry, server-side logout/revocation, account-disable behavior, and authorization checks at every protected operation. Session store technology and lifetimes remain undecided.
-4. **Create a typed backend principal seam.** Authentication dependency validates the session and yields a server-derived principal. Domain/API authorization then verifies resource ownership, active partner membership, platform role, or provider-admin capability. Keep authentication, authorization, and business-policy decisions separate.
-5. **Represent roles as scoped grants, not a universal admin boolean.** Traveler resource ownership, organization membership, marketplace governance permissions, and AI Provider administration are separate scopes. No implicit cross-organization, cross-domain, or provider-admin inheritance.
-6. **Bootstrap the first primary administrator through an approved private ceremony.** Prefer operator-controlled, one-time, attributable enrollment with proof of the named identity, no public endpoint, no hardcoded credentials, single-use/expiry controls, audit, and a defined disablement step. Choose operational form only after the owner’s recovery and deployment model is known.
-7. **Design recovery before exposing protected routes.** Define ordinary user recovery, admin loss, session revocation, account disablement, emergency access (or explicit absence), notification, and audit review. A working sign-in without safe recovery is not complete authentication.
-8. **Preserve current scope boundaries.** No user-data API is enabled anonymously. No referral leads are enabled under current ADR-0007. No provider admin route exists until ADR-0008’s separate authentication gate is satisfied. No destination/RAG or partner data boundary is bypassed.
+1. **Accepted:** Iranian `+98` phone OTP via a provider-neutral SMS adapter is the sole initial login method; other login methods and international authentication are deferred.
+2. **Accepted:** sessions are opaque, high-entropy, server-managed, PostgreSQL-backed and delivered in a host-only `Secure`, `HttpOnly`, `SameSite=Lax` cookie. No Redis without separate approval.
+3. **Accepted:** identity and permissions are server-derived; traveler, partner membership, marketplace governance, and AI Provider administration are distinct scoped capabilities with object/tenant checks.
+4. **Accepted:** privileged administrator operations require additional authentication; TOTP is preferred for evaluation, with detailed MFA lifecycle open. First-admin provisioning is private, operator-controlled, and one-time.
+5. **Proposed technical default:** use the same-origin PWA/API where practical; this is not an existing deployment fact and needs deployment review.
+6. **Proposed technical default:** use a synchronizer CSRF token held server-side and in client memory, sent in a custom header, and validate Origin on unsafe requests. Exact mechanism remains open for security review.
+7. **Open:** OTP parameters, SMS provider, session lifetimes/rotation, CSRF deployment details, phone recovery/replacement, TOTP lifecycle, and first-admin recovery/break-glass controls.
+8. **Required boundary:** no anonymous user-data routes, referral leads remain outside ADR-0007, and no provider-admin route is exposed until ADR-0008's separate gates pass. Catalogue and RAG boundaries remain unchanged.
 
-**Rationale:** The cookie-session recommendation aligns with a browser-first same-origin PWA and gives the server a direct revocation point. It does not require choosing an identity vendor and avoids exposing long-lived tokens to JavaScript. A bearer/refresh architecture remains valid if future multi-client needs outweigh the added browser token and revocation complexity. The recommendation is not an accepted ADR decision.
+The cookie-session direction aligns with a browser-first PWA, keeps the session credential out of JavaScript, and provides a server-side revocation point. It does not select an identity/SMS vendor. A bearer/refresh architecture is not the approved initial direction; revisit only through an explicit owner decision if client topology changes.
 
-## 8. Explicit owner decision checklist
+## 8. Remaining owner decisions and implementation checklist
 
-### 8.1 Decisions required before Task 3 protected implementation
+### 8.1 Unresolved decisions required before production authentication or privileged access
 
-- [ ] Choose primary end-user authentication method or deliberately limited combination; specify verified contact/identity attributes and account identifier semantics.
-- [ ] Select identity and delivery provider(s), if needed, only after target geography, availability, operating terms, privacy, and cost are reviewed. No vendor is selected here.
-- [ ] Decide verification, signup/invitation eligibility, account linking/unlinking, duplicate-account resolution, recovery, credential change, and account deletion/disablement behavior.
-- [ ] Choose session architecture; define cookie/token attributes, idle/absolute lifetime, rotation, concurrent devices, logout, revocation, and account-disable latency.
-- [ ] Approve CSRF, CORS/origin, HTTPS/proxy, XSS/CSP, rate limits, brute-force/OTP/magic-link abuse controls, and security event monitoring.
-- [ ] Define principal claims and exact separation between traveler, partner membership, marketplace governance, primary platform admin, and AI Provider admin.
-- [ ] Approve partner membership lifecycle, invitation recipient binding, expiry/revocation, credential confidentiality, and authorization cache/revocation behavior.
-- [ ] Approve organization/object-level authorization matrix and deny-by-default behavior, including cross-organization and guessed-ID handling.
-- [ ] Define platform administrator role assignment, first-admin bootstrap, recovery, emergency access or explicit no-break-glass policy, separation of duties, periodic review, and audit access.
-- [ ] Define audit event fields, redaction, retention, access controls, and required evidence for role grants, verification, moderation, suspension, and recovery.
-- [ ] Confirm privacy notice, purposes, personal-data minimization, consent categories, retention/deletion, and incident/support responsibilities before real identity data is collected.
-- [ ] Ensure the actual deployment can provide HTTPS, trusted proxy/origin behavior, protected configuration/secrets, session-store availability, operational alerts, backups/recovery as relevant, and mail/SMS/IdP integrations chosen by the owner.
-- [ ] Approve a test strategy and threat model covering authentication, authorization, CSRF, recovery, revocation, cross-user and cross-tenant isolation, bootstrap, and privileged-operation audit.
+- [ ] Select SMS vendor/routes/terms and approve representative MCI, Irancell, and Rightel delivery results before production SMS.
+- [ ] Approve OTP digits, validity, attempt/resend budgets and rate-limit dimensions; six digits/five minutes/five failures/60 seconds remain proposed defaults.
+- [ ] Set session idle/absolute expiry, rotation triggers, multi-device policy, and PostgreSQL retention/cleanup.
+- [ ] Approve exact CSRF mechanism, Origin/Referer checks, trusted-proxy/TLS configuration, and cookie deployment settings.
+- [ ] Decide lost-phone recovery, phone replacement/reassignment, duplicate account, and account linking. No self-service path is approved.
+- [ ] Approve administrator TOTP enrollment, recovery, backup-code, device replacement, and intended factor assurance. Confirm whether two possession-channel OTP mechanisms meet the intended MFA requirement.
+- [ ] Define first-admin recovery, approvers, audit, emergency/break-glass policy, and post-use review.
+- [ ] Approve privacy notice, data retention/deletion, support/incident ownership, audit access, and required operational controls.
+
+High-level choices already accepted by the owner are listed in the outcome section; they are not reopened by this checklist.
 
 ### 8.2 Infrastructure and implementation prerequisites
 
@@ -223,9 +261,9 @@ Do not defer object-level authorization, tenant isolation, session revocation/di
 
 ## 9. Task 3 readiness verdict
 
-### Verdict: **Not ready for protected Task 3 implementation**
+### Verdict: **High-level decisions accepted; Task 3 remains blocked pending Task 2.3**
 
-The repository has an identity schema seam, least-privilege database configuration, request-ID/error-redaction middleware, health routes, and documentation stating the security gates. It does not have a selected authentication or session mechanism, authenticated principal, authorization dependencies, role/membership model, admin bootstrap/recovery, app deployment ingress/TLS configuration, or corresponding tests. ADR-0006 is still open; ADR-0008 explicitly gates provider control on approved admin authentication. The partner-marketplace ADRs remain proposals.
+The repository has an identity schema seam, least-privilege database configuration, request-ID/error-redaction middleware, health routes, and documentation stating the security gates. It still does not have an authentication flow, authenticated principal, authorization dependencies, session lifecycle, admin MFA/bootstrap implementation, or corresponding tests. The owner has accepted the high-level initial authentication/session decisions and ADR-0006 is being updated accordingly; implementation and operational gates remain. ADR-0008 continues to gate provider control on approved admin MFA, authorization, bootstrap, and recovery. The partner-marketplace ADRs remain proposals.
 
 | Task 3 capability | Required before implementation | May be designed/deferred |
 |---|---|---|
@@ -235,7 +273,7 @@ The repository has an identity schema seam, least-privilege database configurati
 | Audit events | Actor identity/capability/tenant/resource/action/time/result/correlation/reason policy; redaction and retention; restricted audit access; tamper/availability expectations | Analytics dashboards and long-term reporting beyond security/operational needs |
 | Cross-organization isolation tests | Authenticated test principals/memberships; positive same-org and negative other-org/guessed-ID cases; revoked/suspended membership tests; public-field projection tests; admin role boundary tests | Load/performance tests beyond expected pilot scale; broader fuzzing can follow the initial adversarial suite |
 
-**Readiness gate:** Codex may prepare further documentation or tests only when explicitly requested. Implementation of protected organizations, memberships, verification cases, or admin functions must wait for owner approval of the required ADR-0006 and bootstrap/authorization decisions, and then begin with a scoped implementation plan and isolated verification. Do not start Task 3 automatically.
+**Readiness gate:** Task 3 must wait until ADR-0006 is accepted, Task 2.3 authentication/session implementation and required security tests are complete, an owner-approved production-capable OTP path is tested and authorized, admin bootstrap/MFA/recovery/authorization gates are satisfied, and cross-user/cross-organization authorization tests pass. No protected route is authorized by this brief. Do not start Task 3 automatically.
 
 ## 10. Open questions for the owner
 
@@ -262,6 +300,6 @@ The repository has an identity schema seam, least-privilege database configurati
 - [Security and Privacy Boundaries](../security/SECURITY_PRIVACY_BOUNDARIES_v0.1.md) — server-derived identity, object checks, secure sessions, and privacy gates.
 - [Current MVP ERD](ERD_MVP_v0.1.md) and `engineering/database-prep/sql/001_core_schema.sql` — current identity columns and the absence of implemented auth/session/partner-role aggregates.
 
-## 12. Decision gate
+## 12. Decision gate and next approval
 
-This brief recommends a direction but does not change ADR-0006 or ADR-0008. The owner must explicitly accept or revise the authentication method, session strategy, administrator bootstrap/recovery, role boundaries, and minimum security/deployment gates. Only then should the ADR be updated and Task 3 implementation separately authorized. No implementation is started by this document.
+The owner-approved high-level choices are recorded above and in ADR-0006; unresolved operating, recovery, MFA-assurance, CSRF, and deployment details remain open. ADR-0008 remains unchanged and authoritative for AI Provider Gateway administration. The owner should review the [implementation contract](AUTHENTICATION_SESSION_AND_ADMIN_BOOTSTRAP_IMPLEMENTATION_CONTRACT_v1.0.md), resolve its production and privileged-access gates, and separately authorize Task 2.3. Task 3 remains blocked until Task 2.3 and the roadmap prerequisites are complete. This brief does not authorize implementation.

@@ -108,15 +108,66 @@ Before each task, Codex must collect a fresh baseline. Do not use this historica
 
 **Gate:** Owner signs off service categories, data contracts, roles, consent and freshness policy.
 
+### Task 2.2 — Authentication decision closure and implementation contract
+
+**Mode:** Documentation only. No runtime implementation.
+
+**Purpose:** Record the owner's approved authentication decisions, define the implementation contract, and close the roadmap sequencing gap before any protected partner foundation.
+
+**Required documents:**
+
+- Update `docs/architecture/decisions/ADR-0006-authentication-and-session.md` with the owner-approved initial domestic phone OTP, provider-neutral SMS, PostgreSQL-backed opaque session/cookie, authorization separation, additional administrator factor, and private one-time first-admin provisioning decisions.
+- Update `docs/architecture/AUTHENTICATION_SESSION_AND_ADMIN_BOOTSTRAP_DECISION_BRIEF_v1.0.md` while preserving its historical audit/options analysis and clearly separating accepted decisions from unresolved operational/security choices.
+- Create `docs/architecture/AUTHENTICATION_SESSION_AND_ADMIN_BOOTSTRAP_IMPLEMENTATION_CONTRACT_v1.0.md` with OTP/session/CSRF/authorization/admin/bootstrap, test, operational, and release gates.
+- Update this roadmap to insert Task 2.2 and Task 2.3 and make Task 3 dependent on Task 2.3 completion.
+
+**Acceptance:**
+
+- The owner-approved decisions are stated as accepted and traceable to 2026-11-07.
+- SMS vendor, OTP parameters, session lifetimes, CSRF details, phone recovery/linking, TOTP lifecycle, and first-admin recovery remain visibly unresolved where they have not been approved.
+- No SMS provider, authentication implementation, protected route, schema, or migration is introduced.
+- Task 3 explicitly cannot start before Task 2.3 and its production/security gates.
+- Links and documentation checks pass; only the four specified documentation files change.
+
+**Gate:** Owner reviews the decision record and implementation contract. This task must be completed and verified before Task 2.3 begins; its roadmap entry is not evidence of completion by itself.
+
+### Task 2.3 — Authentication and Session Foundation
+
+**Mode:** Separate implementation task. Not part of Task 2.2 and not automatically authorized by it.
+
+**Purpose:** Implement the approved domestic authentication/session foundation from `docs/architecture/AUTHENTICATION_SESSION_AND_ADMIN_BOOTSTRAP_IMPLEMENTATION_CONTRACT_v1.0.md` before partner tenancy or protected marketplace work.
+
+**Scope and gates:**
+
+- Implement Iranian `+98` phone normalization, OTP challenge lifecycle, purpose binding, provider-neutral SMS adapter boundary, keyed OTP verifier, expiry/single-use/attempt accounting, enumeration-safe responses, abuse controls, and deterministic fake adapter.
+- Implement opaque PostgreSQL-backed server sessions, token-hash storage, session validation/expiry/revocation/logout/account-disablement, host-only `Secure`/`HttpOnly`/`SameSite=Lax` cookie, CSRF defense, and server-derived principal/authorization seam.
+- Implement required administrator additional-factor controls and private operator-controlled one-time first-admin provisioning only after the detailed MFA assurance, bootstrap, recovery, and authorization policies are approved. Do not expose privileged admin operations while any of these controls are unresolved or untested.
+- Do not enable production SMS delivery until an SMS vendor is selected, actual representative delivery is tested on MCI, Irancell, and Rightel, operational/cost/security review is complete, and the owner explicitly authorizes production use. Automated tests use a deterministic fake adapter.
+- Use focused unit/API/browser security tests and isolated PostgreSQL 17 integration tests. Never touch `ai_tourism_dev` or another shared database. No Redis without measured need and separate approval.
+- Run an independent security review before declaring Task 2.3 complete. No commit/push/merge or branch switch.
+
+**Acceptance:**
+
+- No plaintext OTP, raw session token, TOTP secret, recovery material, SMS credential, or provider secret is stored/logged/exposed in client responses.
+- OTP verification is atomic, enumeration-safe, rate-limited, bound to phone/purpose, expires, and succeeds once only.
+- PostgreSQL session validation, cookie/CSRF behavior, logout, revocation, account disablement, and server-derived identity pass focused tests.
+- Cross-user and cross-organization authorization tests pass; privileged role boundaries and ADR-0008 separation are verified.
+- Production OTP activation and privileged routes remain disabled unless their owner-approved gates are satisfied.
+- Isolated PostgreSQL 17 tests and independent security review pass; shared database remains untouched.
+
+**Gate:** Owner reviews implementation evidence, unresolved operational gates, and security review before Task 3.
+
 ### Task 3 — Secure partner foundation (organization and verification)
 
-**Mode:** First implementation vertical slice, only after authentication/authorization decisions are accepted.
+**Mode:** First partner implementation vertical slice, only after the authentication/session foundation and all listed gates are complete.
 
 **Purpose:** Build the secure organization boundary before partner catalogues or offers.
 
 **Codex prompt:**
 
-> Implement only the approved partner organization foundation from the accepted domain contract. Start with the exact current branch/worktree baseline and protect every pre-existing local change. Implement the smallest necessary additive persistence model, repository/service layer, API contracts and tests for organizations, memberships, organization roles, verification cases and audit events. Do not implement services/offers/prices/referrals yet. Enforce organization-level authorization server-side for every read/write; never trust a client-supplied organization ID as authority. Keep partner evidence private. Use the project's approved auth/session mechanism; if ADR-0006 or admin bootstrap is not accepted/implemented, stop and report the blocker rather than adding placeholder auth. Design migrations additively, validate from the supported migration baselines in a disposable PostgreSQL 17 database, and do not apply them to `ai_tourism_dev`. Preserve current database lifecycle checks and least-privilege application-role grants. No branch switch, commit, push or merge.
+> Implement only the approved partner organization foundation from the accepted domain contract. Start with the exact current branch/worktree baseline and protect every pre-existing local change. Implement the smallest necessary additive persistence model, repository/service layer, API contracts and tests for organizations, memberships, organization roles, verification cases and audit events. Do not implement services/offers/prices/referrals yet. Enforce organization-level authorization server-side for every read/write; never trust a client-supplied organization ID as authority. Keep partner evidence private. Use the implemented, tested authentication/session foundation from Task 2.3; if any listed prerequisite below is missing, stop and report the blocker rather than adding placeholder auth. Design migrations additively, validate from the supported migration baselines in a disposable PostgreSQL 17 database, and do not apply them to `ai_tourism_dev`. Preserve current database lifecycle checks and least-privilege application-role grants. No branch switch, commit, push or merge.
+
+> **Task 3 prerequisites — all required:** (1) ADR-0006 is accepted; (2) Task 2.3 authentication/session implementation and required security tests are complete; (3) the approved production-capable OTP delivery path has passed representative network testing and is explicitly authorized; (4) administrator bootstrap/MFA/authorization gates are satisfied before any admin-only verification operation is exposed; and (5) cross-user and cross-organization authorization tests pass.
 
 **Acceptance:**
 
@@ -249,10 +300,10 @@ Codex must return:
 
 ## 5. Recommended immediate sequence
 
-1. Attach/place the architecture and roadmap documents in the project documentation directory without committing them.
-2. Run **Task 0 only** to establish the real current worktree and overlap map.
-3. Run **Task 1 only** after reviewing Task 0.
-4. Owner reviews the ADR package and resolves the decisions in Section 18 of the architecture document.
-5. Proceed sequentially through Tasks 2–8 with an explicit owner gate between tasks.
+1. Verify the current worktree before each task; preserve all owner changes and never infer state from this historical sequence.
+2. Complete and verify **Task 2.2** documentation (ADR-0006 decision record, decision-brief outcome, implementation contract, and corrected roadmap), then wait for owner review.
+3. After explicit owner authorization, implement **Task 2.3** authentication/session foundation and pass its isolated tests, production OTP authorization, administrator controls, and independent security review.
+4. Start **Task 3** only after all five Task 3 prerequisites listed in that task are satisfied and the owner authorizes it.
+5. Continue Tasks 4–8 sequentially with the existing owner gates. Task 2.3 does not expand ADR-0007 or authorize booking/referral transactions.
 
-**Important:** The partner marketplace is now a defined product direction, but this roadmap does not grant permission to implement every phase at once. The next safe Codex action is a read-only baseline audit.
+**Important:** Task 2.2 is complete only when its four documentation deliverables have actually been updated and verified in the task report. The partner marketplace remains gated, and this roadmap does not grant permission to implement every phase at once. Do not start Task 2.3 or Task 3 automatically.
