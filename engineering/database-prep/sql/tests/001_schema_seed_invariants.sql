@@ -5,21 +5,27 @@ DECLARE
     actual_count INTEGER;
     missing_count INTEGER;
     v_count BIGINT;
+    expected_ledger_count BIGINT;
     v_has_shiraz BOOLEAN;
+    v_has_auth BOOLEAN;
 BEGIN
     SELECT EXISTS (
         SELECT 1 FROM system.schema_migrations
         WHERE migration_id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'
     ) INTO v_has_shiraz;
+    SELECT EXISTS (
+        SELECT 1 FROM system.schema_migrations
+        WHERE migration_id = '0008_authentication_foundation'
+    ) INTO v_has_auth;
 
-    -- Exactly 30 application/system tables are expected in the owned schemas.
+    -- Exactly 30 baseline tables, or 34 after additive Migration 0008.
     SELECT COUNT(*) INTO actual_count
     FROM pg_catalog.pg_tables
     WHERE schemaname IN ('identity', 'conversation', 'travel', 'knowledge',
                          'recommendation', 'integration', 'operations', 'system');
 
-    IF actual_count <> 30 THEN
-        RAISE EXCEPTION 'Expected exactly 30 owned tables; found %', actual_count;
+    IF actual_count <> (CASE WHEN v_has_auth THEN 34 ELSE 30 END) THEN
+        RAISE EXCEPTION 'Expected exactly % owned tables; found %', (CASE WHEN v_has_auth THEN 34 ELSE 30 END), actual_count;
     END IF;
 
     WITH expected(schema_name, table_name) AS (
@@ -39,9 +45,15 @@ BEGIN
         ('operations','feedback'), ('operations','ai_model_calls'),
         ('operations','audit_events'), ('operations','dataset_import_batches'),
         ('system','schema_migrations')
+    ), expected_with_auth AS (
+        SELECT * FROM expected
+        UNION ALL SELECT 'identity','otp_challenges' WHERE v_has_auth
+        UNION ALL SELECT 'identity','verified_phones' WHERE v_has_auth
+        UNION ALL SELECT 'identity','web_sessions' WHERE v_has_auth
+        UNION ALL SELECT 'identity','auth_rate_limits' WHERE v_has_auth
     )
     SELECT COUNT(*) INTO missing_count
-    FROM expected e
+    FROM expected_with_auth e
     LEFT JOIN pg_catalog.pg_tables p
       ON p.schemaname = e.schema_name AND p.tablename = e.table_name
     WHERE p.tablename IS NULL;
@@ -52,8 +64,21 @@ BEGIN
 
     -- Exact dataset counts. These checks fail loudly if a seed is incomplete or duplicated.
     SELECT COUNT(*) INTO v_count FROM system.schema_migrations;
-    IF (v_has_shiraz AND v_count <> 8) OR (NOT v_has_shiraz AND v_count <> 7) THEN
-        RAISE EXCEPTION 'Expected exactly the complete 0006 (7 entries) or 0007 (8 entries) migration ledger; found % entries', v_count;
+    expected_ledger_count := CASE WHEN v_has_shiraz THEN 8 ELSE 7 END;
+    IF v_has_auth THEN expected_ledger_count := expected_ledger_count + 1; END IF;
+    IF v_count <> expected_ledger_count THEN
+        RAISE EXCEPTION 'Migration ledger entry count does not match the exact 0006/0007/0008 state; found %', v_count;
+    END IF;
+
+    IF v_has_auth THEN
+        SELECT COUNT(*) INTO v_count FROM identity.otp_challenges;
+        IF v_count <> 0 THEN RAISE EXCEPTION 'Authentication migration baseline must contain no OTP challenges'; END IF;
+        SELECT COUNT(*) INTO v_count FROM identity.verified_phones;
+        IF v_count <> 0 THEN RAISE EXCEPTION 'Authentication migration must not mark legacy phones verified'; END IF;
+        SELECT COUNT(*) INTO v_count FROM identity.web_sessions;
+        IF v_count <> 0 THEN RAISE EXCEPTION 'Authentication migration baseline must contain no sessions'; END IF;
+        SELECT COUNT(*) INTO v_count FROM identity.auth_rate_limits;
+        IF v_count <> 0 THEN RAISE EXCEPTION 'Authentication migration baseline must contain no rate-limit history'; END IF;
     END IF;
 
     SELECT COUNT(*) INTO v_count FROM knowledge.knowledge_sources;
@@ -239,8 +264,10 @@ BEGIN
         WHERE batch_key = 'legacy-user-supplied-destinations-v1') IS NULL
     THEN RAISE EXCEPTION 'Legacy import batch must preserve the source SQL checksum'; END IF;
     SELECT COUNT(*) INTO v_count FROM system.schema_migrations;
-    IF (v_has_shiraz AND v_count <> 8) OR (NOT v_has_shiraz AND v_count <> 7) THEN
-        RAISE EXCEPTION 'Expected 7 tracked migration entries at 0006 or 8 at 0007; found %', v_count;
+    expected_ledger_count := CASE WHEN v_has_shiraz THEN 8 ELSE 7 END;
+    IF v_has_auth THEN expected_ledger_count := expected_ledger_count + 1; END IF;
+    IF v_count <> expected_ledger_count THEN
+        RAISE EXCEPTION 'Tracked migration entries do not match the exact 0006/0007/0008 state; found %', v_count;
     END IF;
 
     SELECT COUNT(*) INTO v_count FROM knowledge.production_destinations;

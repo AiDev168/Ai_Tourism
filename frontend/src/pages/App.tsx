@@ -6,6 +6,7 @@ import { createTripRequirements, MAX_TRIP_DURATION_DAYS, type TripRequirements }
 import { confirmDestinationCandidate, resolveDestinationNames, type DestinationResolution } from '../trip/destinationResolution';
 import { ApiDestinationCatalogPort } from '../trip/destinationCatalogApi';
 import { useLocale } from '../i18n/LocaleContext';
+import { AuthPanel } from '../auth/AuthPanel';
 
 const destinationCatalog = new ApiDestinationCatalogPort();
 
@@ -140,6 +141,7 @@ export function App() {
           <a href="#itinerary">{t('navPlan')}</a>
         </nav>
         <div className="top-actions">
+          <AuthPanel locale={locale} />
           <label className="sr-only" htmlFor="locale">{t('labelLanguage')}</label>
           <select id="locale" value={locale} onChange={event => setLocale(event.target.value as Locale)}>
             {(['fa-IR', 'en-US', 'ar'] as Locale[]).map(value => (

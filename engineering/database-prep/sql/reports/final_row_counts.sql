@@ -35,7 +35,9 @@ WITH actual(table_name, actual_count) AS (
     SELECT EXISTS (
         SELECT 1 FROM system.schema_migrations
         WHERE migration_id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'
-    ) AS shiraz_applied
+    ) AS shiraz_applied,
+    EXISTS (SELECT 1 FROM system.schema_migrations
+            WHERE migration_id = '0008_authentication_foundation') AS auth_applied
 ), expected(table_name, expected_0006, expected_0007) AS (
     VALUES
     ('identity.users', 1::BIGINT, 1::BIGINT),
@@ -70,7 +72,9 @@ WITH actual(table_name, actual_count) AS (
     ('system.schema_migrations', 7, 8)
 ), expected_for_state AS (
     SELECT table_name,
-           CASE WHEN state.shiraz_applied THEN expected_0007 ELSE expected_0006 END AS expected_count,
+           CASE WHEN state.auth_applied AND table_name='system.schema_migrations'
+                THEN CASE WHEN state.shiraz_applied THEN expected_0007 + 1 ELSE expected_0006 + 1 END
+                WHEN state.shiraz_applied THEN expected_0007 ELSE expected_0006 END AS expected_count,
            state.shiraz_applied
     FROM expected CROSS JOIN state
 )
@@ -99,15 +103,22 @@ DECLARE
     total_actual BIGINT := 0;
     total_expected BIGINT := 0;
     has_shiraz BOOLEAN;
+    has_auth BOOLEAN;
+    required_total BIGINT;
 BEGIN
     SELECT EXISTS (
         SELECT 1 FROM system.schema_migrations
         WHERE migration_id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'
     ) INTO has_shiraz;
+    SELECT EXISTS (SELECT 1 FROM system.schema_migrations
+                   WHERE migration_id = '0008_authentication_foundation') INTO has_auth;
+    required_total := CASE WHEN has_shiraz THEN 695 ELSE 419 END + CASE WHEN has_auth THEN 1 ELSE 0 END;
 
     FOR item IN
         SELECT schema_name, table_name,
-               CASE WHEN has_shiraz THEN expected_0007 ELSE expected_0006 END AS expected_count
+               CASE WHEN has_auth AND schema_name='system' AND table_name='schema_migrations'
+                    THEN CASE WHEN has_shiraz THEN expected_0007 + 1 ELSE expected_0006 + 1 END
+                    WHEN has_shiraz THEN expected_0007 ELSE expected_0006 END AS expected_count
         FROM (VALUES
             ('identity','users',1::BIGINT,1::BIGINT),
             ('identity','user_consents',1,1),
@@ -154,13 +165,22 @@ BEGIN
         END IF;
     END LOOP;
 
-    IF has_shiraz AND (total_actual <> 695 OR total_expected <> 695) THEN
-        RAISE EXCEPTION 'Migration 0007 state requires exactly 695 rows, found % (manifest total %)',
-            total_actual, total_expected;
-    ELSIF NOT has_shiraz AND (total_actual <> 419 OR total_expected <> 419) THEN
-        RAISE EXCEPTION 'Migration 0006 state requires exactly 419 rows, found % (manifest total %)',
-            total_actual, total_expected;
+    IF total_actual <> required_total OR total_expected <> required_total THEN
+        RAISE EXCEPTION 'Migration ledger state requires exactly % rows, found % (manifest total %)',
+            required_total, total_actual, total_expected;
     END IF;
 
-    RAISE NOTICE 'PASS: all 30 expected tables match the migration-ledger state; total rows = %.', total_actual;
+    IF has_auth AND (to_regclass('identity.otp_challenges') IS NULL
+        OR to_regclass('identity.verified_phones') IS NULL
+        OR to_regclass('identity.web_sessions') IS NULL
+        OR to_regclass('identity.auth_rate_limits') IS NULL) THEN
+        RAISE EXCEPTION 'Migration 0008 is recorded but authentication tables are incomplete';
+    ELSIF NOT has_auth AND (to_regclass('identity.otp_challenges') IS NOT NULL
+        OR to_regclass('identity.verified_phones') IS NOT NULL
+        OR to_regclass('identity.web_sessions') IS NOT NULL
+        OR to_regclass('identity.auth_rate_limits') IS NOT NULL) THEN
+        RAISE EXCEPTION 'Authentication tables exist without Migration 0008 ledger entry';
+    END IF;
+
+    RAISE NOTICE 'PASS: exact ledger state row-count manifest; total rows = %.', total_actual;
 END $$;

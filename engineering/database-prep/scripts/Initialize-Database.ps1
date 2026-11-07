@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path,
-    [switch]$ApplyPendingMigrationsToExistingDatabase
+    [switch]$ApplyPendingMigrationsToExistingDatabase,
+    [switch]$ApplyAuthenticationMigrationToExistingDatabase
 )
 
 $ErrorActionPreference = 'Stop'
@@ -188,7 +189,8 @@ try {
             @{ Id = '0004_app_role_grants'; Path = (Join-Path $PackageRoot 'sql\004_app_role_grants.sql') },
             @{ Id = '0005_verified_unesco_destination_seed'; Path = (Join-Path $PackageRoot 'sql\005_verified_unesco_destination_seed.sql') },
             @{ Id = '0006_verified_unesco_destination_seed_batch2'; Path = (Join-Path $PackageRoot 'sql\006_verified_unesco_destination_seed_batch2.sql') },
-            @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; Path = (Join-Path $PackageRoot 'sql\007_shiraz_dalahoo_wikipedia_dataset_v1.sql') }
+            @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; Path = (Join-Path $PackageRoot 'sql\007_shiraz_dalahoo_wikipedia_dataset_v1.sql') },
+            @{ Id = '0008_authentication_foundation'; Path = (Join-Path $PackageRoot 'sql\008_authentication_foundation.sql') }
         ) | Where-Object { $_.Id -in $expectedMigrations }
         foreach ($migration in $migrationFiles) {
             $localHash = (Get-FileHash -LiteralPath $migration.Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -200,18 +202,16 @@ try {
 
         Write-Host "Validating existing database state $databaseState without applying migrations..." -ForegroundColor Cyan
         Invoke-PsqlFile '/opt/ai-tourism/sql/reports/final_row_counts.sql'
-        if ($state.IncludesShiraz) {
-            $initializationAction = Resolve-DatabaseInitializationAction -State $databaseState -ApplyPendingMigrationsToExistingDatabase:$ApplyPendingMigrationsToExistingDatabase
-        }
-        elseif ($ApplyPendingMigrationsToExistingDatabase) {
-            $initializationAction = Resolve-DatabaseInitializationAction -State $databaseState -ApplyPendingMigrationsToExistingDatabase
-        }
-        else {
-            $initializationAction = Resolve-DatabaseInitializationAction -State $databaseState
-        }
+        $initializationAction = Resolve-DatabaseInitializationAction -State $databaseState `
+            -ApplyPendingMigrationsToExistingDatabase:$ApplyPendingMigrationsToExistingDatabase `
+            -ApplyAuthenticationMigrationToExistingDatabase:$ApplyAuthenticationMigrationToExistingDatabase
 
         if ($initializationAction -eq 'already-integrated') {
             Write-Host 'Database already has the validated 0007 / 695-row state. No changes are needed.' -ForegroundColor Green
+            return
+        }
+        if ($initializationAction -eq 'already-authenticated') {
+            Write-Host "Database state $databaseState already includes the validated authentication migration. No changes are needed." -ForegroundColor Green
             return
         }
         if ($initializationAction -eq 'apply-pending-0007') {
@@ -263,8 +263,21 @@ try {
         @{ Id = '0004_app_role_grants'; File = '004_app_role_grants.sql'; Path = '/opt/ai-tourism/sql/004_app_role_grants.sql' },
         @{ Id = '0005_verified_unesco_destination_seed'; File = '005_verified_unesco_destination_seed.sql'; Path = '/opt/ai-tourism/sql/005_verified_unesco_destination_seed.sql' },
         @{ Id = '0006_verified_unesco_destination_seed_batch2'; File = '006_verified_unesco_destination_seed_batch2.sql'; Path = '/opt/ai-tourism/sql/006_verified_unesco_destination_seed_batch2.sql' },
-        @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; File = '007_shiraz_dalahoo_wikipedia_dataset_v1.sql'; Path = '/opt/ai-tourism/sql/007_shiraz_dalahoo_wikipedia_dataset_v1.sql' }
+        @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; File = '007_shiraz_dalahoo_wikipedia_dataset_v1.sql'; Path = '/opt/ai-tourism/sql/007_shiraz_dalahoo_wikipedia_dataset_v1.sql' },
+        @{ Id = '0008_authentication_foundation'; File = '008_authentication_foundation.sql'; Path = '/opt/ai-tourism/sql/008_authentication_foundation.sql' }
     )
+
+    if ($databaseState -ne 'fresh') {
+        if ($initializationAction -eq 'apply-pending-0007') {
+            $migrations = @($migrations | Where-Object { $_.Id -eq '0007_shiraz_dalahoo_wikipedia_dataset_v1' })
+        }
+        elseif ($initializationAction -like 'apply-auth-0008-*') {
+            $migrations = @($migrations | Where-Object { $_.Id -eq '0008_authentication_foundation' })
+        }
+        else {
+            throw "Unexpected migration action '$initializationAction'; stopped before writes."
+        }
+    }
 
     foreach ($migration in $migrations) {
         $filePath = Join-Path $PackageRoot (Join-Path 'sql' $migration.File)

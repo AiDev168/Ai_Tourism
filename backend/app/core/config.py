@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +17,25 @@ class Settings(BaseSettings):
     database_user: str = "ai_tourism_app"
     database_password: SecretStr
     database_connect_timeout_seconds: int = Field(default=2, ge=1, le=10)
+    auth_enabled: bool = False
+    auth_sms_adapter: str = "disabled"
+    auth_otp_hmac_secret: SecretStr | None = None
+    auth_csrf_secret: SecretStr | None = None
+    auth_rate_limit_secret: SecretStr | None = None
+    auth_session_idle_seconds: int | None = Field(default=None, ge=60)
+    auth_session_absolute_seconds: int | None = Field(default=None, ge=60)
+    auth_otp_length: int = Field(default=6, ge=6, le=8)
+    auth_otp_ttl_seconds: int = Field(default=300, ge=60, le=900)
+    auth_otp_max_attempts: int = Field(default=5, ge=1, le=10)
+    auth_otp_resend_cooldown_seconds: int = Field(default=60, ge=10, le=600)
+    auth_cookie_secure: bool = True
+    auth_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
+    auth_rate_window_seconds: int = Field(default=600, ge=60, le=3600)
+    auth_phone_issue_limit: int = Field(default=3, ge=1, le=20)
+    auth_ip_issue_limit: int = Field(default=20, ge=1, le=200)
+    auth_global_issue_limit: int = Field(default=500, ge=1, le=10000)
+    auth_phone_verify_limit: int = Field(default=20, ge=1, le=500)
+    auth_ip_verify_limit: int = Field(default=60, ge=1, le=1000)
 
     @field_validator("log_level")
     @classmethod
@@ -32,6 +51,32 @@ class Settings(BaseSettings):
         if value != "ai_tourism_app":
             raise ValueError("DATABASE_USER must be the least-privilege ai_tourism_app role")
         return value
+
+    @model_validator(mode="after")
+    def validate_auth_configuration(self):
+        if self.auth_sms_adapter not in {"disabled", "fake"}:
+            raise ValueError("AUTH_SMS_ADAPTER must be disabled or fake; no production adapter exists")
+        if self.app_env.lower() == "production":
+            if self.auth_enabled:
+                raise ValueError("Authentication cannot be enabled in production without an approved SMS adapter")
+            if not self.auth_cookie_secure:
+                raise ValueError("AUTH_COOKIE_SECURE must be true in production")
+        if self.auth_sms_adapter == "fake" and self.app_env.lower() not in {"development", "test"}:
+            raise ValueError("The fake SMS adapter is restricted to development and tests")
+        if self.auth_enabled:
+            for name in ("auth_otp_hmac_secret", "auth_csrf_secret", "auth_rate_limit_secret"):
+                secret = getattr(self, name)
+                if secret is None or len(secret.get_secret_value().encode("utf-8")) < 32:
+                    raise ValueError(f"{name.upper()} must contain at least 32 bytes when authentication is enabled")
+            if self.auth_session_idle_seconds is None or self.auth_session_absolute_seconds is None:
+                raise ValueError("Both authentication session lifetimes must be configured")
+            if self.auth_session_idle_seconds > self.auth_session_absolute_seconds:
+                raise ValueError("Session idle lifetime cannot exceed absolute lifetime")
+            if self.auth_sms_adapter != "fake":
+                raise ValueError("Authentication is enabled without an available SMS delivery adapter")
+            if not self.auth_allowed_origins.strip():
+                raise ValueError("AUTH_ALLOWED_ORIGINS must contain at least one exact origin")
+        return self
 
 
 @lru_cache

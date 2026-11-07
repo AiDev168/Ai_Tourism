@@ -63,7 +63,8 @@ try {
         @{ Id = '0004_app_role_grants'; Path = (Join-Path $PackageRoot 'sql\004_app_role_grants.sql') },
         @{ Id = '0005_verified_unesco_destination_seed'; Path = (Join-Path $PackageRoot 'sql\005_verified_unesco_destination_seed.sql') },
         @{ Id = '0006_verified_unesco_destination_seed_batch2'; Path = (Join-Path $PackageRoot 'sql\006_verified_unesco_destination_seed_batch2.sql') },
-        @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; Path = (Join-Path $PackageRoot 'sql\007_shiraz_dalahoo_wikipedia_dataset_v1.sql') }
+        @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; Path = (Join-Path $PackageRoot 'sql\007_shiraz_dalahoo_wikipedia_dataset_v1.sql') },
+        @{ Id = '0008_authentication_foundation'; Path = (Join-Path $PackageRoot 'sql\008_authentication_foundation.sql') }
     ) | Where-Object { $_.Id -in $expectedMigrations }
     foreach ($migration in $migrationSet) {
         $localHash = (Get-FileHash -LiteralPath $migration.Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -111,6 +112,11 @@ try {
     }
     else {
         Write-Host 'PASS: Migration 0007 is absent; Shiraz migration/test were not applied or executed.' -ForegroundColor Green
+    }
+
+    if ($state.IncludesAuthentication) {
+        Write-Host "`n========== AUTHENTICATION FOUNDATION / DATABASE ACCESS ==========" -ForegroundColor Cyan
+        Invoke-PsqlFile '/opt/ai-tourism/sql/tests/010_authentication_foundation.sql'
     }
 
     Write-Host "`n========== COMPLETE EXPECTED VS ACTUAL ROW COUNTS ==========" -ForegroundColor Cyan
