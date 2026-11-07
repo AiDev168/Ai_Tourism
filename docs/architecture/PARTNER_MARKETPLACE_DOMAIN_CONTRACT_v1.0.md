@@ -129,6 +129,7 @@ ACTIVE -> REVOKED
 ```
 
 - Invitations are organization-scoped, addressed to a specific identity/contact, single-use, time-limited, and auditable. Invitation delivery and expiry settings remain owner decisions.
+- The invitation credential itself is secret. It may be presented only to the intended invitee through the future approved invitation flow. Never expose the credential in normal API responses, partner staff/member lists, logs, analytics, or unrelated audit views. Lists and audit records may show non-secret invitation status and identifiers only. Credential generation, storage/protection, delivery, expiry, single-use enforcement, and revocation remain subject to the approved ADR-0006 identity and security design; this contract selects no technology.
 - `ACTIVE` membership grants only its assigned organization-scoped permissions.
 - `SUSPENDED` blocks partner access pending review; `REVOKED` ends that membership. Revocation must promptly invalidate access and not delete authored history.
 - Account suspension is an identity-wide control under the future ADR-0006 design; it is distinct from one membership suspension.
@@ -256,7 +257,7 @@ Freshness is evaluated against owner-approved field/category policies; it is not
 |---|---|---|
 | `current` | Required observation exists, is within its policy freshness window, applies to requested time, and no unresolved conflicting assertion exists | May be used for the field only; still not a guarantee |
 | `stale` | Observation exists but exceeds its freshness window; explicit validity may remain open | Never state as current; normally `needs_confirmation` or excluded per approved category policy |
-| `expired` | Explicit validity end has passed, offer validity has ended, or source explicitly withdrew the assertion | Do not use for positive eligibility; candidate is ineligible for that date/offer |
+| `expired` | This price or availability observation's explicit `valid_until` has passed; it does not by itself mean the underlying offer has expired or that availability is false | Never present the observation as current. Apply the approved refresh/correction policy; if no other hard failure exists, outcome is normally `needs_confirmation` unless an approved hard freshness gate makes the candidate `ineligible` |
 | `unknown` | No assertion, missing required context, or the assertion cannot be interpreted | Never assume available/within-budget; `needs_confirmation` where it is not already a hard failure |
 | `conflict` | Equally applicable assertions disagree and policy cannot deterministically select one authoritative current value | Do not select the favorable value; `needs_confirmation` or ineligible according to the accepted hard rule |
 
@@ -292,17 +293,19 @@ withdrawn_at: null
 
 This is a documentation example only. Consent must show the actual recipient, purpose, policy version, and exact data categories before submission. Category names are not permission to include hidden fields: payload projection must include only the selected categories and disclose the exact values/summary being sent. No full conversation, unrelated profile, precise location, or entire trip is shared by default.
 
-### 7.3 Proposed lead lifecycle
+### 7.3 Proposed consent-intent and lead lifecycle
 
 ```text
 DRAFT -> AWAITING_CONSENT -> CONSENTED -> QUEUED -> DELIVERED
-                 └-> CANCELLED       ├-> WITHDRAWN (before delivery)
-                                     └-> DELIVERY_FAILED -> RETRY_PENDING/FAILED_FINAL
+    └-> DISCARDED          └-> DISCARDED  ├-> WITHDRAWN (before delivery)
+                                          └-> DELIVERY_FAILED -> RETRY_PENDING/FAILED_FINAL
 DELIVERED -> ACKNOWLEDGED -> RESPONDED -> CLOSED
 DELIVERED/ACKNOWLEDGED -> WITHDRAWAL_REQUESTED -> CLOSED (policy-dependent)
 ```
 
-- No lead exists before explicit consent.
+- `DRAFT` and `AWAITING_CONSENT` are temporary consent-intent states only. They are not referral leads, are not delivered, and are never visible to a partner. Under this proposal they remain transient in the traveler interaction; any server-side persistence before consent would require separate privacy/security approval and must still not create a lead or grant partner access.
+- The referral lead comes into existence only at the `CONSENTED` transition, after an affirmative, recorded consent binds the named recipient, purpose, policy version, and exact data categories. Failed, abandoned, or declined consent is discarded; it is not retained as a lead.
+- No lead is queued, delivered, listed, counted in partner analytics, or otherwise partner-accessible before that recorded consent transition.
 - Delivery is idempotent; retries cannot create duplicate leads or broaden disclosed data.
 - Withdrawal before delivery cancels the transfer. After delivery, the platform can stop future processing and send a deletion/cessation request where policy permits, but cannot promise recall of data already received; this limitation must be disclosed before consent.
 - Partner status updates are scoped to a delivered referral; they cannot change consent evidence or claim a booking.
@@ -391,11 +394,11 @@ Order is mandatory:
 
 | Outcome | Exact rule | User-facing treatment |
 |---|---|---|
-| `ineligible` | At least one known hard constraint fails, offer/service/organization is not currently publishable, offer is withdrawn/expired, or an explicit conflict proves the hard condition is unmet | Exclude from recommendations; safe reason may be returned where it does not expose private data |
-| `needs_confirmation` | No known hard failure, but at least one material required fact is missing, stale, expired-but-correctable, ambiguous, or conflicting such that eligibility cannot be established | Do not rank as eligible or claim availability/price fit; present a confirmation action only if policy and interaction are approved |
+| `ineligible` | At least one known hard constraint fails; the organization/service/offer is not currently publishable; the offer itself is withdrawn or its own validity period has ended; or an approved hard eligibility policy is demonstrably unmet (including a required freshness gate) | Exclude from recommendations; safe reason may be returned where it does not expose private data |
+| `needs_confirmation` | No known hard failure, but a material required fact is missing, stale, ambiguous, conflicting, or its price/availability observation has expired while the underlying offer may still be valid, so eligibility cannot yet be established | Do not rank as eligible or claim availability/price fit; apply only the approved refresh/correction policy and present a confirmation action only if policy and interaction are approved |
 | `eligible` | Every mandatory hard predicate is known, applicable, fresh enough under the approved category policy, and satisfied | Candidate may enter soft ranking; still display source/freshness and no guarantee language |
 
-Precedence: **known hard failure wins** (`ineligible`), even if other fields are unknown. Otherwise material uncertainty yields `needs_confirmation`. Only complete satisfied mandatory predicates produce `eligible`. Whether a particular unknown field is material or whether a `needs_confirmation` result is displayed is category policy requiring owner approval.
+Precedence: **known hard failure wins** (`ineligible`), even if other fields are unknown. An expired offer validity period is a hard failure. An expired observation is not the same as an expired offer: it is never current, and normally yields `needs_confirmation` while the underlying offer remains valid. If an owner-approved category policy makes a current observation a hard eligibility requirement, failure of that gate yields `ineligible` until fresh evidence is reviewed. Otherwise material uncertainty yields `needs_confirmation`. Only complete satisfied mandatory predicates produce `eligible`. The category-specific hard freshness policy and refresh/correction behavior require owner approval; scoring cannot override either outcome.
 
 ### 10.3 Hard filters versus soft ranking
 
@@ -407,7 +410,7 @@ Every result is reproducible from the input snapshot, candidate revision, observ
 
 ## 11. Documentation-only API examples and schema shapes
 
-These examples are OpenAPI-compatible design material only. They do not authorize, declare present, or implement these routes. All protected operations require accepted ADR-0006 identity/authorization and future API review. The only existing traveler-action boundary remains ADR-0007 outbound links/clicks. Referral submission below is explicitly gated by owner approval and an ADR-0007 amendment/addendum.
+The YAML below is a collection of **OpenAPI 3.1 schema excerpts**, not a complete standalone OpenAPI document. It omits required document-level metadata and paths, and has not been validated as a complete OpenAPI specification. These excerpts are design material only: they do not authorize, declare present, or implement routes. All protected operations require accepted ADR-0006 identity/authorization and future API review. The only existing traveler-action boundary remains ADR-0007 outbound links/clicks. Referral submission below is explicitly gated by owner approval and an ADR-0007 amendment/addendum.
 
 ### 11.1 Proposed public offer query
 
@@ -418,7 +421,6 @@ It would return only currently published public fields. It must not return draft
 ### 11.2 Proposed match request and response
 
 ```yaml
-openapi: 3.1.0
 components:
   schemas:
     MoneyConstraint:
