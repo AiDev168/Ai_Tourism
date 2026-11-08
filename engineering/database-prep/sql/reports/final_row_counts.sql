@@ -37,7 +37,9 @@ WITH actual(table_name, actual_count) AS (
     EXISTS (SELECT 1 FROM system.schema_migrations
             WHERE migration_id = '0008_authentication_foundation') AS auth_applied,
     EXISTS (SELECT 1 FROM system.schema_migrations
-            WHERE migration_id = '0009_traveler_core') AS traveler_applied
+            WHERE migration_id = '0009_traveler_core') AS traveler_applied,
+    EXISTS (SELECT 1 FROM system.schema_migrations
+            WHERE migration_id = '0010_task31_content_privacy_full_itinerary') AS task31_applied
 ), expected(table_name, expected_0006, expected_0007) AS (
     VALUES
     ('identity.users (synthetic seed)', 1::BIGINT, 1::BIGINT),
@@ -73,7 +75,8 @@ WITH actual(table_name, actual_count) AS (
            CASE WHEN state.auth_applied AND table_name='system.schema_migrations'
                 THEN CASE WHEN state.shiraz_applied THEN expected_0007 + 1 ELSE expected_0006 + 1 END
                 WHEN state.shiraz_applied THEN expected_0007 ELSE expected_0006 END
-               + CASE WHEN state.traveler_applied AND table_name='system.schema_migrations' THEN 1 ELSE 0 END AS expected_count,
+               + CASE WHEN state.traveler_applied AND table_name='system.schema_migrations' THEN 1 ELSE 0 END
+               + CASE WHEN state.task31_applied AND table_name='system.schema_migrations' THEN 1 ELSE 0 END AS expected_count,
            state.shiraz_applied
     FROM expected CROSS JOIN state
 )
@@ -146,6 +149,7 @@ DECLARE
     has_shiraz BOOLEAN;
     has_auth BOOLEAN;
     has_traveler_core BOOLEAN;
+    has_task31 BOOLEAN;
     required_total BIGINT;
 BEGIN
     SELECT EXISTS (
@@ -156,11 +160,14 @@ BEGIN
                    WHERE migration_id = '0008_authentication_foundation') INTO has_auth;
     SELECT EXISTS (SELECT 1 FROM system.schema_migrations
                    WHERE migration_id = '0009_traveler_core') INTO has_traveler_core;
+    SELECT EXISTS (SELECT 1 FROM system.schema_migrations
+                   WHERE migration_id = '0010_task31_content_privacy_full_itinerary') INTO has_task31;
     -- Counts only the immutable synthetic identity seed; real users and
     -- authentication activity are reported separately below.
     required_total := CASE WHEN has_shiraz THEN 695 ELSE 419 END
         + CASE WHEN has_auth THEN 1 ELSE 0 END
-        + CASE WHEN has_traveler_core THEN 1 ELSE 0 END;
+        + CASE WHEN has_traveler_core THEN 1 ELSE 0 END
+        + CASE WHEN has_task31 THEN 1 ELSE 0 END;
 
     FOR item IN
         SELECT schema_name, table_name,
@@ -168,6 +175,7 @@ BEGIN
                     THEN CASE WHEN has_shiraz THEN expected_0007 ELSE expected_0006 END
                          + CASE WHEN has_auth THEN 1 ELSE 0 END
                          + CASE WHEN has_traveler_core THEN 1 ELSE 0 END
+                         + CASE WHEN has_task31 THEN 1 ELSE 0 END
                     WHEN has_shiraz THEN expected_0007 ELSE expected_0006 END AS expected_count
         FROM (VALUES
             ('identity','users',1::BIGINT,1::BIGINT),
@@ -240,5 +248,22 @@ BEGIN
         RAISE EXCEPTION 'Authentication tables exist without Migration 0008 ledger entry';
     END IF;
 
-    RAISE NOTICE 'PASS: immutable seed and migration row-count manifest; total = % (runtime identities/auth rows excluded).', total_actual;
+    IF has_task31 THEN
+        IF to_regclass('knowledge.destination_enrichment_proposals') IS NULL
+           OR to_regclass('knowledge.destination_enrichment_proposal_sources') IS NULL
+           OR to_regclass('knowledge.culinary_knowledge_items') IS NULL
+           OR to_regclass('knowledge.culinary_item_sources') IS NULL
+           OR to_regclass('knowledge.production_culinary_knowledge') IS NULL THEN
+            RAISE EXCEPTION 'Migration 0010 is recorded but Task 3.1 objects are incomplete';
+        END IF;
+        RAISE NOTICE 'RUNTIME/review rows (not immutable seed assertions): spatial proposals=%, spatial provenance edges=%, culinary proposals=%, culinary source edges=%',
+            (SELECT COUNT(*) FROM knowledge.destination_enrichment_proposals),
+            (SELECT COUNT(*) FROM knowledge.destination_enrichment_proposal_sources),
+            (SELECT COUNT(*) FROM knowledge.culinary_knowledge_items),
+            (SELECT COUNT(*) FROM knowledge.culinary_item_sources);
+    ELSIF to_regclass('knowledge.culinary_knowledge_items') IS NOT NULL THEN
+        RAISE EXCEPTION 'Task 3.1 proposal tables exist without Migration 0010 ledger entry';
+    END IF;
+
+    RAISE NOTICE 'PASS: immutable seed and migration row-count manifest; total = % (runtime identities, auth rows and proposals excluded).', total_actual;
 END $$;

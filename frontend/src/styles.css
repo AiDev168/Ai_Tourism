@@ -220,12 +220,20 @@ button { cursor: pointer; }
 .saved-stop textarea, .journey-panel select, .saved-stop select {
   width: 100%; min-width: 0; max-width: 100%;
 }
+.itinerary-start input[type="number"] { width: min(100%, 12rem); min-width: 0; }
 .destination-edit-row { align-items: end; flex-wrap: wrap; }
 .destination-edit-row label { flex-basis: 100%; }
 .destination-edit-row input { flex: 1 1 220px; }
 .evidence-card { margin-block: 12px; }
 .evidence-card h4, .evidence-card p { overflow-wrap: anywhere; }
-.saved-itinerary-stops, .trip-history { display: grid; gap: 12px; }
+.saved-itinerary-days, .saved-itinerary-stops, .trip-history { display: grid; gap: 12px; }
+.itinerary-day { min-width: 0; padding: 16px; border: 1px solid rgba(43, 55, 42, .13); border-radius: 18px; background: rgba(255, 253, 248, .7); }
+.itinerary-day h4, .saved-stop h5 { margin: 0; overflow-wrap: anywhere; }
+.saved-stop h5 { font-size: 1rem; }
+.itinerary-coverage, .unplanned-day { padding: 12px 14px; border-radius: 12px; line-height: 1.7; }
+.itinerary-coverage-complete { background: #edf7ee; }
+.itinerary-coverage-partial, .unplanned-day { background: #fff4d8; }
+.unresolved-requirements { margin-block: 8px 0; padding-inline-start: 1.5rem; }
 .saved-stop { display: grid; gap: 10px; }
 .stop-actions { justify-content: flex-start; flex-wrap: wrap; }
 .history-trip { align-items: stretch; margin-block: 8px; }

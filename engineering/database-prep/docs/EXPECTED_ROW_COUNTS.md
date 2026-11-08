@@ -106,3 +106,15 @@ Migration `0009_traveler_core` معتبر فقط پس از Migration 0008 است
 وضعیت‌های `0006-auth-0009` و `0007-auth-0009` به‌ترتیب manifest دقیق ۴۲۱ و ۶۹۷ ردیفی دارند. ردیف‌های runtime غیرمصنوعی مکالمه، پیام، سفر، پیشنهاد و itinerary از شمارش immutable seed حذف و جداگانه گزارش می‌شوند؛ صحت seed همچنان با شمارش دقیق `is_synthetic=true` و جدول‌های محتوای ثابت سنجیده می‌شود. ردیف‌های OTP، شماره تأییدشده، نشست و محدودکننده نرخ نیز داده runtime هستند و نباید صفر فرض شوند.
 
 برای پایگاه موجود در وضعیت `0006-auth` یا `0007-auth`، `Initialize-Database.ps1` به‌طور پیش‌فرض متوقف می‌شود. اجرای `0009` روی پایگاه موجود به opt-in مجزای `-ApplyTravelerCoreMigrationToExistingDatabase` پس از تأیید مالک نیاز دارد. این opt-in مجوزی برای پایگاه مشترک `ai_tourism_dev` نیست و در این Task تغییری روی پایگاه مشترک انجام نمی‌شود.
+
+## Migration 0010 — Task 3.1 content, privacy cleanup, and itinerary bounds
+
+Migration `0010_task31_content_privacy_full_itinerary` is additive after 0009. It adds four proposal/review tables and one migration-ledger row; it does not import candidate content or mutate canonical destination/document/source records. This raises immutable seed-plus-ledger totals by one to 422 rows for the 0006 dataset and 698 rows for the 0007 dataset. The four spatial/culinary proposal tables are mutable review/runtime data and are reported separately, never counted as immutable seed rows. A fresh authenticated database has 38 project-owned tables after this migration.
+
+The migration keeps all content proposals non-publishable by default. The non-spatial culinary production view returns only fully localized, explicitly approved, verified, non-synthetic records with currently valid verified provenance for every claim. It has no destination or coordinate requirement and does not join legacy spatial identities. The application role can read the approved view but cannot read proposal/raw knowledge tables.
+
+OTP cleanup is an explicit operator-run operation: `identity.purge_terminal_otp_challenges(cutoff, batch_limit)`. The cutoff must not be in the future and each call is capped at 1,000 rows. It removes only terminal/expired challenges and preserves a currently valid sent challenge. The stored verified-phone reference becomes nullable when a challenge is purged. No scheduler or retention period is introduced by this migration. Operators must select and document a privacy/security-reviewed retention cutoff and schedule a bounded invocation cadence before production activation; raw phone-bearing challenge rows must not be retained indefinitely by default.
+
+Itinerary `day_count` and `day_number` are bounded to 1–365, each day supports at most 50 stops, and an itinerary supports at most 1,000 total stops. Database triggers also require the itinerary to fit within its confirmed parent trip duration. These are technical limits; they do not promise that matching content exists for each requested day.
+
+For an existing 0009 database, initialization recognizes but does not apply Migration 0010 unless explicitly invoked with `-ApplyTask31MigrationToExistingDatabase`. This opt-in does not authorize applying it to any shared database.

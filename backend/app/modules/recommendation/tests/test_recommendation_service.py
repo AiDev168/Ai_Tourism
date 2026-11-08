@@ -35,10 +35,14 @@ def source(destination_id: int, source_id: int, **overrides: object) -> Evidence
     return EvidenceSource.model_validate(values)
 
 
+def requirements(**values: object) -> dict[str, object]:
+    return {"durationDays": {"value": 10, "status": "confirmed"}, **values}
+
+
 def test_returns_only_selected_currently_sourced_production_candidates_in_user_order() -> None:
     items = [candidate("2"), candidate("1")]
     result = recommend_trip(
-        requirements={"constraints": {"value": []}},
+        requirements=requirements(constraints={"value": []}),
         selected_destination_ids=["1", "2", "1"],
         catalogue=items,
         evidence_by_destination={"1": [source(1, 11)], "2": [source(2, 12)]},
@@ -46,7 +50,7 @@ def test_returns_only_selected_currently_sourced_production_candidates_in_user_o
     )
 
     assert result.status == "available"
-    assert result.algorithm_version == "structured-catalogue-ranking-v1"
+    assert result.algorithm_version == "structured-catalogue-ranking-v2"
     assert [(item.destination_id, item.rank) for item in result.items] == [("1", 1), ("2", 2)]
     assert result.items[0].explanation_key == "explicit_destination_match"
     assert result.items[0].matched_requirements == ["destination:1"]
@@ -58,15 +62,15 @@ def test_returns_only_selected_currently_sourced_production_candidates_in_user_o
 
 def test_empty_catalogue_and_unavailable_selection_are_honest_clarification_outcomes() -> None:
     empty = recommend_trip(
-        requirements={}, selected_destination_ids=[], catalogue=[],
+        requirements=requirements(), selected_destination_ids=[], catalogue=[],
         evidence_by_destination={}, locale="ar",
     )
     missing_selection = recommend_trip(
-        requirements={}, selected_destination_ids=[], catalogue=[candidate("1")],
+        requirements=requirements(), selected_destination_ids=[], catalogue=[candidate("1")],
         evidence_by_destination={}, locale="en-US",
     )
 
-    assert (empty.status, empty.reason_code, empty.items) == ("empty", "catalogue_empty", [])
+    assert (empty.status, empty.reason_code, empty.items) == ("needs_confirmation", "destination_selection_required", [])
     assert (missing_selection.status, missing_selection.reason_code) == (
         "needs_confirmation", "destination_selection_required"
     )
@@ -74,13 +78,13 @@ def test_empty_catalogue_and_unavailable_selection_are_honest_clarification_outc
 
 def test_hard_constraints_do_not_get_overridden_by_a_match_score() -> None:
     result = recommend_trip(
-        requirements={"constraints": {"value": ["wheelchair access"]}},
+        requirements=requirements(constraints={"value": ["wheelchair access"]}),
         selected_destination_ids=["1"], catalogue=[candidate("1")],
         evidence_by_destination={"1": [source(1, 11)]}, locale="en-US",
     )
 
     assert result.status == "needs_confirmation"
-    assert result.reason_code == "hard_constraints_not_verifiable"
+    assert result.reason_code == "hard_constraints_unverifiable"
     assert result.items == []
 
 
@@ -93,7 +97,7 @@ def test_no_recommendation_when_source_is_missing_expired_or_bound_to_another_id
     ]
     for evidence in cases:
         result = recommend_trip(
-            requirements={}, selected_destination_ids=["1"], catalogue=[candidate("1")],
+            requirements=requirements(), selected_destination_ids=["1"], catalogue=[candidate("1")],
             evidence_by_destination={"1": evidence}, locale="fa-IR",
         )
         assert result.status == "empty"
@@ -103,7 +107,7 @@ def test_no_recommendation_when_source_is_missing_expired_or_bound_to_another_id
 
 def test_unknown_provenance_freshness_is_a_warning_not_a_claim_of_freshness() -> None:
     result = recommend_trip(
-        requirements={}, selected_destination_ids=["1"], catalogue=[candidate("1")],
+        requirements=requirements(), selected_destination_ids=["1"], catalogue=[candidate("1")],
         evidence_by_destination={"1": [source(1, 11, retrieved_at=None)]}, locale="fa-IR",
     )
 
@@ -113,11 +117,11 @@ def test_unknown_provenance_freshness_is_a_warning_not_a_claim_of_freshness() ->
 
 def test_non_spatial_knowledge_and_duplicate_identity_conflicts_fail_closed() -> None:
     food = recommend_trip(
-        requirements={}, selected_destination_ids=["1"], catalogue=[candidate("1", "food")],
+        requirements=requirements(), selected_destination_ids=["1"], catalogue=[candidate("1", "food")],
         evidence_by_destination={"1": [source(1, 11)]}, locale="fa-IR",
     )
     conflict = recommend_trip(
-        requirements={}, selected_destination_ids=["1"],
+        requirements=requirements(), selected_destination_ids=["1"],
         catalogue=[candidate("1"), candidate("1", "city")],
         evidence_by_destination={"1": [source(1, 11)]}, locale="fa-IR",
     )
@@ -130,7 +134,7 @@ def test_non_spatial_knowledge_and_duplicate_identity_conflicts_fail_closed() ->
 
 def test_non_numeric_client_identifier_is_not_accepted_as_catalogue_identity() -> None:
     result = recommend_trip(
-        requirements={}, selected_destination_ids=["1 OR TRUE"], catalogue=[candidate("1")],
+        requirements=requirements(), selected_destination_ids=["1 OR TRUE"], catalogue=[candidate("1")],
         evidence_by_destination={"1": [source(1, 11)]}, locale="fa-IR",
     )
     assert result.reason_code == "destination_selection_invalid"

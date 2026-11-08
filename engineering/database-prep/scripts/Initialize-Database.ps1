@@ -3,7 +3,8 @@ param(
     [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path,
     [switch]$ApplyPendingMigrationsToExistingDatabase,
     [switch]$ApplyAuthenticationMigrationToExistingDatabase,
-    [switch]$ApplyTravelerCoreMigrationToExistingDatabase
+    [switch]$ApplyTravelerCoreMigrationToExistingDatabase,
+    [switch]$ApplyTask31MigrationToExistingDatabase
 )
 
 $ErrorActionPreference = 'Stop'
@@ -164,7 +165,8 @@ try {
     }
 
     # Classify existing data before bootstrap, seed, checksum-ledger, or import
-    # writes. Only a truly empty database, exact 0006, or exact 0007 is accepted.
+    # writes. Only an exact recognized migration state is accepted; pending
+    # additive migrations require their separate explicit opt-in switches.
     $ledgerExists = Get-PsqlScalar "SELECT CASE WHEN to_regclass('system.schema_migrations') IS NULL THEN 'no' ELSE 'yes' END;"
     $projectTableCount = Get-PsqlScalar "SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname IN ('identity','conversation','travel','knowledge','recommendation','integration','operations','system');"
     $projectSchemaCount = Get-PsqlScalar "SELECT COUNT(*) FROM pg_catalog.pg_namespace WHERE nspname IN ('identity','conversation','travel','knowledge','recommendation','integration','operations','system');"
@@ -192,7 +194,8 @@ try {
             @{ Id = '0006_verified_unesco_destination_seed_batch2'; Path = (Join-Path $PackageRoot 'sql\006_verified_unesco_destination_seed_batch2.sql') },
             @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; Path = (Join-Path $PackageRoot 'sql\007_shiraz_dalahoo_wikipedia_dataset_v1.sql') },
             @{ Id = '0008_authentication_foundation'; Path = (Join-Path $PackageRoot 'sql\008_authentication_foundation.sql') },
-            @{ Id = '0009_traveler_core'; Path = (Join-Path $PackageRoot 'sql\009_traveler_core.sql') }
+            @{ Id = '0009_traveler_core'; Path = (Join-Path $PackageRoot 'sql\009_traveler_core.sql') },
+            @{ Id = '0010_task31_content_privacy_full_itinerary'; Path = (Join-Path $PackageRoot 'sql\010_task31_content_privacy_full_itinerary.sql') }
         ) | Where-Object { $_.Id -in $expectedMigrations }
         foreach ($migration in $migrationFiles) {
             $localHash = (Get-FileHash -LiteralPath $migration.Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -207,7 +210,8 @@ try {
         $initializationAction = Resolve-DatabaseInitializationAction -State $databaseState `
             -ApplyPendingMigrationsToExistingDatabase:$ApplyPendingMigrationsToExistingDatabase `
             -ApplyAuthenticationMigrationToExistingDatabase:$ApplyAuthenticationMigrationToExistingDatabase `
-            -ApplyTravelerCoreMigrationToExistingDatabase:$ApplyTravelerCoreMigrationToExistingDatabase
+            -ApplyTravelerCoreMigrationToExistingDatabase:$ApplyTravelerCoreMigrationToExistingDatabase `
+            -ApplyTask31MigrationToExistingDatabase:$ApplyTask31MigrationToExistingDatabase
 
         if ($initializationAction -eq 'already-integrated') {
             Write-Host 'Database already has the validated 0007 / 695-row state. No changes are needed.' -ForegroundColor Green
@@ -219,6 +223,10 @@ try {
         }
         if ($initializationAction -eq 'already-traveler-core') {
             Write-Host "Database state $databaseState already includes the validated traveler-core migration. No changes are needed." -ForegroundColor Green
+            return
+        }
+        if ($initializationAction -eq 'already-task31') {
+            Write-Host "Database state $databaseState already includes the validated Task 3.1 migration. No changes are needed." -ForegroundColor Green
             return
         }
         if ($initializationAction -eq 'apply-pending-0007') {
@@ -272,7 +280,8 @@ try {
         @{ Id = '0006_verified_unesco_destination_seed_batch2'; File = '006_verified_unesco_destination_seed_batch2.sql'; Path = '/opt/ai-tourism/sql/006_verified_unesco_destination_seed_batch2.sql' },
         @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; File = '007_shiraz_dalahoo_wikipedia_dataset_v1.sql'; Path = '/opt/ai-tourism/sql/007_shiraz_dalahoo_wikipedia_dataset_v1.sql' },
         @{ Id = '0008_authentication_foundation'; File = '008_authentication_foundation.sql'; Path = '/opt/ai-tourism/sql/008_authentication_foundation.sql' },
-        @{ Id = '0009_traveler_core'; File = '009_traveler_core.sql'; Path = '/opt/ai-tourism/sql/009_traveler_core.sql' }
+        @{ Id = '0009_traveler_core'; File = '009_traveler_core.sql'; Path = '/opt/ai-tourism/sql/009_traveler_core.sql' },
+        @{ Id = '0010_task31_content_privacy_full_itinerary'; File = '010_task31_content_privacy_full_itinerary.sql'; Path = '/opt/ai-tourism/sql/010_task31_content_privacy_full_itinerary.sql' }
     )
 
     if ($databaseState -ne 'fresh') {
@@ -284,6 +293,9 @@ try {
         }
         elseif ($initializationAction -like 'apply-traveler-0009-*') {
             $migrations = @($migrations | Where-Object { $_.Id -eq '0009_traveler_core' })
+        }
+        elseif ($initializationAction -like 'apply-task31-0010-*') {
+            $migrations = @($migrations | Where-Object { $_.Id -eq '0010_task31_content_privacy_full_itinerary' })
         }
         else {
             throw "Unexpected migration action '$initializationAction'; stopped before writes."

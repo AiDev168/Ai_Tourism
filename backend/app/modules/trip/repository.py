@@ -29,9 +29,23 @@ class TravelerInvalidState(Exception):
     pass
 
 
+_PROFILE_ALIASES = {
+    "durationDays": ("durationDays", "duration_days"),
+    "travelerCount": ("travelerCount", "traveler_count"),
+    "travelDates": ("travelDates", "travel_dates"),
+    "origin": ("origin",),
+    "budget": ("budget",),
+}
+
+
 def _field_value(requirements: Mapping[str, Any], key: str) -> Any:
-    field = requirements.get(key)
-    return field.get("value") if isinstance(field, Mapping) else None
+    """Read both extraction envelopes and the API's normalized snake-case profile."""
+    for alias in _PROFILE_ALIASES.get(key, (key,)):
+        if alias not in requirements:
+            continue
+        field = requirements[alias]
+        return field.get("value") if isinstance(field, Mapping) and "value" in field else field
+    return None
 
 
 def _profile_columns(requirements: Mapping[str, Any]) -> dict[str, Any]:
@@ -71,8 +85,8 @@ def _profile_columns(requirements: Mapping[str, Any]) -> dict[str, Any]:
                 amount = None
     return {
         "origin": origin if isinstance(origin, str) and origin.strip() else None,
-        "duration": duration if isinstance(duration, int) and 1 <= duration <= 365 else None,
-        "travelers": travelers if isinstance(travelers, int) and 1 <= travelers <= 50 else None,
+        "duration": duration if isinstance(duration, int) and not isinstance(duration, bool) and 1 <= duration <= 365 else None,
+        "travelers": travelers if isinstance(travelers, int) and not isinstance(travelers, bool) and 1 <= travelers <= 50 else None,
         "start_date": start_date,
         "end_date": end_date,
         "budget_amount": amount,
@@ -618,13 +632,46 @@ class TravelerRepository:
             ).fetchone()
             if not exists:
                 return False
+            owned_phones = conn.execute(
+                """SELECT phone_e164 FROM identity.users WHERE user_id=%s
+                   UNION SELECT phone_e164 FROM identity.verified_phones WHERE user_id=%s""",
+                (user_id, user_id),
+            ).fetchall()
+            phone_numbers = sorted({row["phone_e164"] for row in owned_phones})
             conn.execute(
                 """DELETE FROM operations.feedback WHERE user_id=%s
                    OR conversation_id IN (SELECT conversation_id FROM conversation.conversations WHERE user_id=%s)
-                   OR trip_id IN (SELECT trip_id FROM travel.trips WHERE user_id=%s)""",
+                   OR trip_id IN (SELECT trip_id FROM travel.trips WHERE user_id=%s)
+                   OR recommendation_id IN (
+                       SELECT r.recommendation_id
+                       FROM recommendation.recommendations r
+                       JOIN recommendation.recommendation_requests q USING(recommendation_request_id)
+                       JOIN travel.trips t USING(trip_id)
+                       WHERE t.user_id=%s
+                   )""",
+                (user_id, user_id, user_id, user_id),
+            )
+            conn.execute(
+                """DELETE FROM integration.outbound_clicks WHERE user_id=%s
+                   OR trip_id IN (SELECT trip_id FROM travel.trips WHERE user_id=%s)
+                   OR recommendation_id IN (
+                       SELECT r.recommendation_id
+                       FROM recommendation.recommendations r
+                       JOIN recommendation.recommendation_requests q USING(recommendation_request_id)
+                       JOIN travel.trips t USING(trip_id)
+                       WHERE t.user_id=%s
+                   )""",
                 (user_id, user_id, user_id),
             )
             conn.execute("DELETE FROM identity.users WHERE user_id=%s", (user_id,))
+            if phone_numbers:
+                # OTP challenges contain the canonical phone and deliberately
+                # have no account FK; erase them in the same account-deletion
+                # transaction without logging or returning the phone values.
+                conn.execute(
+                    "DELETE FROM identity.otp_challenges WHERE phone_e164 = ANY(%s::text[])",
+                    (phone_numbers,),
+                )
             return True
 
     def create_recommendation_run(
@@ -652,6 +699,7 @@ class TravelerRepository:
                 "selected_destination_ids": selected_destination_ids,
                 "outcome_status": outcome.status,
                 "reason_code": outcome.reason_code,
+                "unresolved_fields": list(outcome.unresolved_fields),
                 "algorithm_version": outcome.algorithm_version,
                 "retrieval_version": outcome.retrieval_version,
             }

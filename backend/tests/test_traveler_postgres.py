@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import secrets
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -168,8 +168,9 @@ def test_real_app_persists_owner_scoped_trip_and_deletes_all_content():
         assert confirmed.status_code == 200
         assert confirmed.json()["duration_days"] == 4
 
-        # The isolated 0007 dataset has no editorially published destinations.
-        # The API may request clarification, but it must return no candidate.
+        # This profile has no requested or resolved destination, so the API
+        # must request destination selection rather than infer an empty-catalogue
+        # result. It must still return no candidate.
         recommendations = client_a.post(
             f"/api/v1/trips/{trip_id}/recommendations",
             headers=_request_headers(csrf_a),
@@ -178,8 +179,8 @@ def test_real_app_persists_owner_scoped_trip_and_deletes_all_content():
         assert recommendations.status_code == 201
         recommendation_body = recommendations.json()
         assert recommendation_body["items"] == []
-        assert recommendation_body["status"] == "empty"
-        assert recommendation_body["reason_code"] == "catalogue_empty"
+        assert recommendation_body["status"] == "needs_confirmation"
+        assert recommendation_body["reason_code"] == "destination_selection_required"
         recommendation_id = recommendation_body["recommendation_request_id"]
 
         itinerary = client_a.post(
@@ -256,6 +257,41 @@ def test_real_app_persists_owner_scoped_trip_and_deletes_all_content():
         account_conversation_id = account_trip.json()["conversation"]["conversation_id"]
         account_trip_id = account_trip.json()["trip"]["trip_id"]
         user_b_uuid = UUID(user_b)
+        user_a_uuid = UUID(user_a)
+        test_external_link_id = uuid4()
+        with connect(settings) as connection, connection.transaction():
+            # These owner-scoped records are created only in the guarded,
+            # disposable integration database. Keep User A records as a
+            # sentinel proving User B deletion does not cross ownership.
+            connection.execute(
+                """INSERT INTO operations.feedback
+                   (feedback_id,user_id,trip_id,feedback_type,comment,is_synthetic)
+                   VALUES (%s,%s,%s,'other','test-owned deletion record',FALSE),
+                          (%s,%s,NULL,'other','other-owner preservation record',FALSE)""",
+                (uuid4(), user_b_uuid, account_trip_id, uuid4(), user_a_uuid),
+            )
+            connection.execute(
+                """INSERT INTO integration.external_links
+                   (external_link_id,provider_name,service_type,label_fa,target_url,is_active,is_synthetic)
+                   VALUES (%s,'test-only','official_info','آزمون','https://example.invalid/test',TRUE,TRUE)""",
+                (test_external_link_id,),
+            )
+            connection.execute(
+                """INSERT INTO integration.outbound_clicks
+                   (external_link_id,user_id,trip_id,is_synthetic)
+                   VALUES (%s,%s,%s,FALSE),(%s,%s,NULL,FALSE)""",
+                (test_external_link_id, user_b_uuid, account_trip_id, test_external_link_id, user_a_uuid),
+            )
+            challenge_ids_by_phone = connection.execute(
+                """SELECT phone_e164, array_agg(challenge_id) AS ids
+                   FROM identity.otp_challenges WHERE phone_e164=ANY(%s::text[])
+                   GROUP BY phone_e164""",
+                (list(TEST_PHONES),),
+            ).fetchall()
+            challenge_ids = {row["phone_e164"]: row["ids"] for row in challenge_ids_by_phone}
+            assert all(phone in challenge_ids for phone in TEST_PHONES)
+            user_a_challenge_ids = challenge_ids[TEST_PHONES[0]]
+            user_b_challenge_ids = challenge_ids[TEST_PHONES[1]]
         account_delete = client_b.delete("/api/v1/auth/me", headers=_request_headers(csrf_b))
         assert account_delete.status_code == 204
         assert client_b.get("/api/v1/auth/me").status_code == 401
@@ -265,6 +301,18 @@ def test_real_app_persists_owner_scoped_trip_and_deletes_all_content():
             assert _count(connection, "conversation.conversations", "conversation_id", account_conversation_id) == 0
             assert _count(connection, "travel.trips", "trip_id", account_trip_id) == 0
             assert _count(connection, "conversation.messages", "conversation_id", account_conversation_id) == 0
+            assert _count(connection, "operations.feedback", "user_id", user_b_uuid) == 0
+            assert _count(connection, "operations.feedback", "user_id", user_a_uuid) == 1
+            assert _count(connection, "integration.outbound_clicks", "user_id", user_b_uuid) == 0
+            assert _count(connection, "integration.outbound_clicks", "user_id", user_a_uuid) == 1
+            assert connection.execute(
+                "SELECT COUNT(*) AS n FROM identity.otp_challenges WHERE challenge_id=ANY(%s::uuid[])",
+                (user_b_challenge_ids,),
+            ).fetchone()["n"] == 0
+            assert connection.execute(
+                "SELECT COUNT(*) AS n FROM identity.otp_challenges WHERE challenge_id=ANY(%s::uuid[])",
+                (user_a_challenge_ids,),
+            ).fetchone()["n"] == len(user_a_challenge_ids)
     finally:
         client_a.close()
         client_b.close()
@@ -273,3 +321,12 @@ def test_real_app_persists_owner_scoped_trip_and_deletes_all_content():
             app.dependency_overrides[get_settings] = previous_settings
         app.state.sms_adapter = previous_sms
         _clean_test_records(settings)
+        with connect(settings) as connection, connection.transaction():
+            connection.execute(
+                "DELETE FROM integration.outbound_clicks WHERE external_link_id=%s",
+                (test_external_link_id,),
+            )
+            connection.execute(
+                "DELETE FROM integration.external_links WHERE external_link_id=%s",
+                (test_external_link_id,),
+            )

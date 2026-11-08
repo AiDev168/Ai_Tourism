@@ -43,7 +43,7 @@ class RecommendedDestination(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     destination_id: str = Field(pattern=r"^[0-9]+$")
-    rank: int = Field(ge=1, le=3)
+    rank: int = Field(ge=1, le=1_000)
     # This represents an exact requested-identity match, not quality or truth confidence.
     final_score: float = Field(ge=0, le=1)
     matched_requirements: list[str] = Field(max_length=16)
@@ -70,8 +70,10 @@ class RecommendationOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     status: Literal["available", "empty", "needs_confirmation"]
-    algorithm_version: Literal["structured-catalogue-ranking-v1"] = "structured-catalogue-ranking-v1"
-    retrieval_version: Literal["approved-structured-catalogue-v1"] = "approved-structured-catalogue-v1"
+    algorithm_version: Literal["structured-catalogue-ranking-v2"] = "structured-catalogue-ranking-v2"
+    retrieval_version: Literal["approved-structured-catalogue-v2"] = "approved-structured-catalogue-v2"
     reason_code: str | None = Field(default=None, max_length=64)
-    items: list[RecommendedDestination] = Field(max_length=3)
+    unresolved_fields: list[str] = Field(default_factory=list, max_length=32)
+    duration_days: int | None = Field(default=None, ge=1, le=365)
+    items: list[RecommendedDestination] = Field(max_length=1_000)
 

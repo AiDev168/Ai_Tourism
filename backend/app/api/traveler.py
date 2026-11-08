@@ -391,6 +391,7 @@ def _recommendation_response(
         "algorithm_version": outcome.algorithm_version,
         "retrieval_version": outcome.retrieval_version,
         "trip_version": trip_version,
+        "unresolved_fields": list(outcome.unresolved_fields),
         "items": items,
     }
 
@@ -462,6 +463,7 @@ def get_latest_recommendations(
             outcome = RecommendationOutcome(
                 status=saved_status,
                 reason_code=snapshot.get("reason_code"),
+                unresolved_fields=snapshot.get("unresolved_fields", []),
                 items=[],
             )
             return _recommendation_response(outcome, {}, request_id, trip["version"], {})
@@ -541,6 +543,14 @@ def create_itinerary(
 ):
     _mark_no_store(response)
     try:
+        trip = repository.trip(principal.user_id, trip_id)
+        if trip is None:
+            return _owner_missing()
+        confirmed_duration = trip.get("duration_days")
+        if confirmed_duration is None:
+            return _error(409, "trip_duration_not_confirmed")
+        if body.day_count > confirmed_duration:
+            return _error(409, "itinerary_exceeds_confirmed_duration")
         outcome, by_id, rec_ids, _persisted_scores = _current_recommendations(
             settings, repository, principal.user_id, trip_id, body.recommendation_request_id
         )
@@ -583,7 +593,14 @@ def _enrich_itinerary(row: dict[str, Any], by_id: dict[str, ProductionDestinatio
             "localized_names": destination.localized_names,
             "canonical_name": destination.canonical_name,
         })
-    return {**row, "stops": enriched_stops}
+    planned_days = {stop["day_number"] for stop in enriched_stops}
+    unplanned_days = [day for day in range(1, row["day_count"] + 1) if day not in planned_days]
+    return {
+        **row,
+        "stops": enriched_stops,
+        "status": "partial" if unplanned_days else "complete",
+        "unplanned_days": unplanned_days,
+    }
 
 
 @router.get("/itineraries/{itinerary_id}", response_model=ItineraryResponse)
@@ -630,6 +647,14 @@ def update_itinerary(
         existing = repository.itinerary(principal.user_id, itinerary_id)
         if existing is None:
             return _owner_missing()
+        trip = repository.trip(principal.user_id, existing["trip_id"])
+        if trip is None:
+            return _owner_missing()
+        confirmed_duration = trip.get("duration_days")
+        if confirmed_duration is None:
+            return _error(409, "trip_duration_not_confirmed")
+        if existing["day_count"] > confirmed_duration:
+            return _error(409, "itinerary_exceeds_confirmed_duration")
         # Revalidate every referenced destination against the current publication view.
         outcome, by_id, current_rec_ids, _persisted_scores = _current_recommendations(
             settings, repository, principal.user_id, existing["trip_id"],

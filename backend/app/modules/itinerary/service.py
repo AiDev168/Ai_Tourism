@@ -9,15 +9,21 @@ def generate_itinerary(
 ) -> ItineraryDraft | None:
     """Return no plan when there are no eligible places; never invent stops."""
     del locale  # User-authored notes start empty; labels are localized in the PWA.
-    if day_count not in (1, 2, 3):
-        raise ValueError("day_count must be between one and three")
+    if isinstance(day_count, bool) or not isinstance(day_count, int) or not 1 <= day_count <= 365:
+        raise ValueError("day_count must be between one and 365")
     if recommendation.status != "available" or not recommendation.items:
         return None
 
     stops: list[ItineraryStopDraft] = []
-    orders_by_day = [0, 0, 0]
-    for index, item in enumerate(recommendation.items):
-        day_number = min(index + 1, day_count)
+    # Give each successive day one eligible stop before filling any day with
+    # additional candidates. This keeps long requested plans honest when only
+    # a partial evidence-backed candidate set exists.
+    selected_items = recommendation.items[: min(len(recommendation.items), 1_000, day_count * 50)]
+    assigned: list[tuple[int, object]] = []
+    for index, item in enumerate(selected_items):
+        assigned.append((index + 1, item) if index < day_count else (index % day_count + 1, item))
+    orders_by_day = [0] * day_count
+    for day_number, item in assigned:
         orders_by_day[day_number - 1] += 1
         stops.append(
             ItineraryStopDraft(
@@ -29,5 +35,16 @@ def generate_itinerary(
                 evidence=item.evidence,
             )
         )
-    return ItineraryDraft(day_count=day_count, stops=stops)
+    planned_days = {stop.day_number for stop in stops}
+    unplanned_days = [day for day in range(1, day_count + 1) if day not in planned_days]
+    warnings = ["approximate_order_only", "no_hours_or_routes_inferred"]
+    if unplanned_days:
+        warnings.append("some_days_unplanned_insufficient_candidates")
+    return ItineraryDraft(
+        day_count=day_count,
+        status="partial" if unplanned_days else "complete",
+        warning_codes=warnings,
+        unplanned_days=unplanned_days,
+        stops=stops,
+    )
 

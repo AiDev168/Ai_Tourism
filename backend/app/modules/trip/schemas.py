@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 Locale = Literal["fa-IR", "en-US", "ar"]
 
@@ -98,14 +98,14 @@ class CreateRecommendationRequest(StrictModel):
 
 class CreateItineraryRequest(StrictModel):
     recommendation_request_id: UUID
-    day_count: int = Field(ge=1, le=3)
+    day_count: StrictInt = Field(ge=1, le=365)
     locale: Locale
 
 
 class ItineraryStopEdit(StrictModel):
     recommendation_id: UUID
-    day_number: int = Field(ge=1, le=3)
-    stop_order: int = Field(ge=1, le=50)
+    day_number: StrictInt = Field(ge=1, le=365)
+    stop_order: StrictInt = Field(ge=1, le=50)
     notes_by_locale: dict[Locale, str] = Field(default_factory=dict)
 
     @field_validator("notes_by_locale")
@@ -119,7 +119,23 @@ class ItineraryStopEdit(StrictModel):
 class UpdateItineraryRequest(StrictModel):
     expected_revision: int = Field(ge=1)
     title_by_locale: dict[Locale, str] = Field(default_factory=dict)
-    stops: list[ItineraryStopEdit] = Field(max_length=50)
+    stops: list[ItineraryStopEdit] = Field(max_length=1_000)
+
+    @model_validator(mode="after")
+    def bounded_unique_stop_positions(self) -> "UpdateItineraryRequest":
+        counts: dict[int, int] = {}
+        positions: set[tuple[int, int]] = set()
+        recommendation_ids: set[UUID] = set()
+        for stop in self.stops:
+            counts[stop.day_number] = counts.get(stop.day_number, 0) + 1
+            position = (stop.day_number, stop.stop_order)
+            if position in positions or stop.recommendation_id in recommendation_ids:
+                raise ValueError("itinerary stop positions and recommendations must be unique")
+            positions.add(position)
+            recommendation_ids.add(stop.recommendation_id)
+        if any(count > 50 for count in counts.values()):
+            raise ValueError("an itinerary day cannot contain more than 50 stops")
+        return self
 
     @field_validator("title_by_locale")
     @classmethod
@@ -228,7 +244,8 @@ class RecommendationResponse(StrictModel):
     algorithm_version: str
     retrieval_version: str
     trip_version: int
-    items: list[RecommendationItemResponse]
+    unresolved_fields: list[str] = Field(default_factory=list, max_length=32)
+    items: list[RecommendationItemResponse] = Field(max_length=1_000)
 
 
 class RecommendationScoreComponent(StrictModel):
@@ -243,8 +260,8 @@ class ItineraryStopResponse(StrictModel):
     itinerary_stop_id: UUID
     recommendation_id: UUID
     destination_id: str
-    day_number: int
-    stop_order: int
+    day_number: StrictInt = Field(ge=1, le=365)
+    stop_order: StrictInt = Field(ge=1, le=50)
     notes_by_locale: dict[str, str]
     canonical_name: str
     localized_names: dict[str, str | None]
@@ -256,10 +273,25 @@ class ItineraryResponse(StrictModel):
     recommendation_request_id: UUID
     version: int
     revision: int
-    day_count: int
+    day_count: StrictInt = Field(ge=1, le=365)
+    status: Literal["complete", "partial"]
+    unplanned_days: list[StrictInt] = Field(max_length=365)
     title_by_locale: dict[str, str]
     stops: list[ItineraryStopResponse]
     updated_at: datetime
+
+    @model_validator(mode="after")
+    def consistent_coverage(self) -> "ItineraryResponse":
+        planned_days = {stop.day_number for stop in self.stops}
+        expected_unplanned = [
+            day for day in range(1, self.day_count + 1) if day not in planned_days
+        ]
+        if self.unplanned_days != expected_unplanned:
+            raise ValueError("unplanned days must exactly describe missing coverage")
+        expected_status = "partial" if expected_unplanned else "complete"
+        if self.status != expected_status:
+            raise ValueError("itinerary status must match day coverage")
+        return self
 
 
 class TripDeleteResponse(StrictModel):

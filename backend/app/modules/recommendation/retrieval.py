@@ -16,6 +16,10 @@ _AREA_TYPES = {"city", "town", "region", "province"}
 _MAX_CANDIDATES = 1_000
 
 
+class CandidateSetExceedsBound(ValueError):
+    """Raised instead of silently truncating a candidate set."""
+
+
 @dataclass(frozen=True, slots=True)
 class StructuredDestinationMetadata:
     """Optional tag projection from approved production metadata views.
@@ -66,7 +70,7 @@ class ApprovedCatalogueCandidateRetriever:
         catalogue: Sequence[ProductionDestinationItem],
         metadata_by_destination: Mapping[str, StructuredDestinationMetadata],
     ) -> list[RetrievedDestination]:
-        if query.limit < 1 or query.limit > _MAX_CANDIDATES:
+        if isinstance(query.limit, bool) or query.limit < 1 or query.limit > _MAX_CANDIDATES:
             raise ValueError("candidate retrieval limit is outside the supported bound")
 
         by_id: dict[str, ProductionDestinationItem] = {}
@@ -78,10 +82,6 @@ class ApprovedCatalogueCandidateRetriever:
 
         hits: list[RetrievedDestination] = []
         seen: set[str] = set()
-        normalized_interests = tuple(
-            (raw, normalize_alias(raw)) for raw in query.interests if raw.strip()
-        )
-
         for request_order, selected_id in enumerate(query.selected_destination_ids):
             selected = by_id.get(selected_id)
             if selected is None:
@@ -110,20 +110,18 @@ class ApprovedCatalogueCandidateRetriever:
                 if not direct and not area_match:
                     continue
 
-                item_metadata = metadata_by_destination.get(
-                    item.destination_id, StructuredDestinationMetadata()
-                )
-                normalized_tags = {normalize_alias(tag) for tag in item_metadata.tags if tag.strip()}
-                matched = tuple(
-                    raw for raw, normalized in normalized_interests if normalized and normalized in normalized_tags
-                )
+                # Published tags are currently untagged by locale. Do not
+                # compare a request in one language with tags of unknown
+                # language; interest scoring stays disabled until metadata
+                # carries a reviewed locale contract.
+                matched: tuple[str, ...] = ()
                 scope = "explicit_identity" if direct else "explicit_area"
                 # A city/region match is allowed only when the selected entity
                 # itself explicitly represents that broad area.
                 hits.append(RetrievedDestination(item, selected_id, request_order, scope, matched))
                 seen.add(item.destination_id)
-                if len(hits) >= query.limit:
-                    return hits
+                if len(hits) > query.limit:
+                    raise CandidateSetExceedsBound("candidate set exceeds the explicit retrieval bound")
         return hits
 
 

@@ -9,7 +9,9 @@ class ApprovedDestinationAlias(BaseModel):
 
     locale: Literal["fa-IR", "en-US", "ar"]
     value: str = Field(min_length=1, max_length=200)
-    alias_type: Literal["canonical_display_name", "spelling_variant", "alternate_script_name", "exonym"]
+    alias_type: Literal[
+        "canonical_display_name", "spelling_variant", "alternate_script_name", "exonym"
+    ]
 
 
 class ProductionDestinationItem(BaseModel):
@@ -71,3 +73,53 @@ class CatalogueUnavailable(BaseModel):
 
     status: Literal["unavailable"] = "unavailable"
     error: CatalogueError = Field(default_factory=CatalogueError)
+
+
+class CulinaryClaimSource(BaseModel):
+    """Source metadata included by the approved culinary publication view."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_name: str = Field(min_length=1, max_length=500)
+    source_url: str = Field(min_length=1, max_length=2048)
+    license: str | None = Field(default=None, max_length=500)
+    source_role: str = Field(min_length=1, max_length=64)
+    evidence_note: str | None = Field(default=None, max_length=2_000)
+    retrieved_at: datetime | None = None
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
+
+
+class CulinaryClaim(BaseModel):
+    """One localized, source-backed non-spatial claim."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    claim_key: str = Field(min_length=1, max_length=240)
+    text: str = Field(min_length=1, max_length=4_000)
+    sources: list[CulinaryClaimSource] = Field(min_length=1, max_length=32)
+
+
+class ProductionCulinaryItem(BaseModel):
+    """Localized non-spatial item from the approved publication view."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: str = Field(min_length=36, max_length=36)
+    item_key: str = Field(min_length=1, max_length=240)
+    category: str = Field(min_length=1, max_length=64)
+    record_key: str = Field(min_length=1, max_length=240)
+    locale: Literal["fa-IR", "en-US", "ar"]
+    name: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1, max_length=8_000)
+    claims: list[CulinaryClaim] = Field(max_length=32)
+    updated_at: datetime
+
+
+class AvailableCulinaryCatalogue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["available"] = "available"
+    count: int = Field(ge=0)
+    locale: Literal["fa-IR", "en-US", "ar"]
+    items: list[ProductionCulinaryItem]

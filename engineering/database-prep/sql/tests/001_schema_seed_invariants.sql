@@ -3,12 +3,14 @@
 DO $$
 DECLARE
     actual_count INTEGER;
+    expected_table_count INTEGER;
     missing_count INTEGER;
     v_count BIGINT;
     expected_ledger_count BIGINT;
     v_has_shiraz BOOLEAN;
     v_has_auth BOOLEAN;
     v_has_traveler_core BOOLEAN;
+    v_has_task31 BOOLEAN;
 BEGIN
     SELECT EXISTS (
         SELECT 1 FROM system.schema_migrations
@@ -22,23 +24,34 @@ BEGIN
         SELECT 1 FROM system.schema_migrations
         WHERE migration_id = '0009_traveler_core'
     ) INTO v_has_traveler_core;
+    SELECT EXISTS (
+        SELECT 1 FROM system.schema_migrations
+        WHERE migration_id = '0010_task31_content_privacy_full_itinerary'
+    ) INTO v_has_task31;
 
     IF v_has_traveler_core AND NOT v_has_auth THEN
         RAISE EXCEPTION 'Migration 0009 cannot be applied without Migration 0008';
+    END IF;
+    IF v_has_task31 AND NOT v_has_traveler_core THEN
+        RAISE EXCEPTION 'Migration 0010 cannot be applied without Migration 0009';
     END IF;
     SELECT EXISTS (
         SELECT 1 FROM system.schema_migrations
         WHERE migration_id = '0009_traveler_core'
     ) INTO v_has_traveler_core;
 
-    -- Exactly 30 baseline tables, or 34 after additive Migration 0008.
+    -- Exactly 30 baseline tables, plus four auth and four Task 3.1 tables.
     SELECT COUNT(*) INTO actual_count
     FROM pg_catalog.pg_tables
     WHERE schemaname IN ('identity', 'conversation', 'travel', 'knowledge',
                          'recommendation', 'integration', 'operations', 'system');
 
-    IF actual_count <> (CASE WHEN v_has_auth THEN 34 ELSE 30 END) THEN
-        RAISE EXCEPTION 'Expected exactly % owned tables; found %', (CASE WHEN v_has_auth THEN 34 ELSE 30 END), actual_count;
+    expected_table_count := CASE WHEN v_has_auth THEN 34 ELSE 30 END;
+    IF v_has_task31 THEN
+        expected_table_count := expected_table_count + 4;
+    END IF;
+    IF actual_count <> expected_table_count THEN
+        RAISE EXCEPTION 'Expected exactly % owned tables; found %', expected_table_count, actual_count;
     END IF;
 
     WITH expected(schema_name, table_name) AS (
@@ -64,6 +77,10 @@ BEGIN
         UNION ALL SELECT 'identity','verified_phones' WHERE v_has_auth
         UNION ALL SELECT 'identity','web_sessions' WHERE v_has_auth
         UNION ALL SELECT 'identity','auth_rate_limits' WHERE v_has_auth
+        UNION ALL SELECT 'knowledge','destination_enrichment_proposals' WHERE v_has_task31
+        UNION ALL SELECT 'knowledge','destination_enrichment_proposal_sources' WHERE v_has_task31
+        UNION ALL SELECT 'knowledge','culinary_knowledge_items' WHERE v_has_task31
+        UNION ALL SELECT 'knowledge','culinary_item_sources' WHERE v_has_task31
     )
     SELECT COUNT(*) INTO missing_count
     FROM expected_with_auth e
@@ -80,6 +97,7 @@ BEGIN
     expected_ledger_count := CASE WHEN v_has_shiraz THEN 8 ELSE 7 END;
     IF v_has_auth THEN expected_ledger_count := expected_ledger_count + 1; END IF;
     IF v_has_traveler_core THEN expected_ledger_count := expected_ledger_count + 1; END IF;
+    IF v_has_task31 THEN expected_ledger_count := expected_ledger_count + 1; END IF;
     IF v_count <> expected_ledger_count THEN
         RAISE EXCEPTION 'Migration ledger entry count does not match the exact 0006/0007/0008 state; found %', v_count;
     END IF;
@@ -270,6 +288,7 @@ BEGIN
     expected_ledger_count := CASE WHEN v_has_shiraz THEN 8 ELSE 7 END;
     IF v_has_auth THEN expected_ledger_count := expected_ledger_count + 1; END IF;
     IF v_has_traveler_core THEN expected_ledger_count := expected_ledger_count + 1; END IF;
+    IF v_has_task31 THEN expected_ledger_count := expected_ledger_count + 1; END IF;
     IF v_count <> expected_ledger_count THEN
         RAISE EXCEPTION 'Tracked migration entries do not match the exact 0006/0007/0008 state; found %', v_count;
     END IF;

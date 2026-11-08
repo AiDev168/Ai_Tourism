@@ -1,0 +1,1689 @@
+{
+  "dataset_key": "shiraz_fars_candidate_content_v2",
+  "version": "2.0.0",
+  "created_at": "2026-11-08",
+  "scope": {
+    "province": "Fars",
+    "primary_city": "Shiraz",
+    "regional_day_trips": [
+      "Persepolis near Marvdasht",
+      "Pasargadae"
+    ],
+    "not_owner_approved_pilot_scope": true,
+    "maragheh_excluded": true
+  },
+  "purpose": "Editorial candidate content for internal import/review only. Never publish directly.",
+  "locale_contract": {
+    "locales": [
+      "fa-IR",
+      "en-US",
+      "ar"
+    ],
+    "translation_status": "draft_human_review_required"
+  },
+  "publication_contract": {
+    "record_origin": "verified_external",
+    "verification_status": "pending",
+    "is_synthetic": false,
+    "status": "needs_review",
+    "data_confidence": 0.0,
+    "publishable": false
+  },
+  "spatial_entities": [],
+  "existing_destination_enrichment_proposals": [
+    {
+      "entity_kind": "existing_destination_enrichment_proposal",
+      "canonical_name": "شیراز",
+      "names_by_locale": {
+        "fa-IR": "شیراز",
+        "en-US": "Shiraz",
+        "ar": "شيراز"
+      },
+      "destination_type": "city",
+      "province_name": "فارس",
+      "city_name": "شیراز",
+      "geographic_scope": "city_scope",
+      "description_by_locale_draft": {
+        "fa-IR": "شیراز مرکز استان فارس است و به‌خاطر باغ‌های تاریخی، آرامگاه‌های حافظ و سعدی و مجموعه‌ای از بناهای دوره‌های زندیه و قاجار شناخته می‌شود.",
+        "en-US": "Shiraz is the capital of Fars Province. Its cultural profile includes historic gardens, the tombs of Hafez and Saadi, and monuments from the Zand and Qajar periods.",
+        "ar": "شيراز هي عاصمة محافظة فارس. وتضم معالمها الثقافية حدائق تاريخية وضريحي حافظ وسعدي وآثاراً من العصرين الزندي والقاجاري."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "shiraz_capital_fars",
+          "claim_by_locale": {
+            "fa-IR": "شیراز مرکز استان فارس است.",
+            "en-US": "Shiraz is the capital of Fars Province.",
+            "ar": "شيراز هي عاصمة محافظة فارس."
+          },
+          "source_ids": [
+            "VISITIRAN_FARS"
+          ]
+        },
+        {
+          "claim_id": "shiraz_historic_gardens_and_tombs",
+          "claim_by_locale": {
+            "fa-IR": "باغ‌های تاریخی و آرامگاه‌های حافظ و سعدی از جاذبه‌های شناخته‌شدهٔ شیراز هستند.",
+            "en-US": "Historic gardens and the tombs of Hafez and Saadi are among Shiraz’s known attractions.",
+            "ar": "تُعد الحدائق التاريخية وضريحا حافظ وسعدي من معالم شيراز المعروفة."
+          },
+          "source_ids": [
+            "VISITIRAN_FARS",
+            "IRANICA_SHIRAZ"
+          ]
+        }
+      ],
+      "coordinates": {
+        "latitude": 29.61,
+        "longitude": 52.5425,
+        "coordinate_role": "representative_point",
+        "coordinate_status": "secondary_coordinate_requires_validation",
+        "source_id": "WIKI_COORD_SECONDARY",
+        "source_url": "https://en.wikipedia.org/wiki/Shiraz"
+      },
+      "access_profile": {
+        "access_modes": null,
+        "difficulty": null,
+        "mobility_accessibility": null,
+        "safety_restrictions": null,
+        "evidence_status": "unknown_not_researched"
+      },
+      "operational_facts": {
+        "opening_hours": null,
+        "ticket_price": null,
+        "visit_duration_minutes": null,
+        "visitor_entrance": null,
+        "parking": null,
+        "public_transport": null,
+        "evidence_status": "not_verified"
+      },
+      "provenance": {
+        "source_ids": [
+          "IRANICA_SHIRAZ",
+          "VISITIRAN_FARS",
+          "WIKI_COORD_SECONDARY"
+        ],
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "All three descriptions are draft paraphrases/translations and require native editorial review.",
+        "Do not infer a visitor entrance, accessible route, opening hours, ticket price or visit duration.",
+        "Do not show as a production recommendation until the owner/editor approves identity, facts, localization, provenance and coordinates."
+      ],
+      "target_record_key": "shiraz-city-v1",
+      "record_action": "stage_existing_record_enrichment_review",
+      "target_resolution": {
+        "expected_existing_record_key": "shiraz-city-v1",
+        "must_resolve_exactly_one_existing_record": true,
+        "must_not_insert_new_destination": true,
+        "must_not_mutate_published_or_canonical_record": true,
+        "if_missing_or_conflicting": "stop_and_report_identity_conflict"
+      },
+      "coordinate_apply_policy": "reference_only_never_overwrite_existing_coordinate"
+    },
+    {
+      "entity_kind": "existing_destination_enrichment_proposal",
+      "canonical_name": "حافظیه؛ آرامگاه حافظ",
+      "names_by_locale": {
+        "fa-IR": "حافظیه؛ آرامگاه حافظ",
+        "en-US": "Hafezieh — Tomb of Hafez",
+        "ar": "حافظية؛ ضريح حافظ"
+      },
+      "destination_type": "historic_memorial",
+      "province_name": "فارس",
+      "city_name": "شیراز",
+      "geographic_scope": "within_shiraz",
+      "description_by_locale_draft": {
+        "fa-IR": "حافظیه آرامگاه حافظ، غزل‌سرای فارسی‌زبان سدهٔ هشتم هجری، در شیراز است. منبع گردشگری Visit Iran از ساخت گنبدی بر فراز آرامگاه در سال ۸۶۵ هجری قمری و دگرگونی‌های بعدی مجموعه یاد می‌کند.",
+        "en-US": "Hafezieh is the Shiraz mausoleum complex associated with Hafez, the Persian lyric poet of the fourteenth century. Visit Iran records an early dome over the grave in 1452 CE and later changes to the site.",
+        "ar": "حافظية هي مجمّع ضريح حافظ في شيراز، شاعر الغزل الفارسي في القرن الثامن الهجري. ويذكر مصدر Visit Iran إقامة قبة فوق القبر سنة 1452 ميلادية وما تبع ذلك من تغييرات في الموقع."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "hafez_mausoleum_shiraz",
+          "claim_by_locale": {
+            "fa-IR": "آرامگاه حافظ در شیراز قرار دارد.",
+            "en-US": "The mausoleum of Hafez is in Shiraz.",
+            "ar": "يقع ضريح حافظ في شيراز."
+          },
+          "source_ids": [
+            "VISITIRAN_HAFEZ",
+            "IRANICA_HAFEZ"
+          ]
+        },
+        {
+          "claim_id": "hafez_dome_1452",
+          "claim_by_locale": {
+            "fa-IR": "Visit Iran از ساخت گنبدی بر فراز آرامگاه در سال ۱۴۵۲ میلادی گزارش می‌دهد.",
+            "en-US": "Visit Iran reports a dome over the grave in 1452 CE.",
+            "ar": "يذكر Visit Iran إقامة قبة فوق القبر سنة 1452 ميلادية."
+          },
+          "source_ids": [
+            "VISITIRAN_HAFEZ"
+          ]
+        }
+      ],
+      "coordinates": {
+        "latitude": 29.6254028,
+        "longitude": 52.5583194,
+        "coordinate_role": "representative_point",
+        "coordinate_status": "secondary_coordinate_requires_validation",
+        "source_id": "WIKI_COORD_SECONDARY",
+        "source_url": "https://en.wikipedia.org/wiki/Tomb_of_Hafez"
+      },
+      "access_profile": {
+        "access_modes": null,
+        "difficulty": null,
+        "mobility_accessibility": null,
+        "safety_restrictions": null,
+        "evidence_status": "unknown_not_researched"
+      },
+      "operational_facts": {
+        "opening_hours": null,
+        "ticket_price": null,
+        "visit_duration_minutes": null,
+        "visitor_entrance": null,
+        "parking": null,
+        "public_transport": null,
+        "evidence_status": "not_verified"
+      },
+      "provenance": {
+        "source_ids": [
+          "IRANICA_HAFEZ",
+          "VISITIRAN_HAFEZ",
+          "WIKI_COORD_SECONDARY"
+        ],
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "All three descriptions are draft paraphrases/translations and require native editorial review.",
+        "Do not infer a visitor entrance, accessible route, opening hours, ticket price or visit duration.",
+        "Do not show as a production recommendation until the owner/editor approves identity, facts, localization, provenance and coordinates."
+      ],
+      "target_record_key": "shiraz-hafezieh-v1",
+      "record_action": "stage_existing_record_enrichment_review",
+      "target_resolution": {
+        "expected_existing_record_key": "shiraz-hafezieh-v1",
+        "must_resolve_exactly_one_existing_record": true,
+        "must_not_insert_new_destination": true,
+        "must_not_mutate_published_or_canonical_record": true,
+        "if_missing_or_conflicting": "stop_and_report_identity_conflict"
+      },
+      "coordinate_apply_policy": "reference_only_never_overwrite_existing_coordinate"
+    },
+    {
+      "entity_kind": "existing_destination_enrichment_proposal",
+      "canonical_name": "سعدیه؛ آرامگاه سعدی",
+      "names_by_locale": {
+        "fa-IR": "سعدیه؛ آرامگاه سعدی",
+        "en-US": "Saadieh — Tomb of Saadi",
+        "ar": "سعدية؛ ضريح سعدي"
+      },
+      "destination_type": "historic_memorial",
+      "province_name": "فارس",
+      "city_name": "شیراز",
+      "geographic_scope": "within_shiraz",
+      "description_by_locale_draft": {
+        "fa-IR": "سعدیه آرامگاه سعدی، شاعر و نویسندهٔ فارسی‌زبان، در شیراز و نزدیک باغ دلگشا است. مجموعهٔ کنونی باغ، آرامگاه و بناهایی را دربرمی‌گیرد که در دوره‌های مختلف بازسازی شده‌اند.",
+        "en-US": "Saadieh is the Shiraz tomb complex of Saadi, the Persian poet and prose writer. Visit Iran places it near Delgosha Garden and describes the present building as a twentieth-century design following earlier phases of rebuilding.",
+        "ar": "سعدية هي مجمّع ضريح سعدي، الشاعر والكاتب الفارسي، في شيراز بالقرب من حديقة دلگشا. ويصف Visit Iran المبنى الحالي بأنه تصميم من القرن العشرين بعد مراحل سابقة من إعادة البناء."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "saadi_tomb_location",
+          "claim_by_locale": {
+            "fa-IR": "آرامگاه سعدی در شیراز و نزدیک باغ دلگشا قرار دارد.",
+            "en-US": "Saadi’s tomb is in Shiraz, near Delgosha Garden.",
+            "ar": "يقع ضريح سعدي في شيراز بالقرب من حديقة دلگشا."
+          },
+          "source_ids": [
+            "VISITIRAN_SAADI",
+            "IRANICA_SHIRAZ"
+          ]
+        },
+        {
+          "claim_id": "saadi_present_building",
+          "claim_by_locale": {
+            "fa-IR": "Visit Iran ساخت بنای کنونی را به طرحی از محسن فروغی در سال ۱۹۵۱ نسبت می‌دهد.",
+            "en-US": "Visit Iran attributes the present building to a design by Mohsen Foroughi completed in 1951.",
+            "ar": "ينسب Visit Iran المبنى الحالي إلى تصميم محسن فروغي الذي اكتمل عام 1951."
+          },
+          "source_ids": [
+            "VISITIRAN_SAADI"
+          ]
+        }
+      ],
+      "coordinates": {
+        "latitude": 29.6225,
+        "longitude": 52.58306,
+        "coordinate_role": "representative_point",
+        "coordinate_status": "secondary_coordinate_requires_validation",
+        "source_id": "WIKI_COORD_SECONDARY",
+        "source_url": "https://en.wikipedia.org/wiki/Tomb_of_Saadi"
+      },
+      "access_profile": {
+        "access_modes": null,
+        "difficulty": null,
+        "mobility_accessibility": null,
+        "safety_restrictions": null,
+        "evidence_status": "unknown_not_researched"
+      },
+      "operational_facts": {
+        "opening_hours": null,
+        "ticket_price": null,
+        "visit_duration_minutes": null,
+        "visitor_entrance": null,
+        "parking": null,
+        "public_transport": null,
+        "evidence_status": "not_verified"
+      },
+      "provenance": {
+        "source_ids": [
+          "IRANICA_SHIRAZ",
+          "VISITIRAN_SAADI",
+          "WIKI_COORD_SECONDARY"
+        ],
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "All three descriptions are draft paraphrases/translations and require native editorial review.",
+        "Do not infer a visitor entrance, accessible route, opening hours, ticket price or visit duration.",
+        "Do not show as a production recommendation until the owner/editor approves identity, facts, localization, provenance and coordinates."
+      ],
+      "target_record_key": "shiraz-saadieh-v1",
+      "record_action": "stage_existing_record_enrichment_review",
+      "target_resolution": {
+        "expected_existing_record_key": "shiraz-saadieh-v1",
+        "must_resolve_exactly_one_existing_record": true,
+        "must_not_insert_new_destination": true,
+        "must_not_mutate_published_or_canonical_record": true,
+        "if_missing_or_conflicting": "stop_and_report_identity_conflict"
+      },
+      "coordinate_apply_policy": "reference_only_never_overwrite_existing_coordinate"
+    },
+    {
+      "entity_kind": "existing_destination_enrichment_proposal",
+      "canonical_name": "ارگ کریم‌خان زند",
+      "names_by_locale": {
+        "fa-IR": "ارگ کریم‌خان زند",
+        "en-US": "Karim Khan Citadel",
+        "ar": "قلعة كريم خان الزندية"
+      },
+      "destination_type": "historic_citadel",
+      "province_name": "فارس",
+      "city_name": "شیراز",
+      "geographic_scope": "within_shiraz",
+      "description_by_locale_draft": {
+        "fa-IR": "ارگ کریم‌خان در شیراز به فرمان کریم‌خان زند و در دوره‌ای ساخته شد که شیراز پایتخت حکومت زند بود. این بنای مستطیل‌شکل با برج‌های مدور در گوشه‌ها از نشانه‌های معماری شاخص مجموعه است.",
+        "en-US": "Karim Khan Citadel was built in Shiraz by order of the Zand ruler Karim Khan, when the city served as his capital. The rectangular complex is distinguished by round towers at its corners.",
+        "ar": "بُنيت قلعة كريم خان في شيراز بأمر الحاكم الزندي كريم خان حين كانت المدينة عاصمته. ويتميّز المبنى المستطيل بأبراج مستديرة عند زواياه."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "arg_zand_citadel",
+          "claim_by_locale": {
+            "fa-IR": "ارگ به‌دستور کریم‌خان زند در شیراز ساخته شد.",
+            "en-US": "The citadel was built in Shiraz by order of Karim Khan Zand.",
+            "ar": "بُنيت القلعة في شيراز بأمر كريم خان الزندي."
+          },
+          "source_ids": [
+            "IRANICA_ARG",
+            "IRANICA_SHIRAZ"
+          ]
+        },
+        {
+          "claim_id": "arg_architecture",
+          "claim_by_locale": {
+            "fa-IR": "منبع ایرانیکا بنای مستطیل‌شکل و برج‌های مدور گوشه‌های ارگ را توصیف می‌کند.",
+            "en-US": "Iranica describes the rectangular building and its round corner towers.",
+            "ar": "تصف إيرانكا المبنى المستطيل وأبراجه الركنية المستديرة."
+          },
+          "source_ids": [
+            "IRANICA_ARG"
+          ]
+        }
+      ],
+      "coordinates": {
+        "latitude": 29.6174,
+        "longitude": 52.5446,
+        "coordinate_role": "representative_point",
+        "coordinate_status": "secondary_coordinate_requires_validation",
+        "source_id": "WIKI_COORD_SECONDARY",
+        "source_url": "https://en.wikipedia.org/wiki/Arg_of_Karim_Khan"
+      },
+      "access_profile": {
+        "access_modes": null,
+        "difficulty": null,
+        "mobility_accessibility": null,
+        "safety_restrictions": null,
+        "evidence_status": "unknown_not_researched"
+      },
+      "operational_facts": {
+        "opening_hours": null,
+        "ticket_price": null,
+        "visit_duration_minutes": null,
+        "visitor_entrance": null,
+        "parking": null,
+        "public_transport": null,
+        "evidence_status": "not_verified"
+      },
+      "provenance": {
+        "source_ids": [
+          "IRANICA_ARG",
+          "IRANICA_SHIRAZ",
+          "WIKI_COORD_SECONDARY"
+        ],
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "All three descriptions are draft paraphrases/translations and require native editorial review.",
+        "Do not infer a visitor entrance, accessible route, opening hours, ticket price or visit duration.",
+        "Do not show as a production recommendation until the owner/editor approves identity, facts, localization, provenance and coordinates."
+      ],
+      "target_record_key": "shiraz-arg-karim-khan-v1",
+      "record_action": "stage_existing_record_enrichment_review",
+      "target_resolution": {
+        "expected_existing_record_key": "shiraz-arg-karim-khan-v1",
+        "must_resolve_exactly_one_existing_record": true,
+        "must_not_insert_new_destination": true,
+        "must_not_mutate_published_or_canonical_record": true,
+        "if_missing_or_conflicting": "stop_and_report_identity_conflict"
+      },
+      "coordinate_apply_policy": "reference_only_never_overwrite_existing_coordinate"
+    },
+    {
+      "entity_kind": "existing_destination_enrichment_proposal",
+      "canonical_name": "باغ ارم",
+      "names_by_locale": {
+        "fa-IR": "باغ ارم",
+        "en-US": "Eram Garden",
+        "ar": "حديقة إرم"
+      },
+      "destination_type": "historic_garden",
+      "province_name": "فارس",
+      "city_name": "شیراز",
+      "geographic_scope": "within_shiraz",
+      "description_by_locale_draft": {
+        "fa-IR": "باغ ارم از باغ‌های تاریخی شیراز است. منبع Visit Iran از گسترش باغ در دوره‌های سلجوقی و زند، شکل‌گیری عمارت کنونی در دورهٔ قاجار و تنوع گیاهی آن یاد می‌کند.",
+        "en-US": "Eram Garden is a historic garden in Shiraz. Visit Iran describes its development during the Seljuq and Zand periods, the Qajar-era pavilion, and its diverse planting and garden layout.",
+        "ar": "حديقة إرم من الحدائق التاريخية في شيراز. ويذكر Visit Iran تطورها في العصرين السلجوقي والزندّي، والجناح العائد إلى العصر القاجاري، وتنوع نباتاتها وتصميمها."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "eram_location_and_history",
+          "claim_by_locale": {
+            "fa-IR": "منبع Visit Iran باغ ارم را در شیراز معرفی می‌کند و از دوره‌های سلجوقی، زند و قاجار در تاریخ آن یاد می‌کند.",
+            "en-US": "Visit Iran locates Eram Garden in Shiraz and describes its Seljuq, Zand and Qajar-era history.",
+            "ar": "يحدد Visit Iran موقع حديقة إرم في شيراز ويذكر تاريخها السلجوقي والزندّي والقاجاري."
+          },
+          "source_ids": [
+            "VISITIRAN_ERAM_EN",
+            "VISITIRAN_ERAM_FA"
+          ]
+        },
+        {
+          "claim_id": "eram_unesco_component",
+          "claim_by_locale": {
+            "fa-IR": "Visit Iran باغ ارم را در میان اجزای مجموعهٔ باغ‌های ایرانی ثبت‌شده در میراث جهانی معرفی می‌کند.",
+            "en-US": "Visit Iran identifies Eram Garden as one of the components of the inscribed Persian Gardens property.",
+            "ar": "يعرّف Visit Iran حديقة إرم باعتبارها أحد مكونات موقع الحدائق الفارسية المدرج على قائمة التراث العالمي."
+          },
+          "source_ids": [
+            "VISITIRAN_ERAM_FA"
+          ],
+          "editorial_check": "Visit Iran makes this component claim; confirm the exact component list against the full UNESCO nomination before public display."
+        }
+      ],
+      "coordinates": {
+        "latitude": 29.63583,
+        "longitude": 52.52528,
+        "coordinate_role": "representative_point",
+        "coordinate_status": "secondary_coordinate_requires_validation",
+        "source_id": "WIKI_COORD_SECONDARY",
+        "source_url": "https://en.wikipedia.org/wiki/Eram_Garden"
+      },
+      "access_profile": {
+        "access_modes": null,
+        "difficulty": null,
+        "mobility_accessibility": null,
+        "safety_restrictions": null,
+        "evidence_status": "unknown_not_researched"
+      },
+      "operational_facts": {
+        "opening_hours": null,
+        "ticket_price": null,
+        "visit_duration_minutes": null,
+        "visitor_entrance": null,
+        "parking": null,
+        "public_transport": null,
+        "evidence_status": "not_verified"
+      },
+      "provenance": {
+        "source_ids": [
+          "VISITIRAN_ERAM_EN",
+          "VISITIRAN_ERAM_FA",
+          "WIKI_COORD_SECONDARY"
+        ],
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "All three descriptions are draft paraphrases/translations and require native editorial review.",
+        "Do not infer a visitor entrance, accessible route, opening hours, ticket price or visit duration.",
+        "Do not show as a production recommendation until the owner/editor approves identity, facts, localization, provenance and coordinates."
+      ],
+      "target_record_key": "shiraz-eram-garden-v1",
+      "record_action": "stage_existing_record_enrichment_review",
+      "target_resolution": {
+        "expected_existing_record_key": "shiraz-eram-garden-v1",
+        "must_resolve_exactly_one_existing_record": true,
+        "must_not_insert_new_destination": true,
+        "must_not_mutate_published_or_canonical_record": true,
+        "if_missing_or_conflicting": "stop_and_report_identity_conflict"
+      },
+      "coordinate_apply_policy": "reference_only_never_overwrite_existing_coordinate"
+    },
+    {
+      "entity_kind": "existing_destination_enrichment_proposal",
+      "canonical_name": "نارنجستان قوام",
+      "names_by_locale": {
+        "fa-IR": "نارنجستان قوام",
+        "en-US": "Narenjestan Qavam",
+        "ar": "نارنجستان قوام"
+      },
+      "destination_type": "historic_house_garden",
+      "province_name": "فارس",
+      "city_name": "شیراز",
+      "geographic_scope": "within_shiraz",
+      "description_by_locale_draft": {
+        "fa-IR": "نارنجستان قوام مجموعه‌ای از باغ و عمارت مرتبط با خاندان قوام در شیراز و دورهٔ قاجار است. منبع Visit Iran به ایوان آینه‌کاری‌شده و تزئیناتی چون نقاشی، گچ‌بری، حجاری و کاشی‌کاری اشاره می‌کند.",
+        "en-US": "Narenjestan Qavam is a Qajar-era garden and mansion complex associated with the Qavam family in Shiraz. Visit Iran highlights its mirrored porch and decorative painting, plasterwork, carving and tilework.",
+        "ar": "نارنجستان قوام مجمّع حديقة وقصر من العصر القاجاري مرتبط بعائلة قوام في شيراز. ويبرز Visit Iran الرواق ذي المرايا والزخارف من رسم وجص ونحت وبلاط."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "narenjestan_qavam_family_qajar",
+          "claim_by_locale": {
+            "fa-IR": "مجموعهٔ نارنجستان قوام به خاندان قوام و دورهٔ قاجار مرتبط است.",
+            "en-US": "The Narenjestan Qavam complex is associated with the Qavam family and the Qajar period.",
+            "ar": "يرتبط مجمّع نارنجستان قوام بعائلة قوام والعصر القاجاري."
+          },
+          "source_ids": [
+            "VISITIRAN_NARENJESTAN"
+          ]
+        },
+        {
+          "claim_id": "narenjestan_decorative_features",
+          "claim_by_locale": {
+            "fa-IR": "آینه‌کاری، نقاشی، گچ‌بری، حجاری و کاشی‌کاری از آرایه‌های توصیف‌شدهٔ مجموعه‌اند.",
+            "en-US": "Mirrors, painting, plasterwork, carving and tilework are among the complex’s described decorative features.",
+            "ar": "المرايا والرسم والزخرفة الجصية والنحت والبلاط من العناصر الزخرفية الموصوفة في المجمّع."
+          },
+          "source_ids": [
+            "VISITIRAN_NARENJESTAN"
+          ]
+        }
+      ],
+      "coordinates": {
+        "latitude": 29.6078444,
+        "longitude": 52.5525694,
+        "coordinate_role": "representative_point",
+        "coordinate_status": "secondary_coordinate_requires_validation",
+        "source_id": "WIKI_COORD_SECONDARY",
+        "source_url": "https://en.wikipedia.org/wiki/Qavam_House"
+      },
+      "access_profile": {
+        "access_modes": null,
+        "difficulty": null,
+        "mobility_accessibility": null,
+        "safety_restrictions": null,
+        "evidence_status": "unknown_not_researched"
+      },
+      "operational_facts": {
+        "opening_hours": null,
+        "ticket_price": null,
+        "visit_duration_minutes": null,
+        "visitor_entrance": null,
+        "parking": null,
+        "public_transport": null,
+        "evidence_status": "not_verified"
+      },
+      "provenance": {
+        "source_ids": [
+          "VISITIRAN_NARENJESTAN",
+          "WIKI_COORD_SECONDARY"
+        ],
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "All three descriptions are draft paraphrases/translations and require native editorial review.",
+        "Do not infer a visitor entrance, accessible route, opening hours, ticket price or visit duration.",
+        "Do not show as a production recommendation until the owner/editor approves identity, facts, localization, provenance and coordinates."
+      ],
+      "target_record_key": "shiraz-narenjestan-qavam-v1",
+      "record_action": "stage_existing_record_enrichment_review",
+      "target_resolution": {
+        "expected_existing_record_key": "shiraz-narenjestan-qavam-v1",
+        "must_resolve_exactly_one_existing_record": true,
+        "must_not_insert_new_destination": true,
+        "must_not_mutate_published_or_canonical_record": true,
+        "if_missing_or_conflicting": "stop_and_report_identity_conflict"
+      },
+      "coordinate_apply_policy": "reference_only_never_overwrite_existing_coordinate"
+    },
+    {
+      "entity_kind": "existing_destination_enrichment_proposal",
+      "canonical_name": "مسجد نصیرالملک",
+      "names_by_locale": {
+        "fa-IR": "مسجد نصیرالملک",
+        "en-US": "Nasir al-Mulk Mosque",
+        "ar": "مسجد نصير الملك"
+      },
+      "destination_type": "historic_mosque",
+      "province_name": "فارس",
+      "city_name": "شیراز",
+      "geographic_scope": "within_shiraz",
+      "description_by_locale_draft": {
+        "fa-IR": "مسجد نصیرالملک از بناهای دورهٔ قاجار در شیراز است. شبستان غربی آن به پنجره‌های شیشه‌رنگی شناخته می‌شود که نور رنگی را به فضای داخلی می‌آورند.",
+        "en-US": "Nasir al-Mulk Mosque is a Qajar-era monument in Shiraz. Its western prayer hall is known for colored-glass windows that cast colored light into the interior.",
+        "ar": "مسجد نصير الملك أثر من العصر القاجاري في شيراز. ويشتهر مصلى المسجد الغربي بنوافذ الزجاج الملون التي تُدخل الضوء الملون إلى الداخل."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "nasir_qajar_mosque",
+          "claim_by_locale": {
+            "fa-IR": "مسجد نصیرالملک بنایی متعلق به دورهٔ قاجار در شیراز است.",
+            "en-US": "Nasir al-Mulk Mosque is a Qajar-period monument in Shiraz.",
+            "ar": "مسجد نصير الملك أثر من العصر القاجاري في شيراز."
+          },
+          "source_ids": [
+            "VISITIRAN_NASIR_EN",
+            "VISITIRAN_NASIR_FA"
+          ]
+        },
+        {
+          "claim_id": "nasir_colored_glass",
+          "claim_by_locale": {
+            "fa-IR": "پنجره‌های شیشه‌رنگی شبستان غربی از ویژگی‌های شاخص توصیف‌شدهٔ مسجد هستند.",
+            "en-US": "The colored-glass windows of the western prayer hall are a distinctive described feature.",
+            "ar": "تُعد نوافذ الزجاج الملون في المصلى الغربي من السمات البارزة الموصوفة للمسجد."
+          },
+          "source_ids": [
+            "VISITIRAN_NASIR_EN"
+          ]
+        }
+      ],
+      "coordinates": {
+        "latitude": 29.60861,
+        "longitude": 52.54833,
+        "coordinate_role": "representative_point",
+        "coordinate_status": "secondary_coordinate_requires_validation",
+        "source_id": "WIKI_COORD_SECONDARY",
+        "source_url": "https://en.wikipedia.org/wiki/Nasir-ol-Molk_Mosque"
+      },
+      "access_profile": {
+        "access_modes": null,
+        "difficulty": null,
+        "mobility_accessibility": null,
+        "safety_restrictions": null,
+        "evidence_status": "unknown_not_researched"
+      },
+      "operational_facts": {
+        "opening_hours": null,
+        "ticket_price": null,
+        "visit_duration_minutes": null,
+        "visitor_entrance": null,
+        "parking": null,
+        "public_transport": null,
+        "evidence_status": "not_verified"
+      },
+      "provenance": {
+        "source_ids": [
+          "VISITIRAN_NASIR_EN",
+          "VISITIRAN_NASIR_FA",
+          "WIKI_COORD_SECONDARY"
+        ],
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "All three descriptions are draft paraphrases/translations and require native editorial review.",
+        "Do not infer a visitor entrance, accessible route, opening hours, ticket price or visit duration.",
+        "Do not show as a production recommendation until the owner/editor approves identity, facts, localization, provenance and coordinates."
+      ],
+      "target_record_key": "shiraz-nasir-ol-molk-v1",
+      "record_action": "stage_existing_record_enrichment_review",
+      "target_resolution": {
+        "expected_existing_record_key": "shiraz-nasir-ol-molk-v1",
+        "must_resolve_exactly_one_existing_record": true,
+        "must_not_insert_new_destination": true,
+        "must_not_mutate_published_or_canonical_record": true,
+        "if_missing_or_conflicting": "stop_and_report_identity_conflict"
+      },
+      "coordinate_apply_policy": "reference_only_never_overwrite_existing_coordinate"
+    },
+    {
+      "entity_kind": "existing_destination_enrichment_proposal",
+      "canonical_name": "حمام وکیل",
+      "names_by_locale": {
+        "fa-IR": "حمام وکیل",
+        "en-US": "Vakil Historic Bath",
+        "ar": "حمام وكيل التاريخي"
+      },
+      "destination_type": "historic_bathhouse",
+      "province_name": "فارس",
+      "city_name": "شیراز",
+      "geographic_scope": "within_shiraz",
+      "description_by_locale_draft": {
+        "fa-IR": "حمام وکیل از بناهای دورهٔ زندیه در مجموعهٔ وکیل شیراز است و به فرمان کریم‌خان ساخته شد. بخش‌هایی مانند رختکن هشت‌ضلعی، گرمخانه و خزینه در توصیف منابع تاریخی آن آمده‌اند.",
+        "en-US": "Vakil Historic Bath is a Zand-period monument in Shiraz’s Vakil complex, commissioned by Karim Khan. Historical descriptions identify areas including an octagonal dressing hall, hot room and water tank.",
+        "ar": "حمام وكيل أثر من العصر الزندي ضمن مجمّع وكيل في شيراز، شُيّد بأمر كريم خان. وتذكر الأوصاف التاريخية أقساماً منها قاعة تبديل الملابس المثمنة والغرفة الساخنة والخزان."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "vakil_bath_zand",
+          "claim_by_locale": {
+            "fa-IR": "حمام وکیل از بناهای دورهٔ زندیه و به فرمان کریم‌خان ساخته شد.",
+            "en-US": "Vakil Bath is a Zand-period monument commissioned by Karim Khan.",
+            "ar": "حمام وكيل أثر من العصر الزندي شُيّد بأمر كريم خان."
+          },
+          "source_ids": [
+            "VISITIRAN_VAKIL_BATH",
+            "IRANICA_VAKIL_BATH"
+          ]
+        },
+        {
+          "claim_id": "vakil_bath_architecture",
+          "claim_by_locale": {
+            "fa-IR": "شبستان/رختکن هشت‌ضلعی با گنبد و نورگیر در توصیف ایرانیکا آمده است.",
+            "en-US": "Iranica describes an octagonal dressing hall beneath a dome with a skylight.",
+            "ar": "تصف إيرانكا قاعة تبديل ملابس مثمنة تحت قبة ذات فتحة إنارة."
+          },
+          "source_ids": [
+            "IRANICA_VAKIL_BATH"
+          ]
+        }
+      ],
+      "coordinates": {
+        "latitude": 29.61477,
+        "longitude": 52.54512,
+        "coordinate_role": "representative_point",
+        "coordinate_status": "secondary_coordinate_requires_validation",
+        "source_id": "WIKI_COORD_SECONDARY",
+        "source_url": "https://en.wikipedia.org/wiki/Vakil_Bathhouse"
+      },
+      "access_profile": {
+        "access_modes": null,
+        "difficulty": null,
+        "mobility_accessibility": null,
+        "safety_restrictions": null,
+        "evidence_status": "unknown_not_researched"
+      },
+      "operational_facts": {
+        "opening_hours": null,
+        "ticket_price": null,
+        "visit_duration_minutes": null,
+        "visitor_entrance": null,
+        "parking": null,
+        "public_transport": null,
+        "evidence_status": "not_verified"
+      },
+      "provenance": {
+        "source_ids": [
+          "IRANICA_VAKIL_BATH",
+          "VISITIRAN_VAKIL_BATH",
+          "WIKI_COORD_SECONDARY"
+        ],
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "All three descriptions are draft paraphrases/translations and require native editorial review.",
+        "Do not infer a visitor entrance, accessible route, opening hours, ticket price or visit duration.",
+        "Do not show as a production recommendation until the owner/editor approves identity, facts, localization, provenance and coordinates."
+      ],
+      "target_record_key": "shiraz-vakil-bathhouse-v1",
+      "record_action": "stage_existing_record_enrichment_review",
+      "target_resolution": {
+        "expected_existing_record_key": "shiraz-vakil-bathhouse-v1",
+        "must_resolve_exactly_one_existing_record": true,
+        "must_not_insert_new_destination": true,
+        "must_not_mutate_published_or_canonical_record": true,
+        "if_missing_or_conflicting": "stop_and_report_identity_conflict"
+      },
+      "coordinate_apply_policy": "reference_only_never_overwrite_existing_coordinate"
+    },
+    {
+      "entity_kind": "existing_destination_enrichment_proposal",
+      "canonical_name": "بازار وکیل",
+      "names_by_locale": {
+        "fa-IR": "بازار وکیل",
+        "en-US": "Vakil Bazaar",
+        "ar": "سوق وكيل"
+      },
+      "destination_type": "historic_bazaar",
+      "province_name": "فارس",
+      "city_name": "شیراز",
+      "geographic_scope": "within_shiraz",
+      "description_by_locale_draft": {
+        "fa-IR": "بازار وکیل بخشی از مجموعهٔ وکیل در مرکز شیراز است که با دورهٔ زندیه و کریم‌خان زند پیوند دارد. راسته‌های تجاری، گذرهای سرپوشیده و کاروانسراهای پیرامونی از اجزای توصیف‌شدهٔ این مجموعه‌اند.",
+        "en-US": "Vakil Bazaar is part of the Vakil complex in central Shiraz and is associated with the Zand period and Karim Khan. Its covered passages, commercial lanes and nearby caravanserais are described by Visit Iran.",
+        "ar": "سوق وكيل جزء من مجمّع وكيل في وسط شيراز ويرتبط بالعصر الزندي وكريم خان. ويصف Visit Iran ممراته المسقوفة وأسواقه التجارية والخانات القريبة منه."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "vakil_bazaar_complex",
+          "claim_by_locale": {
+            "fa-IR": "بازار وکیل بخشی از مجموعهٔ وکیل در مرکز شیراز است.",
+            "en-US": "Vakil Bazaar forms part of the Vakil complex in central Shiraz.",
+            "ar": "يشكل سوق وكيل جزءاً من مجمّع وكيل في وسط شيراز."
+          },
+          "source_ids": [
+            "VISITIRAN_VAKIL_BAZAAR",
+            "IRANICA_SHIRAZ"
+          ]
+        },
+        {
+          "claim_id": "vakil_bazaar_zand",
+          "claim_by_locale": {
+            "fa-IR": "منبع Visit Iran ساخت بازار را در دورهٔ کریم‌خان و طی سال‌های ۱۷۵۸ تا ۱۷۷۷ گزارش می‌کند.",
+            "en-US": "Visit Iran dates construction of the bazaar to Karim Khan’s period, 1758–1777.",
+            "ar": "يؤرخ Visit Iran بناء السوق إلى عهد كريم خان، بين 1758 و1777."
+          },
+          "source_ids": [
+            "VISITIRAN_VAKIL_BAZAAR"
+          ]
+        }
+      ],
+      "coordinates": {
+        "latitude": 29.6149806,
+        "longitude": 52.5467972,
+        "coordinate_role": "representative_point",
+        "coordinate_status": "secondary_coordinate_requires_validation",
+        "source_id": "WIKI_COORD_SECONDARY",
+        "source_url": "https://en.wikipedia.org/wiki/Vakil_Bazaar"
+      },
+      "access_profile": {
+        "access_modes": null,
+        "difficulty": null,
+        "mobility_accessibility": null,
+        "safety_restrictions": null,
+        "evidence_status": "unknown_not_researched"
+      },
+      "operational_facts": {
+        "opening_hours": null,
+        "ticket_price": null,
+        "visit_duration_minutes": null,
+        "visitor_entrance": null,
+        "parking": null,
+        "public_transport": null,
+        "evidence_status": "not_verified"
+      },
+      "provenance": {
+        "source_ids": [
+          "IRANICA_SHIRAZ",
+          "VISITIRAN_VAKIL_BAZAAR",
+          "WIKI_COORD_SECONDARY"
+        ],
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "All three descriptions are draft paraphrases/translations and require native editorial review.",
+        "Do not infer a visitor entrance, accessible route, opening hours, ticket price or visit duration.",
+        "Do not show as a production recommendation until the owner/editor approves identity, facts, localization, provenance and coordinates."
+      ],
+      "target_record_key": "shiraz-vakil-bazaar-v1",
+      "record_action": "stage_existing_record_enrichment_review",
+      "target_resolution": {
+        "expected_existing_record_key": "shiraz-vakil-bazaar-v1",
+        "must_resolve_exactly_one_existing_record": true,
+        "must_not_insert_new_destination": true,
+        "must_not_mutate_published_or_canonical_record": true,
+        "if_missing_or_conflicting": "stop_and_report_identity_conflict"
+      },
+      "coordinate_apply_policy": "reference_only_never_overwrite_existing_coordinate"
+    },
+    {
+      "record_key": "fars-persepolis-v1",
+      "entity_kind": "existing_destination_enrichment_proposal",
+      "canonical_name": "تخت جمشید؛ پارسه",
+      "names_by_locale": {
+        "fa-IR": "تخت جمشید؛ پارسه",
+        "en-US": "Persepolis",
+        "ar": "تخت جمشيد؛ برسبوليس"
+      },
+      "destination_type": "archaeological_site",
+      "province_name": "فارس",
+      "city_name": "مرودشت",
+      "geographic_scope": "regional_day_trip",
+      "description_by_locale_draft": {
+        "fa-IR": "تخت جمشید محوطهٔ باستانی هخامنشی در محدودهٔ مرودشت استان فارس است. یونسکو آغاز ساخت مجموعه را به فرمان داریوش یکم در سال ۵۱۸ پیش از میلاد و آن را مجموعه‌ای از بناهای کاخی بر سکویی بزرگ توصیف می‌کند.",
+        "en-US": "Persepolis is an Achaemenid archaeological complex near Marvdasht in Fars Province. UNESCO records that construction began under Darius I in 518 BCE and describes a major palatial ensemble on a vast terrace.",
+        "ar": "برسبوليس مجمّع أثري أخميني قرب مرودشت في محافظة فارس. وتسجل اليونسكو بدء البناء في عهد داريوس الأول سنة 518 قبل الميلاد، وتصف مجموعة قصور على مصطبة واسعة."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "persepolis_518_bce",
+          "claim_by_locale": {
+            "fa-IR": "ساخت تخت جمشید به فرمان داریوش یکم در سال ۵۱۸ پیش از میلاد آغاز شد.",
+            "en-US": "Construction of Persepolis began under Darius I in 518 BCE.",
+            "ar": "بدأ بناء برسبوليس في عهد داريوس الأول سنة 518 قبل الميلاد."
+          },
+          "source_ids": [
+            "UNESCO_PERSEPOLIS"
+          ]
+        },
+        {
+          "claim_id": "persepolis_marvdasht_fars",
+          "claim_by_locale": {
+            "fa-IR": "تخت جمشید در محدودهٔ مرودشت استان فارس قرار دارد.",
+            "en-US": "Persepolis is in the Marvdasht area of Fars Province.",
+            "ar": "تقع برسبوليس في منطقة مرودشت بمحافظة فارس."
+          },
+          "source_ids": [
+            "VISITIRAN_PERSEPOLIS",
+            "UNESCO_PERSEPOLIS"
+          ]
+        }
+      ],
+      "coordinates": {
+        "latitude": 29.93444,
+        "longitude": 52.89028,
+        "coordinate_role": "property_reference",
+        "coordinate_status": "official_property_coordinate_not_entrance",
+        "source_id": "UNESCO_PERSEPOLIS",
+        "source_url": "https://whc.unesco.org/en/list/114"
+      },
+      "access_profile": {
+        "access_modes": null,
+        "difficulty": null,
+        "mobility_accessibility": null,
+        "safety_restrictions": null,
+        "evidence_status": "unknown_not_researched"
+      },
+      "operational_facts": {
+        "opening_hours": null,
+        "ticket_price": null,
+        "visit_duration_minutes": null,
+        "visitor_entrance": null,
+        "parking": null,
+        "public_transport": null,
+        "evidence_status": "not_verified"
+      },
+      "provenance": {
+        "source_ids": [
+          "UNESCO_PERSEPOLIS",
+          "VISITIRAN_PERSEPOLIS"
+        ],
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "All three descriptions are draft paraphrases/translations and require native editorial review.",
+        "Do not infer a visitor entrance, accessible route, opening hours, ticket price or visit duration.",
+        "Do not show as a production recommendation until the owner/editor approves identity, facts, localization, provenance and coordinates."
+      ],
+      "target_record_key": "unesco-persepolis-v1",
+      "record_action": "stage_existing_record_enrichment_review",
+      "target_resolution": {
+        "expected_existing_record_key": "unesco-persepolis-v1",
+        "must_resolve_exactly_one_existing_record": true,
+        "must_not_insert_new_destination": true,
+        "must_not_mutate_published_or_canonical_record": true,
+        "if_missing_or_conflicting": "stop_and_report_identity_conflict"
+      },
+      "coordinate_apply_policy": "UNESCO_property_reference_only_never_overwrite_existing_coordinate"
+    },
+    {
+      "record_key": "fars-pasargadae-v1",
+      "entity_kind": "existing_destination_enrichment_proposal",
+      "canonical_name": "پاسارگاد",
+      "names_by_locale": {
+        "fa-IR": "پاسارگاد",
+        "en-US": "Pasargadae",
+        "ar": "پاسارغاد"
+      },
+      "destination_type": "archaeological_site",
+      "province_name": "فارس",
+      "city_name": null,
+      "geographic_scope": "regional_day_trip",
+      "description_by_locale_draft": {
+        "fa-IR": "پاسارگاد نخستین پایتخت دودمانی هخامنشیان بود که در سدهٔ ششم پیش از میلاد به فرمان کوروش دوم شکل گرفت. مجموعهٔ میراث جهانی شامل آرامگاه کوروش، بقایای کاخ‌ها و باغ شاهی و سکوی استحکامی تل تخت است.",
+        "en-US": "Pasargadae was the first dynastic capital of the Achaemenid Empire, founded by Cyrus II in the sixth century BCE. The World Heritage property includes the tomb of Cyrus, palace and garden remains, and the fortified terrace of Tall-e Takht.",
+        "ar": "كانت باسارغاد أول عاصمة سلالية للإمبراطورية الأخمينية، وأسسها كورش الثاني في القرن السادس قبل الميلاد. ويضم موقع التراث العالمي ضريح كورش وبقايا القصور والحدائق الملكية والمصطبة المحصنة تل تخت."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "pasargadae_first_capital",
+          "claim_by_locale": {
+            "fa-IR": "پاسارگاد نخستین پایتخت دودمانی هخامنشیان بود و به کوروش دوم نسبت داده می‌شود.",
+            "en-US": "Pasargadae was the first dynastic capital of the Achaemenids and is associated with Cyrus II.",
+            "ar": "كانت باسارغاد أول عاصمة سلالية للأخمينيين وترتبط بكورش الثاني."
+          },
+          "source_ids": [
+            "UNESCO_PASARGADAE"
+          ]
+        },
+        {
+          "claim_id": "pasargadae_landmarks",
+          "claim_by_locale": {
+            "fa-IR": "آرامگاه کوروش، مجموعهٔ کاخ و باغ و تل تخت از اجزای شاخص محوطه‌اند.",
+            "en-US": "The tomb of Cyrus, palace-and-garden ensemble and Tall-e Takht are notable parts of the site.",
+            "ar": "يُعد ضريح كورش ومجموعة القصر والحدائق وتل تخت من أبرز أجزاء الموقع."
+          },
+          "source_ids": [
+            "UNESCO_PASARGADAE"
+          ]
+        }
+      ],
+      "coordinates": {
+        "latitude": 30.193830000000002,
+        "longitude": 53.167289999999994,
+        "coordinate_role": "property_reference",
+        "coordinate_status": "official_property_coordinate_not_entrance",
+        "source_id": "UNESCO_PASARGADAE",
+        "source_url": "https://whc.unesco.org/en/list/1106",
+        "coordinate_cross_check_source_ids": [
+          "UNESCO_PASARGADAE_MAP"
+        ]
+      },
+      "access_profile": {
+        "access_modes": null,
+        "difficulty": null,
+        "mobility_accessibility": null,
+        "safety_restrictions": null,
+        "evidence_status": "unknown_not_researched"
+      },
+      "operational_facts": {
+        "opening_hours": null,
+        "ticket_price": null,
+        "visit_duration_minutes": null,
+        "visitor_entrance": null,
+        "parking": null,
+        "public_transport": null,
+        "evidence_status": "not_verified"
+      },
+      "provenance": {
+        "source_ids": [
+          "UNESCO_PASARGADAE",
+          "UNESCO_PASARGADAE_MAP"
+        ],
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "All three descriptions are draft paraphrases/translations and require native editorial review.",
+        "Do not infer a visitor entrance, accessible route, opening hours, ticket price or visit duration.",
+        "Do not show as a production recommendation until the owner/editor approves identity, facts, localization, provenance and coordinates."
+      ],
+      "target_record_key": "unesco-pasargadae-v1",
+      "record_action": "stage_existing_record_enrichment_review",
+      "target_resolution": {
+        "expected_existing_record_key": "unesco-pasargadae-v1",
+        "must_resolve_exactly_one_existing_record": true,
+        "must_not_insert_new_destination": true,
+        "must_not_mutate_published_or_canonical_record": true,
+        "if_missing_or_conflicting": "stop_and_report_identity_conflict"
+      },
+      "coordinate_apply_policy": "UNESCO_property_reference_only_never_overwrite_existing_coordinate"
+    }
+  ],
+  "non_spatial_knowledge": [
+    {
+      "record_key": "shiraz-kalam-polo-v1",
+      "entity_kind": "non_spatial_culinary_knowledge",
+      "name_by_locale": {
+        "fa-IR": "کلم‌پلو شیرازی",
+        "en-US": "Shirazi Kalam Polo",
+        "ar": "كلم پلو الشيرازي"
+      },
+      "category": "regional_dish",
+      "description_by_locale_draft": {
+        "fa-IR": "کلم‌پلو از غذاهای مرتبط با فارس و شیراز است. منابع معرفی‌شده ترکیب‌هایی از برنج، کلم یا کلم‌قمری، سبزی‌های معطر و کوفته‌های کوچک گوشت را توصیف می‌کنند؛ جزئیات دستور در منابع مختلف یکسان نیست.",
+        "en-US": "Kalam Polo is associated with Fars and Shiraz. The cited profiles describe versions combining rice, cabbage or kohlrabi, aromatic herbs and small meatballs; recipe details vary between sources.",
+        "ar": "يرتبط كلم پلو بمحافظة فارس وشيراز. وتصف المصادر المذكورة نسخاً تجمع الأرز والملفوف أو الكولرابي والأعشاب العطرية وكرات اللحم الصغيرة؛ وتختلف تفاصيل الوصفات بين المصادر."
+      },
+      "claims": [
+        {
+          "claim_id": "kalam_polo_fars_association",
+          "text_by_locale": {
+            "fa-IR": "منابع Visit Iran و ICRO کلم‌پلو را غذایی مرتبط با شیراز/فارس معرفی می‌کنند.",
+            "en-US": "Visit Iran and ICRO describe Kalam Polo as associated with Shiraz/Fars.",
+            "ar": "يصف Visit Iran وICRO كلم پلو بأنه مرتبط بشيراز وفارس."
+          },
+          "source_ids": [
+            "VISITIRAN_KALAM_POLO",
+            "ICRO_KALAM_POLO"
+          ]
+        },
+        {
+          "claim_id": "kalam_polo_ingredients_variation",
+          "text_by_locale": {
+            "fa-IR": "منابع دربارهٔ نوع کلم و ترکیب سبزی‌ها تفاوت دارند؛ این تفاوت نباید به یک دستور واحد تبدیل شود.",
+            "en-US": "Sources differ on the cabbage type and herb mix; they should not be collapsed into one definitive recipe.",
+            "ar": "تختلف المصادر في نوع الملفوف ومزيج الأعشاب؛ ولا ينبغي دمجها في وصفة واحدة قطعية."
+          },
+          "source_ids": [
+            "VISITIRAN_KALAM_POLO",
+            "ICRO_KALAM_POLO"
+          ]
+        }
+      ],
+      "dietary_and_allergen_data": null,
+      "venue_ids": [],
+      "provenance": {
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "Not a place or restaurant. Do not assign coordinates.",
+        "Recipe variations are source-dependent. No allergen or halal/vegetarian guarantee."
+      ],
+      "record_action": "stage_existing_record_enrichment_review"
+    },
+    {
+      "record_key": "shiraz-do-piazeh-aloo-v1",
+      "entity_kind": "non_spatial_culinary_knowledge",
+      "name_by_locale": {
+        "fa-IR": "دوپیازه‌آلو",
+        "en-US": "Do Piazeh Aloo",
+        "ar": "دو بيازه آلو"
+      },
+      "category": "regional_dish",
+      "description_by_locale_draft": {
+        "fa-IR": "دوپیازه‌آلو در فهرست غذاهای محلی فارس آمده و Visit Iran آن را در کنار غذاهای قابل تجربه در محدودهٔ بازار وکیل نیز نام می‌برد. نام انگلیسی منبع آن را با سیب‌زمینی و پیاز توضیح می‌دهد؛ این توصیف، دستور پخت کامل یا استاندارد نیست.",
+        "en-US": "Do Piazeh Aloo appears in Visit Iran’s list of local Fars foods and is also mentioned among dishes available around Vakil Bazaar. The source glosses the name as potatoes and onions; this is not a complete or standardized recipe.",
+        "ar": "يَرِد دو بيازه آلو في قائمة أطعمة فارس المحلية لدى Visit Iran، كما يُذكر ضمن أطباق يمكن تجربتها قرب سوق وكيل. ويشرح المصدر الاسم بالبطاطا والبصل؛ وهذا ليس وصفة كاملة أو موحدة."
+      },
+      "claims": [
+        {
+          "claim_id": "do_piazeh_fars_food",
+          "text_by_locale": {
+            "fa-IR": "دوپیازه‌آلو در فهرست غذاهای محلی فارس و در معرفی خوراک‌های نزدیک بازار وکیل ذکر شده است.",
+            "en-US": "Do Piazeh Aloo is listed among Fars local foods and dishes mentioned near Vakil Bazaar.",
+            "ar": "يُدرج دو بيازه آلو ضمن أطعمة فارس المحلية والأطباق المذكورة قرب سوق وكيل."
+          },
+          "source_ids": [
+            "VISITIRAN_FARS",
+            "VISITIRAN_VAKIL_BAZAAR_FOOD"
+          ]
+        }
+      ],
+      "dietary_and_allergen_data": null,
+      "venue_ids": [],
+      "provenance": {
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "No recipe, ingredients beyond the source name gloss, serving venue or availability is asserted.",
+        "Not a place or restaurant; no coordinates."
+      ],
+      "record_action": "stage_existing_record_enrichment_review"
+    },
+    {
+      "record_key": "shiraz-faloodeh-v1",
+      "entity_kind": "non_spatial_culinary_knowledge",
+      "name_by_locale": {
+        "fa-IR": "فالودهٔ شیرازی",
+        "en-US": "Shirazi Faloodeh",
+        "ar": "فالوده شيرازي"
+      },
+      "category": "dessert",
+      "description_by_locale_draft": {
+        "fa-IR": "فالوده از دسرهای شناخته‌شدهٔ مرتبط با شیراز است. Visit Iran در معرفی بازار وکیل، سرو آن با آب‌لیمو و شربت آلبالو را پیشنهاد می‌کند؛ این اشاره به معنی تأیید فروشنده یا موجودی فعلی نیست.",
+        "en-US": "Faloodeh is a well-known dessert associated with Shiraz. Visit Iran suggests trying it with lime juice and sour-cherry syrup in its Vakil Bazaar guide; this does not confirm a particular vendor or current availability.",
+        "ar": "الفالوده من الحلويات المعروفة المرتبطة بشيراز. ويقترح Visit Iran تقديمها مع عصير الليمون وشراب الكرز الحامض في دليل سوق وكيل؛ ولا يؤكد ذلك بائعاً بعينه أو توافراً حالياً."
+      },
+      "claims": [
+        {
+          "claim_id": "faloodeh_shiraz_dessert",
+          "text_by_locale": {
+            "fa-IR": "Visit Iran فالوده را از دسرهای مشهور شیراز معرفی می‌کند.",
+            "en-US": "Visit Iran identifies Faloodeh as a famous Shiraz dessert.",
+            "ar": "يعرّف Visit Iran الفالوده بأنها حلوى مشهورة في شيراز."
+          },
+          "source_ids": [
+            "VISITIRAN_FARS",
+            "VISITIRAN_VAKIL_BAZAAR_FOOD"
+          ]
+        },
+        {
+          "claim_id": "faloodeh_serving_suggestion",
+          "text_by_locale": {
+            "fa-IR": "منبع برای سرو فالوده، آب‌لیمو و شربت آلبالو را پیشنهاد می‌کند.",
+            "en-US": "The source suggests lime juice and sour-cherry syrup as accompaniments.",
+            "ar": "يقترح المصدر عصير الليمون وشراب الكرز الحامض كمرافقين."
+          },
+          "source_ids": [
+            "VISITIRAN_VAKIL_BAZAAR_FOOD"
+          ]
+        }
+      ],
+      "dietary_and_allergen_data": null,
+      "venue_ids": [],
+      "provenance": {
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "No vendor, price, current availability, recipe or dietary claim.",
+        "Not a place; no coordinates."
+      ],
+      "record_action": "stage_new_non_spatial_candidate_review",
+      "duplicate_check": {
+        "match_by": [
+          "normalized_locale_names",
+          "culinary_category"
+        ],
+        "must_resolve_no_existing_duplicate_before_insert": true,
+        "if_match_found": "stage_as_existing_record_enrichment_instead"
+      }
+    },
+    {
+      "record_key": "fars-aush-sabzi-v1",
+      "entity_kind": "non_spatial_culinary_knowledge",
+      "name_by_locale": {
+        "fa-IR": "آش سبزی شیرازی",
+        "en-US": "Shirazi Aush-e Sabzi",
+        "ar": "آش سبزي الشيرازي"
+      },
+      "category": "regional_dish",
+      "description_by_locale_draft": {
+        "fa-IR": "Visit Iran آش سبزی را از صبحانه‌های محبوب شیراز معرفی می‌کند. منبع نام غذا و پیوند آن با شهر را پشتیبانی می‌کند، اما ترکیب مواد و دستور مشخصی در این رکورد ادعا نمی‌شود.",
+        "en-US": "Visit Iran describes Aush-e Sabzi as a popular breakfast in Shiraz. The cited source supports the dish name and its association with the city, but this record does not assert a specific ingredient list or recipe.",
+        "ar": "يصف Visit Iran آش سبزي بأنه من وجبات الإفطار الشائعة في شيراز. ويدعم المصدر اسم الطبق وارتباطه بالمدينة، لكن هذا السجل لا يحدد مكونات أو وصفة بعينها."
+      },
+      "claims": [
+        {
+          "claim_id": "aush_sabzi_shiraz_breakfast",
+          "text_by_locale": {
+            "fa-IR": "آش سبزی از صبحانه‌های محبوب شیراز معرفی شده است.",
+            "en-US": "Aush-e Sabzi is described as a popular Shiraz breakfast.",
+            "ar": "يوصف آش سبزي بأنه من وجبات الإفطار الشائعة في شيراز."
+          },
+          "source_ids": [
+            "VISITIRAN_FARS"
+          ]
+        }
+      ],
+      "dietary_and_allergen_data": null,
+      "venue_ids": [],
+      "provenance": {
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "No ingredient, nutrition, allergen or dietary claims without a separate source.",
+        "Not a place; no coordinates."
+      ],
+      "record_action": "stage_new_non_spatial_candidate_review",
+      "duplicate_check": {
+        "match_by": [
+          "normalized_locale_names",
+          "culinary_category"
+        ],
+        "must_resolve_no_existing_duplicate_before_insert": true,
+        "if_match_found": "stage_as_existing_record_enrichment_instead"
+      }
+    },
+    {
+      "record_key": "shiraz-masghati-v1",
+      "entity_kind": "non_spatial_culinary_knowledge",
+      "name_by_locale": {
+        "fa-IR": "مسقطی شیراز",
+        "en-US": "Shirazi Masghati",
+        "ar": "مسقطي شيرازي"
+      },
+      "category": "sweet_or_souvenir",
+      "description_by_locale_draft": {
+        "fa-IR": "Visit Iran مسقطی را در میان سوغات و خوراکی‌های مرتبط با بازار وکیل شیراز نام می‌برد. این منبع برای معرفی آن به‌عنوان سوغات مناسب است، اما نوع دقیق، مواد اولیه، سازنده یا فروشگاه مشخصی را تأیید نمی‌کند.",
+        "en-US": "Visit Iran lists Masghati among sweets and souvenirs associated with Shiraz’s Vakil Bazaar. The source supports its mention as a souvenir, but not a particular variety, ingredient list, maker or shop.",
+        "ar": "يذكر Visit Iran المسقطي ضمن الحلويات والهدايا المرتبطة بسوق وكيل في شيراز. ويدعم المصدر ذكره كتذكار، لكنه لا يؤكد نوعاً محدداً أو مكونات أو صانعاً أو متجراً بعينه."
+      },
+      "claims": [
+        {
+          "claim_id": "masghati_shiraz_souvenir",
+          "text_by_locale": {
+            "fa-IR": "مسقطی در معرفی سوغات بازار وکیل ذکر شده است.",
+            "en-US": "Masghati is mentioned among souvenirs in the Vakil Bazaar guide.",
+            "ar": "يُذكر المسقطي ضمن الهدايا في دليل سوق وكيل."
+          },
+          "source_ids": [
+            "VISITIRAN_VAKIL_BAZAAR_FOOD"
+          ]
+        }
+      ],
+      "dietary_and_allergen_data": null,
+      "venue_ids": [],
+      "provenance": {
+        "record_origin": "verified_external",
+        "verification_status": "pending",
+        "is_synthetic": false,
+        "status": "needs_review",
+        "data_confidence": 0.0,
+        "publishable": false
+      },
+      "editorial_notes": [
+        "Do not infer ingredients, allergens, shelf life or dietary suitability.",
+        "Not a place; no coordinates."
+      ],
+      "record_action": "stage_existing_record_enrichment_review"
+    }
+  ],
+  "regional_context_claims": [
+    {
+      "claim_id": "unesco_persian_gardens_serial_property",
+      "claim_by_locale": {
+        "fa-IR": "یونسکو مجموعه‌ای زنجیره‌ای از باغ‌های ایرانی را به‌عنوان میراث جهانی ثبت کرده است؛ این گزاره به‌تنهایی عضویت هر باغ مشخص را ثابت نمی‌کند.",
+        "en-US": "UNESCO inscribes a serial property of Persian gardens; this general statement alone does not establish that any particular garden is a component.",
+        "ar": "تدرج اليونسكو مجموعة متسلسلة من الحدائق الفارسية على قائمة التراث العالمي؛ ولا تثبت هذه العبارة العامة وحدها أن حديقة بعينها من مكوناتها."
+      },
+      "source_ids": [
+        "UNESCO_PERSIAN_GARDENS"
+      ],
+      "editorial_note": "Do not attach this general claim to Eram or any other specific garden until the official component list is checked."
+    }
+  ],
+  "source_register": [
+    {
+      "source_id": "WIKI_COORD_SECONDARY",
+      "title": "Wikipedia coordinates cited by the earlier candidate dataset",
+      "url": "https://en.wikipedia.org/wiki/Shiraz",
+      "publisher": "Wikipedia contributors",
+      "source_type": "secondary_geospatial_discovery",
+      "supports": [
+        "representative-point coordinates for Shiraz and selected in-city attractions only"
+      ],
+      "retrieved_at": "2026-11-08",
+      "license": "CC BY-SA 4.0",
+      "notes": "Coordinate provenance only; page-specific URLs are stored per entity. Not an authoritative geospatial survey, not an entrance, not suitable as routing/parking access. Requires independent validation."
+    },
+    {
+      "source_id": "VISITIRAN_FARS",
+      "title": "Fars Province — Visit Iran",
+      "url": "https://visitiran.ir/province/fars-province",
+      "publisher": "Visit Iran portal",
+      "source_type": "official_tourism_portal",
+      "supports": [
+        "Shiraz is the capital of Fars",
+        "Fars destinations",
+        "local food list: Kalam Polo, Do Piaze Aloo, Aush-e Sabzi, Faloodeh and Shirazi salad"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Use for regional context and for the fact that dishes are introduced as Fars/Shiraz foods. Does not establish availability at a particular restaurant."
+    },
+    {
+      "source_id": "VISITIRAN_ERAM_EN",
+      "title": "Eram Garden — Visit Iran (English)",
+      "url": "https://visitiran.ir/attraction/eram-garden",
+      "publisher": "Visit Iran portal",
+      "source_type": "tourism_attraction_profile",
+      "supports": [
+        "north of Shiraz",
+        "development in Seljuq and Zand periods",
+        "Qajar pavilion associated with Nasir ol-Molk",
+        "garden layout and plants",
+        "historical landscape"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Paraphrased. The page gives historical/landscape description, not a verified current timetable or ticket price."
+    },
+    {
+      "source_id": "VISITIRAN_ERAM_FA",
+      "title": "باغ ارم — Visit Iran (Persian)",
+      "url": "https://visitiran.ir/fa/attraction/%D8%A8%D8%A7%D8%BA-%D8%A7%D8%B1%D9%85",
+      "publisher": "Visit Iran portal",
+      "source_type": "tourism_attraction_profile",
+      "supports": [
+        "Qajar-period present form",
+        "botanical research garden",
+        "description of vegetation and pavilion",
+        "World Heritage component claim as stated by Visit Iran"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Cross-language corroboration. For inscription claims, cite UNESCO component documentation separately when necessary."
+    },
+    {
+      "source_id": "UNESCO_PERSIAN_GARDENS",
+      "title": "The Persian Garden — UNESCO World Heritage Centre",
+      "url": "https://whc.unesco.org/en/list/1372",
+      "publisher": "UNESCO World Heritage Centre",
+      "source_type": "world_heritage_primary_record",
+      "supports": [
+        "inscribed serial property of nine Persian gardens",
+        "general garden-design attributes"
+      ],
+      "retrieved_at": "2026-11-08",
+      "license": "CC-BY-SA IGO 3.0",
+      "notes": "The UNESCO page describes the serial property. The project must retain exact component-level attribution; do not infer that every historic garden in Shiraz is inscribed."
+    },
+    {
+      "source_id": "VISITIRAN_HAFEZ",
+      "title": "Hafezieh — Visit Iran",
+      "url": "https://visitiran.ir/en/attraction/hafezieh",
+      "publisher": "Visit Iran portal",
+      "source_type": "tourism_attraction_profile",
+      "supports": [
+        "mausoleum of Hafez in Shiraz",
+        "initial dome over grave in 1452 CE",
+        "later repairs and additions",
+        "present architectural work and courtyards"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Paraphrased. No current hours, ticket price, entrance point or access profile inferred."
+    },
+    {
+      "source_id": "IRANICA_HAFEZ",
+      "title": "HAFEZ — Encyclopaedia Iranica",
+      "url": "https://www.iranicaonline.org/articles/hafez-xiii/",
+      "publisher": "Encyclopaedia Iranica",
+      "source_type": "scholarly_reference",
+      "supports": [
+        "Hafez historical biography and location of tomb/Hafezieh"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Scholarly historical reference; use alongside Visit Iran for the visitor-place description."
+    },
+    {
+      "source_id": "VISITIRAN_SAADI",
+      "title": "Tomb of Saadi — Visit Iran",
+      "url": "https://visitiran.ir/index.php/attraction/tomb-saadi",
+      "publisher": "Visit Iran portal",
+      "source_type": "tourism_attraction_profile",
+      "supports": [
+        "Saadi tomb in Shiraz near Delgosha Garden",
+        "Saadi literary works and present building history",
+        "architect and completion of present building in 1951 as described by source"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Paraphrased; no current opening hours or price inferred."
+    },
+    {
+      "source_id": "IRANICA_SHIRAZ",
+      "title": "SHIRAZ i. HISTORY TO 1940 — Encyclopaedia Iranica",
+      "url": "https://www.iranicaonline.org/articles/shiraz-i-history-to-1940/",
+      "publisher": "Encyclopaedia Iranica",
+      "source_type": "scholarly_reference",
+      "supports": [
+        "historic place of Hafez and Saadi tombs",
+        "Zand-era Wakili monuments and urban history"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Historical context only; not an operational visitor source."
+    },
+    {
+      "source_id": "IRANICA_ARG",
+      "title": "ARG-E KARĪM KHAN — Encyclopaedia Iranica",
+      "url": "https://www.iranicaonline.org/articles/arg-e-karim-khan/",
+      "publisher": "Encyclopaedia Iranica",
+      "source_type": "scholarly_reference",
+      "supports": [
+        "citadel built by Karim Khan at Shiraz",
+        "layout and corner towers",
+        "historical use as Zand residence and later administrative uses"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Historical/architectural paraphrase; article updated 2017."
+    },
+    {
+      "source_id": "VISITIRAN_NARENJESTAN",
+      "title": "Narenjestan Qavam — Visit Iran",
+      "url": "https://visitiran.ir/en/attraction/narenjestan-qavam",
+      "publisher": "Visit Iran portal",
+      "source_type": "tourism_attraction_profile",
+      "supports": [
+        "Qavam family and Qajar-era complex",
+        "garden/mansion arrangement",
+        "mirror-work, painting, plaster, carving and tiling"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Paraphrased; current operating details are not included."
+    },
+    {
+      "source_id": "VISITIRAN_NASIR_EN",
+      "title": "Nasir al-Mulk Mosque — Visit Iran (English)",
+      "url": "https://visitiran.ir/attraction/nasir-al-molk-mosque",
+      "publisher": "Visit Iran portal",
+      "source_type": "tourism_attraction_profile",
+      "supports": [
+        "Qajar-era mosque in Shiraz",
+        "colored glass and light in west prayer hall",
+        "architectural description and urban location"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Paraphrased; no current visiting restrictions or photography/access policy inferred."
+    },
+    {
+      "source_id": "VISITIRAN_NASIR_FA",
+      "title": "مسجد نصیرالملک — Visit Iran (Persian)",
+      "url": "https://visitiran.ir/fa/attraction/%D9%85%D8%B3%D8%AC%D8%AF-%D9%86%D8%B5%DB%8C%D8%B1%D8%A7%D9%84%D9%85%D9%84%DA%A9",
+      "publisher": "Visit Iran portal",
+      "source_type": "tourism_attraction_profile",
+      "supports": [
+        "construction period in Qajar era and local description"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Persian cross-check for terminology and construction dates."
+    },
+    {
+      "source_id": "VISITIRAN_VAKIL_BATH",
+      "title": "Vakil Historic Bath — Visit Iran",
+      "url": "https://visitiran.ir/attraction/vakil-historic-bath",
+      "publisher": "Visit Iran portal",
+      "source_type": "tourism_attraction_profile",
+      "supports": [
+        "Zand-era bath commissioned by Karim Khan",
+        "location next to Vakil Mosque and Bazaar",
+        "architectural sections and historical function"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Paraphrased. Page's historic-area measurements are not transferred until independently checked."
+    },
+    {
+      "source_id": "IRANICA_VAKIL_BATH",
+      "title": "ḤAMMĀM-E WAKĪL — Encyclopaedia Iranica",
+      "url": "https://www.iranicaonline.org/articles/ammam-e-wakil/",
+      "publisher": "Encyclopaedia Iranica",
+      "source_type": "scholarly_reference",
+      "supports": [
+        "bathhouse constructed by Karim Khan Zand after 1776",
+        "location west of Vakil Mosque",
+        "octagonal dressing hall, dome and skylight"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Historical/architectural cross-check."
+    },
+    {
+      "source_id": "VISITIRAN_VAKIL_BAZAAR",
+      "title": "Vakil Bazaar — Visit Iran (English)",
+      "url": "https://visitiran.ir/en/attraction/vakil-bazaar-0",
+      "publisher": "Visit Iran portal",
+      "source_type": "tourism_attraction_profile",
+      "supports": [
+        "central Shiraz location",
+        "part of Vakil complex",
+        "Zand-era construction date range as presented by source",
+        "market structure and commercial sections"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Page lists visitor hours, but those hours are deliberately not imported into durable factual fields because they require live re-verification."
+    },
+    {
+      "source_id": "VISITIRAN_PERSEPOLIS",
+      "title": "Persepolis — Visit Iran",
+      "url": "https://visitiran.ir/attraction/persepolis",
+      "publisher": "Visit Iran portal",
+      "source_type": "tourism_attraction_profile",
+      "supports": [
+        "Persepolis in Marvdasht",
+        "palatial complex, terrace and main structures"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Useful local visitor-description source. Keep it distinct from Shiraz city attractions."
+    },
+    {
+      "source_id": "UNESCO_PERSEPOLIS",
+      "title": "Persepolis — UNESCO World Heritage Centre",
+      "url": "https://whc.unesco.org/en/list/114",
+      "publisher": "UNESCO World Heritage Centre",
+      "source_type": "world_heritage_primary_record",
+      "supports": [
+        "founded by Darius I in 518 BCE",
+        "Achaemenid imperial capital",
+        "terrace and palatial complex",
+        "Fars",
+        "property coordinates"
+      ],
+      "retrieved_at": "2026-11-08",
+      "license": "CC-BY-SA IGO 3.0",
+      "notes": "Official coordinates are property reference coordinates, not a visitor entrance or routing point. UNESCO description is licensed CC-BY-SA IGO 3.0; supplied text is paraphrased."
+    },
+    {
+      "source_id": "UNESCO_PASARGADAE",
+      "title": "Pasargadae — UNESCO World Heritage Centre",
+      "url": "https://whc.unesco.org/en/list/1106",
+      "publisher": "UNESCO World Heritage Centre",
+      "source_type": "world_heritage_primary_record",
+      "supports": [
+        "first Achaemenid dynastic capital",
+        "Cyrus II and 6th century BCE",
+        "tomb, palace/garden ensemble and Tall-e Takht",
+        "Fars",
+        "property coordinates"
+      ],
+      "retrieved_at": "2026-11-08",
+      "license": "CC-BY-SA IGO 3.0",
+      "notes": "Official coordinates are property reference coordinates, not a visitor entrance or routing point. Supplied text is paraphrased."
+    },
+    {
+      "source_id": "UNESCO_PASARGADAE_MAP",
+      "title": "Pasargadae — UNESCO geographical data",
+      "url": "https://whc.unesco.org/en/list/1106/maps/",
+      "publisher": "UNESCO World Heritage Centre",
+      "source_type": "official_geospatial_record",
+      "supports": [
+        "Pasargadae property reference coordinates"
+      ],
+      "retrieved_at": "2026-11-08",
+      "license": "CC-BY-SA IGO 3.0",
+      "notes": "Coordinate cross-check, not routing/entrance evidence."
+    },
+    {
+      "source_id": "VISITIRAN_KALAM_POLO",
+      "title": "Kalam Polo Shirazi — Visit Iran",
+      "url": "https://visitiran.ir/index.php/cuisine/kalam-polo-shirazi",
+      "publisher": "Visit Iran portal",
+      "source_type": "regional_cuisine_profile",
+      "supports": [
+        "Kalam Polo as a Fars/Shiraz food",
+        "rice, kohlrabi, herbs, meatballs and chickpea flour as described by source"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "Ingredients are source-specific; do not turn recipe into allergen or dietary-safety guarantees."
+    },
+    {
+      "source_id": "ICRO_KALAM_POLO",
+      "title": "Shirazi Kalam Polau — Organization for Islamic Culture and Relations",
+      "url": "https://en.icro.ir/Iranian%E2%80%93Cuisine/Shirazi-Kalam-Polau",
+      "publisher": "Public Relations Office, Organization for Islamic Culture and Relations",
+      "source_type": "cultural_institution_cuisine_profile",
+      "supports": [
+        "Kalam Polau is associated with Shiraz and Fars",
+        "one published ingredient variation"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "A second institutional description lists white cabbage, rice, herbs and minced meat; differences between recipes should be retained, not silently harmonized."
+    },
+    {
+      "source_id": "VISITIRAN_VAKIL_BAZAAR_FOOD",
+      "title": "Vakil Bazaar — Visit Iran (food and souvenirs section)",
+      "url": "https://visitiran.ir/attraction/vakil-bazaar",
+      "publisher": "Visit Iran portal",
+      "source_type": "tourism_food_context",
+      "supports": [
+        "Faloodeh and sour-cherry/lime serving suggestion",
+        "Do Piazeh Aloo and Kalam Polo mentioned as local dishes offered near bazaar",
+        "Masghati mentioned among souvenirs"
+      ],
+      "retrieved_at": "2026-11-08",
+      "notes": "This establishes mentions/context, not a verified restaurant identity, current menu or availability."
+    }
+  ],
+  "global_limitations": [
+    "No current operating hours, admission prices, booking capacity, current closure status, or visitor entrance has been verified.",
+    "No difficulty, route surface, off-road, hiking/climbing, step-free, wheelchair or mobility-access claims are supplied.",
+    "Secondary-source coordinates for Shiraz sites are representative points and require independent geospatial/editorial review before maps or routing. UNESCO coordinates for Persepolis and Pasargadae are property references, not visitor entrances.",
+    "Food entries are knowledge items, not restaurants or offers; no vendor, price, current menu, ingredients/allergens/nutrition unless an individual source claim explicitly supports it.",
+    "Persepolis and Pasargadae already exist in project data: they are enrichment targets only and must not be inserted as duplicate destination records.",
+    "Three culinary entries reuse pre-existing record keys: shiraz-kalam-polo-v1, shiraz-do-piazeh-aloo-v1 and shiraz-masghati-v1.",
+    "The package is not an owner approval of the initial geography. Fars/Shiraz is a research candidate scope because an earlier dataset package already exists.",
+    "No embedding vectors are supplied. This package does not create or replace a RAG model or RetrievalPort."
+  ]
+}

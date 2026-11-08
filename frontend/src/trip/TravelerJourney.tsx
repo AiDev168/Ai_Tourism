@@ -29,6 +29,38 @@ function choiceIds(resolution: DestinationResolution | null): string[] {
     ? [item.destination.destinationId] : []);
 }
 
+function validDayCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 365
+    ? value : null;
+}
+
+function tripDayCount(trip: TripRecord | null, extracted: TripRequirements | null): number | null {
+  return validDayCount(trip?.confirmed_requirements?.duration_days)
+    ?? validDayCount(trip?.duration_days)
+    ?? validDayCount(extracted?.durationDays.value);
+}
+
+function assignStopToDay(stops: ItineraryStop[], recommendationId: string, nextDay: number): ItineraryStop[] {
+  const moving = stops.find(stop => stop.recommendation_id === recommendationId);
+  if (!moving || moving.day_number === nextDay) return stops;
+  const previousDay = moving.day_number;
+  const next = stops.map(stop => stop.recommendation_id === recommendationId ? { ...stop, day_number: nextDay } : stop);
+  return normalizeDayOrders(next, [previousDay, nextDay]);
+}
+
+function normalizeDayOrders(stops: ItineraryStop[], days: number[]): ItineraryStop[] {
+  const next = stops.slice();
+  for (const day of new Set(days)) {
+    const ordered = next.filter(stop => stop.day_number === day).sort((a, b) => a.stop_order - b.stop_order);
+    const orderById = new Map(ordered.map((stop, index) => [stop.recommendation_id, index + 1]));
+    for (let index = 0; index < next.length; index += 1) {
+      const stop = next[index];
+      if (stop.day_number === day) next[index] = { ...stop, stop_order: orderById.get(stop.recommendation_id) ?? stop.stop_order };
+    }
+  }
+  return next;
+}
+
 export type TravelerJourneyProps = {
   locale: Locale;
   session: AuthSession | null;
@@ -53,6 +85,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const [itinerary, setItinerary] = useState<ItineraryRecord | null>(null);
   const [editableStops, setEditableStops] = useState<ItineraryStop[]>([]);
   const [dayCount, setDayCount] = useState(1);
+  const [itineraryDirty, setItineraryDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [status, setStatus] = useState('');
@@ -64,6 +97,14 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const selectedIds = choiceIds(resolution);
   const currentMessages = activeConversation?.messages.filter(message => !activeTrip || message.trip_id === activeTrip.trip_id) ?? [];
   const csrf = session?.csrf_token ?? '';
+  const requestedTripDays = tripDayCount(activeTrip, extracted);
+  const dayCountValid = Number.isInteger(dayCount) && dayCount >= 1 && dayCount <= 365
+    && requestedTripDays !== null && dayCount <= requestedTripDays;
+  const dayNumbers = Array.from({ length: dayCountValid ? dayCount : 0 }, (_, index) => index + 1);
+  const locallyUnplannedDays = dayNumbers.filter(day => !editableStops.some(stop => stop.day_number === day));
+  const displayedItineraryStatus = itineraryDirty
+    ? !dayCountValid || locallyUnplannedDays.length ? 'partial' : 'complete'
+    : itinerary?.status;
 
   const resolveNames = async (names: string[]) => {
     if (!names.length || names.some(name => !name.trim())) { setResolution(null); return; }
@@ -83,6 +124,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       setActiveTrip(null);
       setRecommendations(null);
       setItinerary(null);
+      setItineraryDirty(false);
       setResolution(null);
       return;
     }
@@ -107,6 +149,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       }
       setDestinationNames(requirements.destinations.value ? [...requirements.destinations.value] : []);
       setDurationText(requirements.durationDays.value === null ? '' : String(requirements.durationDays.value));
+      const suggestedDays = validDayCount(requirements.durationDays.value);
+      if (!activeTrip?.latest_itinerary_id && suggestedDays !== null) setDayCount(suggestedDays);
       void resolveNames(requirements.destinations.value ?? []);
       const restoring = restoringRequestRef.current === requirements.requestText;
       if (requirements.requestText === activeTrip?.original_request) setDirty(false);
@@ -115,6 +159,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         setConfirmed(false);
         setRecommendations(null);
         setItinerary(null);
+      setItineraryDirty(false);
       }
     } else if (!activeTrip) {
       setResolution(null);
@@ -149,6 +194,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         : await travelerApi.createConversation(csrf, body);
       setActiveConversation(result.conversation);
       setActiveTrip(result.trip);
+      setDayCount(tripDayCount(result.trip, requirements) ?? 1);
       setConfirmed(false);
       setDirty(false);
       setStatus(copy.saveSuccess);
@@ -183,8 +229,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       setRecommendations(latestRecs);
       if (trip.latest_itinerary_id) {
         const saved = await travelerApi.getItinerary(trip.latest_itinerary_id);
-        setItinerary(saved); setEditableStops(saved.stops.slice()); setDayCount(saved.day_count);
-      } else { setItinerary(null); setEditableStops([]); }
+        setItinerary(saved); setEditableStops(saved.stops.slice()); setDayCount(saved.day_count); setItineraryDirty(false);
+      } else { setItinerary(null); setEditableStops([]); setDayCount(tripDayCount(trip, parsed) ?? 1); setItineraryDirty(false); }
       setDirty(false);
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
@@ -235,6 +281,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         destination_ids: selectedIds,
       });
       setActiveTrip(trip); setConfirmed(true); setDirty(false); setRecommendations(null); setItinerary(null); setStatus(copy.profileSaved);
+      setItineraryDirty(false);
+      setDayCount(validDayCount(duration) ?? 1);
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
   };
@@ -253,12 +301,13 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
 
   const createItinerary = async () => {
     if (!session || !activeTrip || !recommendations || recommendations.status !== 'available' || !recommendations.items.length || !online) return;
+    if (!dayCountValid) { setError(copy.dayCountInvalid); return; }
     setBusy(true); setError(''); setStatus('');
     try {
       const saved = await travelerApi.createItinerary(csrf, activeTrip.trip_id, {
         recommendation_request_id: recommendations.recommendation_request_id, day_count: dayCount, locale,
       });
-      setItinerary(saved); setEditableStops(saved.stops.slice()); setDayCount(saved.day_count); setStatus(copy.itinerarySaved);
+      setItinerary(saved); setEditableStops(saved.stops.slice()); setDayCount(saved.day_count); setItineraryDirty(false); setStatus(copy.itinerarySaved);
       setActiveTrip(await travelerApi.getTrip(activeTrip.trip_id));
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
@@ -272,14 +321,14 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       const saved = await travelerApi.updateItinerary(csrf, itinerary.itinerary_id, {
         expected_revision: itinerary.revision,
         title_by_locale,
-        stops: editableStops.map((stop, index) => ({
+        stops: editableStops.map(stop => ({
           recommendation_id: stop.recommendation_id,
           day_number: stop.day_number,
-          stop_order: index + 1,
+          stop_order: stop.stop_order,
           notes_by_locale: stop.notes_by_locale,
         })),
       });
-      setItinerary(saved); setEditableStops(saved.stops.slice()); setStatus(copy.itinerarySaved);
+      setItinerary(saved); setEditableStops(saved.stops.slice()); setItineraryDirty(false); setStatus(copy.itinerarySaved);
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
   };
@@ -308,19 +357,30 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
 
   const appendStop = (recommendationId: string) => {
     const item = recommendations?.items.find(result => result.recommendation_id === recommendationId);
-    if (!item) return;
-    setEditableStops(stops => [...stops, {
+    if (!item || editableStops.length >= 1_000) return;
+    const day = dayNumbers.find(candidateDay => editableStops.filter(stop => stop.day_number === candidateDay).length < 50);
+    if (day === undefined) return;
+    const stopOrder = editableStops.filter(stop => stop.day_number === day).length + 1;
+    setEditableStops(stops => normalizeDayOrders([...stops, {
       recommendation_id: item.recommendation_id, destination_id: item.destination_id,
       canonical_name: item.canonical_name, localized_names: item.localized_names,
       city_name: item.city_name, province_name: item.province_name,
-      day_number: Math.min(dayCount, stops.length + 1), stop_order: stops.length + 1, notes_by_locale: {},
-    }]);
+      day_number: day, stop_order: stopOrder, notes_by_locale: {},
+    }], [day]));
+    setItineraryDirty(true);
   };
 
-  const moveStop = (index: number, delta: number) => {
-    const target = index + delta;
-    if (target < 0 || target >= editableStops.length) return;
-    setEditableStops(stops => { const next = stops.slice(); [next[index], next[target]] = [next[target], next[index]]; return next; });
+  const moveStop = (day: number, recommendationId: string, delta: number) => {
+    setEditableStops(stops => {
+      const dayStops = stops.filter(stop => stop.day_number === day).sort((a, b) => a.stop_order - b.stop_order);
+      const index = dayStops.findIndex(stop => stop.recommendation_id === recommendationId);
+      const target = index + delta;
+      if (index < 0 || target < 0 || target >= dayStops.length) return stops;
+      [dayStops[index], dayStops[target]] = [dayStops[target], dayStops[index]];
+      const order = new Map(dayStops.map((stop, position) => [stop.recommendation_id, position + 1]));
+      return stops.map(stop => stop.day_number === day ? { ...stop, stop_order: order.get(stop.recommendation_id) ?? stop.stop_order } : stop);
+    });
+    setItineraryDirty(true);
   };
 
   return (
@@ -402,7 +462,15 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
           {confirmed && <div className="recommendation-controls">
             <h3>{copy.recommendationTitle}</h3>
             <button type="button" onClick={() => void findRecommendations()} disabled={busy || !online}>{busy ? copy.checkingRecommendations : copy.findRecommendations}</button>
-            {recommendations && recommendations.status !== 'available' && <p className="empty-state" role="status">{recommendations.status === 'needs_confirmation' ? copy.recommendationClarify : copy.recommendationEmpty}</p>}
+            {recommendations && recommendations.status !== 'available' && <div className="empty-state" role="status">
+              <p>{recommendations.status === 'needs_confirmation' ? copy.recommendationClarify : copy.recommendationEmpty}</p>
+              {recommendations.status === 'needs_confirmation' && <>
+                <p>{localizeRecommendationCode(locale, recommendations.reason_code)}</p>
+                {!!recommendations.unresolved_fields.length && <ul className="unresolved-requirements">
+                  {recommendations.unresolved_fields.map(field => <li key={field}>{localizeRecommendationCode(locale, `field:${field}`)}</li>)}
+                </ul>}
+              </>}
+            </div>}
             {recommendations?.status === 'available' && recommendations.items.map(item => <article className="evidence-card" key={item.recommendation_id}>
               <h4 dir="auto">{item.localized_names[locale] ?? item.canonical_name}</h4>
               <p>{item.city_name ? `${item.city_name} · ` : ''}{item.province_name}</p>
@@ -417,9 +485,16 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             {recommendations?.status === 'available' && <div className="itinerary-start">
               <h3>{copy.itineraryTitle}</h3>
               <p>{copy.itinerarySuggestionWarning}</p>
-              <label htmlFor="journey-day-count">{copy.dayCount}</label>
-              <select id="journey-day-count" value={dayCount} onChange={event => setDayCount(Number(event.target.value))}>{[1, 2, 3].map(value => <option key={value} value={value}>{formatNumber(locale, value)}</option>)}</select>
-              {!itinerary ? <button type="button" onClick={() => void createItinerary()} disabled={busy || !online}>{copy.createItinerary}</button> : <p>{copy.itinerarySaved}</p>}
+              {!itinerary && <>
+                <label htmlFor="journey-day-count">{copy.dayCount}</label>
+                <input id="journey-day-count" type="number" min={1} max={Math.min(365, requestedTripDays ?? 365)} step={1} value={dayCount || ''}
+                  aria-describedby="journey-day-count-help" aria-invalid={!dayCountValid}
+                  onChange={event => setDayCount(event.currentTarget.value === '' ? 0 : event.currentTarget.valueAsNumber)} />
+                <p id="journey-day-count-help">{copy.dayCountHelp}</p>
+                {!dayCountValid && <p className="journey-error" role="alert">{copy.dayCountInvalid}</p>}
+                <button type="button" onClick={() => void createItinerary()} disabled={busy || !online || !dayCountValid}>{copy.createItinerary}</button>
+              </>}
+              {itinerary && <p>{copy.itinerarySaved}</p>}
             </div>}
           </div>}
         </article>
@@ -427,28 +502,52 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
 
       {itinerary && <section className="saved-itinerary" aria-labelledby="saved-itinerary-title">
         <h3 id="saved-itinerary-title">{copy.itineraryTitle}</h3>
-        <div className="saved-itinerary-stops">
-          {editableStops.map((stop, index) => <article className="saved-stop" key={`${stop.recommendation_id}-${index}`}>
-            <h4 dir="auto">{stop.localized_names?.[locale] ?? stop.canonical_name ?? stop.name ?? ''}</h4>
-            <label htmlFor={`stop-day-${index}`}>{copy.dayCount}</label>
-            <select id={`stop-day-${index}`} value={stop.day_number} onChange={event => setEditableStops(stops => stops.map((item, i) => i === index ? { ...item, day_number: Number(event.target.value) } : item))}>{Array.from({ length: dayCount }, (_, i) => i + 1).map(day => <option value={day} key={day}>{copy.day} {formatNumber(locale, day)}</option>)}</select>
-            <label htmlFor={`stop-note-${index}`}>{copy.noteLabel}</label>
-            <textarea id={`stop-note-${index}`} dir="auto" value={stop.notes_by_locale[locale] ?? ''} onChange={event => setEditableStops(stops => stops.map((item, i) => i === index ? { ...item, notes_by_locale: { ...item.notes_by_locale, [locale]: event.target.value } } : item))} />
-            <div className="stop-actions">
-              <button type="button" onClick={() => moveStop(index, -1)} disabled={index === 0}>↑</button>
-              <button type="button" onClick={() => moveStop(index, 1)} disabled={index === editableStops.length - 1}>↓</button>
-              <button type="button" onClick={() => setEditableStops(stops => stops.filter((_, i) => i !== index))}>{copy.removeStop}</button>
-            </div>
-          </article>)}
+        <p className={`itinerary-coverage itinerary-coverage-${displayedItineraryStatus ?? 'partial'}`} role="status">
+          {displayedItineraryStatus === 'complete' ? copy.itineraryComplete : copy.itineraryPartial}
+        </p>
+        <p>{copy.itineraryCoverageNote}</p>
+        <div className="saved-itinerary-days">
+          {dayNumbers.map(day => {
+            const dayStops = editableStops.filter(stop => stop.day_number === day).sort((a, b) => a.stop_order - b.stop_order);
+            return <section className="itinerary-day" key={day} aria-labelledby={`itinerary-day-${day}`}>
+              <h4 id={`itinerary-day-${day}`}>{copy.day} {formatNumber(locale, day)}</h4>
+              {(dayStops.length === 0 || (!itineraryDirty && itinerary.unplanned_days.includes(day))) && <p className="unplanned-day" role="status">{copy.unplannedDay}</p>}
+              <div className="saved-itinerary-stops">
+                {dayStops.map((stop, index) => <article className="saved-stop" key={stop.recommendation_id}>
+                  <h5 dir="auto">{stop.localized_names?.[locale] ?? stop.canonical_name ?? stop.name ?? ''}</h5>
+                  <label htmlFor={`stop-day-${stop.recommendation_id}`}>{copy.dayCount}</label>
+                  <select id={`stop-day-${stop.recommendation_id}`} value={stop.day_number} onChange={event => {
+                    const newDay = Number(event.target.value);
+                    setEditableStops(stops => assignStopToDay(stops, stop.recommendation_id, newDay));
+                    setItineraryDirty(true);
+                  }}>{dayNumbers.map(optionDay => <option value={optionDay} key={optionDay} disabled={optionDay !== stop.day_number && editableStops.filter(other => other.day_number === optionDay).length >= 50}>{copy.day} {formatNumber(locale, optionDay)}</option>)}</select>
+                  <label htmlFor={`stop-note-${stop.recommendation_id}`}>{copy.noteLabel}</label>
+                  <textarea id={`stop-note-${stop.recommendation_id}`} dir="auto" value={stop.notes_by_locale[locale] ?? ''} onChange={event => {
+                    setEditableStops(stops => stops.map(item => item.recommendation_id === stop.recommendation_id
+                      ? { ...item, notes_by_locale: { ...item.notes_by_locale, [locale]: event.target.value } } : item));
+                    setItineraryDirty(true);
+                  }} />
+                  <div className="stop-actions">
+                    <button type="button" aria-label={`${copy.moveEarlier} ${copy.day} ${formatNumber(locale, day)}`} onClick={() => moveStop(day, stop.recommendation_id, -1)} disabled={index === 0}>↑</button>
+                    <button type="button" aria-label={`${copy.moveLater} ${copy.day} ${formatNumber(locale, day)}`} onClick={() => moveStop(day, stop.recommendation_id, 1)} disabled={index === dayStops.length - 1}>↓</button>
+                    <button type="button" onClick={() => {
+                      setEditableStops(stops => normalizeDayOrders(stops.filter(item => item.recommendation_id !== stop.recommendation_id), [day]));
+                      setItineraryDirty(true);
+                    }}>{copy.removeStop}</button>
+                  </div>
+                </article>)}
+              </div>
+            </section>;
+          })}
         </div>
         {recommendations?.items && <div className="add-itinerary-stop">
           <label htmlFor="add-itinerary-stop">{copy.addStop}</label>
-          <select id="add-itinerary-stop" defaultValue="" onChange={event => { if (event.target.value) appendStop(event.target.value); event.target.value = ''; }}>
+          <select id="add-itinerary-stop" defaultValue="" disabled={editableStops.length >= 1_000 || !dayNumbers.some(day => editableStops.filter(stop => stop.day_number === day).length < 50)} onChange={event => { if (event.target.value) appendStop(event.target.value); event.target.value = ''; }}>
             <option value="">{copy.selectTrip}</option>
             {recommendations.items.filter(item => !editableStops.some(stop => stop.recommendation_id === item.recommendation_id)).map(item => <option key={item.recommendation_id} value={item.recommendation_id}>{item.localized_names[locale] ?? item.canonical_name}</option>)}
           </select>
         </div>}
-        <button type="button" onClick={() => void saveItinerary()} disabled={busy || !online}>{copy.saveItinerary}</button>
+        <button type="button" onClick={() => void saveItinerary()} disabled={busy || !online || editableStops.length > 1_000 || editableStops.some(stop => editableStops.filter(other => other.day_number === stop.day_number).length > 50)}>{copy.saveItinerary}</button>
       </section>}
 
       {session && <section className="trip-history" aria-labelledby="trip-history-title">

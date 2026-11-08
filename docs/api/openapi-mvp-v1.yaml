@@ -343,6 +343,45 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/v1/trips/{trip_id}/itineraries:
+    parameters:
+      - name: trip_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Itineraries]
+      operationId: createItinerary
+      summary: Create an editable evidence-backed plan draft
+      description: |
+        The requested day_count is 1–365 and cannot exceed the owner's
+        confirmed trip duration. The response includes every requested day
+        through day_count, marks uncovered days as unplanned, and never
+        invents places or schedules. A partial draft is valid when approved
+        evidence covers fewer days than requested.
+      x-authentication-required: true
+      x-implementation-gate: ADR-0006
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateItineraryRequest'
+      responses:
+        '201':
+          description: Created partial or complete editable itinerary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Itinerary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Trip duration is unconfirmed, exceeds the confirmed duration, or has no eligible recommendations.
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/itineraries/{itinerary_id}:
     parameters:
       - name: itinerary_id
@@ -368,15 +407,18 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-    patch:
+    put:
       tags: [Itineraries]
       operationId: updateItinerary
       summary: Update an owned itinerary
       description: |
         Only the authenticated owner can edit. The application validates that
-        day_count is 1–3, day_number is within that range, stop_order is unique
-        within a day, and referenced destinations are eligible for display.
-        Route times and travel durations remain unknown unless provider-backed.
+        day_count is 1–365 and cannot exceed the confirmed trip duration.
+        Each day may contain at most 50 stops and a plan at most 1,000 stops.
+        Stop order is unique within a day; referenced destinations are
+        revalidated against the approved catalogue. The response's status and
+        unplanned_days are derived from actual stop coverage. Route times and
+        travel durations remain unknown unless source-backed.
       x-authentication-required: true
       x-implementation-gate: ADR-0006
       requestBody:
@@ -810,18 +852,25 @@ components:
     ItineraryStop:
       type: object
       additionalProperties: false
-      required: [destination_id, day_number, stop_order]
+      required: [itinerary_stop_id, recommendation_id, destination_id, day_number, stop_order]
       properties:
+        itinerary_stop_id:
+          type: string
+          format: uuid
+        recommendation_id:
+          type: string
+          format: uuid
         destination_id:
-          type: integer
-          format: int64
+          type: string
+          pattern: '^[0-9]+$'
         day_number:
           type: integer
           minimum: 1
-          maximum: 3
+          maximum: 365
         stop_order:
           type: integer
           minimum: 1
+          maximum: 50
         planned_start_time:
           type: [string, 'null']
           format: time
@@ -829,12 +878,22 @@ components:
           type: [integer, 'null']
           minimum: 1
           maximum: 1440
-        notes:
-          type: [string, 'null']
+        notes_by_locale:
+          type: object
+          maxProperties: 3
+          additionalProperties:
+            type: string
+            maxLength: 2000
+        canonical_name:
+          type: string
+        localized_names:
+          type: object
+          additionalProperties:
+            type: [string, 'null']
     Itinerary:
       type: object
       additionalProperties: false
-      required: [itinerary_id, version, title, day_count, stops]
+      required: [itinerary_id, trip_id, recommendation_request_id, version, revision, day_count, status, unplanned_days, title_by_locale, stops, updated_at]
       properties:
         itinerary_id:
           type: string
@@ -842,35 +901,77 @@ components:
         version:
           type: integer
           minimum: 1
-        title:
+        trip_id:
           type: string
+          format: uuid
+        recommendation_request_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
         day_count:
           type: integer
           minimum: 1
-          maximum: 3
+          maximum: 365
+        status:
+          type: string
+          enum: [complete, partial]
+          description: Coverage status; complete only when every requested day has an evidenced stop.
+        unplanned_days:
+          type: array
+          maxItems: 365
+          items:
+            type: integer
+            minimum: 1
+            maximum: 365
+        title_by_locale:
+          type: object
+          additionalProperties:
+            type: string
+        updated_at:
+          type: string
+          format: date-time
         stops:
           type: array
+          maxItems: 1000
           items:
             $ref: '#/components/schemas/ItineraryStop'
+    CreateItineraryRequest:
+      type: object
+      additionalProperties: false
+      required: [recommendation_request_id, day_count, locale]
+      properties:
+        recommendation_request_id:
+          type: string
+          format: uuid
+        day_count:
+          type: integer
+          minimum: 1
+          maximum: 365
+          description: Must not exceed the confirmed trip duration.
+        locale:
+          type: string
+          enum: [fa-IR, en-US, ar]
     UpdateItineraryRequest:
       type: object
       additionalProperties: false
-      required: [version, title, day_count, stops]
+      required: [expected_revision, title_by_locale, stops]
       properties:
-        version:
+        expected_revision:
           type: integer
           minimum: 1
-          description: Current version supplied by the client; stale versions must be rejected.
-        title:
-          type: string
-          minLength: 1
-          maxLength: 160
-        day_count:
-          type: integer
-          minimum: 1
-          maximum: 3
+          description: Current revision supplied by the client; stale edits are rejected.
+        title_by_locale:
+          type: object
+          maxProperties: 3
+          additionalProperties:
+            type: string
+            minLength: 1
+            maxLength: 200
         stops:
           type: array
+          maxItems: 1000
           items:
             $ref: '#/components/schemas/ItineraryStop'
     FeedbackRequest:

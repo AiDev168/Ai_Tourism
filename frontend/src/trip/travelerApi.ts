@@ -85,6 +85,8 @@ export type RecommendationResult = {
   recommendation_request_id: string;
   status: 'available' | 'empty' | 'needs_confirmation';
   reason_code: string;
+  /** Stable requirement field codes the catalogue cannot assess. */
+  unresolved_fields: string[];
   algorithm_version: string;
   trip_version: number;
   items: RecommendationItem[];
@@ -109,7 +111,11 @@ export type ItineraryRecord = {
   trip_id: string;
   revision: number;
   version: number;
+  /** Requested days; each day is rendered even when it has no eligible stop. */
   day_count: number;
+  status: 'complete' | 'partial';
+  /** Server-derived day numbers without any evidenced itinerary stop. */
+  unplanned_days: number[];
   title_by_locale: Partial<Record<Locale, string>>;
   stops: ItineraryStop[];
   recommendation_request_id: string;
