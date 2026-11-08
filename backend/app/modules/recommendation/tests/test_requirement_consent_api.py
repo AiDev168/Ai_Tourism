@@ -64,6 +64,7 @@ def test_profile_confirmation_accepts_field_choices_but_server_owns_binding_vers
             "requirement_consent": {
                 "contract_version": "recommendation-consent-v1",
                 "field_decisions": {"budget": "advisory"},
+                "advisory_acknowledged_fields": ["budget"],
             },
         })
         assert response.status_code == 200
@@ -71,6 +72,7 @@ def test_profile_confirmation_accepts_field_choices_but_server_owns_binding_vers
         assert repository.confirmed["requirement_consent"] == {
             "contract_version": "recommendation-consent-v1",
             "field_decisions": {"budget": "advisory"},
+            "advisory_acknowledged_fields": ["budget"],
         }
         assert repository.saved_consent["profile_version"] == 5
         assert "profile_version" not in repository.confirmed["requirement_consent"]
@@ -93,6 +95,22 @@ def test_profile_confirmation_rejects_forged_version_unknown_field_and_nested_cl
                 "contract_version": "recommendation-consent-v1",
                 "profile_version": 5,
                 "field_decisions": {"budget": "advisory"},
+                "advisory_acknowledged_fields": ["budget"],
+            },
+        })
+        unacknowledged = client.patch(f"/api/v1/trips/{TRIP}", json={
+            **base,
+            "requirement_consent": {
+                "contract_version": "recommendation-consent-v1",
+                "field_decisions": {"budget": "advisory"},
+            },
+        })
+        extraneous_acknowledgement = client.patch(f"/api/v1/trips/{TRIP}", json={
+            **base,
+            "requirement_consent": {
+                "contract_version": "recommendation-consent-v1",
+                "field_decisions": {"budget": "must_have"},
+                "advisory_acknowledged_fields": ["budget"],
             },
         })
         unknown_field = client.patch(f"/api/v1/trips/{TRIP}", json={
@@ -100,13 +118,32 @@ def test_profile_confirmation_rejects_forged_version_unknown_field_and_nested_cl
             "requirement_consent": {
                 "contract_version": "recommendation-consent-v1",
                 "field_decisions": {"wheelchair_magic": "advisory"},
+                "advisory_acknowledged_fields": ["wheelchair_magic"],
+            },
+        })
+        safety_critical_advisory = client.patch(f"/api/v1/trips/{TRIP}", json={
+            **base,
+            "requirement_consent": {
+                "contract_version": "recommendation-consent-v1",
+                "field_decisions": {"accessibility": "advisory"},
+                "advisory_acknowledged_fields": ["accessibility"],
             },
         })
         nested_claim = client.patch(f"/api/v1/trips/{TRIP}", json={
             **base,
             "confirmed_requirements": {"requirement_consent": {"field_decisions": {}}},
         })
-        assert forged_version.status_code == unknown_field.status_code == nested_claim.status_code == 422
+        assert all(
+            response.status_code == 422
+            for response in (
+                forged_version,
+                unacknowledged,
+                extraneous_acknowledgement,
+                unknown_field,
+                safety_critical_advisory,
+                nested_claim,
+            )
+        )
         assert repository.confirmed is None
     finally:
         app.dependency_overrides.clear()

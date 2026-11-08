@@ -4,6 +4,7 @@ export type Field<T> = { value: T | null; status: 'extracted' | 'unknown' | 'amb
 export type TripRequirements = {
   requestText: string; locale: Locale; destinations: Field<string[]>; origin: Field<string>; durationDays: Field<number>;
   travelDates: Field<{ start: string; end: string }>; travelerCount: Field<number>;
+  accessibility: Field<Array<'wheelchair_access' | 'step_free_access'>>;
   budget: Field<{ amount: number; currency: string | null; unit: string; raw: string }>;
   interests: Field<string[]>; constraints: Field<string[]>; extractionStatus: 'ready' | 'needs_clarification';
   missingRequired: Array<'destination' | 'duration'>; ambiguousRequired: Array<'destination' | 'duration'>;
@@ -68,6 +69,15 @@ function extractPlaces(source:string, locale:Locale, spans:ReturnType<typeof dur
 }
 function explicitCount(text:string):number|null {const n=`(${numPattern})`;const m=normalize(text).match(new RegExp(`${n}\\s*(?:people|travelers|travellers|نفر|مسافر|أشخاص|اشخاص|أفراد|افراد)`,'iu'));return m?numberValue(m[1]):null;}
 function explicitDateRange(text:string):TripRequirements['travelDates'] {const m=normalize(text).match(/(\d{4}-\d{2}-\d{2})\s*(?:to|through|تا|إلى|الى|حتى|—|–)\s*(\d{4}-\d{2}-\d{2})/iu);if(!m)return{value:null,status:'unknown',evidence:null};const valid=(s:string)=>{const d=new Date(`${s}T00:00:00Z`);return !Number.isNaN(d.valueOf())&&d.toISOString().slice(0,10)===s;};if(!valid(m[1])||!valid(m[2])||m[1]>m[2])return{value:null,status:'ambiguous',evidence:m[0],candidates:[]};return{value:{start:m[1],end:m[2]},status:'extracted',evidence:m[0]};}
+function explicitAccessibilityNeeds(text:string):TripRequirements['accessibility'] {
+ const normalized=normalize(text);
+ const wheelchair=/(?:\bwheelchair(?:\s+|-)?(?:access|accessible|accessibility)\b|دسترسی\s+(?:با\s+)?ویلچر|مناسب\s+(?:برای\s+)?ویلچر|(?:إمكانية\s+الوصول|وصول|مناسب)\s+(?:بالكراسي\s+المتحركة|للكراسي\s+المتحركة))/iu.test(normalized);
+ const stepFree=/(?:\bstep[- ]free(?:\s+(?:access|entrance|route))?\b|\bno\s+stairs\b|\bwithout\s+stairs\b|بدون\s+پله(?:‌ها)?|ورودی\s+بدون\s+پله|(?:بدون|دون)\s+(?:درجات|سلالم))/iu.test(normalized);
+ const value:Array<'wheelchair_access'|'step_free_access'>=[];
+ if(wheelchair)value.push('wheelchair_access');
+ if(stepFree)value.push('step_free_access');
+ return value.length?{value,status:'extracted',evidence:null}:{value:null,status:'unknown',evidence:null};
+}
 function parseBudget(text:string):TripRequirements['budget'] {const m=normalize(text).match(/([\d,]+(?:\.\d+)?)\s*(میلیون|million|مليون)?\s*(تومان|ریال|IRR|toman|rial|ر.س|ريال|درهم|AED|USD|دلار|دولار)/iu);if(!m)return{value:null,status:'unknown',evidence:null};let amount=Number(m[1].replaceAll(',',''));if(m[2])amount*=1_000_000;return{value:{amount,currency:/IRR|ریال|rial|ريال/iu.test(m[3])?'IRR':/AED|درهم/iu.test(m[3])?'AED':/USD|دلار|دولار/iu.test(m[3])?'USD':null,unit:`${m[2]??''} ${m[3]}`.trim(),raw:m[0]},status:'extracted',evidence:m[0]};}
 function extractedText(text:string, trigger:RegExp):Field<string[]> {const m=normalize(text).match(trigger);return m?{value:[cleanPlace(m[1])],status:'extracted',evidence:m[0]}:{value:null,status:'unknown',evidence:null};}
 export function createTripRequirements(input:{requestText:string;locale:Locale;maxDurationDays?:number}):TripIntakeResult {
@@ -76,9 +86,10 @@ export function createTripRequirements(input:{requestText:string;locale:Locale;m
  const spans=durationSpans(text);const durations=[...new Set(spans.map(s=>s.days).filter(Boolean))];if(durations.some(d=>d>max))return{kind:'invalid',reason:'duration-too-long'};
  const duration:Field<number>=durations.length>1?{value:null,status:'ambiguous',evidence:spans.map(s=>s.raw).join(' / '),candidates:durations}:durations.length?{value:durations[0],status:'extracted',evidence:spans[0].raw}:{value:null,status:'unknown',evidence:null};
  const {places,origin}=extractPlaces(text,input.locale,spans);
+  const accessibility=explicitAccessibilityNeeds(text);
  const missingRequired:Array<'destination'|'duration'>=[];const ambiguousRequired:Array<'destination'|'duration'>=[];
  if(!places.value){(places.status==='ambiguous'?ambiguousRequired:missingRequired).push('destination');}if(!duration.value){(duration.status==='ambiguous'?ambiguousRequired:missingRequired).push('duration');}
  const interest=extractedText(text,/(?:interested in|love|enjoy|أحب|احب)\s+(.+?)(?:[.!؟؛،,;]|$)/iu);if(!interest.value){const end=text.indexOf(' علاقه دارم');const start=end>=0?text.lastIndexOf(' به ',end):-1;if(start>=0)Object.assign(interest,{value:[cleanPlace(text.slice(start+4,end))],status:'extracted',evidence:text.slice(start,end+12)});}
- const requirements:TripRequirements={requestText:original,locale:input.locale,destinations:places,origin,durationDays:duration,travelDates:explicitDateRange(text),travelerCount:(()=>{const n=explicitCount(text);return n?{value:n,status:'extracted' as const,evidence:text.match(new RegExp(`${n}\\s*(?:people|travelers|travellers|نفر|مسافر|أشخاص|اشخاص|أفراد|افراد)`,'iu'))?.[0]??null}:{value:null,status:'unknown' as const,evidence:null};})(),budget:parseBudget(text),interests:interest,constraints:extractedText(text,/(?:prefer|must|need|ترجیح می‌دهم|ترجیح میدهم|باید|لا أريد|لا اريد|أفضل|افضل)\s+(.+?)(?:[.!؟]|$)/iu),extractionStatus:missingRequired.length||ambiguousRequired.length?'needs_clarification':'ready',missingRequired,ambiguousRequired,confirmationRequired:[],destinationVerification:'user_input_unverified'};
+  const requirements:TripRequirements={requestText:original,locale:input.locale,destinations:places,origin,durationDays:duration,travelDates:explicitDateRange(text),travelerCount:(()=>{const n=explicitCount(text);return n?{value:n,status:'extracted' as const,evidence:text.match(new RegExp(`${n}\\s*(?:people|travelers|travellers|نفر|مسافر|أشخاص|اشخاص|أفراد|افراد)`,'iu'))?.[0]??null}:{value:null,status:'unknown' as const,evidence:null};})(),accessibility,budget:parseBudget(text),interests:interest,constraints:extractedText(text,/(?:prefer|must|need|ترجیح می‌دهم|ترجیح میدهم|باید|لا أريد|لا اريد|أفضل|افضل)\s+(.+?)(?:[.!؟]|$)/iu),extractionStatus:missingRequired.length||ambiguousRequired.length?'needs_clarification':'ready',missingRequired,ambiguousRequired,confirmationRequired:[],destinationVerification:'user_input_unverified'};
  return requirements.extractionStatus==='ready'?{kind:'ready',requirements}:{kind:'clarification',requirements};
 }

@@ -86,9 +86,11 @@ class _StaleRequirementConsent(ValueError):
 
 _CONSENT_KEY = "requirement_consent"
 _WAIVABLE_FIELDS = frozenset({
-    "origin", "travel_dates", "traveler_count", "budget", "accessibility", "mobility",
-    "surface", "activity", "activity_difficulty", "season", "radius", "time_window",
-    "transport", "travel_style", "accommodation", "party_composition",
+    # These are the only explicit profile choices surfaced by the reviewed UI.
+    # Access, mobility, terrain/activity/difficulty, transport, and free-text
+    # constraints remain mandatory because no safe preference representation
+    # or catalogue evaluation contract exists for them.
+    "origin", "travel_dates", "traveler_count", "budget",
 })
 _FIELD_REASON_CODES = {
     "budget": "budget_unverifiable", "travel_dates": "travel_dates_unverifiable",
@@ -442,6 +444,7 @@ def _requirement_consent(
     if consent is not None:
         if not isinstance(consent, Mapping) or set(consent) != {
             "contract_version", "profile_version", "field_decisions",
+            "advisory_acknowledged_fields",
         }:
             raise _InvalidRequirements
         if consent.get("contract_version") != "recommendation-consent-v1":
@@ -465,6 +468,18 @@ def _requirement_consent(
             decision == "advisory" and field not in _WAIVABLE_FIELDS
             for field, decision in decisions.items()
         ):
+            raise _InvalidRequirements
+        raw_acknowledgements = consent.get("advisory_acknowledged_fields")
+        if (
+            not isinstance(raw_acknowledgements, (list, tuple))
+            or any(not isinstance(field, str) for field in raw_acknowledgements)
+            or len(raw_acknowledgements) != len(set(raw_acknowledgements))
+        ):
+            raise _InvalidRequirements
+        advisory_fields = {
+            field for field, decision in decisions.items() if decision == "advisory"
+        }
+        if set(raw_acknowledgements) != advisory_fields:
             raise _InvalidRequirements
 
     assessments: list[RequirementAssessment] = []

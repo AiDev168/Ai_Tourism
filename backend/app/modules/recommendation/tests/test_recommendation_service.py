@@ -97,6 +97,7 @@ def test_persian_and_arabic_rial_units_allow_only_explicit_advisory_consent() ->
                 "contract_version": "recommendation-consent-v1",
                 "profile_version": 2,
                 "field_decisions": {"budget": "advisory"},
+                "advisory_acknowledged_fields": ["budget"],
             },
         )
         result = recommend_trip(
@@ -189,6 +190,7 @@ def test_explicit_version_bound_advisory_is_not_evaluated_or_scored() -> None:
         "contract_version": "recommendation-consent-v1",
         "profile_version": 4,
         "field_decisions": {"budget": "advisory"},
+        "advisory_acknowledged_fields": ["budget"],
     }
     result = recommend_trip(
         requirements=profile, selected_destination_ids=["1"], catalogue=[candidate("1")],
@@ -214,6 +216,7 @@ def test_stale_or_forged_consent_fails_closed() -> None:
         "contract_version": "recommendation-consent-v1",
         "profile_version": 3,
         "field_decisions": {"budget": "advisory"},
+        "advisory_acknowledged_fields": ["budget"],
     }
     stale_result = recommend_trip(
         requirements=stale, selected_destination_ids=["1"], catalogue=[candidate("1")],
@@ -224,6 +227,7 @@ def test_stale_or_forged_consent_fails_closed() -> None:
         "contract_version": "recommendation-consent-v1",
         "profile_version": 4,
         "field_decisions": {"hard_constraint": "advisory"},
+        "advisory_acknowledged_fields": ["hard_constraint"],
     }
     forged_result = recommend_trip(
         requirements=forged, selected_destination_ids=["1"], catalogue=[candidate("1")],
@@ -243,6 +247,7 @@ def test_consent_cannot_be_applied_to_a_field_no_longer_unresolved() -> None:
         "contract_version": "recommendation-consent-v1",
         "profile_version": 4,
         "field_decisions": {"budget": "advisory"},
+        "advisory_acknowledged_fields": ["budget"],
     }
     result = recommend_trip(
         requirements=profile, selected_destination_ids=["1"], catalogue=[candidate("1")],
@@ -250,3 +255,49 @@ def test_consent_cannot_be_applied_to_a_field_no_longer_unresolved() -> None:
     )
     assert result.reason_code == "requirements_invalid"
     assert result.items == []
+
+
+def test_advisory_requires_exact_ack_and_safety_fields_are_never_waivable() -> None:
+    profile = requirements(budget={"amount": 50, "currency": "IRR", "unit": "million toman"})
+    profile["requirement_consent"] = {
+        "contract_version": "recommendation-consent-v1",
+        "profile_version": 4,
+        "field_decisions": {"budget": "advisory"},
+        "advisory_acknowledged_fields": [],
+    }
+    unacknowledged = recommend_trip(
+        requirements=profile, selected_destination_ids=["1"], catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
+    )
+
+    unsafe_profiles = [
+        requirements(access={"value": ["step-free"], "status": "confirmed"}),
+        requirements(mobility={"value": ["wheelchair"], "status": "confirmed"}),
+        requirements(surface={"value": ["flat path"], "status": "confirmed"}),
+        requirements(activity={"value": ["climbing"], "status": "confirmed"}),
+        requirements(activity_difficulty={"value": ["easy"], "status": "confirmed"}),
+        requirements(prohibited_transport={"value": ["car"], "status": "confirmed"}),
+        requirements(constraints={"value": ["must be safe"], "status": "confirmed"}),
+    ]
+    for unsafe in unsafe_profiles:
+        unresolved_field = {
+            "access": "accessibility", "mobility": "mobility", "surface": "surface",
+            "activity": "activity", "activity_difficulty": "activity_difficulty",
+            "prohibited_transport": "transport",
+            "constraints": "hard_constraint",
+        }[next(key for key in unsafe if key != "durationDays")]
+        unsafe["requirement_consent"] = {
+            "contract_version": "recommendation-consent-v1",
+            "profile_version": 4,
+            "field_decisions": {unresolved_field: "advisory"},
+            "advisory_acknowledged_fields": [unresolved_field],
+        }
+        result = recommend_trip(
+            requirements=unsafe, selected_destination_ids=["1"], catalogue=[candidate("1")],
+            evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
+        )
+        assert result.reason_code == "requirements_invalid"
+        assert result.items == []
+
+    assert unacknowledged.reason_code == "requirements_invalid"
+    assert unacknowledged.items == []

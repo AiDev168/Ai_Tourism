@@ -115,8 +115,16 @@ describe('persisted traveler journey', () => {
       ]) {
         expect(localizeRecommendationCode(locale, warning)).not.toBe(warning);
       }
-      for (const field of ['budget', 'travel_dates', 'traveler_count', 'access', 'surface', 'activity', 'difficulty', 'origin', 'radius', 'constraints']) {
+      for (const field of [
+        'budget', 'travel_dates', 'traveler_count', 'access', 'accessibility', 'mobility', 'surface',
+        'activity', 'activity_difficulty', 'difficulty', 'season', 'radius', 'time_window', 'transport',
+        'travel_style', 'accommodation', 'party_composition', 'hard_constraint', 'destination_resolution',
+        'trip_profile', 'duration_days', 'origin', 'constraints',
+      ]) {
         expect(localizeRecommendationCode(locale, `field:${field}`)).not.toBe(journeyMessages[locale].unknown);
+      }
+      if (locale === 'fa-IR') {
+        expect(localizeRecommendationCode(locale, 'field:accessibility')).toBe('دسترس‌پذیری');
       }
       expect(localizeRecommendationCode(locale, 'budget_unverifiable')).not.toBe('budget_unverifiable');
     }
@@ -139,7 +147,7 @@ describe('persisted traveler journey', () => {
         confirmation_source: 'traveler_reviewed',
         requirement_consent: {
           contract_version: 'recommendation-consent-v1', profile_version: 2,
-          field_decisions: { budget: 'advisory' },
+          field_decisions: { budget: 'advisory' }, advisory_acknowledged_fields: ['budget'],
         },
       },
     };
@@ -181,6 +189,7 @@ describe('persisted traveler journey', () => {
     const patchBody = JSON.parse(String((patchCall[1] as RequestInit).body));
     expect(patchBody.requirement_consent).toEqual({
       contract_version: 'recommendation-consent-v1', field_decisions: { budget: 'advisory' },
+      advisory_acknowledged_fields: ['budget'],
     });
     await act(async () => {
       [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].findRecommendations)!.click();
@@ -234,7 +243,7 @@ describe('persisted traveler journey', () => {
       ...baseTrip, version: 2, latest_recommendation_request_id: 'recommendation-request-1',
       confirmed_requirements: {
         confirmation_source: 'traveler_reviewed',
-        requirement_consent: { contract_version: 'recommendation-consent-v1', profile_version: 2, field_decisions: {} },
+        requirement_consent: { contract_version: 'recommendation-consent-v1', profile_version: 2, field_decisions: {}, advisory_acknowledged_fields: [] },
       },
     };
     const conversation = {
@@ -265,6 +274,39 @@ describe('persisted traveler journey', () => {
 
     expect(host.textContent).toContain(journeyMessages['en-US'].recommendationClarify);
     expect(host.textContent).toContain(localizeRecommendationCode('en-US', 'field:budget'));
+  });
+
+  it('keeps unclassified hard constraints mandatory and offers a follow-up clarification path', async () => {
+    const requestText = 'I need wheelchair access for a 3-day trip to Shiraz';
+    const parsed = createTripRequirements({ requestText, locale: 'en-US' });
+    expect(parsed.kind).not.toBe('invalid');
+    if (parsed.kind === 'invalid') return;
+    const trip = tripRecord(requestText, parsed);
+    const conversation = {
+      conversation_id: 'conversation-1', locale: 'en-US', version: 1,
+      started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
+      trips: [trip], messages: [],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input); const method = init?.method ?? 'GET';
+      if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
+      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: null }, 201);
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => root.render(<TravelerJourney locale="en-US" session={session} online requirements={parsed.requirements}
+      onSessionExpired={() => undefined} onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
+    await settle();
+    await act(async () => { host.querySelector<HTMLButtonElement>('.journey-action')!.click(); }); await settle();
+
+    expect(host.textContent).toContain(journeyMessages['en-US'].requirementUnclassifiedMandatory);
+    expect(host.textContent).toContain(journeyMessages['en-US'].requirementClarifyByEditing);
+    expect(host.textContent).toContain(journeyMessages['en-US'].requirementAccessibilityMandatory);
+    expect(host.textContent).toContain(journeyMessages['en-US'].wheelchair_access);
+    expect(host.querySelector('#requirement-consent-accessibility')).toBeNull();
+    expect(host.querySelector('#requirement-consent-hard_constraint')).toBeNull();
+    expect(host.querySelector('.requirement-unclassified button')).not.toBeNull();
   });
 
   it('creates a ten-day itinerary by default and renders every day with honest partial coverage', async () => {

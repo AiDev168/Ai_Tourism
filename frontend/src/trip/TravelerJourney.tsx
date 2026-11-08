@@ -21,7 +21,11 @@ function safeRequirements(value: unknown, locale: Locale): TripRequirements | nu
   if (!value || typeof value !== 'object') return null;
   const candidate = value as Partial<TripRequirements>;
   if (typeof candidate.requestText !== 'string' || !candidate.destinations || !candidate.durationDays) return null;
-  return { ...candidate, locale } as TripRequirements;
+  return {
+    ...candidate,
+    accessibility: candidate.accessibility ?? { value: null, status: 'unknown', evidence: null },
+    locale,
+  } as TripRequirements;
 }
 
 function choiceIds(resolution: DestinationResolution | null): string[] {
@@ -42,6 +46,10 @@ function tripDayCount(trip: TripRecord | null, extracted: TripRequirements | nul
 }
 
 const requirementFields: RequirementFieldCode[] = ['budget', 'travel_dates', 'traveler_count', 'origin'];
+type RestoredRequirementConsent = {
+  decisions: Partial<Record<RequirementFieldCode, RequirementConsentDecision>>;
+  acknowledgedFields: RequirementFieldCode[];
+};
 
 function unresolvedConsentFields(value: TripRequirements | null): RequirementFieldCode[] {
   if (!value) return [];
@@ -61,7 +69,7 @@ function unresolvedConsentFields(value: TripRequirements | null): RequirementFie
 function restoredConsent(
   trip: TripRecord,
   fields: RequirementFieldCode[],
-): Partial<Record<RequirementFieldCode, RequirementConsentDecision>> | null {
+): RestoredRequirementConsent | null {
   const raw = trip.confirmed_requirements.requirement_consent;
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const consent = raw as Record<string, unknown>;
@@ -75,12 +83,18 @@ function restoredConsent(
     !fields.includes(field as RequirementFieldCode)
     || (decision !== 'must_have' && decision !== 'advisory'))
   ) return null;
+  const acknowledgements = consent.advisory_acknowledged_fields;
+  if (!Array.isArray(acknowledgements)
+      || acknowledgements.some(field => typeof field !== 'string' || !fields.includes(field as RequirementFieldCode))
+      || new Set(acknowledgements).size !== acknowledgements.length) return null;
   const parsed: Partial<Record<RequirementFieldCode, RequirementConsentDecision>> = {};
   for (const field of fields) {
     const decision = (decisions as Record<string, unknown>)[field];
     if (decision === 'must_have' || decision === 'advisory') parsed[field] = decision;
   }
-  return parsed;
+  const acknowledgedFields = acknowledgements as RequirementFieldCode[];
+  if (acknowledgedFields.some(field => parsed[field] !== 'advisory')) return null;
+  return { decisions: parsed, acknowledgedFields };
 }
 
 function consentIsComplete(
@@ -300,14 +314,14 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         }) : parsed.destinations.value ?? []);
       }
       const savedConsent = restoredConsent(trip, unresolvedConsentFields(parsed));
-      setRequirementChoices(savedConsent ?? {});
+      setRequirementChoices(savedConsent?.decisions ?? {});
       setAdvisoryAcknowledgements(Object.fromEntries(
-        Object.entries(savedConsent ?? {}).filter(([, decision]) => decision === 'advisory').map(([field]) => [field, true]),
+        (savedConsent?.acknowledgedFields ?? []).map(field => [field, true]),
       ) as Partial<Record<RequirementFieldCode, boolean>>);
       const hasReviewedProfile = trip.confirmed_requirements.confirmation_source === 'traveler_reviewed';
       setConfirmed(hasReviewedProfile && savedConsent !== null
-        && consentIsComplete(unresolvedConsentFields(parsed), savedConsent,
-          Object.fromEntries(Object.entries(savedConsent).filter(([, decision]) => decision === 'advisory').map(([field]) => [field, true]))));
+        && consentIsComplete(unresolvedConsentFields(parsed), savedConsent.decisions,
+          Object.fromEntries(savedConsent.acknowledgedFields.map(field => [field, true]))));
       const latestRecs = trip.latest_recommendation_request_id
         ? await travelerApi.latestRecommendations(trip.trip_id).catch(() => null) : null;
       setRecommendations(latestRecs);
@@ -353,6 +367,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       origin: extracted?.origin.value ?? null,
       travel_dates: extracted?.travelDates.value ?? null,
       traveler_count: extracted?.travelerCount.value ?? null,
+      accessibility: extracted?.accessibility?.value ?? [],
       budget: extracted?.budget.value ?? null,
       interests: extracted?.interests.value ?? [],
       constraints: extracted?.constraints.value ?? [],
@@ -366,6 +381,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         requirement_consent: {
           contract_version: 'recommendation-consent-v1',
           field_decisions: requirementChoices,
+          advisory_acknowledged_fields: requirementFields.filter(field =>
+            requirementChoices[field] === 'advisory' && advisoryAcknowledgements[field] === true),
         },
       });
       setActiveTrip(trip); setConfirmed(true); setDirty(false); setRecommendations(null); setItinerary(null); setStatus(copy.profileSaved);
@@ -563,7 +580,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
                     <p className="journey-alert" role="alert">{copy.requirementAdvisoryWarning}</p>
                     <label htmlFor={`${fieldId}-ack`}>
                       <input id={`${fieldId}-ack`} type="checkbox" checked={advisoryAcknowledgements[field] === true}
-                        onChange={event => { const checked = event.currentTarget.checked; setAdvisoryAcknowledgements(current => ({ ...current, [field]: checked })); }} />
+                        onChange={event => { const checked = event.currentTarget.checked; setAdvisoryAcknowledgements(current => ({ ...current, [field]: checked })); setConfirmed(false); setRecommendations(null); setItinerary(null); }} />
                       {copy.requirementAdvisoryAcknowledgement}
                     </label>
                   </div>}
@@ -573,6 +590,13 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             </fieldset>}
             {!!extracted?.constraints.value?.length && <div className="journey-alert requirement-unclassified" role="status">
               <strong>{localizeRecommendationCode(locale, 'field:constraints')}:</strong> {copy.requirementUnclassifiedMandatory}
+              <button type="button" onClick={() => document.getElementById('trip-follow-up')?.focus()}>{copy.requirementClarifyByEditing}</button>
+            </div>}
+            {!!extracted?.accessibility?.value?.length && <div className="journey-alert requirement-accessibility-mandatory" role="status">
+              <strong>{localizeRecommendationCode(locale, 'field:access')}:</strong>
+              <p>{copy.requirementAccessibilityMandatory}</p>
+              <ul>{extracted.accessibility.value.map(need => <li key={need}>{copy[need]}</li>)}</ul>
+              <button type="button" onClick={() => document.getElementById('trip-follow-up')?.focus()}>{copy.requirementClarifyByEditing}</button>
             </div>}
             {resolution?.kind === 'catalogue-empty' && <p className="journey-alert" role="status">{copy.recommendationEmpty}</p>}
             {resolution?.kind === 'catalogue-unavailable' && <p className="journey-error" role="alert">{copy.recommendationUnavailable}</p>}

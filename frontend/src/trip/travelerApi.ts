@@ -35,6 +35,7 @@ export type RequirementFieldCode = 'budget' | 'travel_dates' | 'traveler_count' 
 export type RequirementConsent = {
   contract_version: 'recommendation-consent-v1';
   field_decisions: Partial<Record<RequirementFieldCode, RequirementConsentDecision>>;
+  advisory_acknowledged_fields: RequirementFieldCode[];
 };
 export type RequirementAssessment = {
   field: string;

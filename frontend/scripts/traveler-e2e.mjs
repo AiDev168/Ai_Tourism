@@ -216,7 +216,8 @@ const localeCopy = {
     find: 'بررسی پیشنهادهای تأییدشده',
     deleteTrip: 'حذف سفر',
     deleteConversation: 'حذف گفت‌وگو و همهٔ سفرهای آن',
-    prompt: 'سفر ۱۰ روزه به شیراز با بودجهٔ ۱۰۰۰۰۰ ریال',
+    prompt: 'سفر ۱۰ روزه به شیراز با بودجهٔ ۱۰۰۰۰۰ ریال؛ دسترسی ویلچر ضروری است؛ باید از مسیرهای ناهموار پرهیز شود.',
+    accessLabel: 'دسترس‌پذیری',
     fixtureName: 'نمونهٔ آزمایشی',
   },
   'en-US': {
@@ -225,7 +226,8 @@ const localeCopy = {
     find: 'Check verified suggestions',
     deleteTrip: 'Delete trip',
     deleteConversation: 'Delete conversation and all its trips',
-    prompt: '10 day trip to Shiraz with a budget of 100000 rial',
+    prompt: '10 day trip to Shiraz with a budget of 100000 rial; wheelchair access is essential; must avoid rough terrain.',
+    accessLabel: 'Accessibility',
     fixtureName: 'Test fixture',
   },
   ar: {
@@ -234,7 +236,8 @@ const localeCopy = {
     find: 'تحقق من الاقتراحات الموثقة',
     deleteTrip: 'احذف الرحلة',
     deleteConversation: 'احذف المحادثة وكل رحلاتها',
-    prompt: 'رحلة لمدة ١٠ أيام إلى شيراز بميزانية ١٠٠٠٠٠ ريال',
+    prompt: 'رحلة لمدة ١٠ أيام إلى شيراز بميزانية ١٠٠٠٠٠ ريال؛ الوصول للكراسي المتحركة ضروري؛ لا أريد أرضاً وعرة.',
+    accessLabel: 'إمكانية الوصول',
     fixtureName: 'نموذج اختباري',
   },
 };
@@ -573,6 +576,10 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     }
     await pageA.locator('.history-trip > button').first().waitFor({ state: 'visible' });
     await pageA.locator('#requirement-consent-budget-advisory').waitFor({ state: 'visible' });
+    await pageA.locator('.requirement-accessibility-mandatory').waitFor({ state: 'visible' });
+    if (await pageA.locator('#requirement-consent-accessibility-must, #requirement-consent-accessibility-advisory').count() !== 0) {
+      throw new Error(`mandatory_access_field_was_offered_consent_downgrade_${locale}`);
+    }
     const consentRadio = pageA.locator('#requirement-consent-budget-advisory');
     if (await consentRadio.isChecked()) throw new Error(`advisory_consent_was_preselected_${locale}`);
     const confirmButton = pageA.getByRole('button', { name: copy.confirm });
@@ -602,25 +609,41 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     const persistedConsent = confirmedTrip.confirmed_requirements?.requirement_consent;
     if (persistedConsent?.contract_version !== 'recommendation-consent-v1'
       || persistedConsent?.profile_version !== confirmedTrip.version
-      || persistedConsent?.field_decisions?.budget !== 'advisory') {
+      || persistedConsent?.field_decisions?.budget !== 'advisory'
+      || Object.keys(persistedConsent?.field_decisions ?? {}).join(',') !== 'budget') {
       throw new Error(`server_bound_consent_snapshot_missing_${locale}`);
     }
     consentSnapshotVerified = true;
+    if (await pageA.locator('.requirement-unclassified').count() !== 1) {
+      throw new Error(`unclassified_hard_requirement_not_disclosed_${locale}`);
+    }
+    if (await pageA.locator('.requirement-accessibility-mandatory').count() !== 1) {
+      throw new Error(`accessibility_mandatory_notice_missing_${locale}`);
+    }
 
     const recommendationResponsePromise = pageA.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/trips/${tripId}/recommendations`
       && response.request().method() === 'POST');
     await pageA.getByRole('button', { name: copy.find }).click();
     const recommendationResponse = await recommendationResponsePromise;
     const recommendation = await recommendationResponse.json();
+    const budgetAssessment = recommendation.requirement_assessments?.find(item => item.field === 'budget');
+    const accessibilityAssessment = recommendation.requirement_assessments?.find(item => item.field === 'accessibility');
+    const hardConstraintAssessment = recommendation.requirement_assessments?.find(item => item.field === 'hard_constraint');
     if (recommendationResponse.status() !== 201 || !recommendationResponse.headers()['cache-control']?.includes('no-store')
-      || recommendation.status !== 'empty' || recommendation.reason_code !== 'catalogue_empty'
+      || recommendation.status !== 'needs_confirmation' || recommendation.reason_code !== 'hard_constraints_unverifiable'
       || !recommendation.waived_fields?.includes('budget') || !recommendation.not_evaluated_fields?.includes('budget')
-      || recommendation.requirement_assessments?.find(item => item.field === 'budget')?.status !== 'not_evaluated') {
+      || recommendation.waived_fields?.length !== 1 || recommendation.not_evaluated_fields?.length !== 1
+      || budgetAssessment?.decision !== 'advisory' || budgetAssessment.status !== 'not_evaluated'
+      || accessibilityAssessment?.decision !== 'must_have' || accessibilityAssessment.status !== 'unresolved'
+      || !['access_unverifiable', 'accessibility_unverifiable'].includes(accessibilityAssessment.reason_code)
+      || hardConstraintAssessment?.decision !== 'must_have' || hardConstraintAssessment.status !== 'unresolved'
+      || !recommendation.unresolved_fields?.includes('hard_constraint') || recommendation.items?.length !== 0) {
       throw new Error(`empty_or_advisory_result_contract_failed_${locale}_${JSON.stringify({
         http: recommendationResponse.status(), status: recommendation.status,
         reason: recommendation.reason_code, waived: recommendation.waived_fields,
         notEvaluated: recommendation.not_evaluated_fields,
         assessments: recommendation.requirement_assessments?.map(item => [item.field, item.decision, item.status, item.reason_code]),
+        unresolved: recommendation.unresolved_fields,
         profileShape: confirmedProfileShape,
       })}`);
     }
@@ -630,6 +653,12 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     const warningText = await notEvaluated.textContent();
     const localizedBudget = { 'fa-IR': 'بودجه', 'en-US': 'Budget', ar: 'الميزانية' }[locale];
     if (!warningText?.includes(localizedBudget)) throw new Error(`advisory_warning_not_localized_${locale}`);
+    const unresolved = pageA.locator('.unresolved-requirements');
+    await unresolved.waitFor({ state: 'visible' });
+    const unresolvedCopy = await unresolved.textContent();
+    if (await unresolved.locator('li').count() < 2 || !unresolvedCopy?.includes(copy.accessLabel)) {
+      throw new Error(`mandatory_access_and_hard_constraint_not_exposed_${locale}`);
+    }
     emptyResultVerified = true;
 
     const reloadMe = pageA.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/auth/me'

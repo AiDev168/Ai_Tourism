@@ -27,4 +27,21 @@ describe('natural-language trip intake v2',()=>{
  it('keeps unknown optional values from blocking intake',()=>expect(intake('I want to travel to Shiraz for four days','en-US').kind).toBe('ready'));
  it('extracts only an explicit ISO date range and rejects invalid dates as ambiguous',()=>{const valid=intake('Trip to Shiraz for 4 days from 2027-03-02 to 2027-03-05','en-US');expect(valid.kind).toBe('ready');if(valid.kind==='ready')expect(valid.requirements.travelDates.value).toEqual({start:'2027-03-02',end:'2027-03-05'});const invalid=intake('Trip to Shiraz for 4 days from 2027-02-31 to 2027-03-05','en-US');if(invalid.kind==='ready')expect(invalid.requirements.travelDates.status).toBe('ambiguous');});
  it('keeps toman and rial units distinct and extracts only explicitly stated traveler counts',()=>{const toman=intake('Trip to Shiraz for 4 days, budget 20 million toman, four people','en-US');const rial=intake('Trip to Shiraz for 4 days, budget 20 million IRR, four people','en-US');expect(toman.kind).toBe('ready');expect(rial.kind).toBe('ready');if(toman.kind==='ready'&&rial.kind==='ready'){expect(toman.requirements.budget.value?.unit).toBe('million toman');expect(rial.requirements.budget.value?.unit).toBe('million IRR');expect(toman.requirements.budget.value?.amount).toBe(rial.requirements.budget.value?.amount);expect(toman.requirements.travelerCount.value).toBe(4);}});
+ it.each([
+  ['I need wheelchair access for a 3-day trip to Shiraz','en-US',['wheelchair_access']],
+  ['سفر ۳ روزه به شیراز با دسترسی با ویلچر','fa-IR',['wheelchair_access']],
+  ['رحلة لمدة ٣ أيام إلى شيراز مع إمكانية الوصول بالكراسي المتحركة','ar',['wheelchair_access']],
+  ['A 3-day trip to Shiraz with a step-free entrance','en-US',['step_free_access']],
+  ['سفر ۳ روزه به شیراز با ورودی بدون پله','fa-IR',['step_free_access']],
+  ['رحلة لمدة ٣ أيام إلى شيراز بمدخل دون درجات','ar',['step_free_access']],
+ ])('extracts only explicitly stated access attribute phrases in %s', (text,locale,attributes)=>{
+  const result=intake(text,locale as 'fa-IR'|'en-US'|'ar');
+  expect(result.kind).toBe('ready');
+  if(result.kind==='ready')expect(result.requirements.accessibility.value).toEqual(attributes);
+ });
+ it('does not infer an access requirement from a statement about the traveler alone',()=>{
+  const result=intake('I use a wheelchair and want a 3-day trip to Shiraz','en-US');
+  expect(result.kind).toBe('ready');
+  if(result.kind==='ready')expect(result.requirements.accessibility.value).toBeNull();
+ });
 });

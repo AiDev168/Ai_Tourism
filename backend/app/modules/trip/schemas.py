@@ -82,11 +82,7 @@ class AppendMessageRequest(StrictModel):
 
 
 RequirementField = Literal[
-    "duration_days", "origin", "travel_dates", "traveler_count", "budget",
-    "accessibility", "mobility", "surface", "activity", "activity_difficulty",
-    "season", "radius", "time_window", "transport", "travel_style",
-    "accommodation", "party_composition",
-    "destination_resolution", "trip_profile",
+    "origin", "travel_dates", "traveler_count", "budget",
 ]
 
 
@@ -97,6 +93,23 @@ class RequirementConsentRequest(StrictModel):
     field_decisions: dict[RequirementField, Literal["must_have", "advisory"]] = Field(
         default_factory=dict, max_length=32
     )
+    advisory_acknowledged_fields: list[RequirementField] = Field(default_factory=list, max_length=4)
+
+    @field_validator("advisory_acknowledged_fields")
+    @classmethod
+    def unique_acknowledgements(cls, value: list[RequirementField]) -> list[RequirementField]:
+        if len(value) != len(set(value)):
+            raise ValueError("advisory acknowledgements must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def acknowledgements_match_advisory_choices(self):
+        advisory = {
+            field for field, decision in self.field_decisions.items() if decision == "advisory"
+        }
+        if set(self.advisory_acknowledged_fields) != advisory:
+            raise ValueError("each advisory choice requires its explicit acknowledgement")
+        return self
 
 
 class ConfirmTripProfileRequest(StrictModel):
