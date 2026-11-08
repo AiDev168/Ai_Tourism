@@ -7,8 +7,6 @@ __pycache__/
 *.so
 
 # Distribution / packaging
-.env.*
-.env.example
 .Python
 build/
 develop-eggs/
@@ -150,10 +148,8 @@ activemq-data/
 *.sage.py
 
 # Environments
-.env
 .envrc
 .venv
-.env
 env/
 venv/
 ENV/
@@ -222,7 +218,6 @@ __marimo__/
 .venv/
 __pycache__/
 *.py[cod]
-.env.example
 node_modules/
 frontend/dist/
 frontend/.vite/
@@ -232,3 +227,8 @@ test-results/
 
 # Visual QA PNGs are tracked individually; keep the duplicate ZIP local
 artifacts/visual-qa/visual-qa.zip
+
+# Local environment files: keep only the safe example template tracked.
+.env
+.env.*
+!.env.example
