@@ -81,14 +81,35 @@ class AppendMessageRequest(StrictModel):
         return _bounded_json(value) if value is not None else None
 
 
+RequirementField = Literal[
+    "duration_days", "origin", "travel_dates", "traveler_count", "budget",
+    "accessibility", "mobility", "surface", "activity", "activity_difficulty",
+    "season", "radius", "time_window", "transport", "travel_style",
+    "accommodation", "party_composition",
+    "destination_resolution", "trip_profile",
+]
+
+
+class RequirementConsentRequest(StrictModel):
+    """Field-specific traveler choices submitted with explicit profile review."""
+
+    contract_version: Literal["recommendation-consent-v1"]
+    field_decisions: dict[RequirementField, Literal["must_have", "advisory"]] = Field(
+        default_factory=dict, max_length=32
+    )
+
+
 class ConfirmTripProfileRequest(StrictModel):
     expected_version: int = Field(ge=1)
     confirmed_requirements: dict[str, Any]
     destination_ids: list[str] = Field(default_factory=list, max_length=50)
+    requirement_consent: RequirementConsentRequest | None = None
 
     @field_validator("confirmed_requirements")
     @classmethod
     def bounded_requirements(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if "requirement_consent" in value or "_recommendation_consent" in value:
+            raise ValueError("requirement consent must use its dedicated request field")
         return _bounded_json(value)
 
 
@@ -226,6 +247,7 @@ class RecommendationItemResponse(StrictModel):
     matched_requirements: list[str]
     unknown_fields: list[str]
     warnings: list[str]
+    not_evaluated_fields: list[str] = Field(default_factory=list, max_length=32)
     explanation_key: str
     explanation_by_locale: dict[str, str]
     score_components: list["RecommendationScoreComponent"]
@@ -237,6 +259,13 @@ class RecommendationItemResponse(StrictModel):
     destination_type: str
 
 
+class RequirementAssessmentResponse(StrictModel):
+    field: str
+    decision: Literal["must_have", "advisory"] | None
+    status: Literal["satisfied", "not_evaluated", "unresolved"]
+    reason_code: str
+
+
 class RecommendationResponse(StrictModel):
     recommendation_request_id: UUID
     status: Literal["available", "empty", "needs_confirmation"]
@@ -245,6 +274,9 @@ class RecommendationResponse(StrictModel):
     retrieval_version: str
     trip_version: int
     unresolved_fields: list[str] = Field(default_factory=list, max_length=32)
+    requirement_assessments: list[RequirementAssessmentResponse] = Field(default_factory=list, max_length=32)
+    waived_fields: list[str] = Field(default_factory=list, max_length=32)
+    not_evaluated_fields: list[str] = Field(default_factory=list, max_length=32)
     items: list[RecommendationItemResponse] = Field(max_length=1_000)
 
 

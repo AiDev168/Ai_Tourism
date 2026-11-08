@@ -24,6 +24,10 @@ from app.modules.catalog.content_pack import (
     resolve_exact_destination_id,
     resolve_optional_source_ids_exactly,
 )
+from app.modules.catalog.content_addendum import (
+    AddendumPack,
+    addendum_payload_hash,
+)
 
 _SPATIAL_IDENTITY_SQL = """
 SELECT destination_id, destination_key
@@ -165,7 +169,10 @@ def _ensure_proposal(
     edge_parent_column: str,
     edges: list[tuple[Any, ...]],
 ) -> LiteralResult:
-    select_sql = f"SELECT {id_column}, {key_column}, payload_sha256, review_status, publishable, is_synthetic FROM {table} WHERE {key_column} = %s FOR UPDATE"
+    # The importer has no UPDATE privilege. The unique stable-key constraint
+    # plus INSERT ... ON CONFLICT DO NOTHING serializes concurrent first
+    # inserts; the subsequent read verifies the winning immutable proposal.
+    select_sql = f"SELECT {id_column}, {key_column}, payload_sha256, review_status, publishable, is_synthetic FROM {table} WHERE {key_column} = %s"
     insert_columns = list(parent_columns)
     insert_values = [parent_columns[name] for name in insert_columns]
     insert_columns.extend(("payload", "payload_sha256"))
@@ -411,3 +418,120 @@ def stage_review_content_pack(
             )
             counts["inserted" if result == "insert" else "unchanged"] += 1
     return counts
+
+
+def stage_review_content_addendum(
+    connection: Any, batch_id: str | UUID, pack: AddendumPack
+) -> dict[str, int]:
+    """Stage the four v1 spatial proposals without canonical catalogue writes.
+
+    The caller injects an operator connection and an existing dataset batch.
+    All four destination identities and source references are resolved before
+    the first proposal insert, inside one transaction. Missing sources remain
+    as provenance snapshots with a NULL FK; duplicate source URLs or missing
+    /duplicate destination keys abort the entire batch.
+    """
+    try:
+        batch_uuid = UUID(str(batch_id))
+    except (TypeError, ValueError):
+        raise ContentImportConflict("an existing import batch UUID is required") from None
+
+    proposal_keys = [proposal.record_key for proposal in pack.spatial_entities]
+    source_urls = [source.url for source in pack.source_register]
+    result = {"inserted": 0, "unchanged": 0}
+    source_by_id = {source.source_id: source for source in pack.source_register}
+
+    with connection.transaction():
+        # Resolve exact canonical identities using read-only SELECT access. The
+        # proposal FK protects referential integrity if a target is removed
+        # between this lookup and insertion; no canonical-row write privilege
+        # or row lock is required for review staging.
+        destination_rows = _read_rows(
+            connection,
+            """SELECT destination_id, destination_key FROM knowledge.destinations
+               WHERE destination_key = ANY(%s::TEXT[])""",
+            (proposal_keys,),
+        )
+        destination_ids = {
+            key: resolve_exact_destination_id(key, destination_rows) for key in proposal_keys
+        }
+        source_rows = _exact_sources(connection, source_urls)
+        source_ids: dict[str, int | None] = {}
+        for source in pack.source_register:
+            matches = [row for row in source_rows if row.get("url") == source.url]
+            if len(matches) > 1:
+                raise CandidateIdentityError(
+                    "source URL resolves to multiple existing sources"
+                )
+            if not matches:
+                source_ids[source.source_id] = None
+                continue
+            try:
+                source_id = int(matches[0]["source_id"])
+            except (KeyError, TypeError, ValueError):
+                raise CandidateIdentityError("source URL resolved to an invalid source ID") from None
+            if source_id < 1 or str(matches[0]["source_id"]) != str(source_id):
+                raise CandidateIdentityError("source URL resolved to an invalid source ID")
+            source_ids[source.source_id] = source_id
+
+        for proposal in pack.spatial_entities:
+            source_snapshots = [
+                {
+                    **source_by_id[source_key].model_dump(mode="json"),
+                    "resolved_source_id": source_ids[source_key],
+                }
+                for claim in proposal.factual_claims
+                for source_key in claim.source_ids
+            ]
+            payload = {
+                "dataset_key": pack.dataset_key,
+                "version": pack.version,
+                "proposal": proposal.model_dump(mode="json"),
+                "publication_contract": pack.publication_contract,
+                "locale_contract": pack.locale_contract,
+                "source_snapshots": source_snapshots,
+            }
+            edges: set[tuple[Any, ...]] = set()
+            for claim in proposal.factual_claims:
+                for source_key in claim.source_ids:
+                    source = source_by_id[source_key]
+                    retrieved_at = datetime.combine(source.retrieved_at, time.min, tzinfo=UTC)
+                    edges.add(
+                        (
+                            claim.claim_id,
+                            source_key,
+                            source_ids[source_key],
+                            source.title,
+                            source.url,
+                            None,
+                            "claim_support",
+                            source.limitations,
+                            retrieved_at,
+                            None,
+                            None,
+                        )
+                    )
+            stable_key = proposal_stable_key(
+                pack.dataset_key, pack.version, proposal.record_key
+            )
+            staged = _ensure_proposal(
+                connection,
+                table="knowledge.destination_enrichment_proposals",
+                id_column="proposal_id",
+                key_column="proposal_key",
+                stable_key=stable_key,
+                payload=payload,
+                digest=addendum_payload_hash(payload),
+                parent_columns={
+                    "proposal_key": stable_key,
+                    "dataset_import_batch_id": batch_uuid,
+                    "target_destination_id": destination_ids[proposal.record_key],
+                    "target_destination_key": proposal.record_key,
+                    "record_action": proposal.target_record_action,
+                },
+                edge_table="knowledge.destination_enrichment_proposal_sources",
+                edge_parent_column="proposal_id",
+                edges=sorted(edges, key=lambda edge: (edge[0], edge[1], edge[6])),
+            )
+            result["inserted" if staged == "insert" else "unchanged"] += 1
+    return result

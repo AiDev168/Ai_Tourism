@@ -122,6 +122,151 @@ describe('persisted traveler journey', () => {
     }
   });
 
+  it('requires an explicit field choice and a separate advisory acknowledgement before saving consent', async () => {
+    const requestText = 'Plan a 3-day trip to Shiraz with a budget of 100000 toman';
+    const parsed = createTripRequirements({ requestText, locale: 'en-US' });
+    expect(parsed.kind).not.toBe('invalid');
+    if (parsed.kind === 'invalid') return;
+    const trip = tripRecord(requestText, parsed);
+    const conversation = {
+      conversation_id: 'conversation-1', locale: 'en-US', version: 1,
+      started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
+      trips: [trip], messages: [],
+    };
+    const savedTrip = {
+      ...trip, version: 2,
+      confirmed_requirements: {
+        confirmation_source: 'traveler_reviewed',
+        requirement_consent: {
+          contract_version: 'recommendation-consent-v1', profile_version: 2,
+          field_decisions: { budget: 'advisory' },
+        },
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input); const method = init?.method ?? 'GET';
+      if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
+      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: null }, 201);
+      if (url === `/api/v1/trips/${trip.trip_id}` && method === 'PATCH') return response(savedTrip);
+      if (url === `/api/v1/trips/${trip.trip_id}/recommendations` && method === 'POST') return response({
+        recommendation_request_id: 'recommendation-request-1', status: 'empty', reason_code: 'no_eligible_candidates',
+        unresolved_fields: [], waived_fields: ['budget'], not_evaluated_fields: ['budget'],
+        requirement_assessments: [{ field: 'budget', decision: 'advisory', status: 'not_evaluated', reason_code: 'budget_unverifiable' }],
+        algorithm_version: 'structured-catalogue-ranking-v3', retrieval_version: 'approved-structured-catalogue-v2',
+        trip_version: 2, items: [],
+      });
+      if (url === `/api/v1/trips/${trip.trip_id}` && method === 'GET') return response(savedTrip);
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => root.render(<TravelerJourney locale="en-US" session={session} online requirements={parsed.requirements}
+      onSessionExpired={() => undefined} onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
+    await settle();
+    await act(async () => { host.querySelector<HTMLButtonElement>('.journey-action')!.click(); }); await settle();
+
+    const confirm = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].confirmProfile)!;
+    const must = host.querySelector<HTMLInputElement>('#requirement-consent-budget-must')!;
+    const advisory = host.querySelector<HTMLInputElement>('#requirement-consent-budget-advisory')!;
+    expect(must.checked).toBe(false);
+    expect(advisory.checked).toBe(false);
+    expect(confirm.disabled).toBe(true);
+    await act(async () => { advisory.click(); }); await settle();
+    expect(host.textContent).toContain(journeyMessages['en-US'].requirementAdvisoryWarning);
+    expect(confirm.disabled).toBe(true);
+    await act(async () => { host.querySelector<HTMLInputElement>('#requirement-consent-budget-ack')!.click(); }); await settle();
+    expect(confirm.disabled).toBe(false);
+    await act(async () => { confirm.click(); }); await settle();
+    const patchCall = fetchMock.mock.calls.find(call => String(call[0]) === `/api/v1/trips/${trip.trip_id}` && (call[1] as RequestInit).method === 'PATCH')!;
+    const patchBody = JSON.parse(String((patchCall[1] as RequestInit).body));
+    expect(patchBody.requirement_consent).toEqual({
+      contract_version: 'recommendation-consent-v1', field_decisions: { budget: 'advisory' },
+    });
+    await act(async () => {
+      [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].findRecommendations)!.click();
+    }); await settle();
+    expect(host.textContent).toContain(journeyMessages['en-US'].requirementNotEvaluatedTitle);
+    expect(host.textContent).toContain(journeyMessages['en-US'].requirementAdvisoryWarning);
+    expect(host.textContent).toContain(journeyMessages['en-US'].recommendationEmpty);
+  });
+
+  it('does not restore a confirmed profile when its server-bound consent record is missing', async () => {
+    const requestText = 'Plan a 3-day trip to Shiraz';
+    const parsed = createTripRequirements({ requestText, locale: 'en-US' });
+    expect(parsed.kind).not.toBe('invalid');
+    if (parsed.kind === 'invalid') return;
+    const trip = {
+      ...tripRecord(requestText, parsed),
+      confirmed_requirements: { confirmation_source: 'traveler_reviewed' },
+    };
+    const conversation = {
+      conversation_id: 'conversation-1', locale: 'en-US', version: 1,
+      started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
+      trips: [trip], messages: [],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/conversations?limit=50')) return response({ items: [conversation], next_cursor: null });
+      if (url === '/api/v1/conversations/conversation-1') return response(conversation);
+      if (url === `/api/v1/trips/${trip.trip_id}`) return response(trip);
+      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => root.render(<TravelerJourney locale="en-US" session={session} online requirements={null}
+      onSessionExpired={() => undefined} onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
+    await settle();
+    const openTrip = [...host.querySelectorAll('button')].find(button => button.textContent === requestText)!;
+    await act(async () => { openTrip.click(); }); await settle();
+
+    expect(host.querySelector('.recommendation-controls')).toBeNull();
+    expect(host.textContent).toContain(journeyMessages['en-US'].profileTitle);
+    expect(host.textContent).not.toContain(journeyMessages['en-US'].findRecommendations);
+  });
+
+  it('renders needs-confirmation guidance when the backend reason code is null', async () => {
+    const requestText = 'Plan a 3-day trip to Shiraz';
+    const parsed = createTripRequirements({ requestText, locale: 'en-US' });
+    expect(parsed.kind).not.toBe('invalid');
+    if (parsed.kind === 'invalid') return;
+    const baseTrip = tripRecord(requestText, parsed);
+    const trip = {
+      ...baseTrip, version: 2, latest_recommendation_request_id: 'recommendation-request-1',
+      confirmed_requirements: {
+        confirmation_source: 'traveler_reviewed',
+        requirement_consent: { contract_version: 'recommendation-consent-v1', profile_version: 2, field_decisions: {} },
+      },
+    };
+    const conversation = {
+      conversation_id: 'conversation-1', locale: 'en-US', version: 1,
+      started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
+      trips: [trip], messages: [],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/conversations?limit=50')) return response({ items: [conversation], next_cursor: null });
+      if (url === '/api/v1/conversations/conversation-1') return response(conversation);
+      if (url === `/api/v1/trips/${trip.trip_id}`) return response(trip);
+      if (url === `/api/v1/trips/${trip.trip_id}/recommendations`) return response({
+        recommendation_request_id: 'recommendation-request-1', status: 'needs_confirmation', reason_code: null,
+        unresolved_fields: ['budget'], waived_fields: [], not_evaluated_fields: [], requirement_assessments: [],
+        algorithm_version: 'structured-catalogue-ranking-v3', retrieval_version: 'approved-structured-catalogue-v2',
+        trip_version: 2, items: [],
+      });
+      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => root.render(<TravelerJourney locale="en-US" session={session} online requirements={null}
+      onSessionExpired={() => undefined} onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
+    await settle();
+    const openTrip = [...host.querySelectorAll('button')].find(button => button.textContent === requestText)!;
+    await act(async () => { openTrip.click(); }); await settle();
+
+    expect(host.textContent).toContain(journeyMessages['en-US'].recommendationClarify);
+    expect(host.textContent).toContain(localizeRecommendationCode('en-US', 'field:budget'));
+  });
+
   it('creates a ten-day itinerary by default and renders every day with honest partial coverage', async () => {
     const requestText = 'Plan a 10-day trip to Shiraz';
     const parsed = createTripRequirements({ requestText, locale: 'en-US' });

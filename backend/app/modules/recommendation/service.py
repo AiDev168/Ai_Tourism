@@ -9,6 +9,7 @@ from app.modules.recommendation.contracts import (
     EvidenceSource,
     Locale,
     RankingComponent,
+    RequirementAssessment,
     RecommendationOutcome,
     RecommendedDestination,
 )
@@ -79,6 +80,31 @@ class _InvalidRequirements(ValueError):
     pass
 
 
+class _StaleRequirementConsent(ValueError):
+    pass
+
+
+_CONSENT_KEY = "requirement_consent"
+_WAIVABLE_FIELDS = frozenset({
+    "origin", "travel_dates", "traveler_count", "budget", "accessibility", "mobility",
+    "surface", "activity", "activity_difficulty", "season", "radius", "time_window",
+    "transport", "travel_style", "accommodation", "party_composition",
+})
+_FIELD_REASON_CODES = {
+    "budget": "budget_unverifiable", "travel_dates": "travel_dates_unverifiable",
+    "traveler_count": "party_size_unverifiable", "party_composition": "party_size_unverifiable",
+    "accessibility": "access_unverifiable", "mobility": "access_unverifiable",
+    "surface": "surface_unverifiable", "activity": "activity_unverifiable",
+    "activity_difficulty": "difficulty_unverifiable", "season": "travel_dates_unverifiable",
+    "origin": "origin_unverifiable", "radius": "radius_unverifiable",
+    "time_window": "travel_dates_unverifiable", "transport": "transport_unverifiable",
+    "travel_style": "constraints_unverifiable", "accommodation": "constraints_unverifiable",
+    "hard_constraint": "hard_constraints_unverifiable",
+    "duration_days": "requirements_incomplete",
+    "destination_resolution": "requirements_incomplete", "trip_profile": "requirements_incomplete",
+}
+
+
 def _unwrap(requirements: Mapping[str, object], key: str) -> object:
     value = requirements.get(key)
     if isinstance(value, Mapping):
@@ -140,6 +166,7 @@ def _validate_budget(value: object) -> bool:
         raise _InvalidRequirements
     supported_units = {
         "rial", "toman", "irr", "million rial", "million toman",
+        "ریال", "تومان", "ريال", "تومان",
         "میلیون ریال", "میلیون تومان", "مليون ريال", "مليون تومان",
     }
     if currency not in {"IRR", None} or (unit is not None and (not isinstance(unit, str) or unit.strip().casefold() not in supported_units)):
@@ -401,6 +428,65 @@ def _assess_requirements(
     return duration, interests, unique_unresolved, normalized_profile_ids, has_destination_text
 
 
+def _requirement_consent(
+    requirements: Mapping[str, object], unresolved: tuple[str, ...], profile_version: int | None,
+) -> tuple[list[RequirementAssessment], list[str], list[str]]:
+    """Validate version-bound explicit choices and classify unresolved fields.
+
+    Missing choices are mandatory. Only exact, recognized structured fields
+    may be waived; the untyped free-text hard_constraint bucket is never
+    waivable because it may combine safety-critical requirements.
+    """
+    consent = requirements.get(_CONSENT_KEY)
+    decisions: Mapping[str, object] = {}
+    if consent is not None:
+        if not isinstance(consent, Mapping) or set(consent) != {
+            "contract_version", "profile_version", "field_decisions",
+        }:
+            raise _InvalidRequirements
+        if consent.get("contract_version") != "recommendation-consent-v1":
+            raise _InvalidRequirements
+        stored_version = consent.get("profile_version")
+        if isinstance(stored_version, bool) or not isinstance(stored_version, int) or stored_version < 1:
+            raise _InvalidRequirements
+        if profile_version is None or stored_version != profile_version:
+            raise _StaleRequirementConsent
+        raw_decisions = consent.get("field_decisions")
+        if not isinstance(raw_decisions, Mapping):
+            raise _InvalidRequirements
+        if any(not isinstance(field, str) or not isinstance(decision, str)
+               or decision not in {"must_have", "advisory"}
+               for field, decision in raw_decisions.items()):
+            raise _InvalidRequirements
+        decisions = raw_decisions
+        if not set(decisions).issubset(set(unresolved)):
+            raise _InvalidRequirements
+        if any(
+            decision == "advisory" and field not in _WAIVABLE_FIELDS
+            for field, decision in decisions.items()
+        ):
+            raise _InvalidRequirements
+
+    assessments: list[RequirementAssessment] = []
+    blockers: list[str] = []
+    waived: list[str] = []
+    for field in unresolved:
+        decision = decisions.get(field, "must_have")
+        if decision == "advisory":
+            waived.append(field)
+            status = "not_evaluated"
+        else:
+            blockers.append(field)
+            status = "unresolved"
+        assessments.append(RequirementAssessment(
+            field=field,
+            decision=decision,
+            status=status,
+            reason_code=_FIELD_REASON_CODES.get(field, "requirements_unverifiable"),
+        ))
+    return assessments, blockers, waived
+
+
 def recommend_trip(
     *,
     requirements: Mapping[str, object],
@@ -411,6 +497,7 @@ def recommend_trip(
     max_candidates: int = MAX_CANDIDATES,
     metadata_by_destination: Mapping[str, StructuredDestinationMetadata] | None = None,
     retrieval_port: StructuredDestinationCandidateRetrievalPort | None = None,
+    profile_version: int | None = None,
 ) -> RecommendationOutcome:
     """Assess confirmed requirements, then rank approved structured candidates.
 
@@ -424,58 +511,97 @@ def recommend_trip(
         return RecommendationOutcome(status="needs_confirmation", reason_code="requirements_invalid", items=[])
     if not isinstance(requirements, Mapping):
         return RecommendationOutcome(status="needs_confirmation", reason_code="requirements_invalid", items=[])
+    requirements_for_assessment = dict(requirements)
+    consent_value = requirements_for_assessment.pop(_CONSENT_KEY, None)
     try:
-        duration_days, interests, unresolved, profile_destination_ids, has_destination_text = _assess_requirements(requirements)
+        duration_days, interests, unresolved, profile_destination_ids, has_destination_text = _assess_requirements(requirements_for_assessment)
+        consent_input = dict(requirements_for_assessment)
+        if consent_value is not None:
+            consent_input[_CONSENT_KEY] = consent_value
+        assessments, blocking_fields, waived_fields = _requirement_consent(
+            consent_input, unresolved, profile_version
+        )
+    except _StaleRequirementConsent:
+        return RecommendationOutcome(
+            status="needs_confirmation", reason_code="requirement_consent_stale",
+            unresolved_fields=list(unresolved) if "unresolved" in locals() else [],
+            requirement_assessments=[
+                RequirementAssessment(
+                    field=field, decision="must_have", status="unresolved",
+                    reason_code=_FIELD_REASON_CODES.get(field, "requirements_unverifiable"),
+                )
+                for field in unresolved
+            ] if "unresolved" in locals() else [],
+            items=[],
+        )
     except _InvalidRequirements:
         return RecommendationOutcome(status="needs_confirmation", reason_code="requirements_invalid", items=[])
+    consent_metadata = {
+        "requirement_assessments": assessments,
+        "waived_fields": waived_fields,
+        "not_evaluated_fields": waived_fields,
+    }
     if (
         not isinstance(selected_destination_ids, Sequence)
         or isinstance(selected_destination_ids, (str, bytes))
         or len(selected_destination_ids) > 50
     ):
-        return RecommendationOutcome(status="needs_confirmation", reason_code="requirements_invalid", items=[])
+        return RecommendationOutcome(
+            status="needs_confirmation", reason_code="requirements_invalid",
+            **consent_metadata, items=[],
+        )
     selected: list[str] = []
     for raw_id in selected_destination_ids:
         if not isinstance(raw_id, (str, int)) or isinstance(raw_id, bool):
-            return RecommendationOutcome(status="needs_confirmation", reason_code="destination_selection_invalid", items=[])
+            return RecommendationOutcome(
+                status="needs_confirmation", reason_code="destination_selection_invalid",
+                **consent_metadata, items=[],
+            )
         destination_id = str(raw_id)
         if (
             not destination_id.isascii() or not destination_id.isdecimal()
             or len(destination_id) > 19 or int(destination_id) < 1
             or int(destination_id) > _MAX_DESTINATION_ID
         ):
-            return RecommendationOutcome(status="needs_confirmation", reason_code="destination_selection_invalid", items=[])
+            return RecommendationOutcome(
+                status="needs_confirmation", reason_code="destination_selection_invalid",
+                **consent_metadata, items=[],
+            )
         if destination_id not in selected:
             selected.append(destination_id)
     if profile_destination_ids and tuple(selected) != profile_destination_ids:
         return RecommendationOutcome(
             status="needs_confirmation", reason_code="requirements_invalid", items=[],
-            duration_days=duration_days,
+            duration_days=duration_days, **consent_metadata,
         )
-    if unresolved:
+    if blocking_fields:
         # An exact requested place with no resolved production identity is a
         # catalogue-unavailable outcome when the approved view is empty. Other
         # explicit, unverifiable requirements still need traveler confirmation.
-        if not catalogue and unresolved == ("destination_resolution",) and has_destination_text:
-            return RecommendationOutcome(status="empty", reason_code="catalogue_empty", items=[])
-        if "hard_constraint" in unresolved:
+        if not catalogue and blocking_fields == ["destination_resolution"] and has_destination_text:
+            return RecommendationOutcome(
+                status="empty", reason_code="catalogue_empty", **consent_metadata, items=[]
+            )
+        if "hard_constraint" in blocking_fields:
             reason = "hard_constraints_unverifiable"
-        elif set(unresolved).issubset({"duration_days", "destination_resolution", "trip_profile"}):
+        elif set(blocking_fields).issubset({"duration_days", "destination_resolution", "trip_profile"}):
             reason = "requirements_incomplete"
         else:
             reason = "requirements_unverifiable"
         return RecommendationOutcome(
             status="needs_confirmation", reason_code=reason,
-            unresolved_fields=list(unresolved), duration_days=duration_days, items=[],
+            unresolved_fields=blocking_fields, duration_days=duration_days,
+            **consent_metadata, items=[],
         )
     if not catalogue and selected:
         return RecommendationOutcome(
             status="empty", reason_code="catalogue_empty", items=[], duration_days=duration_days,
+            **consent_metadata,
         )
     if not selected:
         return RecommendationOutcome(
             status="needs_confirmation", reason_code="destination_selection_required", items=[],
-            duration_days=duration_days,
+            duration_days=duration_days, **consent_metadata,
         )
 
     by_id: dict[str, ProductionDestinationItem] = {}
@@ -487,13 +613,20 @@ def recommend_trip(
         else:
             by_id[candidate.destination_id] = candidate
     if conflicted:
-        return RecommendationOutcome(status="needs_confirmation", reason_code="catalogue_identity_conflict", items=[])
+        return RecommendationOutcome(
+            status="needs_confirmation", reason_code="catalogue_identity_conflict",
+            **consent_metadata, items=[],
+        )
     if any(destination_id not in by_id for destination_id in selected):
         return RecommendationOutcome(
-            status="needs_confirmation", reason_code="selected_destination_unavailable", items=[]
+            status="needs_confirmation", reason_code="selected_destination_unavailable",
+            **consent_metadata, items=[]
         )
     if any(by_id[item].destination_type.strip().casefold() in _NON_SPATIAL_TYPES for item in selected):
-        return RecommendationOutcome(status="empty", reason_code="non_spatial_item_not_supported", items=[])
+        return RecommendationOutcome(
+            status="empty", reason_code="non_spatial_item_not_supported",
+            **consent_metadata, items=[],
+        )
 
     metadata = metadata_by_destination or {}
     retriever = retrieval_port or ApprovedCatalogueCandidateRetriever()
@@ -509,10 +642,13 @@ def recommend_trip(
     except CandidateSetExceedsBound:
         return RecommendationOutcome(
             status="needs_confirmation", reason_code="candidate_set_exceeds_bound", items=[],
-            duration_days=duration_days,
+            duration_days=duration_days, **consent_metadata,
         )
     except (TypeError, ValueError):
-        return RecommendationOutcome(status="needs_confirmation", reason_code="catalogue_identity_conflict", items=[])
+        return RecommendationOutcome(
+            status="needs_confirmation", reason_code="catalogue_identity_conflict",
+            **consent_metadata, items=[],
+        )
 
     now = datetime.now(UTC)
     eligible: list[tuple[int, float, int, object, list[EvidenceSource]]] = []
@@ -525,7 +661,10 @@ def recommend_trip(
         seen_ids.add(candidate.destination_id)
         if candidate.destination_type.strip().casefold() in _NON_SPATIAL_TYPES:
             if hit.scope_match == "explicit_identity":
-                return RecommendationOutcome(status="empty", reason_code="non_spatial_item_not_supported", items=[])
+                return RecommendationOutcome(
+                    status="empty", reason_code="non_spatial_item_not_supported",
+                    **consent_metadata, items=[],
+                )
             continue
         sources = sorted(
             (
@@ -546,15 +685,21 @@ def recommend_trip(
         eligible.append((hit.request_order, score, int(candidate.destination_id), hit, sources))
 
     if missing_selected_evidence:
-        return RecommendationOutcome(status="empty", reason_code="provenance_unavailable", items=[], duration_days=duration_days)
+        return RecommendationOutcome(
+            status="empty", reason_code="provenance_unavailable", items=[], duration_days=duration_days,
+            **consent_metadata,
+        )
     if not eligible:
-        return RecommendationOutcome(status="empty", reason_code="no_eligible_destination", items=[], duration_days=duration_days)
+        return RecommendationOutcome(
+            status="empty", reason_code="no_eligible_destination", items=[], duration_days=duration_days,
+            **consent_metadata,
+        )
 
     eligible.sort(key=lambda row: (row[0], -row[1], row[2]))
     if len(eligible) > max_candidates:
         return RecommendationOutcome(
             status="needs_confirmation", reason_code="candidate_set_exceeds_bound", items=[],
-            duration_days=duration_days,
+            duration_days=duration_days, **consent_metadata,
         )
     items: list[RecommendedDestination] = []
     for rank, (_, score, _, hit, sources) in enumerate(eligible, start=1):
@@ -584,7 +729,8 @@ def recommend_trip(
                     + [f"interest:{term}" for term in matched_interests]
                 ),
                 unknown_fields=unknown,
-                warnings=warnings,
+                warnings=warnings + (["requirements_not_evaluated"] if waived_fields else []),
+                not_evaluated_fields=waived_fields,
                 explanation_key=(
                     "explicit_destination_match" if hit.scope_match == "explicit_identity"
                     else "published_area_candidate"
@@ -592,4 +738,6 @@ def recommend_trip(
                 score_components=components, evidence=sources,
             )
         )
-    return RecommendationOutcome(status="available", items=items, duration_days=duration_days)
+    return RecommendationOutcome(
+        status="available", items=items, duration_days=duration_days, **consent_metadata
+    )

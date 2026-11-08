@@ -290,6 +290,10 @@ def confirm_trip_profile(
             expected_version=body.expected_version,
             confirmed_requirements=body.confirmed_requirements,
             destination_ids=body.destination_ids,
+            requirement_consent=(
+                body.requirement_consent.model_dump(mode="json")
+                if body.requirement_consent is not None else None
+            ),
         )
         result = repository.trip(principal.user_id, trip_id)
         return result if result is not None else _owner_missing()
@@ -354,6 +358,7 @@ def _recommendation_outcome(
         evidence_by_destination=evidence_by_destination,
         locale=trip["locale"],
         metadata_by_destination=metadata_by_destination,
+        profile_version=trip["version"],
     )
     return outcome, by_id
 
@@ -392,6 +397,9 @@ def _recommendation_response(
         "retrieval_version": outcome.retrieval_version,
         "trip_version": trip_version,
         "unresolved_fields": list(outcome.unresolved_fields),
+        "requirement_assessments": [item.model_dump(mode="json") for item in outcome.requirement_assessments],
+        "waived_fields": list(outcome.waived_fields),
+        "not_evaluated_fields": list(outcome.not_evaluated_fields),
         "items": items,
     }
 
@@ -464,6 +472,9 @@ def get_latest_recommendations(
                 status=saved_status,
                 reason_code=snapshot.get("reason_code"),
                 unresolved_fields=snapshot.get("unresolved_fields", []),
+                requirement_assessments=snapshot.get("requirement_assessments", []),
+                waived_fields=snapshot.get("waived_fields", []),
+                not_evaluated_fields=snapshot.get("not_evaluated_fields", []),
                 items=[],
             )
             return _recommendation_response(outcome, {}, request_id, trip["version"], {})

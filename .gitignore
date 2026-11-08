@@ -227,6 +227,7 @@ test-results/
 
 # Visual QA PNGs are tracked individually; keep the duplicate ZIP local
 artifacts/visual-qa/visual-qa.zip
+artifacts/visual-qa-task32/
 
 # Local environment files: keep only the safe example template tracked.
 .env

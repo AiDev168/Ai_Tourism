@@ -220,6 +220,15 @@ button { cursor: pointer; }
 .saved-stop textarea, .journey-panel select, .saved-stop select {
   width: 100%; min-width: 0; max-width: 100%;
 }
+.requirement-consent, .requirement-consent-field { min-width: 0; margin: 0; padding: 14px; border: 1px solid rgba(43, 55, 42, .18); border-radius: 14px; }
+.requirement-consent { display: grid; gap: 12px; background: rgba(255, 253, 248, .72); }
+.requirement-consent-field { display: grid; gap: 8px; background: var(--paper, #fffdf8); }
+.requirement-consent-field legend, .requirement-consent legend { padding-inline: 6px; font-weight: 700; }
+.requirement-consent-field label, .requirement-advisory-warning label { display: flex; align-items: flex-start; gap: 9px; line-height: 1.65; }
+.profile-editor .requirement-consent input[type="radio"], .profile-editor .requirement-consent input[type="checkbox"] { width: auto; min-width: 1.1rem; margin-block-start: .35em; }
+.requirement-advisory-warning { display: grid; gap: 8px; }
+.requirement-advisory-warning .journey-alert { margin: 0; }
+.requirement-unclassified, .not-evaluated-warning { margin-block: 12px; }
 .itinerary-start input[type="number"] { width: min(100%, 12rem); min-width: 0; }
 .destination-edit-row { align-items: end; flex-wrap: wrap; }
 .destination-edit-row label { flex-basis: 100%; }

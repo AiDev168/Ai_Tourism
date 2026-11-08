@@ -30,6 +30,19 @@ export type TripRecord = {
   latest_itinerary_id?: string | null;
 };
 
+export type RequirementConsentDecision = 'must_have' | 'advisory';
+export type RequirementFieldCode = 'budget' | 'travel_dates' | 'traveler_count' | 'origin';
+export type RequirementConsent = {
+  contract_version: 'recommendation-consent-v1';
+  field_decisions: Partial<Record<RequirementFieldCode, RequirementConsentDecision>>;
+};
+export type RequirementAssessment = {
+  field: string;
+  decision: RequirementConsentDecision | null;
+  status: 'satisfied' | 'not_evaluated' | 'unresolved';
+  reason_code: string | null;
+};
+
 export type ConversationRecord = {
   conversation_id: string;
   locale: Locale;
@@ -84,10 +97,14 @@ export type RankingComponent = {
 export type RecommendationResult = {
   recommendation_request_id: string;
   status: 'available' | 'empty' | 'needs_confirmation';
-  reason_code: string;
+  reason_code: string | null;
   /** Stable requirement field codes the catalogue cannot assess. */
   unresolved_fields: string[];
+  requirement_assessments: RequirementAssessment[];
+  waived_fields: string[];
+  not_evaluated_fields: string[];
   algorithm_version: string;
+  retrieval_version: string;
   trip_version: number;
   items: RecommendationItem[];
 };
@@ -194,6 +211,7 @@ export const travelerApi = {
     expected_version: number;
     confirmed_requirements: Record<string, unknown>;
     destination_ids: string[];
+    requirement_consent: RequirementConsent;
   }) => request<TripRecord>(`/trips/${encodeURIComponent(tripId)}`, csrf, json('PATCH', body)),
   getTrip: (tripId: string) => request<TripRecord>(`/trips/${encodeURIComponent(tripId)}`, undefined),
   deleteTrip: (csrf: string, tripId: string) => request<void>(`/trips/${encodeURIComponent(tripId)}`, csrf, { method: 'DELETE' }),

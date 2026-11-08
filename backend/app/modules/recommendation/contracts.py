@@ -49,6 +49,7 @@ class RecommendedDestination(BaseModel):
     matched_requirements: list[str] = Field(max_length=16)
     unknown_fields: list[str] = Field(max_length=16)
     warnings: list[str] = Field(max_length=16)
+    not_evaluated_fields: list[str] = Field(default_factory=list, max_length=32)
     explanation_key: Literal["explicit_destination_match", "published_area_candidate"]
     score_components: list["RankingComponent"] = Field(max_length=4)
     evidence: list[EvidenceSource] = Field(min_length=1, max_length=32)
@@ -64,16 +65,30 @@ class RankingComponent(BaseModel):
     matched_terms: list[str] = Field(max_length=32)
 
 
+class RequirementAssessment(BaseModel):
+    """Transparent result for a recognized profile field the catalogue cannot evaluate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    field: str = Field(min_length=1, max_length=64)
+    decision: Literal["must_have", "advisory"] | None
+    status: Literal["satisfied", "not_evaluated", "unresolved"]
+    reason_code: str = Field(min_length=1, max_length=64)
+
+
 class RecommendationOutcome(BaseModel):
     """Stable service result; empty and clarification outcomes are not failures."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     status: Literal["available", "empty", "needs_confirmation"]
-    algorithm_version: Literal["structured-catalogue-ranking-v2"] = "structured-catalogue-ranking-v2"
+    algorithm_version: Literal["structured-catalogue-ranking-v3"] = "structured-catalogue-ranking-v3"
     retrieval_version: Literal["approved-structured-catalogue-v2"] = "approved-structured-catalogue-v2"
     reason_code: str | None = Field(default=None, max_length=64)
     unresolved_fields: list[str] = Field(default_factory=list, max_length=32)
+    requirement_assessments: list[RequirementAssessment] = Field(default_factory=list, max_length=32)
+    waived_fields: list[str] = Field(default_factory=list, max_length=32)
+    not_evaluated_fields: list[str] = Field(default_factory=list, max_length=32)
     duration_days: int | None = Field(default=None, ge=1, le=365)
     items: list[RecommendedDestination] = Field(max_length=1_000)
 

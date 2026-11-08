@@ -7,7 +7,8 @@ import { resolveDestinationNames, confirmDestinationCandidate, type DestinationR
 import { ApiDestinationCatalogPort } from './destinationCatalogApi';
 import {
   travelerApi, TravelerApiError, type ConversationRecord, type ConversationSummary,
-  type ItineraryRecord, type ItineraryStop, type RecommendationResult, type TripRecord,
+  type ItineraryRecord, type ItineraryStop, type RecommendationResult, type RequirementConsentDecision,
+  type RequirementFieldCode, type TripRecord,
 } from './travelerApi';
 
 const catalog = new ApiDestinationCatalogPort();
@@ -38,6 +39,59 @@ function tripDayCount(trip: TripRecord | null, extracted: TripRequirements | nul
   return validDayCount(trip?.confirmed_requirements?.duration_days)
     ?? validDayCount(trip?.duration_days)
     ?? validDayCount(extracted?.durationDays.value);
+}
+
+const requirementFields: RequirementFieldCode[] = ['budget', 'travel_dates', 'traveler_count', 'origin'];
+
+function unresolvedConsentFields(value: TripRequirements | null): RequirementFieldCode[] {
+  if (!value) return [];
+  const explicit: Record<RequirementFieldCode, unknown> = {
+    budget: value.budget.value,
+    travel_dates: value.travelDates.value,
+    traveler_count: value.travelerCount.value,
+    origin: value.origin.value,
+  };
+  return requirementFields.filter(field => {
+    const fieldValue = explicit[field];
+    return fieldValue !== null && fieldValue !== undefined
+      && (typeof fieldValue !== 'string' || fieldValue.trim().length > 0);
+  });
+}
+
+function restoredConsent(
+  trip: TripRecord,
+  fields: RequirementFieldCode[],
+): Partial<Record<RequirementFieldCode, RequirementConsentDecision>> | null {
+  const raw = trip.confirmed_requirements.requirement_consent;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const consent = raw as Record<string, unknown>;
+  if (consent.contract_version !== 'recommendation-consent-v1'
+      || !Number.isInteger(consent.profile_version)
+      || consent.profile_version !== trip.version) return null;
+  const decisions = consent.field_decisions;
+  if (!decisions || typeof decisions !== 'object' || Array.isArray(decisions)) return null;
+  const decisionEntries = Object.entries(decisions as Record<string, unknown>);
+  if (decisionEntries.some(([field, decision]) =>
+    !fields.includes(field as RequirementFieldCode)
+    || (decision !== 'must_have' && decision !== 'advisory'))
+  ) return null;
+  const parsed: Partial<Record<RequirementFieldCode, RequirementConsentDecision>> = {};
+  for (const field of fields) {
+    const decision = (decisions as Record<string, unknown>)[field];
+    if (decision === 'must_have' || decision === 'advisory') parsed[field] = decision;
+  }
+  return parsed;
+}
+
+function consentIsComplete(
+  fields: RequirementFieldCode[],
+  decisions: Partial<Record<RequirementFieldCode, RequirementConsentDecision>>,
+  acknowledgements: Partial<Record<RequirementFieldCode, boolean>>,
+): boolean {
+  return fields.every(field => {
+    const decision = decisions[field];
+    return decision !== undefined && (decision !== 'advisory' || acknowledgements[field] === true);
+  });
 }
 
 function assignStopToDay(stops: ItineraryStop[], recommendationId: string, nextDay: number): ItineraryStop[] {
@@ -80,6 +134,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const [destinationNames, setDestinationNames] = useState<string[]>([]);
   const [durationText, setDurationText] = useState('');
   const [confirmed, setConfirmed] = useState(false);
+  const [requirementChoices, setRequirementChoices] = useState<Partial<Record<RequirementFieldCode, RequirementConsentDecision>>>({});
+  const [advisoryAcknowledgements, setAdvisoryAcknowledgements] = useState<Partial<Record<RequirementFieldCode, boolean>>>({});
   const [messageText, setMessageText] = useState('');
   const [recommendations, setRecommendations] = useState<RecommendationResult | null>(null);
   const [itinerary, setItinerary] = useState<ItineraryRecord | null>(null);
@@ -94,6 +150,22 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const restoringRequestRef = useRef<string | null>(null);
 
   const extracted = useMemo(() => safeRequirements(activeTrip?.extracted_requirements, activeTrip?.locale ?? locale), [activeTrip, locale]);
+  const consentFields = useMemo(() => unresolvedConsentFields(extracted), [extracted]);
+  const consentComplete = consentIsComplete(consentFields, requirementChoices, advisoryAcknowledgements);
+  const invalidateConsent = () => {
+    setRequirementChoices({});
+    setAdvisoryAcknowledgements({});
+    setConfirmed(false);
+    setRecommendations(null);
+    setItinerary(null);
+  };
+  const chooseRequirement = (field: RequirementFieldCode, decision: RequirementConsentDecision) => {
+    setRequirementChoices(current => ({ ...current, [field]: decision }));
+    setAdvisoryAcknowledgements(current => ({ ...current, [field]: false }));
+    setConfirmed(false);
+    setRecommendations(null);
+    setItinerary(null);
+  };
   const selectedIds = choiceIds(resolution);
   const currentMessages = activeConversation?.messages.filter(message => !activeTrip || message.trip_id === activeTrip.trip_id) ?? [];
   const csrf = session?.csrf_token ?? '';
@@ -124,6 +196,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       setActiveTrip(null);
       setRecommendations(null);
       setItinerary(null);
+      setRequirementChoices({});
+      setAdvisoryAcknowledgements({});
       setItineraryDirty(false);
       setResolution(null);
       return;
@@ -159,7 +233,9 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         setConfirmed(false);
         setRecommendations(null);
         setItinerary(null);
-      setItineraryDirty(false);
+        setItineraryDirty(false);
+        setRequirementChoices({});
+        setAdvisoryAcknowledgements({});
       }
     } else if (!activeTrip) {
       setResolution(null);
@@ -223,7 +299,15 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
           return name ?? '';
         }) : parsed.destinations.value ?? []);
       }
-      setConfirmed(Boolean(Object.keys(trip.confirmed_requirements ?? {}).length));
+      const savedConsent = restoredConsent(trip, unresolvedConsentFields(parsed));
+      setRequirementChoices(savedConsent ?? {});
+      setAdvisoryAcknowledgements(Object.fromEntries(
+        Object.entries(savedConsent ?? {}).filter(([, decision]) => decision === 'advisory').map(([field]) => [field, true]),
+      ) as Partial<Record<RequirementFieldCode, boolean>>);
+      const hasReviewedProfile = trip.confirmed_requirements.confirmation_source === 'traveler_reviewed';
+      setConfirmed(hasReviewedProfile && savedConsent !== null
+        && consentIsComplete(unresolvedConsentFields(parsed), savedConsent,
+          Object.fromEntries(Object.entries(savedConsent).filter(([, decision]) => decision === 'advisory').map(([field]) => [field, true]))));
       const latestRecs = trip.latest_recommendation_request_id
         ? await travelerApi.latestRecommendations(trip.trip_id).catch(() => null) : null;
       setRecommendations(latestRecs);
@@ -252,7 +336,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       setActiveConversation(result.conversation);
       setActiveTrip(result.trip);
       setMessageText('');
-      setConfirmed(false); setRecommendations(null); setItinerary(null); setStatus(copy.messageSaved);
+      setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setStatus(copy.messageSaved);
       const latest = safeRequirements(result.trip.extracted_requirements, result.trip.locale);
       if (latest) { setDestinationNames(latest.destinations.value?.slice() ?? []); setDurationText(latest.durationDays.value === null ? '' : String(latest.durationDays.value)); restoringRequestRef.current = latest.requestText; onRestoreRequest(latest.requestText, latest); void resolveNames(latest.destinations.value ?? []); }
     } catch (value) { applyFailure(value); }
@@ -260,7 +344,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   };
 
   const confirmProfile = async () => {
-    if (!session || !activeTrip || !online) { if (!online) setError(copy.offline); return; }
+    if (!session || !activeTrip || !online || !consentComplete) { if (!online) setError(copy.offline); return; }
     setBusy(true); setError(''); setStatus('');
     const duration = durationText.trim() === '' ? null : Number(durationText);
     const confirmedRequirements = {
@@ -279,6 +363,10 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         expected_version: activeTrip.version,
         confirmed_requirements: confirmedRequirements,
         destination_ids: selectedIds,
+        requirement_consent: {
+          contract_version: 'recommendation-consent-v1',
+          field_decisions: requirementChoices,
+        },
       });
       setActiveTrip(trip); setConfirmed(true); setDirty(false); setRecommendations(null); setItinerary(null); setStatus(copy.profileSaved);
       setItineraryDirty(false);
@@ -407,15 +495,15 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             trip_id: activeTrip.trip_id, content: requirements.requestText, extracted_requirements: requirements,
             idempotency_key: newIdempotencyKey(), expected_version: activeConversation.version, replace_previous_request: true,
           });
-          setActiveConversation(result.conversation); setActiveTrip(result.trip); setDirty(false); setConfirmed(false); setRecommendations(null); setItinerary(null);
+          setActiveConversation(result.conversation); setActiveTrip(result.trip); setDirty(false); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null);
           setStatus(copy.saveSuccess);
         } catch (value) { applyFailure(value); }
         finally { setBusy(false); }
       })()} disabled={busy || !online}>{busy ? copy.saving : copy.updateTrip}</button>}
 
       {session && activeConversation && <div className="journey-new-actions">
-        <button type="button" onClick={() => { setActiveTrip(null); setConfirmed(false); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.createAnotherTrip}</button>
-        <button type="button" onClick={() => { setActiveConversation(null); setActiveTrip(null); setConfirmed(false); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.startNewConversation}</button>
+        <button type="button" onClick={() => { setActiveTrip(null); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.createAnotherTrip}</button>
+        <button type="button" onClick={() => { setActiveConversation(null); setActiveTrip(null); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.startNewConversation}</button>
       </div>}
 
       {activeTrip && activeConversation && <div className="journey-columns">
@@ -441,15 +529,51 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
               {destinationNames.map((name, index) => <div className="destination-edit-row" key={`${index}-${name}`}>
                 <label htmlFor={`profile-destination-${index}`}>{copy.profileDestination} {formatNumber(locale, index + 1)}</label>
                 <input id={`profile-destination-${index}`} value={name} onChange={event => {
-                  const next = destinationNames.slice(); next[index] = event.target.value; setDestinationNames(next); setDirty(true); setConfirmed(false); setRecommendations(null); setItinerary(null); void resolveNames(next);
+                  const next = destinationNames.slice(); next[index] = event.target.value; setDestinationNames(next); setDirty(true); invalidateConsent(); void resolveNames(next);
                 }} dir="auto" />
-                <button type="button" aria-label={`${copy.removeDestination}: ${name}`} onClick={() => { const next = destinationNames.filter((_, item) => item !== index); setDestinationNames(next); setDirty(true); setConfirmed(false); void resolveNames(next); }}>{copy.removeDestination}</button>
+                <button type="button" aria-label={`${copy.removeDestination}: ${name}`} onClick={() => { const next = destinationNames.filter((_, item) => item !== index); setDestinationNames(next); setDirty(true); invalidateConsent(); void resolveNames(next); }}>{copy.removeDestination}</button>
               </div>)}
-              <button type="button" onClick={() => { const next = [...destinationNames, '']; setDestinationNames(next); setDirty(true); setConfirmed(false); setResolution(null); }}>{copy.profileDestination} +</button>
+              <button type="button" onClick={() => { const next = [...destinationNames, '']; setDestinationNames(next); setDirty(true); invalidateConsent(); setResolution(null); }}>{copy.profileDestination} +</button>
               {!destinationNames.length && <p>{copy.noDestination}</p>}
             </fieldset>
             <label htmlFor="profile-duration">{copy.profileDuration}</label>
-            <input id="profile-duration" type="number" min="1" max="365" value={durationText} onChange={event => { setDurationText(event.target.value); setDirty(true); setConfirmed(false); setRecommendations(null); setItinerary(null); }} />
+            <input id="profile-duration" type="number" min="1" max="365" value={durationText} onChange={event => { setDurationText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            {!!consentFields.length && <fieldset className="requirement-consent" aria-describedby="requirement-consent-intro">
+              <legend>{copy.requirementConsentTitle}</legend>
+              <p id="requirement-consent-intro">{copy.requirementConsentIntro}</p>
+              {consentFields.map(field => {
+                const label = localizeRecommendationCode(locale, `field:${field}`);
+                const choice = requirementChoices[field];
+                const fieldId = `requirement-consent-${field}`;
+                return <fieldset className="requirement-consent-field" key={field}>
+                  <legend>{label}</legend>
+                  <p>{copy.requirementUnverified}</p>
+                  <label htmlFor={`${fieldId}-must`}>
+                    <input id={`${fieldId}-must`} type="radio" name={fieldId} value="must_have" checked={choice === 'must_have'}
+                      onChange={() => chooseRequirement(field, 'must_have')} />
+                    {copy.requirementMustHave}
+                  </label>
+                  <p>{copy.requirementMustHaveHelp}</p>
+                  <label htmlFor={`${fieldId}-advisory`}>
+                    <input id={`${fieldId}-advisory`} type="radio" name={fieldId} value="advisory" checked={choice === 'advisory'}
+                      onChange={() => chooseRequirement(field, 'advisory')} />
+                    {copy.requirementAdvisory}
+                  </label>
+                  {choice === 'advisory' && <div className="requirement-advisory-warning" role="group" aria-label={`${label}: ${copy.requirementAdvisoryWarning}`}>
+                    <p className="journey-alert" role="alert">{copy.requirementAdvisoryWarning}</p>
+                    <label htmlFor={`${fieldId}-ack`}>
+                      <input id={`${fieldId}-ack`} type="checkbox" checked={advisoryAcknowledgements[field] === true}
+                        onChange={event => { const checked = event.currentTarget.checked; setAdvisoryAcknowledgements(current => ({ ...current, [field]: checked })); }} />
+                      {copy.requirementAdvisoryAcknowledgement}
+                    </label>
+                  </div>}
+                </fieldset>;
+              })}
+              <p>{copy.requirementChoiceRequired}</p>
+            </fieldset>}
+            {!!extracted?.constraints.value?.length && <div className="journey-alert requirement-unclassified" role="status">
+              <strong>{localizeRecommendationCode(locale, 'field:constraints')}:</strong> {copy.requirementUnclassifiedMandatory}
+            </div>}
             {resolution?.kind === 'catalogue-empty' && <p className="journey-alert" role="status">{copy.recommendationEmpty}</p>}
             {resolution?.kind === 'catalogue-unavailable' && <p className="journey-error" role="alert">{copy.recommendationUnavailable}</p>}
             {resolution?.items.map((item, index) => item.kind === 'ambiguous' ? <fieldset key={index} className="destination-choice">
@@ -457,7 +581,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
               {item.candidates.map(candidate => <label key={candidate.destinationId} dir="auto"><input type="radio" name={`traveler-choice-${index}`} checked={resolution.items[index]?.kind === 'confirmed' && resolution.items[index].destination.destinationId === candidate.destinationId} onChange={() => setResolution(current => current ? confirmDestinationCandidate(current, index, candidate.destinationId) : current)} />{candidate.localizedNames[locale] ?? candidate.canonicalName} · {candidate.provinceName}</label>)}
               <button type="button" onClick={() => { setError(copy.recommendationClarify); document.getElementById(`profile-destination-${index}`)?.focus(); }}>{copy.noneOfThese}</button>
             </fieldset> : item.kind === 'resolved' || item.kind === 'confirmed' ? <p key={index} role="status" dir="auto">{item.destination.localizedNames[locale] ?? item.destination.canonicalName} · {item.kind === 'resolved' ? copy.catalogueMatch : copy.selectedByYou}</p> : item.kind === 'not-found' ? <p key={index} role="status">{item.originalPhrase}: {copy.recommendationClarify}</p> : null)}
-            <button type="button" onClick={() => void confirmProfile()} disabled={busy || (!dirty && confirmed) || !online}>{copy.confirmProfile}</button>
+            <button type="button" onClick={() => void confirmProfile()} disabled={busy || (!dirty && confirmed) || !online || !consentComplete}>{copy.confirmProfile}</button>
           </div>}
           {confirmed && <div className="recommendation-controls">
             <h3>{copy.recommendationTitle}</h3>
@@ -465,11 +589,16 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             {recommendations && recommendations.status !== 'available' && <div className="empty-state" role="status">
               <p>{recommendations.status === 'needs_confirmation' ? copy.recommendationClarify : copy.recommendationEmpty}</p>
               {recommendations.status === 'needs_confirmation' && <>
-                <p>{localizeRecommendationCode(locale, recommendations.reason_code)}</p>
+                {recommendations.reason_code && <p>{localizeRecommendationCode(locale, recommendations.reason_code)}</p>}
                 {!!recommendations.unresolved_fields.length && <ul className="unresolved-requirements">
                   {recommendations.unresolved_fields.map(field => <li key={field}>{localizeRecommendationCode(locale, `field:${field}`)}</li>)}
                 </ul>}
               </>}
+            </div>}
+            {!!recommendations?.not_evaluated_fields?.length && <div className="journey-alert not-evaluated-warning" role="status">
+              <strong>{copy.requirementNotEvaluatedTitle}</strong>
+              <p>{copy.requirementAdvisoryWarning}</p>
+              <ul>{recommendations.not_evaluated_fields.map(field => <li key={field}>{localizeRecommendationCode(locale, `field:${field}`)}</li>)}</ul>
             </div>}
             {recommendations?.status === 'available' && recommendations.items.map(item => <article className="evidence-card" key={item.recommendation_id}>
               <h4 dir="auto">{item.localized_names[locale] ?? item.canonical_name}</h4>

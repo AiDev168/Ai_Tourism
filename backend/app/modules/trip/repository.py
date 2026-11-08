@@ -420,6 +420,7 @@ class TravelerRepository:
         expected_version: int,
         confirmed_requirements: dict[str, Any],
         destination_ids: list[str],
+        requirement_consent: dict[str, Any] | None = None,
     ) -> None:
         requirements = dict(confirmed_requirements)
         requirements["destination_ids"] = destination_ids
@@ -433,6 +434,15 @@ class TravelerRepository:
                 raise TravelerNotFound
             if row["version"] != expected_version:
                 raise TravelerConflict
+            if requirement_consent is not None:
+                # Consent is submitted only alongside the authenticated,
+                # version-checked profile confirmation. Bind it server-side
+                # to the version produced by this update; clients cannot
+                # choose or forge the version identifier.
+                requirements["requirement_consent"] = {
+                    **requirement_consent,
+                    "profile_version": expected_version + 1,
+                }
             conn.execute(
                 """UPDATE travel.trips SET confirmed_requirements=%s,
                    origin_text=%s,start_date=%s,end_date=%s,duration_days=%s,
@@ -696,10 +706,17 @@ class TravelerRepository:
             snapshot = {
                 "trip_version": trip["version"],
                 "confirmed_requirements": trip["confirmed_requirements"] or {},
+                "requirement_consent": (trip["confirmed_requirements"] or {}).get("requirement_consent"),
                 "selected_destination_ids": selected_destination_ids,
                 "outcome_status": outcome.status,
                 "reason_code": outcome.reason_code,
                 "unresolved_fields": list(outcome.unresolved_fields),
+                "requirement_assessments": [
+                    assessment.model_dump(mode="json")
+                    for assessment in outcome.requirement_assessments
+                ],
+                "waived_fields": list(outcome.waived_fields),
+                "not_evaluated_fields": list(outcome.not_evaluated_fields),
                 "algorithm_version": outcome.algorithm_version,
                 "retrieval_version": outcome.retrieval_version,
             }

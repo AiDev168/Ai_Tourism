@@ -50,7 +50,7 @@ def test_returns_only_selected_currently_sourced_production_candidates_in_user_o
     )
 
     assert result.status == "available"
-    assert result.algorithm_version == "structured-catalogue-ranking-v2"
+    assert result.algorithm_version == "structured-catalogue-ranking-v3"
     assert [(item.destination_id, item.rank) for item in result.items] == [("1", 1), ("2", 2)]
     assert result.items[0].explanation_key == "explicit_destination_match"
     assert result.items[0].matched_requirements == ["destination:1"]
@@ -86,6 +86,32 @@ def test_hard_constraints_do_not_get_overridden_by_a_match_score() -> None:
     assert result.status == "needs_confirmation"
     assert result.reason_code == "hard_constraints_unverifiable"
     assert result.items == []
+
+
+def test_persian_and_arabic_rial_units_allow_only_explicit_advisory_consent() -> None:
+    for unit in ("ریال", "ريال", "تومان"):
+        profile = requirements(
+            destinations={"value": ["Shiraz"], "status": "confirmed"},
+            budget={"amount": 100_000, "currency": "IRR", "unit": unit, "raw": "budget"},
+            requirement_consent={
+                "contract_version": "recommendation-consent-v1",
+                "profile_version": 2,
+                "field_decisions": {"budget": "advisory"},
+            },
+        )
+        result = recommend_trip(
+            requirements=profile,
+            selected_destination_ids=[],
+            catalogue=[],
+            evidence_by_destination={},
+            locale="fa-IR",
+            profile_version=2,
+        )
+
+        assert result.status == "empty"
+        assert result.reason_code == "catalogue_empty"
+        assert result.waived_fields == ["budget"]
+        assert result.requirement_assessments[0].status == "not_evaluated"
 
 
 def test_no_recommendation_when_source_is_missing_expired_or_bound_to_another_identity() -> None:
@@ -138,4 +164,89 @@ def test_non_numeric_client_identifier_is_not_accepted_as_catalogue_identity() -
         evidence_by_destination={"1": [source(1, 11)]}, locale="fa-IR",
     )
     assert result.reason_code == "destination_selection_invalid"
+    assert result.items == []
+
+
+def test_unresolved_requirement_defaults_to_mandatory_and_blocks() -> None:
+    result = recommend_trip(
+        requirements=requirements(budget={"amount": 50, "currency": "IRR", "unit": "million toman"}),
+        selected_destination_ids=["1"], catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
+    )
+
+    assert result.status == "needs_confirmation"
+    assert result.unresolved_fields == ["budget"]
+    assert result.waived_fields == result.not_evaluated_fields == []
+    assert [assessment.model_dump() for assessment in result.requirement_assessments] == [{
+        "field": "budget", "decision": "must_have", "status": "unresolved",
+        "reason_code": "budget_unverifiable",
+    }]
+
+
+def test_explicit_version_bound_advisory_is_not_evaluated_or_scored() -> None:
+    profile = requirements(budget={"amount": 50, "currency": "IRR", "unit": "million toman"})
+    profile["requirement_consent"] = {
+        "contract_version": "recommendation-consent-v1",
+        "profile_version": 4,
+        "field_decisions": {"budget": "advisory"},
+    }
+    result = recommend_trip(
+        requirements=profile, selected_destination_ids=["1"], catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
+    )
+
+    assert result.status == "available"
+    assert result.unresolved_fields == []
+    assert result.waived_fields == result.not_evaluated_fields == ["budget"]
+    assert result.requirement_assessments[0].model_dump() == {
+        "field": "budget", "decision": "advisory", "status": "not_evaluated",
+        "reason_code": "budget_unverifiable",
+    }
+    item = result.items[0]
+    assert item.not_evaluated_fields == ["budget"]
+    assert "requirements_not_evaluated" in item.warnings
+    assert all(component.component_key != "budget" for component in item.score_components)
+
+
+def test_stale_or_forged_consent_fails_closed() -> None:
+    stale = requirements(budget={"amount": 50, "currency": "IRR", "unit": "million toman"})
+    stale["requirement_consent"] = {
+        "contract_version": "recommendation-consent-v1",
+        "profile_version": 3,
+        "field_decisions": {"budget": "advisory"},
+    }
+    stale_result = recommend_trip(
+        requirements=stale, selected_destination_ids=["1"], catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
+    )
+    forged = requirements(constraints={"value": ["wheelchair access"]})
+    forged["requirement_consent"] = {
+        "contract_version": "recommendation-consent-v1",
+        "profile_version": 4,
+        "field_decisions": {"hard_constraint": "advisory"},
+    }
+    forged_result = recommend_trip(
+        requirements=forged, selected_destination_ids=["1"], catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
+    )
+
+    assert stale_result.reason_code == "requirement_consent_stale"
+    assert stale_result.unresolved_fields == ["budget"]
+    assert stale_result.waived_fields == []
+    assert forged_result.reason_code == "requirements_invalid"
+    assert forged_result.items == []
+
+
+def test_consent_cannot_be_applied_to_a_field_no_longer_unresolved() -> None:
+    profile = requirements()
+    profile["requirement_consent"] = {
+        "contract_version": "recommendation-consent-v1",
+        "profile_version": 4,
+        "field_decisions": {"budget": "advisory"},
+    }
+    result = recommend_trip(
+        requirements=profile, selected_destination_ids=["1"], catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
+    )
+    assert result.reason_code == "requirements_invalid"
     assert result.items == []
