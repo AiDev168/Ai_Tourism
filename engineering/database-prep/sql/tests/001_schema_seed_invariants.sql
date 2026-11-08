@@ -8,6 +8,7 @@ DECLARE
     expected_ledger_count BIGINT;
     v_has_shiraz BOOLEAN;
     v_has_auth BOOLEAN;
+    v_has_traveler_core BOOLEAN;
 BEGIN
     SELECT EXISTS (
         SELECT 1 FROM system.schema_migrations
@@ -17,6 +18,18 @@ BEGIN
         SELECT 1 FROM system.schema_migrations
         WHERE migration_id = '0008_authentication_foundation'
     ) INTO v_has_auth;
+    SELECT EXISTS (
+        SELECT 1 FROM system.schema_migrations
+        WHERE migration_id = '0009_traveler_core'
+    ) INTO v_has_traveler_core;
+
+    IF v_has_traveler_core AND NOT v_has_auth THEN
+        RAISE EXCEPTION 'Migration 0009 cannot be applied without Migration 0008';
+    END IF;
+    SELECT EXISTS (
+        SELECT 1 FROM system.schema_migrations
+        WHERE migration_id = '0009_traveler_core'
+    ) INTO v_has_traveler_core;
 
     -- Exactly 30 baseline tables, or 34 after additive Migration 0008.
     SELECT COUNT(*) INTO actual_count
@@ -66,6 +79,7 @@ BEGIN
     SELECT COUNT(*) INTO v_count FROM system.schema_migrations;
     expected_ledger_count := CASE WHEN v_has_shiraz THEN 8 ELSE 7 END;
     IF v_has_auth THEN expected_ledger_count := expected_ledger_count + 1; END IF;
+    IF v_has_traveler_core THEN expected_ledger_count := expected_ledger_count + 1; END IF;
     IF v_count <> expected_ledger_count THEN
         RAISE EXCEPTION 'Migration ledger entry count does not match the exact 0006/0007/0008 state; found %', v_count;
     END IF;
@@ -232,14 +246,14 @@ BEGIN
     IF v_count <> 6 THEN RAISE EXCEPTION 'Expected 6 synthetic itinerary stops, found %', v_count; END IF;
     SELECT COUNT(*) INTO v_count FROM integration.external_links WHERE is_synthetic = TRUE;
     IF v_count <> 3 THEN RAISE EXCEPTION 'Expected 3 synthetic external links, found %', v_count; END IF;
-    SELECT COUNT(*) INTO v_count FROM integration.outbound_clicks;
-    IF v_count <> 0 THEN RAISE EXCEPTION 'Expected 0 outbound clicks; no real click occurred, found %', v_count; END IF;
+    SELECT COUNT(*) INTO v_count FROM integration.outbound_clicks WHERE is_synthetic = TRUE;
+    IF v_count <> 0 THEN RAISE EXCEPTION 'Expected 0 synthetic outbound clicks; no synthetic click was seeded, found %', v_count; END IF;
     SELECT COUNT(*) INTO v_count FROM operations.feedback WHERE is_synthetic = TRUE;
     IF v_count <> 1 THEN RAISE EXCEPTION 'Expected one synthetic feedback row, found %', v_count; END IF;
     SELECT COUNT(*) INTO v_count FROM operations.ai_model_calls;
     IF v_count <> 0 THEN RAISE EXCEPTION 'Expected 0 AI usage events; no real provider call occurred, found %', v_count; END IF;
-    SELECT COUNT(*) INTO v_count FROM operations.audit_events;
-    IF v_count <> 0 THEN RAISE EXCEPTION 'Expected 0 audit rows; no live application action occurred, found %', v_count; END IF;
+    -- operations.audit_events is runtime state; it is intentionally excluded
+    -- from immutable seed assertions.
     SELECT COUNT(*) INTO v_count FROM operations.dataset_import_batches;
     IF (v_has_shiraz AND v_count <> 6) OR (NOT v_has_shiraz AND v_count <> 5) THEN
         RAISE EXCEPTION 'Expected 5 dataset batches at 0006 or 6 at 0007; found %', v_count;
@@ -255,6 +269,7 @@ BEGIN
     SELECT COUNT(*) INTO v_count FROM system.schema_migrations;
     expected_ledger_count := CASE WHEN v_has_shiraz THEN 8 ELSE 7 END;
     IF v_has_auth THEN expected_ledger_count := expected_ledger_count + 1; END IF;
+    IF v_has_traveler_core THEN expected_ledger_count := expected_ledger_count + 1; END IF;
     IF v_count <> expected_ledger_count THEN
         RAISE EXCEPTION 'Tracked migration entries do not match the exact 0006/0007/0008 state; found %', v_count;
     END IF;
@@ -275,11 +290,8 @@ BEGIN
         WHERE is_synthetic = TRUE AND (ingestion_status <> 'test_only' OR record_origin <> 'synthetic_fixture')
     ) THEN RAISE EXCEPTION 'Synthetic document escaped test_only guard'; END IF;
 
-    -- Synthetic demo graph must remain synthetic across all user-facing tables.
-    IF EXISTS (SELECT 1 FROM conversation.messages WHERE is_synthetic = FALSE)
-       OR EXISTS (SELECT 1 FROM recommendation.recommendations WHERE is_synthetic = FALSE)
-       OR EXISTS (SELECT 1 FROM travel.itinerary_stops WHERE is_synthetic = FALSE)
-    THEN RAISE EXCEPTION 'Unexpected non-synthetic rows in the seeded QA graph'; END IF;
+    -- The exact synthetic row counts above validate the seeded QA graph.
+    -- Runtime traveler content is non-synthetic and may coexist after 0009.
 
     RAISE NOTICE 'PASS: exact 0006/0007 table-state row counts, provenance and synthetic-data isolation.';
 END $$;

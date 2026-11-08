@@ -12,6 +12,7 @@ from app.core.logging import configure_logging
 from app.api.health import router as health_router
 from app.api.catalogue import router as catalogue_router
 from app.api.auth import router as auth_router
+from app.api.traveler import router as traveler_router
 from app.modules.identity.auth_service import AuthenticationUnavailable
 from app.modules.identity.sms import DisabledSmsAdapter, FakeSmsAdapter, SmsIrSandboxAdapter
 
@@ -22,6 +23,7 @@ app = FastAPI(title="AI Tourism API", version="0.1.0")
 app.include_router(health_router)
 app.include_router(catalogue_router)
 app.include_router(auth_router)
+app.include_router(traveler_router)
 if settings.auth_sms_adapter == "fake":
     app.state.sms_adapter = FakeSmsAdapter()
 elif settings.auth_sms_adapter == "sms_ir_sandbox":
@@ -41,6 +43,8 @@ async def authentication_unavailable(_request: Request, _error: AuthenticationUn
 async def safe_http_exception(_request: Request, error: HTTPException):
     if error.status_code == 401:
         return JSONResponse(status_code=401, content={"error": {"code": "unauthenticated"}})
+    if error.status_code == 403 and error.detail == "csrf_rejected":
+        return JSONResponse(status_code=403, content={"error": {"code": "csrf_rejected"}})
     return JSONResponse(status_code=error.status_code, content={"error": {"code": "request_rejected"}})
 
 
@@ -60,7 +64,7 @@ async def request_context(request: Request, call_next):
         logger.error("request.failed", extra={"request_id": request_id, "result": "error"})
         response = JSONResponse(status_code=500, content={"error": {"code": "internal_error"}})
     response.headers["X-Request-ID"] = request_id
-    if request.url.path.startswith("/api/v1/auth/"):
+    if request.url.path.startswith("/api/v1/"):
         response.headers["Cache-Control"] = "no-store"
     logger.info(
         "request.completed",

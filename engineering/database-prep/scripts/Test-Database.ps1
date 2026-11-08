@@ -65,7 +65,8 @@ try {
         @{ Id = '0005_verified_unesco_destination_seed'; Path = (Join-Path $PackageRoot 'sql\005_verified_unesco_destination_seed.sql') },
         @{ Id = '0006_verified_unesco_destination_seed_batch2'; Path = (Join-Path $PackageRoot 'sql\006_verified_unesco_destination_seed_batch2.sql') },
         @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; Path = (Join-Path $PackageRoot 'sql\007_shiraz_dalahoo_wikipedia_dataset_v1.sql') },
-        @{ Id = '0008_authentication_foundation'; Path = (Join-Path $PackageRoot 'sql\008_authentication_foundation.sql') }
+        @{ Id = '0008_authentication_foundation'; Path = (Join-Path $PackageRoot 'sql\008_authentication_foundation.sql') },
+        @{ Id = '0009_traveler_core'; Path = (Join-Path $PackageRoot 'sql\009_traveler_core.sql') }
     ) | Where-Object { $_.Id -in $expectedMigrations }
     foreach ($migration in $migrationSet) {
         $localHash = (Get-FileHash -LiteralPath $migration.Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -118,6 +119,11 @@ try {
     if ($state.IncludesAuthentication) {
         Write-Host "`n========== AUTHENTICATION FOUNDATION / DATABASE ACCESS ==========" -ForegroundColor Cyan
         Invoke-PsqlFile '/opt/ai-tourism/sql/tests/010_authentication_foundation.sql'
+    }
+
+    if ($state.IncludesTravelerCore) {
+        Write-Host "`n========== TRAVELER CORE / OWNERSHIP / PRIVACY CONTRACT ==========" -ForegroundColor Cyan
+        Invoke-PsqlFile '/opt/ai-tourism/sql/tests/011_traveler_core_contract.sql'
     }
 
     Write-Host "`n========== COMPLETE EXPECTED VS ACTUAL ROW COUNTS ==========" -ForegroundColor Cyan

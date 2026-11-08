@@ -12,6 +12,8 @@ $script:Migration0006Ids = @(
 $script:Migration0007Ids = $script:Migration0006Ids + '0007_shiraz_dalahoo_wikipedia_dataset_v1'
 $script:Migration0008Ids = $script:Migration0006Ids + '0008_authentication_foundation'
 $script:Migration0007And0008Ids = $script:Migration0007Ids + '0008_authentication_foundation'
+$script:Migration0006AuthTravelerIds = $script:Migration0008Ids + '0009_traveler_core'
+$script:Migration0007AuthTravelerIds = $script:Migration0007And0008Ids + '0009_traveler_core'
 
 function Resolve-DatabaseLifecycleState {
     [CmdletBinding()]
@@ -27,6 +29,8 @@ function Resolve-DatabaseLifecycleState {
     $shiraz = @($script:Migration0007Ids | Sort-Object)
     $authBaseline = @($script:Migration0008Ids | Sort-Object)
     $authShiraz = @($script:Migration0007And0008Ids | Sort-Object)
+    $travelerBaseline = @($script:Migration0006AuthTravelerIds | Sort-Object)
+    $travelerShiraz = @($script:Migration0007AuthTravelerIds | Sort-Object)
     $appliedKey = $applied -join ','
 
     if ($appliedKey -ceq ($baseline -join ',')) {
@@ -67,21 +71,52 @@ function Resolve-DatabaseLifecycleState {
         }
     }
 
-    throw "Unsupported or partial database migration ledger. Expected exact 0006, 0007, 0006 plus 0008, or 0007 plus 0008 states; found: $appliedKey. No migration was applied."
+    if ($appliedKey -ceq ($travelerBaseline -join ',')) {
+        return [pscustomobject]@{
+            Name = '0006-auth-0009'
+            ExpectedRows = 421
+            MigrationIds = $script:Migration0006AuthTravelerIds
+            IncludesShiraz = $false
+            IncludesAuthentication = $true
+            IncludesTravelerCore = $true
+        }
+    }
+
+    if ($appliedKey -ceq ($travelerShiraz -join ',')) {
+        return [pscustomobject]@{
+            Name = '0007-auth-0009'
+            ExpectedRows = 697
+            MigrationIds = $script:Migration0007AuthTravelerIds
+            IncludesShiraz = $true
+            IncludesAuthentication = $true
+            IncludesTravelerCore = $true
+        }
+    }
+
+    throw "Unsupported or partial database migration ledger. Expected exact 0006, 0007, 0006 plus 0008, 0007 plus 0008, or either authenticated state plus 0009; found: $appliedKey. No migration was applied."
 }
 
 function Resolve-DatabaseInitializationAction {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)][ValidateSet('fresh', '0006', '0007', '0006-auth', '0007-auth')][string]$State,
+        [Parameter(Mandatory = $true)][ValidateSet('fresh', '0006', '0007', '0006-auth', '0007-auth', '0006-auth-0009', '0007-auth-0009')][string]$State,
         [switch]$ApplyPendingMigrationsToExistingDatabase,
-        [switch]$ApplyAuthenticationMigrationToExistingDatabase
+        [switch]$ApplyAuthenticationMigrationToExistingDatabase,
+        [switch]$ApplyTravelerCoreMigrationToExistingDatabase
     )
 
     switch ($State) {
         'fresh' { return 'initialize-fresh' }
-        '0006-auth' { return 'already-authenticated' }
-        '0007-auth' { return 'already-authenticated' }
+        '0006-auth' {
+            if ($ApplyTravelerCoreMigrationToExistingDatabase) { return 'apply-traveler-0009-from-0006-auth' }
+            throw 'Existing database is at Migration 0006 plus 0008. Migration 0009 is pending and requires separate owner approval. Rerun with -ApplyTravelerCoreMigrationToExistingDatabase only after that approval. No database write was performed.'
+        }
+        '0007-auth' {
+            if ($ApplyTravelerCoreMigrationToExistingDatabase) { return 'apply-traveler-0009-from-0007-auth' }
+            throw 'Existing database is at Migration 0007 plus 0008. Migration 0009 is pending and requires separate owner approval. Rerun with -ApplyTravelerCoreMigrationToExistingDatabase only after that approval. No database write was performed.'
+        }
+        '0006-auth-0009' { return 'already-traveler-core' }
+        '0007-auth-0009' { return 'already-traveler-core' }
         '0006' {
             if ($ApplyAuthenticationMigrationToExistingDatabase) { return 'apply-auth-0008-from-0006' }
             if ($ApplyPendingMigrationsToExistingDatabase) { return 'apply-pending-0007' }

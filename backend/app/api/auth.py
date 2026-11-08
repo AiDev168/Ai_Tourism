@@ -18,6 +18,7 @@ from app.modules.identity.auth_service import (
 )
 from app.modules.identity.phone import InvalidPhoneNumber, normalize_iranian_mobile
 from app.modules.identity.sms import DisabledSmsAdapter
+from app.modules.trip.repository import TravelerRepository
 
 logger = logging.getLogger("ai_tourism.auth")
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
@@ -170,6 +171,24 @@ def authenticated_user(
     return user
 
 
+def require_authenticated_csrf(
+    request: Request,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    service: Annotated[AuthenticationService, Depends(get_auth_service)],
+) -> None:
+    """Require exact same-origin and the CSRF token bound to the server session."""
+    origin = request.headers.get("origin")
+    allowed = {item.strip() for item in settings.auth_allowed_origins.split(",") if item.strip()}
+    token = request.headers.get("x-csrf-token")
+    try:
+        valid_csrf = service.validate_csrf(user, token)
+    except (AuthenticationUnavailable, psycopg.Error):
+        raise AuthenticationUnavailable from None
+    if origin not in allowed or not valid_csrf:
+        raise HTTPException(status_code=403, detail="csrf_rejected")
+
+
 @router.get("/me", response_model=SessionResponse)
 def current_user(
     request: Request,
@@ -220,6 +239,36 @@ def logout(
             service.logout(token)
         except psycopg.Error:
             return _unavailable()
+    _delete_cookie(response, settings)
+    response.status_code = 204
+    return None
+
+
+@router.delete("/me", status_code=204)
+def delete_current_account(
+    request: Request,
+    response: Response,
+    settings: Annotated[Settings, Depends(get_settings)],
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    service: Annotated[AuthenticationService, Depends(get_auth_service)],
+):
+    """Delete the authenticated owner's account and all linked personal data."""
+    origin = request.headers.get("origin")
+    allowed = {item.strip() for item in settings.auth_allowed_origins.split(",") if item.strip()}
+    csrf = request.headers.get("x-csrf-token")
+    try:
+        valid_csrf = service.validate_csrf(user, csrf)
+    except (AuthenticationUnavailable, psycopg.Error):
+        return _unavailable()
+    if origin not in allowed or not valid_csrf:
+        return JSONResponse(status_code=403, content={"error": {"code": "csrf_rejected"}})
+    try:
+        deleted = TravelerRepository(settings).delete_account_data(user.user_id)
+    except psycopg.Error:
+        logger.warning("auth.account_delete_unavailable")
+        return _unavailable()
+    if not deleted:
+        return JSONResponse(status_code=401, content={"error": {"code": "unauthenticated"}})
     _delete_cookie(response, settings)
     response.status_code = 204
     return None

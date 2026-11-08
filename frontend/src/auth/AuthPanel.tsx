@@ -5,7 +5,7 @@ import { authMessages } from './authMessages';
 
 type Phase = 'phone' | 'code';
 
-export function AuthPanel({ locale }: { locale: Locale }) {
+export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessionChange?: (session: AuthSession | null) => void }) {
   const copy = authMessages[locale];
   const [session, setSession] = useState<AuthSession | null>(null);
   const [csrfToken, setCsrfToken] = useState('');
@@ -24,7 +24,9 @@ export function AuthPanel({ locale }: { locale: Locale }) {
       if (!active) return;
       setSession(value);
       setCsrfToken(value.csrf_token);
+      onSessionChange?.(value);
     }).catch(errorValue => {
+      if (active && errorValue instanceof AuthApiError && errorValue.status === 401) onSessionChange?.(null);
       if (active && !(errorValue instanceof AuthApiError && errorValue.status === 401)) {
         // Public browsing remains available if authentication is disabled/offline.
       }
@@ -51,6 +53,7 @@ export function AuthPanel({ locale }: { locale: Locale }) {
     try {
       const value = await authApi.verify(challengeId, code);
       setSession(value); setCsrfToken(value.csrf_token); setCode(''); setOpen(false);
+      onSessionChange?.(value);
     } catch (errorValue) {
       setError(errorValue instanceof AuthApiError && errorValue.status === 401 ? copy.invalidCode : copy.genericError);
     } finally { setBusy(false); }
@@ -61,9 +64,24 @@ export function AuthPanel({ locale }: { locale: Locale }) {
     try {
       await authApi.logout(csrfToken);
       setSession(null); setCsrfToken(''); setPhase('phone'); setChallengeId(''); setCode('');
+      onSessionChange?.(null);
     } catch (errorValue) {
       if (errorValue instanceof AuthApiError && errorValue.status === 401) {
-        setSession(null); setCsrfToken('');
+        setSession(null); setCsrfToken(''); onSessionChange?.(null);
+      } else setError(copy.genericError);
+    } finally { setBusy(false); }
+  };
+
+  const deleteAccount = async () => {
+    if (!window.confirm(copy.confirmDeleteAccount)) return;
+    setBusy(true); setError('');
+    try {
+      await authApi.deleteAccount(csrfToken);
+      setSession(null); setCsrfToken(''); setPhase('phone'); setChallengeId(''); setCode('');
+      onSessionChange?.(null);
+    } catch (errorValue) {
+      if (errorValue instanceof AuthApiError && errorValue.status === 401) {
+        setSession(null); setCsrfToken(''); onSessionChange?.(null);
       } else setError(copy.genericError);
     } finally { setBusy(false); }
   };
@@ -74,6 +92,7 @@ export function AuthPanel({ locale }: { locale: Locale }) {
         <div className="auth-signed-in" aria-live="polite">
           <span dir="ltr">{session.user.phone_e164}</span>
           <button type="button" onClick={() => void signOut()} disabled={busy}>{busy ? copy.loading : copy.signOut}</button>
+          <button type="button" onClick={() => void deleteAccount()} disabled={busy}>{copy.deleteAccount}</button>
         </div>
       ) : <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? copy.close : copy.signIn}</button>}
       {open && !session && (

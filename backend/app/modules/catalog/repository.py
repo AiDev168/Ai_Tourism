@@ -12,12 +12,19 @@ from app.modules.catalog.alias_manifest import (
     ReviewedAliasSet,
     load_reviewed_aliases,
 )
-from app.modules.catalog.schemas import ApprovedDestinationAlias, ProductionDestinationItem
+from app.modules.catalog.schemas import (
+    ApprovedDestinationAlias,
+    ProductionDestinationItem,
+    ProductionDestinationSource,
+    ProductionDestinationTag,
+)
 
 logger = logging.getLogger("ai_tourism.catalog")
 
 MAX_CATALOGUE_ITEMS = 1_000
 MAX_ALIASES_PER_ITEM = 32
+MAX_SOURCES_PER_DESTINATION = 32
+MAX_TAGS_PER_DESTINATION = 64
 MAX_NAME_LENGTH = 240
 MAX_ALIAS_LENGTH = 200
 
@@ -35,6 +42,22 @@ SELECT d.destination_id::text AS destination_id,
        ) AS has_verified_provenance
 FROM knowledge.production_destinations AS d
 ORDER BY d.destination_id ASC
+LIMIT %s
+"""
+
+_PRODUCTION_DESTINATION_SOURCES_SQL = """
+SELECT destination_id, source_id, source_name, source_url, source_role,
+       evidence_note, retrieved_at, valid_from, valid_until, reliability_score
+FROM knowledge.production_destination_sources
+WHERE destination_id = ANY(%s::BIGINT[])
+ORDER BY destination_id ASC, source_id ASC
+"""
+
+_PRODUCTION_DESTINATION_TAGS_SQL = """
+SELECT destination_id, tag
+FROM knowledge.production_destination_tags
+WHERE destination_id = ANY(%s::BIGINT[])
+ORDER BY destination_id ASC, tag ASC
 LIMIT %s
 """
 
@@ -126,4 +149,128 @@ def list_production_destinations(settings: Settings) -> list[ProductionDestinati
         ]
     except (AliasManifestUnavailable, KeyError, TypeError, ValueError):
         logger.warning("catalogue.read_invalid_projection")
+        raise CatalogueUnavailableError from None
+
+
+def list_production_destination_sources(
+    settings: Settings, destination_ids: list[str] | tuple[str, ...]
+) -> dict[str, list[ProductionDestinationSource]]:
+    """Return verified, current provenance through the approved source view only.
+
+    The adapter accepts only a bounded list of numeric IDs and never queries raw
+    knowledge tables. An empty ID list is a successful empty result.
+    """
+    if not destination_ids:
+        return {}
+    if len(destination_ids) > MAX_CATALOGUE_ITEMS:
+        raise CatalogueUnavailableError
+    try:
+        raw_ids = [str(value) for value in destination_ids]
+        if any(
+            not value.isascii()
+            or not value.isdecimal()
+            or len(value) > 19
+            for value in raw_ids
+        ):
+            raise ValueError
+        parsed_ids = sorted({int(value) for value in raw_ids})
+        if any(value < 1 or value > 9_223_372_036_854_775_807 for value in parsed_ids):
+            raise ValueError
+    except (TypeError, ValueError):
+        raise CatalogueUnavailableError from None
+
+    query_timeout_ms = settings.database_connect_timeout_seconds * 1_000
+    try:
+        with psycopg.connect(
+            host=settings.database_host,
+            port=settings.database_port,
+            dbname=settings.database_name,
+            user=settings.database_user,
+            password=settings.database_password.get_secret_value(),
+            connect_timeout=settings.database_connect_timeout_seconds,
+            application_name="ai-tourism-catalogue-provenance-read",
+            options=f"-c statement_timeout={query_timeout_ms}",
+            row_factory=dict_row,
+        ) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SET TRANSACTION READ ONLY")
+                cursor.execute(_PRODUCTION_DESTINATION_SOURCES_SQL, (parsed_ids,))
+                rows = cursor.fetchall()
+    except Exception:
+        logger.warning("catalogue.provenance_read_unavailable")
+        raise CatalogueUnavailableError from None
+
+    if len(rows) > MAX_CATALOGUE_ITEMS * MAX_SOURCES_PER_DESTINATION:
+        logger.warning("catalogue.provenance_limit_exceeded")
+        raise CatalogueUnavailableError
+    try:
+        result: dict[str, list[ProductionDestinationSource]] = {}
+        for row in rows:
+            source = ProductionDestinationSource.model_validate(row)
+            bucket = result.setdefault(str(source.destination_id), [])
+            if len(bucket) >= MAX_SOURCES_PER_DESTINATION:
+                raise CatalogueUnavailableError
+            bucket.append(source)
+        return result
+    except (CatalogueUnavailableError, KeyError, TypeError, ValueError):
+        logger.warning("catalogue.provenance_invalid_projection")
+        raise CatalogueUnavailableError from None
+
+
+def list_production_destination_tags(
+    settings: Settings, destination_ids: list[str] | tuple[str, ...]
+) -> dict[str, tuple[str, ...]]:
+    """Read bounded tag metadata only from the approved production tag view."""
+    if not destination_ids:
+        return {}
+    if len(destination_ids) > MAX_CATALOGUE_ITEMS:
+        raise CatalogueUnavailableError
+    try:
+        raw_ids = [str(value) for value in destination_ids]
+        if any(not value.isascii() or not value.isdecimal() or len(value) > 19 for value in raw_ids):
+            raise ValueError
+        parsed_ids = sorted({int(value) for value in raw_ids})
+        if any(value < 1 or value > 9_223_372_036_854_775_807 for value in parsed_ids):
+            raise ValueError
+    except (TypeError, ValueError):
+        raise CatalogueUnavailableError from None
+
+    query_timeout_ms = settings.database_connect_timeout_seconds * 1_000
+    try:
+        with psycopg.connect(
+            host=settings.database_host,
+            port=settings.database_port,
+            dbname=settings.database_name,
+            user=settings.database_user,
+            password=settings.database_password.get_secret_value(),
+            connect_timeout=settings.database_connect_timeout_seconds,
+            application_name="ai-tourism-catalogue-tags-read",
+            options=f"-c statement_timeout={query_timeout_ms}",
+            row_factory=dict_row,
+        ) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SET TRANSACTION READ ONLY")
+                cursor.execute(
+                    _PRODUCTION_DESTINATION_TAGS_SQL,
+                    (parsed_ids, MAX_CATALOGUE_ITEMS * MAX_TAGS_PER_DESTINATION + 1),
+                )
+                rows = cursor.fetchall()
+    except Exception:
+        logger.warning("catalogue.tags_read_unavailable")
+        raise CatalogueUnavailableError from None
+
+    if len(rows) > MAX_CATALOGUE_ITEMS * MAX_TAGS_PER_DESTINATION:
+        logger.warning("catalogue.tags_limit_exceeded")
+        raise CatalogueUnavailableError
+    try:
+        result: dict[str, list[str]] = {}
+        for row in rows:
+            tag = ProductionDestinationTag.model_validate(row)
+            bucket = result.setdefault(str(tag.destination_id), [])
+            if len(bucket) >= MAX_TAGS_PER_DESTINATION:
+                raise CatalogueUnavailableError
+            bucket.append(tag.tag)
+        return {destination_id: tuple(tags) for destination_id, tags in result.items()}
+    except (CatalogueUnavailableError, KeyError, TypeError, ValueError):
+        logger.warning("catalogue.tags_invalid_projection")
         raise CatalogueUnavailableError from None

@@ -32,4 +32,7 @@ export const authApi = {
   logout: (csrfToken: string) => request<void>('/logout', {
     method: 'POST', headers: { 'X-CSRF-Token': csrfToken },
   }),
+  deleteAccount: (csrfToken: string) => request<void>('/me', {
+    method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken },
+  }),
 };

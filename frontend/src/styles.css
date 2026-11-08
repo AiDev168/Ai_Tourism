@@ -175,6 +175,76 @@ button { cursor: pointer; }
   max-width: 1510px; margin: auto; padding: 16px clamp(20px, 8vw, 120px) 72px;
   display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
 }
+
+.traveler-workspace {
+  max-width: 1240px;
+  margin-inline: auto;
+  padding: 44px clamp(18px, 5vw, 72px) 72px;
+  display: grid;
+  gap: 18px;
+}
+.traveler-workspace-heading, .trip-history-heading, .journey-new-actions,
+.history-trip, .destination-edit-row, .stop-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.traveler-workspace-heading h2 { overflow-wrap: anywhere; }
+.privacy-notice, .journey-alert, .journey-error, .journey-status {
+  padding: 14px 16px;
+  border-radius: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.privacy-notice { background: var(--surface, #f4efe5); }
+.journey-alert { background: #fff4d8; }
+.journey-error { background: #fff0ed; color: #8a2d20; }
+.journey-status { background: #edf7ee; }
+.journey-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.journey-panel, .history-conversation, .saved-stop, .evidence-card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid rgba(43, 55, 42, .13);
+  border-radius: 20px;
+  background: var(--paper, #fffdf8);
+}
+.journey-action { justify-self: start; }
+.journey-new-actions { justify-content: flex-start; flex-wrap: wrap; }
+.conversation-transcript { display: grid; gap: 10px; max-height: 340px; overflow: auto; margin-block: 16px; }
+.saved-message { padding: 12px; border-radius: 14px; background: #f4efe5; overflow-wrap: anywhere; }
+.saved-message p { white-space: pre-wrap; margin-block: 6px 0; }
+.saved-message-assistant, .saved-message-system, .saved-message-tool { background: #eef3ed; }
+.profile-editor, .recommendation-controls, .itinerary-start { display: grid; gap: 12px; margin-block-start: 16px; }
+.profile-editor input, .profile-editor textarea, .journey-panel textarea,
+.saved-stop textarea, .journey-panel select, .saved-stop select {
+  width: 100%; min-width: 0; max-width: 100%;
+}
+.destination-edit-row { align-items: end; flex-wrap: wrap; }
+.destination-edit-row label { flex-basis: 100%; }
+.destination-edit-row input { flex: 1 1 220px; }
+.evidence-card { margin-block: 12px; }
+.evidence-card h4, .evidence-card p { overflow-wrap: anywhere; }
+.saved-itinerary-stops, .trip-history { display: grid; gap: 12px; }
+.saved-stop { display: grid; gap: 10px; }
+.stop-actions { justify-content: flex-start; flex-wrap: wrap; }
+.history-trip { align-items: stretch; margin-block: 8px; }
+.history-trip > button:first-child { flex: 1; text-align: start; overflow-wrap: anywhere; }
+.trip-history-heading { justify-content: flex-start; }
+.traveler-workspace button:focus-visible,
+.traveler-workspace a:focus-visible,
+.traveler-workspace input:focus-visible,
+.traveler-workspace textarea:focus-visible,
+.traveler-workspace select:focus-visible {
+  outline: 3px solid #b36b36;
+  outline-offset: 3px;
+}
+@media (max-width: 760px) {
+  .traveler-workspace { padding: 30px 18px 52px; }
+  .journey-columns { grid-template-columns: minmax(0, 1fr); }
+  .traveler-workspace-heading, .history-trip { align-items: stretch; }
+  .traveler-workspace-heading { flex-direction: column; }
+}
 .conversation-panel, .recommend-panel { min-width: 0; min-height: 310px; padding: 25px; border-radius: 20px; background: var(--soft-sand); }
 .recommend-panel { background: var(--soft-green); }
 .panel-title { display: flex; align-items: center; gap: 9px; color: #3e4b43; font-size: 12px; font-weight: 600; }
@@ -234,12 +304,16 @@ html[dir="ltr"] .hero-body, html[dir="ltr"] .trip-form { text-align: left; }
   .itinerary { margin-inline: 22px; }
 }
 @media (max-width: 650px) {
-  .topbar { height: 68px; padding-inline: 18px; }
+  .topbar { height: 68px; min-width: 0; gap: 7px; padding-inline: 12px; }
   .topbar nav { display: none; }
-  .brand { font-size: 17px; }
-  .brand small { font-size: 9px; }
-  .brand-mark { width: 36px; height: 36px; font-size: 20px; }
-  .top-actions select { min-width: 98px; max-width: 112px; padding: 8px 11px; font-size: 11px; }
+  .brand { min-width: 0; gap: 7px; font-size: 15px; }
+  .brand small { display: none; }
+  .brand-mark { width: 34px; height: 34px; font-size: 19px; }
+  .top-actions { min-width: 0; gap: 5px; }
+  .top-actions select { min-width: 82px; max-width: 96px; padding: 7px 8px; font-size: 10px; }
+  .auth-signed-in { gap: 4px; }
+  .auth-signed-in span { display: none; }
+  .auth-signed-in button { min-height: 34px; padding: 6px 8px; font-size: 9px; }
   .hero { grid-template-columns: minmax(0, 1fr); padding: 24px 18px 42px; gap: 22px; }
   .hero-art { grid-row: 1; min-height: 0; height: auto; aspect-ratio: 1.22 / 1; border-radius: 22px; }
   .hero h1 { font-size: clamp(38px, 11vw, 48px); }

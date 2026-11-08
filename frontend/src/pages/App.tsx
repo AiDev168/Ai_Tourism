@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { formatDate, formatNumber, interfaceActions, statusPreview, type Locale } from '../i18n/messages';
+import { formatNumber, type Locale } from '../i18n/messages';
 import { tripMessages } from '../i18n/tripMessages';
 import { destinationResolutionMessages } from '../i18n/destinationResolutionMessages';
 import { createTripRequirements, MAX_TRIP_DURATION_DAYS, type TripRequirements } from '../trip/tripIntake';
@@ -7,6 +7,8 @@ import { confirmDestinationCandidate, resolveDestinationNames, type DestinationR
 import { ApiDestinationCatalogPort } from '../trip/destinationCatalogApi';
 import { useLocale } from '../i18n/LocaleContext';
 import { AuthPanel } from '../auth/AuthPanel';
+import type { AuthSession } from '../auth/authApi';
+import { TravelerJourney } from '../trip/TravelerJourney';
 
 const destinationCatalog = new ApiDestinationCatalogPort();
 
@@ -45,8 +47,7 @@ export function App() {
   const [ambiguities, setAmbiguities] = useState<TripRequirements['ambiguousRequired']>([]);
   const [error, setError] = useState('');
   const [heroImageFailed, setHeroImageFailed] = useState(false);
-  const [itineraryEditing, setItineraryEditing] = useState(false);
-  const [itineraryNotes, setItineraryNotes] = useState(['', '', '']);
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const requestTextRef = useRef('');
@@ -141,7 +142,7 @@ export function App() {
           <a href="#itinerary">{t('navPlan')}</a>
         </nav>
         <div className="top-actions">
-          <AuthPanel locale={locale} />
+          <AuthPanel locale={locale} onSessionChange={setAuthSession} />
           <label className="sr-only" htmlFor="locale">{t('labelLanguage')}</label>
           <select id="locale" value={locale} onChange={event => setLocale(event.target.value as Locale)}>
             {(['fa-IR', 'en-US', 'ar'] as Locale[]).map(value => (
@@ -298,86 +299,22 @@ export function App() {
           </div>
         </section>
 
-        <section className="journey-grid">
-          <article className="conversation-panel">
-            <div className="panel-title">
-              <span className="mini-icon">✳</span>
-              <span>{t('conversation')}</span>
-              <span className="fixture-tag">UI</span>
-            </div>
-            <h2>{t('conversationTitle')}</h2>
-            <div className="chat-bubble">
-              <span className="assistant-avatar">ر</span>
-              <div><small>{t('assistant')}</small><p>{t('assistantText')}</p></div>
-            </div>
-            <small className="fixture-note">{t('sample')}</small>
-            <details className="state-preview">
-              <summary>{statusPreview[locale]}</summary>
-              <p role="status">{t('loading')}</p>
-              <p role="alert">{t('error')}</p>
-              <small>{t('sample')}</small>
-            </details>
-          </article>
-
-          <article className="recommend-panel">
-            <div className="panel-title">
-              <span className="mini-icon">↗</span>
-              {t('recommendations')}
-              <span className="fixture-tag">UI</span>
-            </div>
-            <h2>{t('recommendationsTitle')}</h2>
-            <div className="empty-state">
-              <span>✳</span>
-              <strong>{t('emptyTitle')}</strong>
-              <p>{t('emptyBody')}</p>
-            </div>
-          </article>
-        </section>
-
-        <section className="itinerary" id="itinerary">
-          <div className="itinerary-header">
-            <div>
-              <p className="eyebrow">{t('itinerary')}</p>
-              <h2>{t('itineraryTitle')}</h2>
-            </div>
-            <span className="fixture-tag">UI</span>
-            <button
-              className="outline"
-              type="button"
-              onClick={() => setItineraryEditing(value => !value)}
-              aria-pressed={itineraryEditing}
-            >
-              {itineraryEditing ? interfaceActions[locale].finishEdit : t('itineraryEdit')} <span>↗</span>
-            </button>
-          </div>
-          <div className="day-strip">
-            {[1, 2, 3].map(day => (
-              <div className="day-card" key={day}>
-                <div className="day-num">
-                  <span>{t('day')}</span>
-                  <b>{formatNumber(locale, day).padStart(2, '0')}</b>
-                </div>
-                <div>
-                  <strong>{day === 1 ? t('morning') : day === 2 ? t('afternoon') : t('evening')}</strong>
-                  {itineraryEditing ? (
-                    <input
-                      className="itinerary-input"
-                      aria-label={t('day') + ' ' + formatNumber(locale, day)}
-                      value={itineraryNotes[day - 1]}
-                      onChange={event => setItineraryNotes(notes => notes.map((note, index) => index === day - 1 ? event.target.value : note))}
-                      placeholder={t('sample')}
-                    />
-                  ) : <p>{itineraryNotes[day - 1] || t('sample')}</p>}
-                </div>
-                <span className="day-dot">✳</span>
-              </div>
-            ))}
-          </div>
-          <p className="warning">ⓘ {t('warning')}</p>
-          <div className="locale-proof">
-            <span>{formatDate(locale, new Date('2026-11-05T12:00:00Z'))}</span>
-          </div>
-        </section>
+        <TravelerJourney
+          locale={locale}
+          session={authSession}
+          online={online}
+          requirements={requirements}
+          onSessionExpired={() => setAuthSession(null)}
+          onRestoreRequest={(text, restored) => {
+            requestTextRef.current = text;
+            if (promptRef.current) promptRef.current.value = text;
+            setRequirements(restored);
+            setClarifications(restored.missingRequired);
+            setAmbiguities(restored.ambiguousRequired);
+            setDestinationResolution(null);
+          }}
+          onStartNewDraft={clearTripDraft}
+        />
       </main>
 
       <footer>
