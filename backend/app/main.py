@@ -26,7 +26,7 @@ if settings.auth_sms_adapter == "fake":
     app.state.sms_adapter = FakeSmsAdapter()
 elif settings.auth_sms_adapter == "sms_ir_sandbox":
     # The key is server-only and Settings rejects Sandbox mode in production.
-    app.state.sms_adapter = SmsIrSandboxAdapter(settings.sms_ir_api_key.get_secret_value())
+    app.state.sms_adapter = SmsIrSandboxAdapter(settings.sms_ir_sandbox_api_key.get_secret_value())
 else:
     app.state.sms_adapter = DisabledSmsAdapter()
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")

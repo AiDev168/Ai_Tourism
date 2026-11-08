@@ -1,5 +1,6 @@
 """Provider-neutral SMS port with fake and SMS.ir Sandbox adapters."""
 
+import math
 from dataclasses import dataclass
 from enum import StrEnum
 from threading import Lock
@@ -87,6 +88,7 @@ class SmsIrSandboxAdapter:
 
     endpoint = "https://api.sms.ir/v1/send/verify"
     sandbox_template_id = 123456
+    max_timeout_seconds = 10.0
 
     def __init__(self, api_key: str, *, transport: httpx.BaseTransport | None = None) -> None:
         if not api_key or api_key != api_key.strip() or "\r" in api_key or "\n" in api_key:
@@ -101,6 +103,14 @@ class SmsIrSandboxAdapter:
         self._client.close()
 
     def send(self, message: SmsMessage, *, timeout_seconds: float) -> SmsDeliveryReceipt:
+        if (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (int, float))
+            or not math.isfinite(timeout_seconds)
+            or timeout_seconds <= 0
+        ):
+            raise SmsDeliveryError(SmsFailureCategory.INVALID_CONFIGURATION)
+        bounded_timeout = min(float(timeout_seconds), self.max_timeout_seconds)
         try:
             mobile = sms_ir_mobile_number(message.recipient)
         except SmsDeliveryError:
@@ -121,7 +131,7 @@ class SmsIrSandboxAdapter:
                     "templateId": self.sandbox_template_id,
                     "parameters": [{"name": "Code", "value": message.verification_code}],
                 },
-                timeout=httpx.Timeout(timeout_seconds),
+                timeout=httpx.Timeout(bounded_timeout),
             )
         except httpx.TimeoutException:
             # A Verify POST timeout is ambiguous: never retry automatically.

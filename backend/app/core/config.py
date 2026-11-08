@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     database_connect_timeout_seconds: int = Field(default=2, ge=1, le=10)
     auth_enabled: bool = False
     auth_sms_adapter: str = "disabled"
-    sms_ir_api_key: SecretStr | None = None
+    sms_ir_sandbox_api_key: SecretStr | None = None
     auth_otp_hmac_secret: SecretStr | None = None
     auth_csrf_secret: SecretStr | None = None
     auth_rate_limit_secret: SecretStr | None = None
@@ -67,11 +67,11 @@ class Settings(BaseSettings):
         if self.auth_sms_adapter == "sms_ir_sandbox":
             if self.app_env.lower() not in {"development", "test"}:
                 raise ValueError("SMS.ir Sandbox is restricted to development and tests")
-            if self.sms_ir_api_key is None:
-                raise ValueError("SMS_IR_API_KEY is required for the SMS.ir Sandbox adapter")
-            key = self.sms_ir_api_key.get_secret_value()
+            if self.sms_ir_sandbox_api_key is None:
+                raise ValueError("SMS_IR_SANDBOX_API_KEY is required for the SMS.ir Sandbox adapter")
+            key = self.sms_ir_sandbox_api_key.get_secret_value()
             if not key or key != key.strip() or "\r" in key or "\n" in key:
-                raise ValueError("SMS_IR_API_KEY is invalid for the SMS.ir Sandbox adapter")
+                raise ValueError("SMS_IR_SANDBOX_API_KEY is invalid for the SMS.ir Sandbox adapter")
         if self.auth_enabled:
             for name in ("auth_otp_hmac_secret", "auth_csrf_secret", "auth_rate_limit_secret"):
                 secret = getattr(self, name)
