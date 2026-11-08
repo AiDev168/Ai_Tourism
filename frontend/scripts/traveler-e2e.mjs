@@ -209,6 +209,16 @@ async function waitForRequest(page, predicate, timeout = 20_000) {
   return page.waitForResponse(predicate, { timeout });
 }
 
+function reportResponseWaitCallsite(page) {
+  const waitForResponse = page.waitForResponse.bind(page);
+  page.waitForResponse = (predicate, options) => {
+    const line = new Error().stack?.split('\n')[2]?.match(/:(\d+):\d+\)?$/)?.[1] ?? 'unknown';
+    return waitForResponse(predicate, options).catch(() => {
+      throw new Error(`browser_response_wait_timeout_line_${line}`);
+    });
+  };
+}
+
 const localeCopy = {
   'fa-IR': {
     workspace: 'برنامه‌های سفر من',
@@ -216,8 +226,9 @@ const localeCopy = {
     find: 'بررسی پیشنهادهای تأییدشده',
     deleteTrip: 'حذف سفر',
     deleteConversation: 'حذف گفت‌وگو و همهٔ سفرهای آن',
-    prompt: 'سفر ۱۰ روزه به شیراز با بودجهٔ ۱۰۰۰۰۰ ریال؛ دسترسی ویلچر ضروری است؛ باید از مسیرهای ناهموار پرهیز شود.',
+    prompt: 'سفر ۱۰ روزه به شیراز با بودجهٔ ۲۰ میلیون تومان؛ ترجیح می‌دهم مسیرهای سنگ‌فرش باشد؛ دسترسی ویلچر ضروری است؛ باید از مسیرهای ناهموار پرهیز شود.',
     accessLabel: 'دسترس‌پذیری',
+    softPreference: 'مسیرهای سنگ‌فرش باشد',
     fixtureName: 'نمونهٔ آزمایشی',
   },
   'en-US': {
@@ -226,8 +237,9 @@ const localeCopy = {
     find: 'Check verified suggestions',
     deleteTrip: 'Delete trip',
     deleteConversation: 'Delete conversation and all its trips',
-    prompt: '10 day trip to Shiraz with a budget of 100000 rial; wheelchair access is essential; must avoid rough terrain.',
+    prompt: '10 day trip to Shiraz with a budget of 20 million IRR; I prefer paved paths; wheelchair access is essential; must avoid rough terrain.',
     accessLabel: 'Accessibility',
+    softPreference: 'paved paths',
     fixtureName: 'Test fixture',
   },
   ar: {
@@ -236,8 +248,9 @@ const localeCopy = {
     find: 'تحقق من الاقتراحات الموثقة',
     deleteTrip: 'احذف الرحلة',
     deleteConversation: 'احذف المحادثة وكل رحلاتها',
-    prompt: 'رحلة لمدة ١٠ أيام إلى شيراز بميزانية ١٠٠٠٠٠ ريال؛ الوصول للكراسي المتحركة ضروري؛ لا أريد أرضاً وعرة.',
+    prompt: 'رحلة لمدة ١٠ أيام إلى شيراز بميزانية ٢٠ مليون درهم؛ أفضل المسارات المعبدة؛ إمكانية الوصول بالكراسي المتحركة ضرورية؛ يجب تجنب الطرق الوعرة.',
     accessLabel: 'إمكانية الوصول',
+    softPreference: 'المسارات المعبدة',
     fixtureName: 'نموذج اختباري',
   },
 };
@@ -525,6 +538,7 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     safeToCleanup = true;
     contextA = await browser.newContext({ locale });
     pageA = await contextA.newPage();
+    reportResponseWaitCallsite(pageA);
     await attachBrowserGuards(pageA, audit);
     await pageA.goto(webOrigin, { waitUntil: 'domcontentloaded' });
     await selectAndVerifyLocale(pageA, locale);
@@ -563,7 +577,7 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     await pageA.locator('.trip-form button[type="submit"]').click();
     await pageA.locator('.journey-action').waitFor({ state: 'visible' });
     const persist = pageA.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
-      && response.request().method() === 'POST' && response.status() === 201);
+      && response.request().method() === 'POST');
     await pageA.locator('.journey-action').click();
     const persisted = await persist;
     firstTripResponseBody = await persisted.json();
@@ -572,7 +586,7 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     conversationVersion = firstTripResponseBody?.conversation?.version;
     if (persisted.status() !== 201 || !tripId || !conversationId
       || firstTripResponseBody.trip.original_request !== copy.prompt) {
-      throw new Error(`conversation_trip_persistence_failed_${locale}`);
+      throw new Error(`conversation_trip_persistence_failed_${locale}_${persisted.status()}`);
     }
     await pageA.locator('.history-trip > button').first().waitFor({ state: 'visible' });
     await pageA.locator('#requirement-consent-budget-advisory').waitFor({ state: 'visible' });
@@ -587,6 +601,8 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     await consentRadio.check();
     const advisoryAcknowledgement = pageA.locator('#requirement-consent-budget-ack');
     await advisoryAcknowledgement.check();
+    await pageA.locator('#requirement-consent-soft_preference-advisory').check();
+    await pageA.locator('#requirement-consent-soft_preference-ack').check();
     if (await confirmButton.isDisabled()) throw new Error(`explicit_advisory_choice_not_accepted_${locale}`);
 
     const confirmResponsePromise = pageA.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/trips/${tripId}`
@@ -610,7 +626,10 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     if (persistedConsent?.contract_version !== 'recommendation-consent-v1'
       || persistedConsent?.profile_version !== confirmedTrip.version
       || persistedConsent?.field_decisions?.budget !== 'advisory'
-      || Object.keys(persistedConsent?.field_decisions ?? {}).join(',') !== 'budget') {
+      || persistedConsent?.field_decisions?.soft_preference !== 'advisory'
+      || Object.keys(persistedConsent?.field_decisions ?? {}).sort().join(',') !== 'budget,soft_preference'
+      || !persistedConsent?.advisory_acknowledged_fields?.includes('budget')
+      || !persistedConsent?.advisory_acknowledged_fields?.includes('soft_preference')) {
       throw new Error(`server_bound_consent_snapshot_missing_${locale}`);
     }
     consentSnapshotVerified = true;
@@ -627,13 +646,17 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     const recommendationResponse = await recommendationResponsePromise;
     const recommendation = await recommendationResponse.json();
     const budgetAssessment = recommendation.requirement_assessments?.find(item => item.field === 'budget');
+    const preferenceAssessment = recommendation.requirement_assessments?.find(item => item.field === 'soft_preference');
     const accessibilityAssessment = recommendation.requirement_assessments?.find(item => item.field === 'accessibility');
     const hardConstraintAssessment = recommendation.requirement_assessments?.find(item => item.field === 'hard_constraint');
     if (recommendationResponse.status() !== 201 || !recommendationResponse.headers()['cache-control']?.includes('no-store')
       || recommendation.status !== 'needs_confirmation' || recommendation.reason_code !== 'hard_constraints_unverifiable'
       || !recommendation.waived_fields?.includes('budget') || !recommendation.not_evaluated_fields?.includes('budget')
-      || recommendation.waived_fields?.length !== 1 || recommendation.not_evaluated_fields?.length !== 1
+      || !recommendation.waived_fields?.includes('soft_preference') || !recommendation.not_evaluated_fields?.includes('soft_preference')
+      || recommendation.waived_fields?.length !== 2 || recommendation.not_evaluated_fields?.length !== 2
       || budgetAssessment?.decision !== 'advisory' || budgetAssessment.status !== 'not_evaluated'
+      || preferenceAssessment?.decision !== 'advisory' || preferenceAssessment.status !== 'not_evaluated'
+      || preferenceAssessment.reason_code !== 'preference_unverifiable'
       || accessibilityAssessment?.decision !== 'must_have' || accessibilityAssessment.status !== 'unresolved'
       || !['access_unverifiable', 'accessibility_unverifiable'].includes(accessibilityAssessment.reason_code)
       || hardConstraintAssessment?.decision !== 'must_have' || hardConstraintAssessment.status !== 'unresolved'
@@ -672,7 +695,9 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       throw new Error(`history_request_not_restored_${locale}`);
     }
     if (!(await pageA.locator('#requirement-consent-budget-advisory').isChecked())
-      || !(await pageA.locator('#requirement-consent-budget-ack').isChecked())) {
+      || !(await pageA.locator('#requirement-consent-budget-ack').isChecked())
+      || !(await pageA.locator('#requirement-consent-soft_preference-advisory').isChecked())
+      || !(await pageA.locator('#requirement-consent-soft_preference-ack').isChecked())) {
       throw new Error(`history_consent_not_restored_${locale}`);
     }
     const reopenedTrip = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
@@ -692,6 +717,7 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
 
     contextB = await browser.newContext({ locale });
     pageB = await contextB.newPage();
+    reportResponseWaitCallsite(pageB);
     await attachBrowserGuards(pageB, audit);
     await pageB.goto(webOrigin, { waitUntil: 'domcontentloaded' });
     await selectAndVerifyLocale(pageB, locale);

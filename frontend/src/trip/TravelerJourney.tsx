@@ -24,6 +24,7 @@ function safeRequirements(value: unknown, locale: Locale): TripRequirements | nu
   return {
     ...candidate,
     accessibility: candidate.accessibility ?? { value: null, status: 'unknown', evidence: null },
+    softPreferences: candidate.softPreferences ?? { value: null, status: 'unknown', evidence: null },
     locale,
   } as TripRequirements;
 }
@@ -45,7 +46,7 @@ function tripDayCount(trip: TripRecord | null, extracted: TripRequirements | nul
     ?? validDayCount(extracted?.durationDays.value);
 }
 
-const requirementFields: RequirementFieldCode[] = ['budget', 'travel_dates', 'traveler_count', 'origin'];
+const requirementFields: RequirementFieldCode[] = ['budget', 'travel_dates', 'traveler_count', 'origin', 'soft_preference'];
 type RestoredRequirementConsent = {
   decisions: Partial<Record<RequirementFieldCode, RequirementConsentDecision>>;
   acknowledgedFields: RequirementFieldCode[];
@@ -58,6 +59,7 @@ function unresolvedConsentFields(value: TripRequirements | null): RequirementFie
     travel_dates: value.travelDates.value,
     traveler_count: value.travelerCount.value,
     origin: value.origin.value,
+    soft_preference: value.softPreferences.value,
   };
   return requirementFields.filter(field => {
     const fieldValue = explicit[field];
@@ -369,6 +371,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       traveler_count: extracted?.travelerCount.value ?? null,
       accessibility: extracted?.accessibility?.value ?? [],
       budget: extracted?.budget.value ?? null,
+      soft_preferences: extracted?.softPreferences.value ?? [],
       interests: extracted?.interests.value ?? [],
       constraints: extracted?.constraints.value ?? [],
       confirmation_source: 'traveler_reviewed',
@@ -592,6 +595,9 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
               <strong>{localizeRecommendationCode(locale, 'field:constraints')}:</strong> {copy.requirementUnclassifiedMandatory}
               <button type="button" onClick={() => document.getElementById('trip-follow-up')?.focus()}>{copy.requirementClarifyByEditing}</button>
             </div>}
+            {!!extracted?.softPreferences.value?.length && <p className="soft-preference-value" role="status">
+              {copy.requirementPreferenceValue}: <span dir="auto">{extracted.softPreferences.value.join(', ')}</span>
+            </p>}
             {!!extracted?.accessibility?.value?.length && <div className="journey-alert requirement-accessibility-mandatory" role="status">
               <strong>{localizeRecommendationCode(locale, 'field:access')}:</strong>
               <p>{copy.requirementAccessibilityMandatory}</p>

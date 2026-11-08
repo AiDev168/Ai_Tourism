@@ -172,7 +172,7 @@ def test_invalid_requirement_types_fail_closed_and_explicit_unverifiable_fields_
     unverified = recommend_trip(
         requirements=requirements(
             travelerCount={"value": 4, "status": "confirmed"},
-            budget={"value": {"amount": 20_000_000, "currency": "IRR", "unit": "toman", "raw": "۲۰ میلیون تومان"}},
+            budget={"value": {"amount": 20, "currency": None, "unit": "میلیون تومان", "raw": "۲۰ میلیون تومان"}},
             travelDates={"value": {"start": "2026-12-01", "end": "2026-12-10"}, "status": "confirmed"},
         ),
         selected_destination_ids=["1"], catalogue=[selected],

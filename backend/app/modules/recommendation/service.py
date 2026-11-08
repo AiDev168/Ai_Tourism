@@ -3,6 +3,8 @@
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+import re
+import unicodedata
 
 from app.modules.catalog.schemas import ProductionDestinationItem
 from app.modules.recommendation.contracts import (
@@ -51,6 +53,7 @@ _FIELD_CODE_ALIASES = {
     "end_time": "time_window", "transport": "transport", "preferred_transport": "transport",
     "prohibited_transport": "transport",
     "travel_style": "travel_style", "accommodation": "accommodation", "constraints": "hard_constraint",
+    "soft_preferences": "soft_preference",
     "hard_constraints": "hard_constraint", "terrain": "surface",
     "interest": "interest_match", "interests": "interest_match", "trip_profile": "trip_profile",
 }
@@ -67,7 +70,7 @@ _ALLOWED_REQUIREMENT_KEYS = {
     "accessModes", "mobilityAccessibility", "activityDifficulty", "timeRange", "visitor_access",
     "transport", "preferred_transport", "prohibited_transport", "travel_style", "accommodation",
     "hard_constraints", "terrain", "max_distance_km", "flexible_dates",
-    "interest",
+    "interest", "soft_preferences",
     "confirmation_source",
 }
 _FIELD_WRAPPED_KEYS = _ALLOWED_REQUIREMENT_KEYS - {
@@ -90,7 +93,7 @@ _WAIVABLE_FIELDS = frozenset({
     # Access, mobility, terrain/activity/difficulty, transport, and free-text
     # constraints remain mandatory because no safe preference representation
     # or catalogue evaluation contract exists for them.
-    "origin", "travel_dates", "traveler_count", "budget",
+    "origin", "travel_dates", "traveler_count", "budget", "soft_preference",
 })
 _FIELD_REASON_CODES = {
     "budget": "budget_unverifiable", "travel_dates": "travel_dates_unverifiable",
@@ -102,6 +105,7 @@ _FIELD_REASON_CODES = {
     "time_window": "travel_dates_unverifiable", "transport": "transport_unverifiable",
     "travel_style": "constraints_unverifiable", "accommodation": "constraints_unverifiable",
     "hard_constraint": "hard_constraints_unverifiable",
+    "soft_preference": "preference_unverifiable",
     "duration_days": "requirements_incomplete",
     "destination_resolution": "requirements_incomplete", "trip_profile": "requirements_incomplete",
 }
@@ -148,7 +152,7 @@ def _string_list(value: object, *, field: str) -> tuple[str, ...]:
 
 
 def _validate_budget(value: object) -> bool:
-    """Validate explicit budget syntax; return whether it is explicitly present."""
+    """Validate the PWA's explicit amount/currency/unit shape without conversion."""
     if value is None:
         return False
     if not isinstance(value, Mapping):
@@ -166,16 +170,27 @@ def _validate_budget(value: object) -> bool:
         raise _InvalidRequirements from None
     if not decimal_amount.is_finite() or decimal_amount < 0:
         raise _InvalidRequirements
-    supported_units = {
-        "rial", "toman", "irr", "million rial", "million toman",
-        "ریال", "تومان", "ريال", "تومان",
-        "میلیون ریال", "میلیون تومان", "مليون ريال", "مليون تومان",
-    }
-    if currency not in {"IRR", None} or (unit is not None and (not isinstance(unit, str) or unit.strip().casefold() not in supported_units)):
+    if currency is not None and (not isinstance(currency, str) or currency not in {"IRR", "USD", "AED", "SAR"}):
         raise _InvalidRequirements
-    # Do not infer a currency unit from the ISO currency alone. An explicit
-    # amount without an unambiguous unit is malformed for this contract.
-    if currency != "IRR" or not isinstance(unit, str) or unit.strip().casefold() not in supported_units:
+    if not isinstance(unit, str) or not unit.strip():
+        raise _InvalidRequirements
+    normalized_unit = unicodedata.normalize("NFKC", unit).casefold()
+    normalized_unit = normalized_unit.replace("ي", "ی").replace("ك", "ک")
+    normalized_unit = normalized_unit.replace("\u0645\u0644\u06cc\u0648\u0646", "\u0645\u06cc\u0644\u06cc\u0648\u0646")
+    normalized_unit = re.sub(r"[\u064b-\u065f\u0670]", "", normalized_unit)
+    normalized_unit = " ".join(normalized_unit.split())
+    unit_currency = {
+        "rial": "IRR", "irr": "IRR", "million rial": "IRR", "million irr": "IRR",
+        "ریال": "IRR", "میلیون ریال": "IRR",
+        "toman": None, "million toman": None, "تومان": None, "میلیون تومان": None,
+        "usd": "USD", "dollar": "USD", "million usd": "USD", "million dollar": "USD",
+        "دلار": "USD", "میلیون دلار": "USD",
+        "aed": "AED", "dirham": "AED", "million aed": "AED", "million dirham": "AED",
+        "درهم": "AED", "میلیون درهم": "AED",
+        "\u0631.\u0633": "SAR", "million \u0631.\u0633": "SAR",
+    }
+    expected_currency = unit_currency.get(normalized_unit, "unsupported")
+    if expected_currency == "unsupported" or currency != expected_currency:
         raise _InvalidRequirements
     raw = value.get("raw")
     if raw is not None and (not isinstance(raw, str) or len(raw) > 240):
@@ -346,6 +361,10 @@ def _assess_requirements(
 
     if _validate_budget(_unwrap(requirements, "budget")):
         unresolved.append("budget")
+
+    soft_preferences = _string_list(_unwrap(requirements, "soft_preferences"), field="soft_preferences")
+    if soft_preferences:
+        unresolved.append("soft_preference")
 
     for key in ("budget_range", "max_budget"):
         if key in requirements and _validate_budget(_unwrap(requirements, key)):

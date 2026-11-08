@@ -6,7 +6,7 @@ export type TripRequirements = {
   travelDates: Field<{ start: string; end: string }>; travelerCount: Field<number>;
   accessibility: Field<Array<'wheelchair_access' | 'step_free_access'>>;
   budget: Field<{ amount: number; currency: string | null; unit: string; raw: string }>;
-  interests: Field<string[]>; constraints: Field<string[]>; extractionStatus: 'ready' | 'needs_clarification';
+  interests: Field<string[]>; softPreferences: Field<string[]>; constraints: Field<string[]>; extractionStatus: 'ready' | 'needs_clarification';
   missingRequired: Array<'destination' | 'duration'>; ambiguousRequired: Array<'destination' | 'duration'>;
   confirmationRequired: string[]; destinationVerification: 'user_input_unverified';
 };
@@ -78,8 +78,31 @@ function explicitAccessibilityNeeds(text:string):TripRequirements['accessibility
  if(stepFree)value.push('step_free_access');
  return value.length?{value,status:'extracted',evidence:null}:{value:null,status:'unknown',evidence:null};
 }
-function parseBudget(text:string):TripRequirements['budget'] {const m=normalize(text).match(/([\d,]+(?:\.\d+)?)\s*(میلیون|million|مليون)?\s*(تومان|ریال|IRR|toman|rial|ر.س|ريال|درهم|AED|USD|دلار|دولار)/iu);if(!m)return{value:null,status:'unknown',evidence:null};let amount=Number(m[1].replaceAll(',',''));if(m[2])amount*=1_000_000;return{value:{amount,currency:/IRR|ریال|rial|ريال/iu.test(m[3])?'IRR':/AED|درهم/iu.test(m[3])?'AED':/USD|دلار|دولار/iu.test(m[3])?'USD':null,unit:`${m[2]??''} ${m[3]}`.trim(),raw:m[0]},status:'extracted',evidence:m[0]};}
+function parseBudget(text:string):TripRequirements['budget'] {const m=normalize(text).match(/([\d,]+(?:\.\d+)?)\s*(میلیون|million|مليون)?\s*(تومان|ریال|IRR|toman|rial|ر.س|ريال|درهم|AED|USD|دلار|دولار)/iu);if(!m)return{value:null,status:'unknown',evidence:null};const amount=Number(m[1].replaceAll(',',''));if(/\u0631\.\u0633/iu.test(m[3]))return{value:{amount,currency:'SAR',unit:`${m[2]??''} ${m[3]}`.trim(),raw:m[0]},status:'extracted',evidence:m[0]};return{value:{amount,currency:/IRR|ریال|rial|ريال/iu.test(m[3])?'IRR':/AED|درهم/iu.test(m[3])?'AED':/USD|دلار|دولار/iu.test(m[3])?'USD':null,unit:`${m[2]??''} ${m[3]}`.trim(),raw:m[0]},status:'extracted',evidence:m[0]};}
 function extractedText(text:string, trigger:RegExp):Field<string[]> {const m=normalize(text).match(trigger);return m?{value:[cleanPlace(m[1])],status:'extracted',evidence:m[0]}:{value:null,status:'unknown',evidence:null};}
+function directedText(text:string, patterns:RegExp[]):Field<string[]> {
+ const normalized=normalize(text);
+ const matches=patterns.flatMap(pattern=>[...normalized.matchAll(pattern)]).map(match=>({value:cleanPlace(match[1]), evidence:match[0]}))
+  .filter(match=>match.value.length>0);
+ const unique=[...new Map(matches.map(match=>[match.value.toLocaleLowerCase(),match])).values()];
+ return unique.length?{value:unique.map(match=>match.value),status:'extracted',evidence:unique.map(match=>match.evidence).join(' / ')}:{value:null,status:'unknown',evidence:null};
+}
+const directiveEnd='(?=\\s+(?:but\\b|however\\b|and\\s+must\\b|during\\b|for\\b|اما\\s|ولی\\s|لكن\\s|لمدة\\s|برای\\s)|[.!?؟؛;]|$)';
+function explicitSoftPreferences(text:string):Field<string[]> {
+ return directedText(text,[
+  new RegExp(`\\b(?:i\\s+)?(?:prefer|would\\s+like)\\s+(.+?)${directiveEnd}`,'giu'),
+  new RegExp(`(?:ترجیح\\s+می\\s+دهم|ترجیح\\s+میدهم)\\s+(.+?)${directiveEnd}`,'gu'),
+  new RegExp(`(?:أفضل|افضل)\\s+(.+?)${directiveEnd}`,'gu'),
+ ]);
+}
+function explicitHardConstraints(text:string):Field<string[]> {
+ return directedText(text,[
+  new RegExp(`\\b(?:must(?:\\s+not)?|need(?:\\s+to)?|required(?:\\s+to)?|do\\s+not|want(?:\\s+to)?)\\s+(.+?)${directiveEnd}`,'giu'),
+  new RegExp(`(?:باید|ضروری(?:\\s+است)?|نباید|می\\s+خواهم|میخواهم)\\s+(.+?)${directiveEnd}`,'gu'),
+  new RegExp(`(?:يجب(?:\\s+أن)?|ضروري|لا\\s+(?:أريد|اريد)|(?:أريد|اريد))\\s+(.+?)${directiveEnd}`,'gu'),
+  new RegExp(`(.+?)\\s+(?:می\\s+خواهم|میخواهم)${directiveEnd}`,'gu'),
+ ]);
+}
 export function createTripRequirements(input:{requestText:string;locale:Locale;maxDurationDays?:number}):TripIntakeResult {
  const original=input.requestText; const text=normalize(original).trim(); if(!text)return{kind:'invalid',reason:'request-required'};if(text.length>1200)return{kind:'invalid',reason:'request-too-long'};
  const max=input.maxDurationDays??MAX_TRIP_DURATION_DAYS;
@@ -90,6 +113,6 @@ export function createTripRequirements(input:{requestText:string;locale:Locale;m
  const missingRequired:Array<'destination'|'duration'>=[];const ambiguousRequired:Array<'destination'|'duration'>=[];
  if(!places.value){(places.status==='ambiguous'?ambiguousRequired:missingRequired).push('destination');}if(!duration.value){(duration.status==='ambiguous'?ambiguousRequired:missingRequired).push('duration');}
  const interest=extractedText(text,/(?:interested in|love|enjoy|أحب|احب)\s+(.+?)(?:[.!؟؛،,;]|$)/iu);if(!interest.value){const end=text.indexOf(' علاقه دارم');const start=end>=0?text.lastIndexOf(' به ',end):-1;if(start>=0)Object.assign(interest,{value:[cleanPlace(text.slice(start+4,end))],status:'extracted',evidence:text.slice(start,end+12)});}
-  const requirements:TripRequirements={requestText:original,locale:input.locale,destinations:places,origin,durationDays:duration,travelDates:explicitDateRange(text),travelerCount:(()=>{const n=explicitCount(text);return n?{value:n,status:'extracted' as const,evidence:text.match(new RegExp(`${n}\\s*(?:people|travelers|travellers|نفر|مسافر|أشخاص|اشخاص|أفراد|افراد)`,'iu'))?.[0]??null}:{value:null,status:'unknown' as const,evidence:null};})(),accessibility,budget:parseBudget(text),interests:interest,constraints:extractedText(text,/(?:prefer|must|need|ترجیح می‌دهم|ترجیح میدهم|باید|لا أريد|لا اريد|أفضل|افضل)\s+(.+?)(?:[.!؟]|$)/iu),extractionStatus:missingRequired.length||ambiguousRequired.length?'needs_clarification':'ready',missingRequired,ambiguousRequired,confirmationRequired:[],destinationVerification:'user_input_unverified'};
+  const requirements:TripRequirements={requestText:original,locale:input.locale,destinations:places,origin,durationDays:duration,travelDates:explicitDateRange(text),travelerCount:(()=>{const n=explicitCount(text);return n?{value:n,status:'extracted' as const,evidence:text.match(new RegExp(`${n}\\s*(?:people|travelers|travellers|نفر|مسافر|أشخاص|اشخاص|أفراد|افراد)`,'iu'))?.[0]??null}:{value:null,status:'unknown' as const,evidence:null};})(),accessibility,budget:parseBudget(text),interests:interest,softPreferences:explicitSoftPreferences(text),constraints:explicitHardConstraints(text),extractionStatus:missingRequired.length||ambiguousRequired.length?'needs_clarification':'ready',missingRequired,ambiguousRequired,confirmationRequired:[],destinationVerification:'user_input_unverified'};
  return requirements.extractionStatus==='ready'?{kind:'ready',requirements}:{kind:'clarification',requirements};
 }

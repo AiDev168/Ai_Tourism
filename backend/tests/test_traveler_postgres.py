@@ -228,14 +228,45 @@ def test_real_app_persists_owner_scoped_trip_and_deletes_all_content():
             assert _count(connection, "travel.itineraries", "trip_id", trip_id) == 0
 
         # Explicit conversation deletion also removes its nested trip and text.
+        budget_profile = {
+            "value": {
+                "amount": 20,
+                "currency": None,
+                "unit": "میلیون تومان",
+                "raw": "20 میلیون تومان",
+            },
+            "status": "extracted",
+            "evidence": "20 میلیون تومان",
+        }
+        second_request = {
+            **request_body,
+            "request_text": "Please plan a trip with a budget of 20 million toman.",
+            "extracted_requirements": {
+                **request_body["extracted_requirements"],
+                "budget": budget_profile,
+            },
+            "idempotency_key": "traveler-pg-create-0002",
+        }
         second = client_a.post(
             "/api/v1/conversations",
             headers=_request_headers(csrf_a),
-            json={**request_body, "idempotency_key": "traveler-pg-create-0002"},
+            json=second_request,
         )
         assert second.status_code == 201
         second_conversation_id = second.json()["conversation"]["conversation_id"]
         second_trip_id = second.json()["trip"]["trip_id"]
+        with connect(settings) as connection:
+            persisted_budget = connection.execute(
+                """SELECT budget_amount_original,budget_currency_iso,budget_unit,budget_raw_text,
+                          extracted_requirements->'budget' AS extracted_budget
+                   FROM travel.trips WHERE trip_id=%s""",
+                (second_trip_id,),
+            ).fetchone()
+        assert persisted_budget["budget_amount_original"] is None
+        assert persisted_budget["budget_currency_iso"] is None
+        assert persisted_budget["budget_unit"] is None
+        assert persisted_budget["budget_raw_text"] is None
+        assert persisted_budget["extracted_budget"] == budget_profile
         deleted_conversation = client_a.delete(
             f"/api/v1/conversations/{second_conversation_id}",
             headers=_request_headers(csrf_a),

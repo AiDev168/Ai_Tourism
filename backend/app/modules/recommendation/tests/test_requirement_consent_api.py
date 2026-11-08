@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi.testclient import TestClient
 
 from app.api.auth import require_authenticated_csrf
+import app.api.traveler as traveler_api
 from app.api.traveler import get_traveler_repository
 from app.main import app
 from app.modules.identity.authorization import Principal, get_principal
@@ -18,9 +19,11 @@ class FakeRepository:
     def __init__(self):
         self.confirmed = None
         self.saved_consent = None
+        self.confirmed_profile = {}
 
     def confirm_trip_profile(self, **kwargs):
         self.confirmed = kwargs
+        self.confirmed_profile = kwargs["confirmed_requirements"]
         self.saved_consent = None
         if kwargs["requirement_consent"] is not None:
             self.saved_consent = {
@@ -34,13 +37,21 @@ class FakeRepository:
             "trip_id": TRIP, "conversation_id": CONVERSATION, "version": 5,
             "locale": "en-US", "original_request": "Plan a trip",
             "extracted_requirements": {},
-            "confirmed_requirements": {"requirement_consent": self.saved_consent}
-            if self.saved_consent else {},
+            "confirmed_requirements": {
+                **self.confirmed_profile,
+                **({"requirement_consent": self.saved_consent} if self.saved_consent else {}),
+            },
             "destination_ids": [], "duration_days": 4, "traveler_count": None,
             "budget_amount_original": None, "budget_currency_iso": None, "budget_unit": None,
             "latest_recommendation_request_id": None, "latest_itinerary_id": None,
             "trip_status": "draft", "created_at": now, "updated_at": now,
         }
+
+    def create_recommendation_run(self, **kwargs):
+        return UUID("77a990ac-2a26-4647-8e75-167cd021a0a1"), kwargs["expected_trip_version"]
+
+    def recommendation_context(self, user_id, trip_id, request_id):
+        return {"items": []}
 
 
 def _client(repository):
@@ -58,21 +69,28 @@ def test_profile_confirmation_accepts_field_choices_but_server_owns_binding_vers
             "expected_version": 4,
             "confirmed_requirements": {
                 "durationDays": {"value": 4, "status": "confirmed"},
-                "budget": {"value": {"amount": 50, "currency": "IRR", "unit": "million toman"}},
+                "budget": {"amount": 20, "currency": None, "unit": "million toman", "raw": "20 million toman"},
+                "soft_preferences": ["paved paths"],
+                "constraints": ["avoid rough terrain"],
             },
             "destination_ids": [],
             "requirement_consent": {
                 "contract_version": "recommendation-consent-v1",
-                "field_decisions": {"budget": "advisory"},
-                "advisory_acknowledged_fields": ["budget"],
+                "field_decisions": {"budget": "advisory", "soft_preference": "advisory"},
+                "advisory_acknowledged_fields": ["budget", "soft_preference"],
             },
         })
         assert response.status_code == 200
         assert repository.confirmed["user_id"] == OWNER
+        assert repository.confirmed["confirmed_requirements"]["budget"] == {
+            "amount": 20, "currency": None, "unit": "million toman", "raw": "20 million toman",
+        }
+        assert repository.confirmed["confirmed_requirements"]["soft_preferences"] == ["paved paths"]
+        assert repository.confirmed["confirmed_requirements"]["constraints"] == ["avoid rough terrain"]
         assert repository.confirmed["requirement_consent"] == {
             "contract_version": "recommendation-consent-v1",
-            "field_decisions": {"budget": "advisory"},
-            "advisory_acknowledged_fields": ["budget"],
+            "field_decisions": {"budget": "advisory", "soft_preference": "advisory"},
+            "advisory_acknowledged_fields": ["budget", "soft_preference"],
         }
         assert repository.saved_consent["profile_version"] == 5
         assert "profile_version" not in repository.confirmed["requirement_consent"]
@@ -145,5 +163,47 @@ def test_profile_confirmation_rejects_forged_version_unknown_field_and_nested_cl
             )
         )
         assert repository.confirmed is None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_parser_shaped_budget_and_preference_profile_reaches_recommendation_api(monkeypatch):
+    repository = FakeRepository()
+    monkeypatch.setattr(traveler_api, "production_catalogue_bundle", lambda settings: ([], {}, {}))
+    client = _client(repository)
+    try:
+        confirmed = client.patch(f"/api/v1/trips/{TRIP}", json={
+            "expected_version": 4,
+            "confirmed_requirements": {
+                "duration_days": 4,
+                "destinations": ["Shiraz"],
+                "destination_ids": [],
+                "budget": {"amount": 20, "currency": None, "unit": "million toman", "raw": "20 million toman"},
+                "soft_preferences": ["paved paths"],
+                "constraints": ["avoid rough terrain"],
+            },
+            "destination_ids": [],
+            "requirement_consent": {
+                "contract_version": "recommendation-consent-v1",
+                "field_decisions": {"budget": "advisory", "soft_preference": "advisory"},
+                "advisory_acknowledged_fields": ["budget", "soft_preference"],
+            },
+        })
+        assert confirmed.status_code == 200
+
+        response = client.post(f"/api/v1/trips/{TRIP}/recommendations", json={})
+        assert response.status_code == 201
+        assert response.headers["cache-control"] == "no-store"
+        result = response.json()
+        assert result["status"] == "needs_confirmation"
+        assert result["reason_code"] == "hard_constraints_unverifiable"
+        assert result["waived_fields"] == ["budget", "soft_preference"]
+        assert result["not_evaluated_fields"] == ["budget", "soft_preference"]
+        assert set(result["unresolved_fields"]) == {"hard_constraint", "destination_resolution"}
+        assessments = {item["field"]: item for item in result["requirement_assessments"]}
+        assert assessments["budget"]["status"] == "not_evaluated"
+        assert assessments["soft_preference"]["status"] == "not_evaluated"
+        assert assessments["hard_constraint"]["decision"] == "must_have"
+        assert result["items"] == []
     finally:
         app.dependency_overrides.clear()

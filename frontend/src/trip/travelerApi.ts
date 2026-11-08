@@ -31,7 +31,7 @@ export type TripRecord = {
 };
 
 export type RequirementConsentDecision = 'must_have' | 'advisory';
-export type RequirementFieldCode = 'budget' | 'travel_dates' | 'traveler_count' | 'origin';
+export type RequirementFieldCode = 'budget' | 'travel_dates' | 'traveler_count' | 'origin' | 'soft_preference';
 export type RequirementConsent = {
   contract_version: 'recommendation-consent-v1';
   field_decisions: Partial<Record<RequirementFieldCode, RequirementConsentDecision>>;

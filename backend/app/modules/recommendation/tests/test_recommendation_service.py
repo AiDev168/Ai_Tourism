@@ -89,10 +89,10 @@ def test_hard_constraints_do_not_get_overridden_by_a_match_score() -> None:
 
 
 def test_persian_and_arabic_rial_units_allow_only_explicit_advisory_consent() -> None:
-    for unit in ("ریال", "ريال", "تومان"):
+    for currency, unit in (("IRR", "ریال"), ("IRR", "ريال"), (None, "تومان")):
         profile = requirements(
             destinations={"value": ["Shiraz"], "status": "confirmed"},
-            budget={"amount": 100_000, "currency": "IRR", "unit": unit, "raw": "budget"},
+            budget={"amount": 100_000, "currency": currency, "unit": unit, "raw": "budget"},
             requirement_consent={
                 "contract_version": "recommendation-consent-v1",
                 "profile_version": 2,
@@ -113,6 +113,89 @@ def test_persian_and_arabic_rial_units_allow_only_explicit_advisory_consent() ->
         assert result.reason_code == "catalogue_empty"
         assert result.waived_fields == ["budget"]
         assert result.requirement_assessments[0].status == "not_evaluated"
+
+
+def test_actual_pwa_budget_shapes_reach_mandatory_and_acknowledged_advisory_assessment() -> None:
+    # These values mirror parseBudget() output: amount is the quantity typed,
+    # unit retains the scale/currency wording, and no FX or Rial/Toman conversion occurs.
+    parser_budgets = [
+        {"amount": 20, "currency": None, "unit": "million toman", "raw": "20 million toman"},
+        {"amount": 20, "currency": "IRR", "unit": "million IRR", "raw": "20 million IRR"},
+        {"amount": 20, "currency": "IRR", "unit": "میلیون ریال", "raw": "۲۰ میلیون ریال"},
+        {"amount": 20, "currency": "USD", "unit": "million USD", "raw": "20 million USD"},
+        {"amount": 20, "currency": "AED", "unit": "مليون درهم", "raw": "٢٠ مليون درهم"},
+        {"amount": 20, "currency": "SAR", "unit": "million ر.س", "raw": "20 million ر.س"},
+    ]
+    for budget in parser_budgets:
+        profile = requirements(budget=budget)
+        mandatory = recommend_trip(
+            requirements=profile, selected_destination_ids=["1"], catalogue=[candidate("1")],
+            evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
+        )
+        assert mandatory.status == "needs_confirmation"
+        assert mandatory.reason_code == "requirements_unverifiable"
+        assert mandatory.unresolved_fields == ["budget"]
+
+        profile["requirement_consent"] = {
+            "contract_version": "recommendation-consent-v1", "profile_version": 4,
+            "field_decisions": {"budget": "advisory"},
+            "advisory_acknowledged_fields": ["budget"],
+        }
+        advisory = recommend_trip(
+            requirements=profile, selected_destination_ids=["1"], catalogue=[candidate("1")],
+            evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
+        )
+        assert advisory.status == "available"
+        assert advisory.not_evaluated_fields == ["budget"]
+        assert advisory.requirement_assessments[0].status == "not_evaluated"
+        assert all(component.component_key != "budget" for component in advisory.items[0].score_components)
+
+
+def test_budget_currency_unit_mismatch_and_malformed_amount_fail_closed() -> None:
+    invalid_budgets = [
+        {"amount": 20, "currency": "IRR", "unit": "million toman"},
+        {"amount": 20, "currency": "USD", "unit": "million AED"},
+        {"amount": True, "currency": "IRR", "unit": "million IRR"},
+        {"amount": "NaN", "currency": "IRR", "unit": "million IRR"},
+        {"amount": 20, "currency": "EUR", "unit": "million EUR"},
+    ]
+    for budget in invalid_budgets:
+        result = recommend_trip(
+            requirements=requirements(budget=budget), selected_destination_ids=["1"],
+            catalogue=[candidate("1")], evidence_by_destination={"1": [source(1, 11)]},
+            locale="en-US", profile_version=4,
+        )
+        assert result.reason_code == "requirements_invalid"
+        assert result.items == []
+
+
+def test_explicit_soft_preference_can_be_advisory_but_hard_constraints_still_block() -> None:
+    soft = requirements(soft_preferences=["paved paths"])
+    soft["requirement_consent"] = {
+        "contract_version": "recommendation-consent-v1", "profile_version": 4,
+        "field_decisions": {"soft_preference": "advisory"},
+        "advisory_acknowledged_fields": ["soft_preference"],
+    }
+    advisory = recommend_trip(
+        requirements=soft, selected_destination_ids=["1"], catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
+    )
+    assert advisory.status == "available"
+    assert advisory.waived_fields == advisory.not_evaluated_fields == ["soft_preference"]
+    assert advisory.requirement_assessments[0].reason_code == "preference_unverifiable"
+    assert advisory.items[0].not_evaluated_fields == ["soft_preference"]
+    assert all(component.component_key != "soft_preference" for component in advisory.items[0].score_components)
+
+    hard = requirements(soft_preferences=["paved paths"], constraints=["avoid rough terrain"])
+    hard["requirement_consent"] = soft["requirement_consent"]
+    blocked = recommend_trip(
+        requirements=hard, selected_destination_ids=["1"], catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
+    )
+    assert blocked.status == "needs_confirmation"
+    assert blocked.unresolved_fields == ["hard_constraint"]
+    assert blocked.waived_fields == ["soft_preference"]
+    assert blocked.items == []
 
 
 def test_no_recommendation_when_source_is_missing_expired_or_bound_to_another_identity() -> None:
@@ -170,7 +253,7 @@ def test_non_numeric_client_identifier_is_not_accepted_as_catalogue_identity() -
 
 def test_unresolved_requirement_defaults_to_mandatory_and_blocks() -> None:
     result = recommend_trip(
-        requirements=requirements(budget={"amount": 50, "currency": "IRR", "unit": "million toman"}),
+        requirements=requirements(budget={"amount": 50, "currency": None, "unit": "million toman"}),
         selected_destination_ids=["1"], catalogue=[candidate("1")],
         evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
     )
@@ -185,7 +268,7 @@ def test_unresolved_requirement_defaults_to_mandatory_and_blocks() -> None:
 
 
 def test_explicit_version_bound_advisory_is_not_evaluated_or_scored() -> None:
-    profile = requirements(budget={"amount": 50, "currency": "IRR", "unit": "million toman"})
+    profile = requirements(budget={"amount": 50, "currency": None, "unit": "million toman"})
     profile["requirement_consent"] = {
         "contract_version": "recommendation-consent-v1",
         "profile_version": 4,
@@ -211,7 +294,7 @@ def test_explicit_version_bound_advisory_is_not_evaluated_or_scored() -> None:
 
 
 def test_stale_or_forged_consent_fails_closed() -> None:
-    stale = requirements(budget={"amount": 50, "currency": "IRR", "unit": "million toman"})
+    stale = requirements(budget={"amount": 50, "currency": None, "unit": "million toman"})
     stale["requirement_consent"] = {
         "contract_version": "recommendation-consent-v1",
         "profile_version": 3,
@@ -258,7 +341,7 @@ def test_consent_cannot_be_applied_to_a_field_no_longer_unresolved() -> None:
 
 
 def test_advisory_requires_exact_ack_and_safety_fields_are_never_waivable() -> None:
-    profile = requirements(budget={"amount": 50, "currency": "IRR", "unit": "million toman"})
+    profile = requirements(budget={"amount": 50, "currency": None, "unit": "million toman"})
     profile["requirement_consent"] = {
         "contract_version": "recommendation-consent-v1",
         "profile_version": 4,

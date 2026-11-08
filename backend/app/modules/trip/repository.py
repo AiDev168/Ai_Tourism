@@ -12,8 +12,6 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from app.core.config import Settings
-from app.modules.trip.budget import InvalidBudgetAmount, convert_budget_to_irr
-
 MAX_CONVERSATION_MESSAGES = 500
 
 
@@ -66,23 +64,23 @@ def _profile_columns(requirements: Mapping[str, Any]) -> dict[str, Any]:
         except (InvalidOperation, TypeError):
             amount = None
         raw_currency = budget.get("currency")
-        raw_unit = str(budget.get("unit") or "").casefold()
-        if raw_currency == "IRR" and amount is not None and amount.is_finite() and amount >= 0:
-            if "toman" in raw_unit or "تومان" in raw_unit:
-                currency, unit = "IRR", "toman"
-            elif "rial" in raw_unit or "ریال" in raw_unit or raw_unit.strip() == "irr":
-                currency, unit = "IRR", "rial"
-            try:
-                if currency and unit:
-                    convert_budget_to_irr(amount, unit)
-                else:
-                    raise InvalidBudgetAmount
-            except InvalidBudgetAmount:
-                currency = unit = None
-            if currency:
-                raw = str(budget.get("raw") or "")[:240]
-            else:
-                amount = None
+        raw_unit = str(budget.get("unit") or "").strip().casefold()
+        if (
+            raw_currency == "IRR"
+            and amount is not None
+            and amount.is_finite()
+            and amount >= 0
+            and raw_unit in {"rial", "toman"}
+            and isinstance(budget.get("raw"), str)
+            and budget["raw"].strip()
+        ):
+            # These legacy columns can represent only an exact amount and one
+            # of two explicit denominations. Keep the entered amount unchanged;
+            # richer parser forms remain losslessly available in the JSON profile.
+            currency, unit = "IRR", raw_unit
+            raw = budget["raw"][:240]
+        else:
+            amount = None
     return {
         "origin": origin if isinstance(origin, str) and origin.strip() else None,
         "duration": duration if isinstance(duration, int) and not isinstance(duration, bool) and 1 <= duration <= 365 else None,

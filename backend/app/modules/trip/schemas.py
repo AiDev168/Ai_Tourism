@@ -82,7 +82,7 @@ class AppendMessageRequest(StrictModel):
 
 
 RequirementField = Literal[
-    "origin", "travel_dates", "traveler_count", "budget",
+    "origin", "travel_dates", "traveler_count", "budget", "soft_preference",
 ]
 
 
@@ -93,7 +93,7 @@ class RequirementConsentRequest(StrictModel):
     field_decisions: dict[RequirementField, Literal["must_have", "advisory"]] = Field(
         default_factory=dict, max_length=32
     )
-    advisory_acknowledged_fields: list[RequirementField] = Field(default_factory=list, max_length=4)
+    advisory_acknowledged_fields: list[RequirementField] = Field(default_factory=list, max_length=5)
 
     @field_validator("advisory_acknowledged_fields")
     @classmethod
