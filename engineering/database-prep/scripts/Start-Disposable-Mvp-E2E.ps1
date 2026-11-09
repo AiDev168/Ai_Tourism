@@ -47,12 +47,22 @@ function Scalar([string]$Statement, [string]$Db = 'ai_tourism_dev') {
 }
 $Created = $false
 try {
-    $Publish = '127.0.0.1:' + $Port + ':5432'
+    # Docker selects an unoccupied IPv4 loopback port; never interrupt a
+    # pre-existing listener. The -Port parameter is accepted for compatibility.
+    $Publish = '127.0.0.1::5432'
     $SqlMount = 'type=bind,source=' + $SqlDir + ',target=/opt/ai-tourism/sql,readonly'
     $LegacyMount = 'type=bind,source=' + $Legacy + ',target=/opt/ai-tourism/legacy/tourism_points.sql,readonly'
     & docker run --detach --rm --name $Name --label 'ai-tourism.disposable-mvp-e2e=true' --publish $Publish --tmpfs '/var/lib/postgresql/data:rw,size=1024m' --mount $SqlMount --mount $LegacyMount --env 'POSTGRES_DB=ai_tourism_dev' --env ('POSTGRES_USER=' + $Owner) --env ('POSTGRES_PASSWORD=' + $OwnerPassword) $Image | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Disposable Docker container did not start.' }
     $Created = $true
+    $PortOutput = (& docker port $Name 5432/tcp | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $PortOutput -notmatch '^127[.]0[.]0[.]1:([0-9]{1,5})$') {
+        throw 'Docker did not publish PostgreSQL on a single IPv4 loopback port.'
+    }
+    $Port = [int]$Matches[1]
+    if ($Port -lt 1024 -or $Port -eq 55433) {
+        throw 'Docker selected a forbidden PostgreSQL port.'
+    }
     $Ready = $false
     for ($i = 0; $i -lt 60; $i++) {
         & docker exec $Name pg_isready -U $Owner -d ai_tourism_dev | Out-Null
@@ -113,7 +123,7 @@ try {
     $env:AUTH_TEST_DATABASE_PASSWORD = $AppPassword
     $env:AUTH_TEST_DATABASE_MARKER = $Marker
     $env:AI_TOURISM_MVP_E2E_CONTAINER = $Name
-    Write-Host 'READY: isolated PostgreSQL 17 with migrations 0000-0011.' -ForegroundColor Green
+    Write-Host ("READY: isolated PostgreSQL 17 on 127.0.0.1:" + $Port + " with migrations 0000-0011.") -ForegroundColor Green
     Write-Host 'AUTH_TEST_DATABASE_* and AUTH_INTEGRATION_TESTS set in current PowerShell.'
     Write-Host 'Run: node frontend/scripts/traveler-e2e.mjs'
     Write-Host 'After tests: docker stop $env:AI_TOURISM_MVP_E2E_CONTAINER'
