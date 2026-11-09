@@ -764,8 +764,13 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     await pageA.locator('.auth-signed-in').waitFor({ state: 'visible' });
     if (!(await reloadMe).headers()['cache-control']?.includes('no-store')) throw new Error(`auth_me_not_no_store_${locale}`);
     await pageA.locator('.history-trip > button').first().click();
-    await pageA.locator('.saved-message-user p').waitFor({ state: 'visible' });
-    if (!(await pageA.locator('.saved-message-user p').first().textContent())?.includes(copy.prompt)) {
+    // The initial request and the assistant follow-up are two distinct user
+    // messages. Check both explicitly instead of waiting on an ambiguous
+    // multi-element locator (Playwright strict mode).
+    const savedUserMessages = pageA.locator('.saved-message-user p');
+    await savedUserMessages.nth(1).waitFor({ state: 'visible' });
+    if (await savedUserMessages.count() !== 2
+      || !(await savedUserMessages.first().textContent())?.includes(copy.prompt)) {
       throw new Error(`history_request_not_restored_${locale}`);
     }
     await pageA.locator('.saved-message-assistant button').first().click();
