@@ -70,3 +70,31 @@ def test_public_history_rejects_literal_backslash_and_control_character_in_citie
             }},
         ))
         assert MessageResponse.model_validate(row).candidate_requirements == {}
+
+
+def test_owner_history_can_reopen_only_validated_budget_dates_and_interest():
+    row = _public_conversation_message(message(
+        "assistant",
+        {"requirements_candidate": {
+            "budget_text": "200000 تومان", "travel_start": "2027-03-01",
+            "travel_end": "2027-03-04", "interest": "باغ‌های تاریخی",
+            "hard_constraint": "do not forward", "secret": "never-public",
+        }},
+    ))
+    parsed = MessageResponse.model_validate(row)
+    assert parsed.candidate_requirements == {
+        "budget_text": "200000 تومان", "travel_start": "2027-03-01",
+        "travel_end": "2027-03-04", "interest": "باغ‌های تاریخی",
+    }
+    assert "never-public" not in str(parsed.model_dump())
+    assert "hard_constraint" not in str(parsed.model_dump())
+
+
+def test_history_rejects_unsupported_dates_and_budget_without_denomination():
+    row = _public_conversation_message(message(
+        "assistant", {"requirements_candidate": {
+            "travel_start": "2027-02-30", "travel_end": "2027-03-02",
+            "budget_text": "cheap", "interest": "bad\\ntext",
+        }},
+    ))
+    assert MessageResponse.model_validate(row).candidate_requirements == {}

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
+from datetime import date
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -61,6 +63,26 @@ class ChatReply(BaseModel):
             item = value.get(key)
             if type(item) is int and 1 <= item <= bound:
                 hints[key] = item
+        for key, limit in (("budget_text", 100), ("interest", 100)):
+            item = value.get(key)
+            if (isinstance(item, str) and 0 < len(item.strip()) <= limit
+                    and "\\" not in item
+                    and not any(ord(char) < 32 or ord(char) == 127 for char in item)):
+                if key != "budget_text" or (
+                    re.search(r"\d", item)
+                    and re.search(r"تومان|ریال|ريال|toman|rial|IRR|USD|دلار|دولار|AED|درهم", item, re.I)
+                ):
+                    hints[key] = item.strip()
+        start, end = value.get("travel_start"), value.get("travel_end")
+        if (isinstance(start, str) and isinstance(end, str)
+                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", start)
+                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", end)):
+            try:
+                if date.fromisoformat(start) <= date.fromisoformat(end):
+                    hints["travel_start"] = start
+                    hints["travel_end"] = end
+            except ValueError:
+                pass
         return hints
 
 
@@ -118,8 +140,12 @@ class RemoteChatAdapter:
                     "Return one JSON object with reply (string), requirements (object), "
                     "and clarification (string or null). In requirements, use ONLY "
                     "destination (city-name string), duration_days (integer 1..365), "
-                    "origin (departure city string) and traveler_count (integer 1..50), "
-                    "when explicitly supported by the latest traveler statements. "
+                    "origin (departure city string), traveler_count (integer 1..50), "
+                    "budget_text (exact stated amount WITH currency/denomination), "
+                    "travel_start and travel_end (BOTH ISO YYYY-MM-DD dates, only when "
+                    "explicitly stated, without converting local calendars), and "
+                    "interest (one explicitly stated interest, max 100 characters). "
+                    "Use these fields ONLY when explicitly supported by traveler statements. "
                     "Omit unknown fields; do not infer a city or group size. If the "
                     "traveler corrects an earlier statement, follow the latest clear "
                     "correction and ask for clarification if contradictory. Also ask "

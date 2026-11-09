@@ -1,6 +1,8 @@
 """PostgreSQL persistence for authenticated traveler conversations and trips."""
 
 import json
+import re
+from datetime import date
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
@@ -153,6 +155,26 @@ def _public_conversation_message(row: Mapping[str, Any]) -> dict[str, Any]:
             travelers = raw.get("traveler_count")
             if type(travelers) is int and 1 <= travelers <= 50:
                 candidate["traveler_count"] = travelers
+            for key, limit in (("budget_text", 100), ("interest", 100)):
+                item = raw.get(key)
+                if (isinstance(item, str) and 0 < len(item.strip()) <= limit
+                        and "\\" not in item
+                        and not any(ord(char) < 32 or ord(char) == 127 for char in item)):
+                    if key != "budget_text" or (
+                        re.search(r"\d", item)
+                        and re.search(r"تومان|ریال|ريال|toman|rial|IRR|USD|دلار|دولار|AED|درهم", item, re.I)
+                    ):
+                        candidate[key] = item.strip()
+            start, end = raw.get("travel_start"), raw.get("travel_end")
+            if (isinstance(start, str) and isinstance(end, str)
+                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", start)
+                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", end)):
+                try:
+                    if date.fromisoformat(start) <= date.fromisoformat(end):
+                        candidate["travel_start"] = start
+                        candidate["travel_end"] = end
+                except ValueError:
+                    pass
     message["candidate_requirements"] = candidate
     return message
 

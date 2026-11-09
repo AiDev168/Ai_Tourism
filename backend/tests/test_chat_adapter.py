@@ -168,3 +168,51 @@ def test_malformed_or_overlong_chat_text_is_rejected_without_retry(content):
         asyncio.run(adapter(handler).invoke(
             ChatRequest(locale="fa-IR", text="لطفاً کمک کن")))
     assert len(calls) == 1
+
+
+def test_additional_trip_hints_are_bounded_and_remain_advisory():
+    def handler(request):
+        system = json.loads(request.content)["messages"][0]["content"]
+        assert "budget_text" in system and "travel_start" in system and "interest" in system
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop",
+            "message": {"content": json.dumps({
+                "reply": "برای تأیید جزئیات سفر آماده‌اید؟",
+                "requirements": {
+                    "budget_text": "200000 تومان",
+                    "travel_start": "2027-03-01",
+                    "travel_end": "2027-03-04",
+                    "interest": "باغ‌های تاریخی",
+                    "hard_constraint": "UNTRUSTED",
+                },
+            }, ensure_ascii=False)},
+        }]})
+    result = asyncio.run(adapter(handler).invoke(
+        ChatRequest(locale="fa-IR", text="بودجه ۲۰۰۰۰۰ تومان و باغ‌های تاریخی")))
+    assert result.requirements == {
+        "budget_text": "200000 تومان",
+        "travel_start": "2027-03-01",
+        "travel_end": "2027-03-04",
+        "interest": "باغ‌های تاریخی",
+    }
+
+
+@pytest.mark.parametrize("start,end", [
+    ("2027-02-30", "2027-03-02"),
+    ("2027-03-07", "2027-03-02"),
+    ("2027-03-01", None),
+    ("2027-03-01", "2027-03-01\\n"),
+])
+def test_invalid_model_dates_are_not_offered_to_traveler(start, end):
+    def handler(request):
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop", "message": {"content": json.dumps({
+                "reply": "لطفاً تاریخ‌ها را روشن کنید.",
+                "requirements": {
+                    "travel_start": start, "travel_end": end,
+                    "budget_text": "cheap", "interest": "bad\\ntext",
+                },
+            }, ensure_ascii=False)},
+        }]})
+    result = asyncio.run(adapter(handler).invoke(ChatRequest(locale="fa-IR", text="سفر")))
+    assert result.requirements == {}

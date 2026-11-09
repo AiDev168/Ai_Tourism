@@ -20,7 +20,7 @@ const assistantCopy: Record<Locale, {
   consent: string; send: string; review: string; initial: string; unavailable: string;
   destination: string; duration: string; apply: string; dismiss: string; unsaved: string; reviewSaved: string;
   speaker: string; promptsTitle: string; prompts: readonly string[];
-  origin: string; travelerCount: string;
+  origin: string; travelerCount: string; budget: string; dates: string; interest: string;
 }> = {
   'fa-IR': { consent: 'با ارسال این پیام و تاریخچهٔ گفت‌وگوی سفر به سرویس هوش مصنوعی موافقم.',
     send: 'پرسش از دستیار سفر', review: 'پیشنهاد مدل؛ پیش از تأیید سفر بررسی کنید:',
@@ -30,6 +30,7 @@ const assistantCopy: Record<Locale, {
     apply: 'انتقال به فرم سفر', dismiss: 'نادیده گرفتن', reviewSaved: 'بازبینی پیشنهاد ذخیره‌شده',
     unsaved: 'این پیشنهاد هنوز ذخیره یا تأیید نشده است. پس از انتقال، فرم سفر را بررسی و تأیید کنید.',
     origin: 'شهر مبدأ پیشنهادی', travelerCount: 'تعداد مسافران پیشنهادی',
+    budget: 'بودجهٔ پیشنهادی', dates: 'تاریخ‌های پیشنهادی (میلادی)', interest: 'علاقهٔ پیشنهادی',
     speaker: 'مشاور هوش مصنوعی', promptsTitle: 'برای ادامه می‌توانید از مشاور بخواهید:',
     prompts: ['دربارهٔ علایق و سبک سفرم یک سؤال تکمیلی بپرس.', 'برای روشن شدن بودجه و تعداد همراهانم سؤال بپرس.', 'محدودیت‌های ضروری سفرم را مرور کن و موارد مبهم را بپرس.'] },
   'en-US': { consent: 'I consent to sending this message and prior trip conversation to the AI service.',
@@ -40,6 +41,7 @@ const assistantCopy: Record<Locale, {
     apply: 'Use in trip form', dismiss: 'Dismiss', reviewSaved: 'Review saved suggestion',
     unsaved: 'Not saved or confirmed. Review and confirm the trip form after applying.',
     origin: 'Suggested departure city', travelerCount: 'Suggested travelers',
+    budget: 'Suggested budget', dates: 'Suggested dates (Gregorian)', interest: 'Suggested interest',
     speaker: 'AI travel advisor', promptsTitle: 'Suggested follow-up questions:',
     prompts: ['Ask me about my interests and travel style.', 'Clarify my budget and number of travelers.', 'Review my essential constraints and ask what is unclear.'] },
   ar: { consent: 'أوافق على إرسال هذه الرسالة وسجل محادثة الرحلة إلى خدمة الذكاء الاصطناعي.',
@@ -50,6 +52,7 @@ const assistantCopy: Record<Locale, {
     apply: 'نقل إلى نموذج الرحلة', dismiss: 'تجاهل', reviewSaved: 'مراجعة الاقتراح المحفوظ',
     unsaved: 'لم يُحفظ هذا الاقتراح أو يُؤكَّد. راجع نموذج الرحلة وأكّده بعد النقل.',
     origin: 'مدينة المغادرة المقترحة', travelerCount: 'عدد المسافرين المقترح',
+    budget: 'الميزانية المقترحة', dates: 'التواريخ المقترحة (ميلادي)', interest: 'الاهتمام المقترح',
     speaker: 'مستشار السفر بالذكاء الاصطناعي', promptsTitle: 'يمكنك متابعة المحادثة عبر:',
     prompts: ['اسألني عن اهتماماتي وطريقة سفري.', 'اسألني عن الميزانية وعدد المسافرين.', 'راجع الشروط الأساسية واسأل عن الأمور غير الواضحة.'] },
 };
@@ -109,14 +112,39 @@ function unresolvedConsentFields(value: TripRequirements | null): RequirementFie
   });
 }
 
+function parseReviewedBudget(text: string, locale: Locale): TripRequirements['budget']['value'] {
+  if (!text.trim()) return null;
+  const result = createTripRequirements({ requestText: text.trim(), locale });
+  return result.kind === 'invalid' ? null : result.requirements.budget.value;
+}
+
+function validIsoDay(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+  const date = new Date(value + 'T00:00:00Z');
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function validTravelDates(start: string, end: string): boolean {
+  return (!start && !end) || (validIsoDay(start) && validIsoDay(end) && start <= end);
+}
+
+function parseInterests(text: string): string[] {
+  return [...new Set(text.split(/[,،؛;]/u).map(value => value.trim()).filter(Boolean))];
+}
+
 function consentFieldsForReviewedProfile(
   extracted: TripRequirements | null,
   origin: string,
   travelers: string,
+  budget: string,
+  dateStart: string,
+  dateEnd: string,
 ): RequirementFieldCode[] {
   const fields = unresolvedConsentFields(extracted);
   if (origin.trim() && !fields.includes('origin')) fields.push('origin');
   if (travelers.trim() && !fields.includes('traveler_count')) fields.push('traveler_count');
+  if (budget.trim() && !fields.includes('budget')) fields.push('budget');
+  if ((dateStart || dateEnd) && !fields.includes('travel_dates')) fields.push('travel_dates');
   return fields;
 }
 
@@ -203,6 +231,10 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const [durationText, setDurationText] = useState('');
   const [originText, setOriginText] = useState('');
   const [travelerCountText, setTravelerCountText] = useState('');
+  const [budgetText, setBudgetText] = useState('');
+  const [travelStartText, setTravelStartText] = useState('');
+  const [travelEndText, setTravelEndText] = useState('');
+  const [interestText, setInterestText] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [requirementChoices, setRequirementChoices] = useState<Partial<Record<RequirementFieldCode, RequirementConsentDecision>>>({});
   const [advisoryAcknowledgements, setAdvisoryAcknowledgements] = useState<Partial<Record<RequirementFieldCode, boolean>>>({});
@@ -222,8 +254,14 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const restoringRequestRef = useRef<string | null>(null);
 
   const extracted = useMemo(() => safeRequirements(activeTrip?.extracted_requirements, activeTrip?.locale ?? locale), [activeTrip, locale]);
-  const consentFields = useMemo(() => consentFieldsForReviewedProfile(extracted, originText, travelerCountText),
-    [extracted, originText, travelerCountText]);
+  const consentFields = useMemo(() => consentFieldsForReviewedProfile(
+    extracted, originText, travelerCountText, budgetText, travelStartText, travelEndText,
+  ), [extracted, originText, travelerCountText, budgetText, travelStartText, travelEndText]);
+  const budgetValid = !budgetText.trim() || parseReviewedBudget(budgetText, locale) !== null;
+  const datesValid = validTravelDates(travelStartText, travelEndText);
+  const interests = parseInterests(interestText);
+  const interestsValid = interestText.length <= 300 && interests.length <= 10
+    && interests.every(value => value.length <= 100 && !/[\u0000-\u001f\u007f]/u.test(value));
   const travelerCountValid = travelerCountText.trim() === '' || (/^[0-9]{1,2}$/.test(travelerCountText.trim())
     && Number(travelerCountText) >= 1 && Number(travelerCountText) <= 50);
   const consentComplete = consentIsComplete(consentFields, requirementChoices, advisoryAcknowledgements);
@@ -305,6 +343,10 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         setDurationText(requirements.durationDays.value === null ? '' : String(requirements.durationDays.value));
         setOriginText(requirements.origin.value ?? '');
         setTravelerCountText(requirements.travelerCount.value === null ? '' : String(requirements.travelerCount.value));
+        setBudgetText(requirements.budget.value?.raw ?? '');
+        setTravelStartText(requirements.travelDates.value?.start ?? '');
+        setTravelEndText(requirements.travelDates.value?.end ?? '');
+        setInterestText(requirements.interests.value?.join('، ') ?? '');
         const suggestedDays = validDayCount(requirements.durationDays.value);
         if (!activeTrip?.latest_itinerary_id && suggestedDays !== null) setDayCount(suggestedDays);
         void resolveNames(requirements.destinations.value ?? []);
@@ -392,12 +434,31 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
           ? '' : String(parsed.travelerCount.value));
       setOriginText(restoredOrigin);
       setTravelerCountText(restoredTravelerCount);
+      const savedBudget = trip.confirmed_requirements.budget;
+      const restoredBudget = hasReviewedProfile && savedBudget && typeof savedBudget === 'object'
+        && !Array.isArray(savedBudget) && typeof (savedBudget as Record<string, unknown>).raw === 'string'
+        ? String((savedBudget as Record<string, unknown>).raw) : (parsed?.budget.value?.raw ?? '');
+      const savedDates = trip.confirmed_requirements.travel_dates;
+      const restoredDates = hasReviewedProfile && savedDates && typeof savedDates === 'object'
+        && !Array.isArray(savedDates) ? savedDates as Record<string, unknown> : null;
+      const restoredStart = typeof restoredDates?.start === 'string' ? restoredDates.start : (parsed?.travelDates.value?.start ?? '');
+      const restoredEnd = typeof restoredDates?.end === 'string' ? restoredDates.end : (parsed?.travelDates.value?.end ?? '');
+      const savedInterests = trip.confirmed_requirements.interests;
+      const restoredInterests = hasReviewedProfile && Array.isArray(savedInterests)
+        && savedInterests.every(value => typeof value === 'string')
+        ? savedInterests as string[] : (parsed?.interests.value ?? []);
+      setBudgetText(restoredBudget);
+      setTravelStartText(restoredStart);
+      setTravelEndText(restoredEnd);
+      setInterestText(restoredInterests.join('، '));
       if (parsed) {
         restoringRequestRef.current = parsed.requestText;
         onRestoreRequest(parsed.requestText, parsed);
       }
       void resolveNames(restoredNames);
-      const restoredConsentFields = consentFieldsForReviewedProfile(parsed, restoredOrigin, restoredTravelerCount);
+      const restoredConsentFields = consentFieldsForReviewedProfile(
+        parsed, restoredOrigin, restoredTravelerCount, restoredBudget, restoredStart, restoredEnd,
+      );
       const savedConsent = restoredConsent(trip, restoredConsentFields);
       setRequirementChoices(savedConsent?.decisions ?? {});
       setAdvisoryAcknowledgements(Object.fromEntries(
@@ -457,6 +518,10 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         setDurationText(latest.durationDays.value === null ? '' : String(latest.durationDays.value));
         setOriginText(latest.origin.value ?? '');
         setTravelerCountText(latest.travelerCount.value === null ? '' : String(latest.travelerCount.value));
+        setBudgetText(latest.budget.value?.raw ?? '');
+        setTravelStartText(latest.travelDates.value?.start ?? '');
+        setTravelEndText(latest.travelDates.value?.end ?? '');
+        setInterestText(latest.interests.value?.join('، ') ?? '');
         restoringRequestRef.current = latest.requestText;
         onRestoreRequest(latest.requestText, latest);
         void resolveNames(latest.destinations.value ?? []);
@@ -520,15 +585,29 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
     if (reviewedAssistantCandidate.travelerCount !== undefined) {
       setTravelerCountText(String(reviewedAssistantCandidate.travelerCount));
     }
+    if (reviewedAssistantCandidate.budgetText !== undefined) {
+      setBudgetText(reviewedAssistantCandidate.budgetText);
+    }
+    if (reviewedAssistantCandidate.travelStart !== undefined && reviewedAssistantCandidate.travelEnd !== undefined) {
+      setTravelStartText(reviewedAssistantCandidate.travelStart);
+      setTravelEndText(reviewedAssistantCandidate.travelEnd);
+    }
+    if (reviewedAssistantCandidate.interest !== undefined) {
+      setInterestText(current => parseInterests([current, reviewedAssistantCandidate.interest!].filter(Boolean).join('، ')).join('، '));
+    }
     setDirty(true);
     invalidateConsent(); // Explicit profile confirmation remains mandatory.
     setAssistantCandidate(null);
   };
 
   const confirmProfile = async () => {
-    if (!session || !activeTrip || !online || !consentComplete || !travelerCountValid) {
+    if (!session || !activeTrip || !online || !consentComplete || !travelerCountValid
+        || !budgetValid || !datesValid || !interestsValid) {
       if (!online) setError(copy.offline);
       else if (!travelerCountValid) setError(copy.profileTravelersInvalid);
+      else if (!budgetValid) setError(copy.profileBudgetInvalid);
+      else if (!datesValid) setError(copy.profileDatesInvalid);
+      else if (!interestsValid) setError(copy.profileInterestsInvalid);
       return;
     }
     setBusy(true); setError(''); setStatus('');
@@ -537,12 +616,13 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       destinations: destinationNames.map(name => name.trim()).filter(Boolean),
       duration_days: duration,
       origin: originText.trim() || null,
-      travel_dates: extracted?.travelDates.value ?? null,
+      travel_dates: travelStartText && travelEndText
+        ? { start: travelStartText, end: travelEndText } : (extracted?.travelDates.value ?? null),
       traveler_count: travelerCountText.trim() ? Number(travelerCountText.trim()) : null,
       accessibility: extracted?.accessibility?.value ?? [],
-      budget: extracted?.budget.value ?? null,
+      budget: parseReviewedBudget(budgetText, locale) ?? extracted?.budget.value ?? null,
       soft_preferences: extracted?.softPreferences.value ?? [],
-      interests: extracted?.interests.value ?? [],
+      interests: interests.length ? interests : (extracted?.interests.value ?? []),
       constraints: extracted?.constraints.value ?? [],
       confirmation_source: 'traveler_reviewed',
     };
@@ -757,6 +837,18 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
                     <dt>{assistantCopy[locale].travelerCount}</dt>
                     <dd>{formatNumber(locale, reviewedAssistantCandidate.travelerCount)}</dd>
                   </>}
+                  {reviewedAssistantCandidate.budgetText !== undefined && <>
+                    <dt>{assistantCopy[locale].budget}</dt>
+                    <dd dir="auto">{reviewedAssistantCandidate.budgetText}</dd>
+                  </>}
+                  {reviewedAssistantCandidate.travelStart !== undefined && reviewedAssistantCandidate.travelEnd !== undefined && <>
+                    <dt>{assistantCopy[locale].dates}</dt>
+                    <dd dir="ltr">{reviewedAssistantCandidate.travelStart} – {reviewedAssistantCandidate.travelEnd}</dd>
+                  </>}
+                  {reviewedAssistantCandidate.interest !== undefined && <>
+                    <dt>{assistantCopy[locale].interest}</dt>
+                    <dd dir="auto">{reviewedAssistantCandidate.interest}</dd>
+                  </>}
                 </dl>
                 <p>{assistantCopy[locale].unsaved}</p>
                 <button type="button" onClick={applyAssistantCandidate} disabled={busy}>{assistantCopy[locale].apply}</button>
@@ -789,6 +881,21 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             <input id="profile-travelers" type="number" min="1" max="50" step="1" value={travelerCountText}
               aria-invalid={!travelerCountValid} onChange={event => { setTravelerCountText(event.target.value); setDirty(true); invalidateConsent(); }} />
             {!travelerCountValid && <p className="journey-error" role="alert">{copy.profileTravelersInvalid}</p>}
+            <label htmlFor="profile-budget">{copy.profileBudget}</label>
+            <input id="profile-budget" type="text" maxLength={100} dir="auto" value={budgetText}
+              onChange={event => { setBudgetText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            {!budgetValid && <p className="journey-error" role="alert">{copy.profileBudgetInvalid}</p>}
+            <label htmlFor="profile-travel-start">{copy.profileTravelStart}</label>
+            <input id="profile-travel-start" type="date" value={travelStartText}
+              onChange={event => { setTravelStartText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            <label htmlFor="profile-travel-end">{copy.profileTravelEnd}</label>
+            <input id="profile-travel-end" type="date" value={travelEndText}
+              onChange={event => { setTravelEndText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            {!datesValid && <p className="journey-error" role="alert">{copy.profileDatesInvalid}</p>}
+            <label htmlFor="profile-interests">{copy.profileInterests}</label>
+            <textarea id="profile-interests" maxLength={300} rows={2} dir="auto" value={interestText}
+              onChange={event => { setInterestText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            {!interestsValid && <p className="journey-error" role="alert">{copy.profileInterestsInvalid}</p>}
             {!!consentFields.length && <fieldset className="requirement-consent" aria-describedby="requirement-consent-intro">
               <legend>{copy.requirementConsentTitle}</legend>
               <p id="requirement-consent-intro">{copy.requirementConsentIntro}</p>
@@ -842,7 +949,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
               {item.candidates.map(candidate => <label key={candidate.destinationId} dir="auto"><input type="radio" name={`traveler-choice-${index}`} checked={resolution.items[index]?.kind === 'confirmed' && resolution.items[index].destination.destinationId === candidate.destinationId} onChange={() => setResolution(current => current ? confirmDestinationCandidate(current, index, candidate.destinationId) : current)} />{candidate.localizedNames[locale] ?? candidate.canonicalName} · {candidate.provinceName}</label>)}
               <button type="button" onClick={() => { setError(copy.recommendationClarify); document.getElementById(`profile-destination-${index}`)?.focus(); }}>{copy.noneOfThese}</button>
             </fieldset> : item.kind === 'resolved' || item.kind === 'confirmed' ? <p key={index} role="status" dir="auto">{item.destination.localizedNames[locale] ?? item.destination.canonicalName} · {item.kind === 'resolved' ? copy.catalogueMatch : copy.selectedByYou}</p> : item.kind === 'not-found' ? <p key={index} role="status">{item.originalPhrase}: {copy.recommendationClarify}</p> : null)}
-            <button type="button" onClick={() => void confirmProfile()} disabled={busy || (!dirty && confirmed) || !online || !consentComplete || !travelerCountValid}>{copy.confirmProfile}</button>
+            <button type="button" onClick={() => void confirmProfile()} disabled={busy || (!dirty && confirmed) || !online || !consentComplete || !travelerCountValid
+              || !budgetValid || !datesValid || !interestsValid}>{copy.confirmProfile}</button>
           </div>}
           {confirmed && <div className="recommendation-controls">
             <h3>{copy.recommendationTitle}</h3>
