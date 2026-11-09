@@ -35,7 +35,7 @@ def test_only_bounded_candidate_fields_are_exposed():
 def test_user_metadata_and_invalid_ai_hints_are_not_public():
     for role, candidate in [
         ("user", {"destination": "تهران", "duration_days": 2}),
-        ("assistant", {"destination": "bad\\nname", "duration_days": 999}),
+        ("assistant", {"destination": "bad\nname", "duration_days": 999}),
         ("assistant", {"destination": "", "duration_days": True}),
     ]:
         row = _public_conversation_message(message(

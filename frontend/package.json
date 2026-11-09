@@ -11,7 +11,7 @@
     "test:pwa-build": "node --test scripts/inject-pwa-assets.test.mjs",
     "test:pwa-offline": "node scripts/pwa-offline-e2e.mjs",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run src/",
     "visual-qa": "node scripts/visual-qa.mjs"
   },
   "dependencies": {
