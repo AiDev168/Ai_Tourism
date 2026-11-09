@@ -109,7 +109,14 @@ def _merge_extraction(previous: Any, latest: dict[str, Any]) -> dict[str, Any]:
     for key, new_value in latest.items():
         old_value = merged.get(key)
         if isinstance(old_value, Mapping) and isinstance(new_value, Mapping) and "value" in new_value:
-            if new_value.get("value") is None and old_value.get("value") is not None:
+            # An explicitly ambiguous correction must not silently restore
+            # an earlier value (e.g. "five or six days" after "three days").
+            # Only genuinely unknown/omitted fields retain prior evidence.
+            if (
+                new_value.get("value") is None
+                and old_value.get("value") is not None
+                and new_value.get("status") != "ambiguous"
+            ):
                 merged[key] = dict(old_value)
             else:
                 merged[key] = dict(new_value)

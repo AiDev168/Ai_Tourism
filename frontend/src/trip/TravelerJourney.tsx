@@ -3,6 +3,7 @@ import type { AuthSession } from '../auth/authApi';
 import { formatNumber, type Locale } from '../i18n/messages';
 import { journeyMessages, localizeRecommendationCode } from '../i18n/journeyMessages';
 import { createTripRequirements, type TripRequirements } from './tripIntake';
+import { integrateTripFollowUp } from './followUpIntake';
 import { resolveDestinationNames, confirmDestinationCandidate, type DestinationResolution } from './destinationResolution';
 import { ApiDestinationCatalogPort } from './destinationCatalogApi';
 import { reviewableAssistantCandidate } from './assistantCandidate';
@@ -418,15 +419,27 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   };
 
   const sendMessage = async () => {
-    if (!session || !activeConversation || !activeTrip || !messageText.trim() || !online) { if (!online) setError(copy.offline); return; }
+    if (!session || !activeConversation || !activeTrip || !messageText.trim() || !online) {
+      if (!online) setError(copy.offline);
+      return;
+    }
+    const initial = createTripRequirements({ requestText: activeTrip.original_request, locale: activeTrip.locale });
+    const previous = safeRequirements(activeTrip.extracted_requirements, activeTrip.locale)
+      ?? (initial.kind === 'invalid' ? null : initial.requirements);
+    if (!previous) { setError(copy.genericError); return; }
+    // Parse the new utterance on its own. The original 1200-character request
+    // remains unchanged; later explicit corrections do not become conflicts
+    // merely because an earlier value also appears in the history.
+    const parsed = integrateTripFollowUp(
+      previous, messageText.trim(), activeTrip.locale, activeTrip.confirmed_requirements,
+    );
+    if (parsed.kind === 'invalid') { setError(copy.followUpInvalid); return; }
     setBusy(true); setError(''); setStatus('');
     try {
-      const merged = `${activeTrip.original_request}\n${messageText.trim()}`;
-      const parsed = createTripRequirements({ requestText: merged, locale: activeTrip.locale });
       const result = await travelerApi.appendMessage(csrf, activeConversation.conversation_id, {
         trip_id: activeTrip.trip_id,
         content: messageText.trim(),
-        extracted_requirements: parsed.kind === 'invalid' ? undefined : parsed.requirements,
+        extracted_requirements: parsed.requirements,
         idempotency_key: newIdempotencyKey(),
         expected_version: activeConversation.version,
       });
@@ -434,9 +447,20 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       setActiveTrip(result.trip);
       setMessageText('');
       setAssistantCandidate(null);
-      setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setStatus(copy.messageSaved);
+      setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({});
+      setRecommendations(null); setItinerary(null);
       const latest = safeRequirements(result.trip.extracted_requirements, result.trip.locale);
-      if (latest) { setDestinationNames(latest.destinations.value?.slice() ?? []); setDurationText(latest.durationDays.value === null ? '' : String(latest.durationDays.value)); restoringRequestRef.current = latest.requestText; onRestoreRequest(latest.requestText, latest); void resolveNames(latest.destinations.value ?? []); }
+      setStatus(latest?.extractionStatus === 'needs_clarification'
+        ? copy.followUpNeedsReview : copy.messageSaved);
+      if (latest) {
+        setDestinationNames(latest.destinations.value?.slice() ?? []);
+        setDurationText(latest.durationDays.value === null ? '' : String(latest.durationDays.value));
+        setOriginText(latest.origin.value ?? '');
+        setTravelerCountText(latest.travelerCount.value === null ? '' : String(latest.travelerCount.value));
+        restoringRequestRef.current = latest.requestText;
+        onRestoreRequest(latest.requestText, latest);
+        void resolveNames(latest.destinations.value ?? []);
+      }
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
   };
