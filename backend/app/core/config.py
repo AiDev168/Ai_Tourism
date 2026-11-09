@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     database_user: str = "ai_tourism_app"
     database_password: SecretStr
     database_connect_timeout_seconds: int = Field(default=2, ge=1, le=10)
+    internal_chat_enabled: bool = False
+    internal_chat_endpoint: str = ""
+    internal_chat_model: str = ""
+    internal_chat_token: SecretStr | None = None
     tourism_rag_enabled: bool = False
     tourism_rag_api_url: str = "http://127.0.0.1:8765"
     tourism_rag_api_token: SecretStr | None = None
@@ -59,6 +63,19 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_auth_configuration(self):
+        if self.internal_chat_enabled:
+            chat_url = urlsplit(self.internal_chat_endpoint)
+            if (
+                self.app_env.lower() not in {"development", "test"}
+                or chat_url.scheme != "https" or not chat_url.hostname
+                or chat_url.username or chat_url.password or chat_url.query or chat_url.fragment
+                or not self.internal_chat_model.strip() or len(self.internal_chat_model) > 160
+                or self.internal_chat_token is None
+            ):
+                raise ValueError("Internal Chat configuration is invalid")
+            token = self.internal_chat_token.get_secret_value()
+            if not token or token != token.strip() or "\r" in token or "\n" in token:
+                raise ValueError("Internal Chat configuration is invalid")
         if self.tourism_rag_enabled:
             parsed_rag_url = urlsplit(self.tourism_rag_api_url)
             if (
