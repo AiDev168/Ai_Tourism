@@ -1,6 +1,6 @@
 # AI Tourism — Phase 0 Architecture Artifacts
 
-**Status:** Phase 0 design package, version 0.2; Phase 1 stack owner-approved  
+**Status:** Phase 0 design package, version 0.2; Phase 1 stack owner-approved; Phase 3 traveler foundation accepted
 **Baseline branch:** `fix/initialize-database-powershell-inspect-v1`  
 **Database gate:** Owner-run Pre-Codex v0.3 checks passed on 2026-11-05; 30 tables / 419 rows.
 
@@ -10,7 +10,7 @@ This folder turns the repository's reference architecture, architecture analysis
 
 1. [Architecture decision records](decisions/README.md) — what is decided, proposed, or explicitly open.
 2. [MVP ERD v0.1](ERD_MVP_v0.1.md) — relationship view of the current 30-table database schema.
-3. [OpenAPI MVP v1 draft](../api/openapi-mvp-v1.yaml) — initial API boundary; authentication and streaming details remain gated decisions.
+3. [OpenAPI MVP v1 draft](../api/openapi-mvp-v1.yaml) — historical initial API boundary; traveler authentication is implemented, while production authentication/admin controls and streaming details remain gated.
 4. [PWA design package](../design/README.md) — owner-approved art direction and visual brief, page layouts, responsive behavior, performance and accessibility acceptance criteria.
 5. [Security and privacy boundaries](../security/SECURITY_PRIVACY_BOUNDARIES_v0.1.md) — trust boundaries, abuse cases, data handling and unresolved policy choices.
 6. [Codex Phase 1 task packet](../implementation/CODEX_PHASE_1_TASK_PACKET_v0.2.md) — bounded implementation instructions for the approved technical skeleton.
@@ -33,4 +33,4 @@ The reference architecture includes future capabilities such as agent orchestrat
 - **Open:** no implementation choice has been made; alternatives and decision criteria are documented.
 - **Superseded:** retained for history but replaced by a later ADR.
 
-No ADR marked Proposed or Open should be treated as permission to implement the choice. ADR-0005 is accepted by the owner; ADR-0006 remains Open and gates authenticated user-data APIs in Phase 2. ADR-0008 records the accepted centralized AI Provider Gateway requirement; implementation of its protected admin control plane also requires an approved administrator authentication/authorization design.
+No ADR marked Proposed or Open should be treated as permission to implement the choice. ADR-0005 is accepted by the owner. ADR-0006's high-level domestic traveler authentication/session decisions are accepted, and the repository contains the OTP, PostgreSQL session, CSRF, principal, and owner-scoped traveler flows. This does not authorize production authentication: production SMS selection/delivery testing, operational settings, recovery, deployment security, and public activation remain gated. ADR-0008 records the accepted centralized AI Provider Gateway requirement; the gateway/control plane is not implemented as a production capability, and protected administration still requires approved MFA, bootstrap, authorization, recovery, secret handling, and deployment controls.

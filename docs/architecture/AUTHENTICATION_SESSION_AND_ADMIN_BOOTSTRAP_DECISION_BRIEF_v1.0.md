@@ -303,3 +303,15 @@ The repository has an identity schema seam, least-privilege database configurati
 ## 12. Decision gate and next approval
 
 The owner-approved high-level choices are recorded above and in ADR-0006; unresolved operating, recovery, MFA-assurance, CSRF, and deployment details remain open. ADR-0008 remains unchanged and authoritative for AI Provider Gateway administration. The owner should review the [implementation contract](AUTHENTICATION_SESSION_AND_ADMIN_BOOTSTRAP_IMPLEMENTATION_CONTRACT_v1.0.md), resolve its production and privileged-access gates, and separately authorize Task 2.3. Task 3 remains blocked until Task 2.3 and the roadmap prerequisites are complete. This brief does not authorize implementation.
+
+## 13. Current implementation-status addendum — 2026-11-08
+
+This dated addendum supplements the historical assessment above; it does not rewrite the decision history or retroactively change the observations made when this brief was authored.
+
+- ADR-0006's high-level domestic traveler authentication/session decisions are accepted. The repository now contains Iranian phone OTP through a provider-neutral SMS port, fake and development/test-only SMS.ir Sandbox adapters, PostgreSQL-backed sessions, secure-cookie and CSRF handling, server-derived principals, and owner-scoped traveler APIs.
+- Authenticated conversations and trips, history/reopen, field-specific requirement consent, logout, revocation and data deletion are implemented. The original user request remains stored for signed-in continuation under owner-only access and deletion controls.
+- Current configuration keeps `AUTH_ENABLED=false` by default and prevents production activation. Fake/Sandbox delivery is not production SMS evidence. Carrier delivery, operating/session policy, recovery and public activation remain gated.
+- No administrator MFA/TOTP lifecycle, first-admin bootstrap, recovery/break-glass flow, provider-management route or protected control plane is exposed. Marketplace, traveler and AI Provider capabilities remain separate; ADR-0008 is authoritative for provider administration.
+- Phase 4 verification on 2026-11-08 passed 138 backend tests with four guarded PostgreSQL tests skipped in the ordinary run; those four passed separately against a uniquely named disposable PostgreSQL 17 database. The three-locale Chromium journey and frontend suite/build also passed. See the [Phase 4 report](../implementation/PHASE4_PILOT_READINESS_REPORT_2026-11-08.md) for commands and limits.
+
+Production authentication and privileged access remain blocked on owner approval of SMS/carrier testing, OTP/session/CSRF deployment policy, account recovery, privacy/retention and operational ownership, administrator MFA/bootstrap/recovery, secret handling, and secure hosting. This addendum does not authorize production use or protected administrator routes.

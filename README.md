@@ -8,6 +8,8 @@ AI Tourism / AI Travel Advisor — architecture baseline and design repository.
 - [Architecture Analysis](docs/reference/ARCHITECTURE_ANALYSIS.md) — architecture maturity, options and long-term evolutionary target.
 - [Phase 0 Architecture Package](docs/architecture/README.md) — ADR index, ERD, API contract and security/privacy boundaries.
 - [MVP Codex Handoff v0.5](docs/implementation/AI_TOURISM_MVP_CODEX_HANDOFF_v0.5.md) — current implementation boundary, approved stack and verified database gate.
+- [Phase 3 closure and Phase 4 status](docs/implementation/AI_TOURISM_PHASE3_CLOSURE_AND_PHASE4_STATUS_2026-11-08.md) — accepted Phase 3 correction and current Phase 4 readiness.
+- [Phase 4 pilot readiness report](docs/implementation/PHASE4_PILOT_READINESS_REPORT_2026-11-08.md) — integrated milestone findings, evidence and release decision.
 - [PWA Design Package](docs/design/README.md) — owner-approved design direction, visual quality, performance and accessibility bar.
 - [Codex Phase 1 Task Packet v0.2](docs/implementation/CODEX_PHASE_1_TASK_PACKET_v0.2.md) — approved Phase 1 implementation and visual QA requirements.
 
@@ -29,15 +31,15 @@ Later, only when justified and approved
   → hierarchical agentic workflows
 ```
 
-## Status — 2026-11-05
+## Current status — 2026-11-08
 
-- Phase 0 architecture and design documents are prepared.
-- The owner-run database suite passed: PostgreSQL 17, PostGIS 3.6.4, pgvector 0.8.7; 30 tables and 419 rows; SQL tests 000–008 all passed.
-- Phase 1 application skeleton is implemented on the authorized feature branch; refer to the current task handoff for validation and remaining release gates.
-- The owner approved PWA + React + TypeScript + FastAPI + Python 3.13 on 2026-11-05.
-- The PWA must meet the high visual-quality requirements in the visual design brief as well as the performance/accessibility targets.
-- ADR-0006 (authentication/session strategy) must be accepted before Phase 2 introduces authenticated user-data endpoints.
-- ADR-0008 requires all AI calls to use a server-side AI Provider Gateway controlled through a protected administrator interface. Provider configuration and infrastructure details are never exposed to ordinary users; implementation of the admin control plane waits for an approved administrator authentication/authorization design.
+- Phase 3 traveler foundation and its final budget/preference correction are accepted based on the integrated verification reported by the owner. The current branch includes authenticated, owner-scoped trip/conversation persistence, field-specific consent, multilingual browser coverage, and deterministic recommendations over approved catalogue views.
+- ADR-0006's high-level domestic authentication/session decisions are accepted and the traveler OTP/session foundation is implemented. Authentication remains disabled by default; production SMS, production activation, account recovery, and operational security settings remain gated.
+- The production catalogue was reported empty in the Phase 3 isolated environment. Research/candidate content is not approved for publication, so an honest empty recommendation state is expected until editorially approved data exists.
+- Structured catalogue retrieval is not semantic RAG. The owner-RAG interface/contract has not been supplied in this repository, and the production AI Provider Gateway/control plane is not implemented.
+- ADR-0008 remains authoritative for centralized server-side AI provider management. Protected administration requires separately approved MFA, bootstrap, authorization, recovery, secret-management, and deployment controls.
+- Phase 4 is a readiness and integration milestone, not a pilot approval. Real content/editorial policy, owner-RAG integration, production authentication, hosting/security operations, and physical mobile-device acceptance remain release gates.
+- Historical baseline: on 2026-11-05, Phase 0/1 architecture and the local PostgreSQL 17/PostGIS/pgvector preparation were documented. That dated snapshot is retained here as history; it does not describe the current implementation state.
 
 ## Phase 1 local development
 

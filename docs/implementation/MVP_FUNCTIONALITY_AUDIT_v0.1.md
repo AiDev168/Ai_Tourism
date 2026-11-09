@@ -50,3 +50,15 @@ The current local trip-intake interaction has one natural-language field, preser
 - **ADR-0008 is accepted:** all future Chat, Vision, Embedding and optional Reranking use the server-side AI Provider Gateway. Admin/provider control-plane implementation waits for an approved administrator-authentication design. No user provider selection, provider detail, credential exposure, paid call, or implicit local-to-remote fallback.
 - **Publication gate:** existing destination fixtures/records are not eligible for production recommendations. Only the curated production views and reviewed real data qualify.
 - **Retrieval ownership:** do not replace or duplicate the owner’s RAG implementation. Integrate through a reviewed contract.
+
+## Current implementation-status addendum — 2026-11-08
+
+The preceding audit is retained as a historical snapshot of the earlier local/transient prototype. Its statements that authentication, persisted traveler journeys and recommendation/itinerary persistence were not implemented describe that earlier state and are not current status.
+
+- The branch now has phone OTP/session authentication, authenticated owner-scoped conversation and trip persistence, profile confirmation, requirement consent, history/reopen/delete and editable itinerary persistence. Raw trip text is stored only for signed-in users and is not sent to an external AI provider in the current traveler flow.
+- The current PWA supports `fa-IR`, `en-US` and `ar`; Phase 4 browser verification exercised full fake-OTP journeys against live FastAPI and a disposable PostgreSQL 17 database. Production authentication remains disabled and production SMS is not authorized.
+- Production destination retrieval reads approved production views. The live-browser verification returned zero approved catalogue items; illustrative home inspiration cards are separate UI material and are not endpoint recommendations. Candidate/review data remains unpublished.
+- `backend/app/modules/recommendation/retrieval.py` is deterministic exact/structured catalogue retrieval, not semantic RAG. `backend/app/modules/retrieval` remains a placeholder because no owner RAG interface/contract was supplied. The new generic capability seam is not RAG integration or production provider activation.
+- Unknown prices, hours, access, routes, weather and availability remain unknown. A typed non-spatial culinary API and approved production-view contract exist separately from spatial destinations; no approved culinary publication or editorial process was demonstrated in this run, so candidate dishes remain unavailable to travelers.
+
+The Phase 4 result is **NO-GO for pilot**. Owner decisions and operational gates remain for pilot geography/content rights and review, the owner RAG contract/evaluation, provider region/consent/cost controls, production SMS and authentication recovery, administrator MFA/bootstrap/recovery, privacy/backup retention, secure hosting, and real Android/iOS device acceptance. See [Phase 3 closure and Phase 4 status](AI_TOURISM_PHASE3_CLOSURE_AND_PHASE4_STATUS_2026-11-08.md) and the [Phase 4 pilot-readiness report](PHASE4_PILOT_READINESS_REPORT_2026-11-08.md).
