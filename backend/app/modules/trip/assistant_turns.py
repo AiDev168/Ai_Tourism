@@ -138,17 +138,39 @@ class AssistantTurnRepository:
 
     def history(self, *, user_id: UUID, conversation_id: UUID, trip_id: UUID,
                 exclude_message_id: UUID) -> list[dict[str, str]]:
+        """Keep the traveler's original request in the bounded chat context.
+
+        A long conversation must not silently forget the initial destination,
+        duration, or mandatory constraints. The newest 11 turns are included
+        as well, so a later explicit correction supersedes the older request.
+        All queries remain owner- and trip-scoped; the currently reserved user
+        message is included by ChatRequest.text and must not be duplicated.
+        """
+        scope = (user_id, conversation_id, trip_id, exclude_message_id)
         with self.traveler.connection() as conn:
-            rows = conn.execute(
-                """SELECT m.role,m.content FROM conversation.messages m
+            first = conn.execute(
+                """SELECT m.message_id,m.role,m.content FROM conversation.messages m
                    JOIN conversation.conversations c USING (conversation_id)
                    WHERE c.user_id=%s AND m.conversation_id=%s AND m.trip_id=%s
-                     AND m.message_id<>%s AND m.role IN ('user','assistant')
-                   ORDER BY m.created_at DESC,m.message_id DESC LIMIT 12""",
-                (user_id, conversation_id, trip_id, exclude_message_id),
+                     AND m.message_id<>%s AND m.role='user'
+                   ORDER BY m.created_at ASC,m.message_id ASC LIMIT 1""",
+                scope,
+            ).fetchone()
+            if first is None:
+                # No prior user statement exists. Do not invent context.
+                return []
+            rows = conn.execute(
+                """SELECT m.message_id,m.role,m.content FROM conversation.messages m
+                   JOIN conversation.conversations c USING (conversation_id)
+                   WHERE c.user_id=%s AND m.conversation_id=%s AND m.trip_id=%s
+                     AND m.message_id<>%s AND m.message_id<>%s
+                     AND m.role IN ('user','assistant')
+                   ORDER BY m.created_at DESC,m.message_id DESC LIMIT 11""",
+                (*scope, first['message_id']),
             ).fetchall()
-            return [{'role': r['role'], 'content': r['content'][:1200]}
-                    for r in reversed(rows)]
+            ordered = [first, *reversed(rows)]
+            return [{'role': row['role'], 'content': row['content'][:1200]}
+                    for row in ordered]
 
     def complete(self, *, user_id: UUID, turn_id: UUID, reply: str,
                  requirements: dict[str, Any], clarification: str | None) -> None:

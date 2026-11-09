@@ -128,6 +128,35 @@ def test_real_reservation_completion_replay_and_version(assistant_db):
     assert n == 3
 
 
+def test_long_chat_context_retains_initial_request_and_latest_corrections(assistant_db):
+    traveler, assistant, owner, conversation, trip = assistant_db
+    # The initial trip request is recorded as a real user message by the
+    # disposable fixture. More than 12 subsequent messages must not evict it.
+    with traveler.connection() as conn, conn.transaction():
+        for index in range(14):
+            conn.execute(
+                """INSERT INTO conversation.messages
+                   (message_id,conversation_id,trip_id,role,content,message_type,
+                    metadata,is_synthetic,created_at)
+                   VALUES (%s,%s,%s,'user',%s,'text','{}'::jsonb,FALSE,
+                           NOW()+(%s * INTERVAL '1 second'))""",
+                (uuid4(), conversation, trip, f"later-{index}", index + 1),
+            )
+    context = assistant.history(
+        user_id=owner, conversation_id=conversation, trip_id=trip,
+        exclude_message_id=uuid4(),
+    )
+    assert len(context) == 12
+    assert context[0] == {"role": "user", "content": "سفر سه روزه به اصفهان"}
+    assert [entry["content"] for entry in context[1:]] == [
+        f"later-{index}" for index in range(3, 14)
+    ]
+    assert assistant.history(
+        user_id=uuid4(), conversation_id=conversation, trip_id=trip,
+        exclude_message_id=uuid4(),
+    ) == []
+
+
 def test_real_owner_scope_and_conflicting_replay(assistant_db):
     _, assistant, owner, conversation, trip = assistant_db
     key = f"assistant-owner-{uuid4().hex}"

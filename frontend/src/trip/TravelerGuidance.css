@@ -28,3 +28,10 @@
 .traveler-clarification button{border:1px solid #356f59;border-radius:.65rem;padding:.55rem .9rem;min-height:44px;color:inherit;background:transparent;cursor:pointer}
 .traveler-clarification button:focus-visible{outline:3px solid #356f59;outline-offset:2px}
 .traveler-clarification button:disabled{opacity:.5;cursor:not-allowed}
+
+.conversation-local-action{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.55rem 0 1rem}
+.conversation-local-action button{min-height:44px}
+.conversation-local-action small{color:var(--text-muted,#63756a);line-height:1.6;flex:1 1 12rem}
+.assistant-prompt-warning{padding:.65rem .8rem;border-inline-start:3px solid #356f59;background:rgba(37,109,84,.06);border-radius:.45rem;line-height:1.75}
+.assistant-action-help{font-size:.9rem;line-height:1.7;margin:.5rem 0}
+@media(max-width:640px){.conversation-local-action{align-items:stretch;flex-direction:column}.conversation-local-action button{width:100%}}

@@ -99,6 +99,16 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     await act(async () => clickLabel('Dismiss')); await settle();
     expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/assistant-turns'))).toBe(false);
 
+    // Advisor prompt chips are explicit AI requests; they must not be
+    // misfiled as traveler facts by the local-only Add action.
+    await act(async () => clickLabel('Ask me about my interests and travel style.')); await settle();
+    expect(host.querySelector<HTMLTextAreaElement>('#trip-follow-up')?.value)
+      .toBe('Ask me about my interests and travel style.');
+    const localSave = [...host.querySelectorAll('button')].find(
+      button => button.textContent?.trim() === 'Add to conversation',
+    );
+    expect(localSave?.disabled).toBe(true);
+    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/assistant-turns'))).toBe(false);
     await act(async () => { host.querySelector<HTMLInputElement>('#assistant-remote-consent')!.click(); });
     await act(async () => clickLabel('Ask travel assistant')); await settle();
     expect(host.textContent).toContain('Suggested destination');

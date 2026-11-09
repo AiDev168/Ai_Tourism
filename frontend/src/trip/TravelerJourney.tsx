@@ -21,6 +21,7 @@ const assistantCopy: Record<Locale, {
   consent: string; send: string; review: string; initial: string; unavailable: string;
   destination: string; duration: string; apply: string; dismiss: string; unsaved: string; reviewSaved: string;
   speaker: string; promptsTitle: string; prompts: readonly string[];
+  promptForAi: string; advisorActionHelp: string;
   origin: string; travelerCount: string; budget: string; dates: string; interest: string;
 }> = {
   'fa-IR': { consent: 'با ارسال این پیام و تاریخچهٔ گفت‌وگوی سفر به سرویس هوش مصنوعی موافقم.',
@@ -33,6 +34,8 @@ const assistantCopy: Record<Locale, {
     origin: 'شهر مبدأ پیشنهادی', travelerCount: 'تعداد مسافران پیشنهادی',
     budget: 'بودجهٔ پیشنهادی', dates: 'تاریخ‌های پیشنهادی (میلادی)', interest: 'علاقهٔ پیشنهادی',
     speaker: 'مشاور هوش مصنوعی', promptsTitle: 'برای ادامه می‌توانید از مشاور بخواهید:',
+    promptForAi: 'این عبارت یک درخواست از مشاور هوش مصنوعی است؛ برای ارسال، رضایت پردازش بیرونی را فعال و «پرسش از دستیار سفر» را انتخاب کنید.',
+    advisorActionHelp: 'پرسش از دستیار: فقط با رضایت شما، پیام و سابقهٔ مرتبط سفر به سرویس هوش مصنوعی ارسال می‌شود.',
     prompts: ['دربارهٔ علایق و سبک سفرم یک سؤال تکمیلی بپرس.', 'برای روشن شدن بودجه و تعداد همراهانم سؤال بپرس.', 'محدودیت‌های ضروری سفرم را مرور کن و موارد مبهم را بپرس.'] },
   'en-US': { consent: 'I consent to sending this message and prior trip conversation to the AI service.',
     send: 'Ask travel assistant', review: 'AI suggestions — review before confirming:',
@@ -44,6 +47,8 @@ const assistantCopy: Record<Locale, {
     origin: 'Suggested departure city', travelerCount: 'Suggested travelers',
     budget: 'Suggested budget', dates: 'Suggested dates (Gregorian)', interest: 'Suggested interest',
     speaker: 'AI travel advisor', promptsTitle: 'Suggested follow-up questions:',
+    promptForAi: 'This prompt is intended for the AI advisor. Consent to external processing and select “Ask travel assistant” to send it.',
+    advisorActionHelp: 'Ask travel assistant sends the message and relevant trip history to the configured AI provider only with your consent.',
     prompts: ['Ask me about my interests and travel style.', 'Clarify my budget and number of travelers.', 'Review my essential constraints and ask what is unclear.'] },
   ar: { consent: 'أوافق على إرسال هذه الرسالة وسجل محادثة الرحلة إلى خدمة الذكاء الاصطناعي.',
     send: 'اسأل مساعد السفر', review: 'اقتراحات النموذج — راجعها قبل التأكيد:',
@@ -55,6 +60,8 @@ const assistantCopy: Record<Locale, {
     origin: 'مدينة المغادرة المقترحة', travelerCount: 'عدد المسافرين المقترح',
     budget: 'الميزانية المقترحة', dates: 'التواريخ المقترحة (ميلادي)', interest: 'الاهتمام المقترح',
     speaker: 'مستشار السفر بالذكاء الاصطناعي', promptsTitle: 'يمكنك متابعة المحادثة عبر:',
+    promptForAi: 'هذا طلب موجه إلى مستشار الذكاء الاصطناعي. وافق على المعالجة الخارجية ثم اختر «اسأل مساعد السفر».',
+    advisorActionHelp: 'عند اختيار مستشار السفر وبموافقتك، تُرسل الرسالة وسجل الرحلة المرتبط إلى خدمة الذكاء الاصطناعي.',
     prompts: ['اسألني عن اهتماماتي وطريقة سفري.', 'اسألني عن الميزانية وعدد المسافرين.', 'راجع الشروط الأساسية واسأل عن الأمور غير الواضحة.'] },
 };
 
@@ -240,6 +247,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const [requirementChoices, setRequirementChoices] = useState<Partial<Record<RequirementFieldCode, RequirementConsentDecision>>>({});
   const [advisoryAcknowledgements, setAdvisoryAcknowledgements] = useState<Partial<Record<RequirementFieldCode, boolean>>>({});
   const [messageText, setMessageText] = useState('');
+  const [assistantPromptSelected, setAssistantPromptSelected] = useState(false);
   const [remoteConsent, setRemoteConsent] = useState(false);
   const [assistantCandidate, setAssistantCandidate] = useState<Record<string, string | number | null> | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationResult | null>(null);
@@ -509,6 +517,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       setActiveConversation(result.conversation);
       setActiveTrip(result.trip);
       setMessageText('');
+      setAssistantPromptSelected(false);
       setAssistantCandidate(null);
       setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({});
       setRecommendations(null); setItinerary(null);
@@ -550,6 +559,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       setActiveTrip(result.trip);
       setAssistantCandidate(result.candidate_requirements);
       setMessageText('');
+      setAssistantPromptSelected(false);
       // AI replies are advisory: do not reset consent, the reviewed trip,
       // recommendations, or a saved itinerary after a chat message.
     } catch (value) {
@@ -810,19 +820,28 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             <div>{assistantCopy[locale].prompts.map(prompt => <button key={prompt} type="button"
               disabled={busy || !online} onClick={() => {
                 setMessageText(prompt);
+                setAssistantPromptSelected(true);
                 document.getElementById('trip-follow-up')?.focus();
               }}>{prompt}</button>)}</div>
           </div>
           <label htmlFor="trip-follow-up">{copy.messagePlaceholder}</label>
-          <textarea id="trip-follow-up" value={messageText} onChange={event => setMessageText(event.target.value)} maxLength={1200} rows={3} dir="auto" />
-          <button type="button" onClick={() => void sendMessage()} disabled={busy || !messageText.trim() || !online}>{copy.sendMessage}</button>
+          <textarea id="trip-follow-up" value={messageText}
+            onChange={event => { setMessageText(event.target.value); setAssistantPromptSelected(false); }}
+            maxLength={1200} rows={3} dir="auto" />
+          {assistantPromptSelected && <p className="assistant-prompt-warning" role="status">{assistantCopy[locale].promptForAi}</p>}
+          <div className="conversation-local-action">
+            <button type="button" onClick={() => void sendMessage()}
+              disabled={busy || !messageText.trim() || !online || assistantPromptSelected}>{copy.sendMessage}</button>
+            <small>{copy.localSaveHelp}</small>
+          </div>
           <div className="assistant-controls">
             <label htmlFor="assistant-remote-consent">
               <input id="assistant-remote-consent" type="checkbox" checked={remoteConsent}
                 onChange={event => setRemoteConsent(event.currentTarget.checked)} />
               {assistantCopy[locale].consent}
             </label>
-            <button type="button" onClick={() => void askAssistant()}
+            <p className="assistant-action-help">{assistantCopy[locale].advisorActionHelp}</p>
+            <button className="primary" type="button" onClick={() => void askAssistant()}
               disabled={busy || !online || !remoteConsent || messageText.length > 1200}>
               {assistantCopy[locale].send}
             </button>
