@@ -49,8 +49,13 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     const conversation = {
       conversation_id: 'conversation-1', locale: 'en-US', version: 1,
       started_at: now, updated_at: now, last_message_at: now, trips: [trip],
-      messages: [{ message_id: 'initial-1', trip_id: trip.trip_id, role: 'user',
-        content: requestText, created_at: now }],
+      messages: [
+        { message_id: 'initial-1', trip_id: trip.trip_id, role: 'user',
+          content: requestText, created_at: now },
+        { message_id: 'saved-ai-1', trip_id: trip.trip_id, role: 'assistant',
+          content: 'An earlier suggestion', created_at: now,
+          candidate_requirements: { destination: 'Qeshm', duration_days: 2 } },
+      ],
     };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); const method = init?.method ?? 'GET';
@@ -82,6 +87,13 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     await act(async () => clickLabel(requestText)); await settle();
     expect(host.querySelector<HTMLInputElement>('#profile-destination-0')?.value).toBe('Yazd');
     expect(host.querySelector<HTMLInputElement>('#profile-duration')?.value).toBe('2');
+
+    // A previously saved AI hint can be reviewed without a second provider call.
+    await act(async () => clickLabel('Review saved suggestion')); await settle();
+    expect(host.textContent).toContain('Qeshm');
+    expect(host.querySelector<HTMLInputElement>('#profile-destination-0')?.value).toBe('Yazd');
+    await act(async () => clickLabel('Dismiss')); await settle();
+    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/assistant-turns'))).toBe(false);
 
     await act(async () => { host.querySelector<HTMLInputElement>('#assistant-remote-consent')!.click(); });
     await act(async () => clickLabel('Ask travel assistant')); await settle();

@@ -253,3 +253,26 @@ def test_real_assistant_chat_preserves_confirmed_trip_and_version(assistant_db, 
     assert after["extracted_requirements"] == before["extracted_requirements"]
     assert after["duration_days"] == before["duration_days"]
     assert traveler.conversation(owner, conversation)["version"] == conversation_version + 2
+
+
+def test_real_saved_assistant_candidate_is_reopenable_by_owner(assistant_db):
+    traveler, assistant, owner, conversation, trip = assistant_db
+    reserved = _reserve(
+        assistant, owner, conversation, trip,
+        key=f"assistant-reopen-{uuid4().hex}",
+    )
+    assistant.complete(
+        user_id=owner, turn_id=reserved.turn_id,
+        reply="کاشان می‌تواند گزینه‌ای برای بررسی باشد.",
+        requirements={"destination": "کاشان", "duration_days": 2,
+                      "budget": "unverified"},
+        clarification=None,
+    )
+    restored = traveler.conversation(owner, conversation)
+    matching = [msg for msg in restored["messages"] if msg["role"] == "assistant"]
+    assert len(matching) == 1
+    assert matching[0]["candidate_requirements"] == {
+        "destination": "کاشان", "duration_days": 2,
+    }
+    assert "metadata" not in matching[0]
+    assert traveler.conversation(uuid4(), conversation) is None

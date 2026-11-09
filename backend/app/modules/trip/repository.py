@@ -118,6 +118,29 @@ def _merge_extraction(previous: Any, latest: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
+def _public_conversation_message(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Expose only bounded, non-authoritative AI suggestions to the owner.
+
+    Raw message metadata may include internal flags. Never return it via the
+    conversation API, and never interpret a candidate as confirmed trip data.
+    """
+    message = dict(row)
+    metadata = message.pop("metadata", None)
+    candidate: dict[str, str | int] = {}
+    if message.get("role") == "assistant" and isinstance(metadata, Mapping):
+        raw = metadata.get("requirements_candidate")
+        if isinstance(raw, Mapping):
+            name = raw.get("destination")
+            if (isinstance(name, str) and 0 < len(name.strip()) <= 100
+                    and not any(ord(char) < 32 or ord(char) == 127 for char in name)):
+                candidate["destination"] = name.strip()
+            days = raw.get("duration_days")
+            if type(days) is int and 1 <= days <= 365:
+                candidate["duration_days"] = days
+    message["candidate_requirements"] = candidate
+    return message
+
+
 class TravelerRepository:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -477,7 +500,7 @@ class TravelerRepository:
         ).fetchall()
         trip_values = [self._trip_response(conn, trip) for trip in trips]
         messages = conn.execute(
-            """SELECT message_id,conversation_id,trip_id,role,content,created_at
+            """SELECT message_id,conversation_id,trip_id,role,content,created_at,metadata
                FROM conversation.messages WHERE conversation_id=%s
                ORDER BY created_at,message_id LIMIT %s""",
             (conversation_id, MAX_CONVERSATION_MESSAGES),
@@ -490,7 +513,7 @@ class TravelerRepository:
             "updated_at": row["updated_at"],
             "last_message_at": row["last_message_at"],
             "trips": trip_values,
-            "messages": messages,
+            "messages": [_public_conversation_message(message) for message in messages],
         }
 
     def list_conversations(

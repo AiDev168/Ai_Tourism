@@ -7,6 +7,8 @@ export type ConversationMessage = {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   created_at: string;
+  /** Advisory hints persisted with an AI reply, never traveler-confirmed. */
+  candidate_requirements?: Record<string, string | number | null>;
 };
 
 export type TripRecord = {

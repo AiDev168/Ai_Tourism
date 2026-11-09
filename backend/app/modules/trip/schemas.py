@@ -186,6 +186,8 @@ class MessageResponse(StrictModel):
     role: Literal["user", "assistant", "system", "tool"]
     content: str
     created_at: datetime
+    # A bounded advisory hint, never authoritative; never exposes raw metadata.
+    candidate_requirements: dict[str, str | int] = Field(default_factory=dict, max_length=2)
 
 
 class TripResponse(StrictModel):

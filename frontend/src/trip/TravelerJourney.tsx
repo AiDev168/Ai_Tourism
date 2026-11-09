@@ -16,28 +16,28 @@ const catalog = new ApiDestinationCatalogPort();
 
 const assistantCopy: Record<Locale, {
   consent: string; send: string; review: string; initial: string; unavailable: string;
-  destination: string; duration: string; apply: string; dismiss: string; unsaved: string;
+  destination: string; duration: string; apply: string; dismiss: string; unsaved: string; reviewSaved: string;
 }> = {
   'fa-IR': { consent: 'با ارسال این پیام و تاریخچهٔ گفت‌وگوی سفر به سرویس هوش مصنوعی موافقم.',
     send: 'پرسش از دستیار سفر', review: 'پیشنهاد مدل؛ پیش از تأیید سفر بررسی کنید:',
     initial: 'لطفاً برای سفر شرح‌داده‌شده سؤال تکمیلی مناسب بپرس.',
     unavailable: 'دستیار در حال حاضر در دسترس نیست؛ همچنان می‌توانید سفر را بدون آن ثبت کنید.',
     destination: 'مقصد پیشنهادی', duration: 'تعداد روز پیشنهادی',
-    apply: 'انتقال به فرم سفر', dismiss: 'نادیده گرفتن',
+    apply: 'انتقال به فرم سفر', dismiss: 'نادیده گرفتن', reviewSaved: 'بازبینی پیشنهاد ذخیره‌شده',
     unsaved: 'این پیشنهاد هنوز ذخیره یا تأیید نشده است. پس از انتقال، فرم سفر را بررسی و تأیید کنید.' },
   'en-US': { consent: 'I consent to sending this message and prior trip conversation to the AI service.',
     send: 'Ask travel assistant', review: 'AI suggestions — review before confirming:',
     initial: 'Please ask a useful clarification about the trip described above.',
     unavailable: 'The assistant is unavailable. You can still save your trip.',
     destination: 'Suggested destination', duration: 'Suggested days',
-    apply: 'Use in trip form', dismiss: 'Dismiss',
+    apply: 'Use in trip form', dismiss: 'Dismiss', reviewSaved: 'Review saved suggestion',
     unsaved: 'Not saved or confirmed. Review and confirm the trip form after applying.' },
   ar: { consent: 'أوافق على إرسال هذه الرسالة وسجل محادثة الرحلة إلى خدمة الذكاء الاصطناعي.',
     send: 'اسأل مساعد السفر', review: 'اقتراحات النموذج — راجعها قبل التأكيد:',
     initial: 'يرجى طرح سؤال توضيحي مناسب عن الرحلة المذكورة أعلاه.',
     unavailable: 'المساعد غير متاح حاليًا. يمكنك حفظ الرحلة بدونه.',
     destination: 'الوجهة المقترحة', duration: 'الأيام المقترحة',
-    apply: 'نقل إلى نموذج الرحلة', dismiss: 'تجاهل',
+    apply: 'نقل إلى نموذج الرحلة', dismiss: 'تجاهل', reviewSaved: 'مراجعة الاقتراح المحفوظ',
     unsaved: 'لم يُحفظ هذا الاقتراح أو يُؤكَّد. راجع نموذج الرحلة وأكّده بعد النقل.' },
 };
 
@@ -626,6 +626,12 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             {currentMessages.map(message => <div className={`saved-message saved-message-${message.role}`} key={message.message_id}>
               <small>{message.role === 'user' ? activeTrip.locale : copy.emptyAssistant}</small>
               <p dir="auto">{message.content}</p>
+              {message.role === 'assistant' &&
+                reviewableAssistantCandidate(message.candidate_requirements ?? null) &&
+                <button type="button" disabled={busy}
+                  onClick={() => setAssistantCandidate(message.candidate_requirements ?? null)}>
+                  {assistantCopy[locale].reviewSaved}
+                </button>}
             </div>)}
             {!currentMessages.length && <p>{copy.emptyAssistant}</p>}
           </div>
