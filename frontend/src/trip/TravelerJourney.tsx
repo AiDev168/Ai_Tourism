@@ -5,6 +5,7 @@ import { journeyMessages, localizeRecommendationCode } from '../i18n/journeyMess
 import { createTripRequirements, type TripRequirements } from './tripIntake';
 import { resolveDestinationNames, confirmDestinationCandidate, type DestinationResolution } from './destinationResolution';
 import { ApiDestinationCatalogPort } from './destinationCatalogApi';
+import { reviewableAssistantCandidate } from './assistantCandidate';
 import {
   travelerApi, TravelerApiError, type ConversationRecord, type ConversationSummary,
   type ItineraryRecord, type ItineraryStop, type RecommendationResult, type RequirementConsentDecision,
@@ -13,19 +14,31 @@ import {
 
 const catalog = new ApiDestinationCatalogPort();
 
-const assistantCopy: Record<Locale, { consent: string; send: string; review: string; initial: string; unavailable: string }> = {
+const assistantCopy: Record<Locale, {
+  consent: string; send: string; review: string; initial: string; unavailable: string;
+  destination: string; duration: string; apply: string; dismiss: string; unsaved: string;
+}> = {
   'fa-IR': { consent: 'با ارسال این پیام و تاریخچهٔ گفت‌وگوی سفر به سرویس هوش مصنوعی موافقم.',
     send: 'پرسش از دستیار سفر', review: 'پیشنهاد مدل؛ پیش از تأیید سفر بررسی کنید:',
     initial: 'لطفاً برای سفر شرح‌داده‌شده سؤال تکمیلی مناسب بپرس.',
-    unavailable: 'دستیار در حال حاضر در دسترس نیست؛ همچنان می‌توانید سفر را بدون آن ثبت کنید.' },
+    unavailable: 'دستیار در حال حاضر در دسترس نیست؛ همچنان می‌توانید سفر را بدون آن ثبت کنید.',
+    destination: 'مقصد پیشنهادی', duration: 'تعداد روز پیشنهادی',
+    apply: 'انتقال به فرم سفر', dismiss: 'نادیده گرفتن',
+    unsaved: 'این پیشنهاد هنوز ذخیره یا تأیید نشده است. پس از انتقال، فرم سفر را بررسی و تأیید کنید.' },
   'en-US': { consent: 'I consent to sending this message and prior trip conversation to the AI service.',
     send: 'Ask travel assistant', review: 'AI suggestions — review before confirming:',
     initial: 'Please ask a useful clarification about the trip described above.',
-    unavailable: 'The assistant is unavailable. You can still save your trip.' },
+    unavailable: 'The assistant is unavailable. You can still save your trip.',
+    destination: 'Suggested destination', duration: 'Suggested days',
+    apply: 'Use in trip form', dismiss: 'Dismiss',
+    unsaved: 'Not saved or confirmed. Review and confirm the trip form after applying.' },
   ar: { consent: 'أوافق على إرسال هذه الرسالة وسجل محادثة الرحلة إلى خدمة الذكاء الاصطناعي.',
     send: 'اسأل مساعد السفر', review: 'اقتراحات النموذج — راجعها قبل التأكيد:',
     initial: 'يرجى طرح سؤال توضيحي مناسب عن الرحلة المذكورة أعلاه.',
-    unavailable: 'المساعد غير متاح حاليًا. يمكنك حفظ الرحلة بدونه.' },
+    unavailable: 'المساعد غير متاح حاليًا. يمكنك حفظ الرحلة بدونه.',
+    destination: 'الوجهة المقترحة', duration: 'الأيام المقترحة',
+    apply: 'نقل إلى نموذج الرحلة', dismiss: 'تجاهل',
+    unsaved: 'لم يُحفظ هذا الاقتراح أو يُؤكَّد. راجع نموذج الرحلة وأكّده بعد النقل.' },
 };
 
 function newIdempotencyKey(): string {
@@ -185,6 +198,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const extracted = useMemo(() => safeRequirements(activeTrip?.extracted_requirements, activeTrip?.locale ?? locale), [activeTrip, locale]);
   const consentFields = useMemo(() => unresolvedConsentFields(extracted), [extracted]);
   const consentComplete = consentIsComplete(consentFields, requirementChoices, advisoryAcknowledgements);
+  const reviewedAssistantCandidate = reviewableAssistantCandidate(assistantCandidate);
   const invalidateConsent = () => {
     setRequirementChoices({});
     setAdvisoryAcknowledgements({});
@@ -254,12 +268,16 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         setRecommendations(null);
         setItinerary(null);
       }
-      setDestinationNames(requirements.destinations.value ? [...requirements.destinations.value] : []);
-      setDurationText(requirements.durationDays.value === null ? '' : String(requirements.durationDays.value));
-      const suggestedDays = validDayCount(requirements.durationDays.value);
-      if (!activeTrip?.latest_itinerary_id && suggestedDays !== null) setDayCount(suggestedDays);
-      void resolveNames(requirements.destinations.value ?? []);
       const restoring = restoringRequestRef.current === requirements.requestText;
+      // The restored, traveler-reviewed profile is authoritative for the form.
+      // Do not overwrite it with the older parser extraction from the parent.
+      if (!(restoring && activeTrip?.confirmed_requirements.confirmation_source === 'traveler_reviewed')) {
+        setDestinationNames(requirements.destinations.value ? [...requirements.destinations.value] : []);
+        setDurationText(requirements.durationDays.value === null ? '' : String(requirements.durationDays.value));
+        const suggestedDays = validDayCount(requirements.durationDays.value);
+        if (!activeTrip?.latest_itinerary_id && suggestedDays !== null) setDayCount(suggestedDays);
+        void resolveNames(requirements.destinations.value ?? []);
+      }
       if (requirements.requestText === activeTrip?.original_request) setDirty(false);
       if (restoring) restoringRequestRef.current = null;
       if (!restoring) {
@@ -321,23 +339,29 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       const trip = await travelerApi.getTrip(tripId);
       setActiveConversation(conversation);
       setActiveTrip(trip);
+      setAssistantCandidate(null);
+      setRemoteConsent(false);
       const parsed = safeRequirements(trip.extracted_requirements, trip.locale);
+      const hasReviewedProfile = trip.confirmed_requirements.confirmation_source === 'traveler_reviewed';
+      const storedNames = trip.confirmed_requirements.destinations;
+      const restoredNames = hasReviewedProfile && Array.isArray(storedNames)
+        && storedNames.every(name => typeof name === 'string' && name.trim().length > 0 && name.length <= 100)
+        ? storedNames as string[] : (parsed?.destinations.value ?? []);
+      const restoredDays = hasReviewedProfile
+        ? validDayCount(trip.confirmed_requirements.duration_days)
+        : (parsed?.durationDays.value ?? null);
+      setDestinationNames(restoredNames.slice());
+      setDurationText(restoredDays === null ? '' : String(restoredDays));
       if (parsed) {
-        setDestinationNames((parsed.destinations.value ?? []).slice());
-        setDurationText(parsed.durationDays.value === null ? '' : String(parsed.durationDays.value));
         restoringRequestRef.current = parsed.requestText;
         onRestoreRequest(parsed.requestText, parsed);
-        void resolveNames(trip.destination_ids.length ? trip.destination_ids.map(id => {
-          const name = (parsed.destinations.value ?? [])[trip.destination_ids.indexOf(id)];
-          return name ?? '';
-        }) : parsed.destinations.value ?? []);
       }
+      void resolveNames(restoredNames);
       const savedConsent = restoredConsent(trip, unresolvedConsentFields(parsed));
       setRequirementChoices(savedConsent?.decisions ?? {});
       setAdvisoryAcknowledgements(Object.fromEntries(
         (savedConsent?.acknowledgedFields ?? []).map(field => [field, true]),
       ) as Partial<Record<RequirementFieldCode, boolean>>);
-      const hasReviewedProfile = trip.confirmed_requirements.confirmation_source === 'traveler_reviewed';
       setConfirmed(hasReviewedProfile && savedConsent !== null
         && consentIsComplete(unresolvedConsentFields(parsed), savedConsent.decisions,
           Object.fromEntries(savedConsent.acknowledgedFields.map(field => [field, true]))));
@@ -369,6 +393,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       setActiveConversation(result.conversation);
       setActiveTrip(result.trip);
       setMessageText('');
+      setAssistantCandidate(null);
       setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setStatus(copy.messageSaved);
       const latest = safeRequirements(result.trip.extracted_requirements, result.trip.locale);
       if (latest) { setDestinationNames(latest.destinations.value?.slice() ?? []); setDurationText(latest.durationDays.value === null ? '' : String(latest.durationDays.value)); restoringRequestRef.current = latest.requestText; onRestoreRequest(latest.requestText, latest); void resolveNames(latest.destinations.value ?? []); }
@@ -381,6 +406,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
     const content = messageText.trim() || assistantCopy[locale].initial;
     if (content.length > 1200) return;
     setBusy(true); setError(''); setStatus('');
+    setAssistantCandidate(null);
     try {
       const result = await travelerApi.assistantTurn(csrf, activeConversation.conversation_id, {
         trip_id: activeTrip.trip_id,
@@ -407,6 +433,21 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         setActiveConversation(conversation); setActiveTrip(trip);
       } catch { /* Keep the original safe error. */ }
     } finally { setBusy(false); }
+  };
+
+  const applyAssistantCandidate = () => {
+    if (!reviewedAssistantCandidate || !activeTrip) return;
+    if (reviewedAssistantCandidate.destination !== null) {
+      const names = [reviewedAssistantCandidate.destination];
+      setDestinationNames(names);
+      void resolveNames(names); // Catalogue verification is separate from AI text.
+    }
+    if (reviewedAssistantCandidate.durationDays !== null) {
+      setDurationText(String(reviewedAssistantCandidate.durationDays));
+    }
+    setDirty(true);
+    invalidateConsent(); // Explicit profile confirmation remains mandatory.
+    setAssistantCandidate(null);
   };
 
   const confirmProfile = async () => {
@@ -557,7 +598,9 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       {requirements && !activeTrip && <button className="primary journey-action" type="button" onClick={() => void persistDraft()} disabled={busy || !session || !online}>
         {busy ? copy.saving : activeConversation ? copy.createAnotherTrip : copy.saveTrip}
       </button>}
-      {requirements && activeTrip && dirty && session && <button className="primary journey-action" type="button" onClick={() => void (async () => {
+      {requirements && activeTrip && dirty && session
+        && requirements.requestText !== activeTrip.original_request
+        && <button className="primary journey-action" type="button" onClick={() => void (async () => {
         if (!activeConversation) return;
         setBusy(true); setError('');
         try {
@@ -572,8 +615,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       })()} disabled={busy || !online}>{busy ? copy.saving : copy.updateTrip}</button>}
 
       {session && activeConversation && <div className="journey-new-actions">
-        <button type="button" onClick={() => { setActiveTrip(null); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.createAnotherTrip}</button>
-        <button type="button" onClick={() => { setActiveConversation(null); setActiveTrip(null); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.startNewConversation}</button>
+        <button type="button" onClick={() => { setActiveTrip(null); setAssistantCandidate(null); setRemoteConsent(false); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.createAnotherTrip}</button>
+        <button type="button" onClick={() => { setActiveConversation(null); setActiveTrip(null); setAssistantCandidate(null); setRemoteConsent(false); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.startNewConversation}</button>
       </div>}
 
       {activeTrip && activeConversation && <div className="journey-columns">
@@ -599,10 +642,22 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
               disabled={busy || !online || !remoteConsent || messageText.length > 1200}>
               {assistantCopy[locale].send}
             </button>
-            {assistantCandidate && Object.keys(assistantCandidate).length > 0 &&
+            {reviewedAssistantCandidate &&
               <div className="assistant-candidate" role="status">
                 <strong>{assistantCopy[locale].review}</strong>
-                <pre dir="auto">{JSON.stringify(assistantCandidate, null, 2)}</pre>
+                <dl>
+                  {reviewedAssistantCandidate.destination !== null && <>
+                    <dt>{assistantCopy[locale].destination}</dt>
+                    <dd dir="auto">{reviewedAssistantCandidate.destination}</dd>
+                  </>}
+                  {reviewedAssistantCandidate.durationDays !== null && <>
+                    <dt>{assistantCopy[locale].duration}</dt>
+                    <dd>{formatNumber(locale, reviewedAssistantCandidate.durationDays)}</dd>
+                  </>}
+                </dl>
+                <p>{assistantCopy[locale].unsaved}</p>
+                <button type="button" onClick={applyAssistantCandidate} disabled={busy}>{assistantCopy[locale].apply}</button>
+                <button type="button" onClick={() => setAssistantCandidate(null)} disabled={busy}>{assistantCopy[locale].dismiss}</button>
               </div>}
           </div>
         </article>
