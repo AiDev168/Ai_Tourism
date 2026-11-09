@@ -60,3 +60,13 @@ def test_public_owner_history_exposes_bounded_origin_and_traveler_count_only():
     }
     assert "never-public" not in str(parsed.model_dump())
     assert "metadata" not in row
+
+
+def test_public_history_rejects_literal_backslash_and_control_character_in_cities():
+    for invalid in ("bad\ncity", "bad\\ncity"):
+        row = _public_conversation_message(message(
+            "assistant", {"requirements_candidate": {
+                "destination": invalid, "origin": invalid,
+            }},
+        ))
+        assert MessageResponse.model_validate(row).candidate_requirements == {}

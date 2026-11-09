@@ -132,6 +132,7 @@ def _public_conversation_message(row: Mapping[str, Any]) -> dict[str, Any]:
         if isinstance(raw, Mapping):
             name = raw.get("destination")
             if (isinstance(name, str) and 0 < len(name.strip()) <= 100
+                    and "\\" not in name
                     and not any(ord(char) < 32 or ord(char) == 127 for char in name)):
                 candidate["destination"] = name.strip()
             days = raw.get("duration_days")
@@ -139,6 +140,7 @@ def _public_conversation_message(row: Mapping[str, Any]) -> dict[str, Any]:
                 candidate["duration_days"] = days
             origin = raw.get("origin")
             if (isinstance(origin, str) and 0 < len(origin.strip()) <= 100
+                    and "\\" not in origin
                     and not any(ord(char) < 32 or ord(char) == 127 for char in origin)):
                 candidate["origin"] = origin.strip()
             travelers = raw.get("traveler_count")

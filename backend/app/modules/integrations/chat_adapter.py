@@ -54,6 +54,7 @@ class ChatReply(BaseModel):
         for key in ("destination", "origin"):
             item = value.get(key)
             if (isinstance(item, str) and 0 < len(item.strip()) <= 100
+                    and "\\" not in item
                     and not any(ord(char) < 32 or ord(char) == 127 for char in item)):
                 hints[key] = item.strip()
         for key, bound in (("duration_days", 365), ("traveler_count", 50)):

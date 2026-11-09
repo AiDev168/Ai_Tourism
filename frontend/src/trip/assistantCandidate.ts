@@ -8,7 +8,7 @@ export type ReviewableAssistantCandidate = {
 
 function safePlace(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0
-    && value.trim().length <= 100 && !/[\u0000-\u001f\u007f]/u.test(value)
+    && value.trim().length <= 100 && !value.includes('\\') && !/[\u0000-\u001f\u007f]/u.test(value)
     ? value.trim() : null;
 }
 

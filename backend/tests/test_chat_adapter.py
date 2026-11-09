@@ -132,6 +132,21 @@ def test_untrusted_out_of_range_profile_hints_are_discarded():
     result = asyncio.run(adapter(handler).invoke(ChatRequest(locale="fa-IR", text="سلام")))
     assert result.requirements == {}
 
+@pytest.mark.parametrize("unsafe_origin", ["bad\ncity", "bad\\ncity", "bad\\tcity"])
+def test_real_control_chars_and_escaped_backslashes_do_not_enter_candidate(unsafe_origin):
+    def handler(request):
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop", "message": {"content": json.dumps({
+                "reply": "لطفاً شهر مبدأ را مشخص کنید.",
+                "requirements": {"origin": unsafe_origin},
+            }, ensure_ascii=False)},
+        }]})
+    response = asyncio.run(adapter(handler).invoke(
+        ChatRequest(locale="fa-IR", text="شهر مبدأ چیست؟")))
+    assert response.requirements == {}
+
+
+
 
 
 @pytest.mark.parametrize("content", [

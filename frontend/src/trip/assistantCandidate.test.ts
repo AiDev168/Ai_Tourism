@@ -19,6 +19,7 @@ describe('reviewable assistant suggestions', () => {
   it('reviews bounded origin and party size without accepting unsupported hints', () => {
     expect(reviewableAssistantCandidate({ origin: '  تهران ', traveler_count: 3, internal: 'ignore' }))
       .toEqual({ destination: null, durationDays: null, origin: 'تهران', travelerCount: 3 });
+    expect(reviewableAssistantCandidate({ origin: 'bad\ncity', traveler_count: 0 })).toBeNull();
     expect(reviewableAssistantCandidate({ origin: 'bad\\ncity', traveler_count: 0 })).toBeNull();
     expect(reviewableAssistantCandidate({ origin: 'x'.repeat(101), traveler_count: 51 })).toBeNull();
   });
