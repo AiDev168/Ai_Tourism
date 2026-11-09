@@ -422,7 +422,12 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       // AI replies are advisory: do not reset consent, the reviewed trip,
       // recommendations, or a saved itinerary after a chat message.
     } catch (value) {
-      applyFailure(value);
+      // A provider outage is different from an unavailable destination catalogue.
+      if (value instanceof TravelerApiError && value.status === 503) {
+        setError(assistantCopy[locale].unavailable);
+      } else {
+        applyFailure(value);
+      }
       // A failed provider request still persists the user turn. Refresh the
       // optimistic version so a subsequent explicit attempt is not stale.
       try {

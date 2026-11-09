@@ -45,8 +45,36 @@ class ChatReply(BaseModel):
     clarification: str | None = Field(default=None, max_length=500)
 
 
+def _parse_provider_content(content: object) -> ChatReply:
+    """Accept bounded chat text or a strict JSON reply, never promote text to facts.
+
+    A response in prose still provides a usable conversational reply, but it
+    contributes no machine-readable trip requirements.
+    """
+    if not isinstance(content, str):
+        raise AiCapabilityUnavailable()
+    value = content.strip()
+    if not value or len(value) > 8192 or "\0" in value:
+        raise AiCapabilityUnavailable()
+
+    if value.startswith("```") or value.endswith("```"):
+        lines = value.splitlines()
+        if (len(lines) < 3 or lines[0].strip().lower() not in {"```", "```json"}
+                or lines[-1].strip() != "```"):
+            raise AiCapabilityUnavailable()
+        value = "\n".join(lines[1:-1]).strip()
+
+    # A malformed JSON object must not be misclassified as natural-language
+    # advice. Never surface truncated provider control data as a chat answer.
+    if value.startswith(("{", "[")):
+        return ChatReply.model_validate_json(value)
+    if len(value) > 2000:
+        raise AiCapabilityUnavailable()
+    return ChatReply(reply=value)
+
+
 class RemoteChatAdapter:
-    """Single fixed server profile; no redirects, retries or fallback."""
+    """Single fixed server profile; no redirects or additional provider calls."""
 
     def __init__(self, *, enabled: bool, environment: str, endpoint: str,
                  model: str, token: SecretStr | None,
@@ -101,7 +129,7 @@ class RemoteChatAdapter:
             choices = envelope["choices"]
             if len(choices) != 1 or choices[0].get("finish_reason") != "stop":
                 raise AiCapabilityUnavailable()
-            return ChatReply.model_validate_json(choices[0]["message"]["content"])
+            return _parse_provider_content(choices[0]["message"]["content"])
         except Exception:
             raise AiCapabilityUnavailable() from None
 

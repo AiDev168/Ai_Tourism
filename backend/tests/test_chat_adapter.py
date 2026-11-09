@@ -65,3 +65,48 @@ def test_server_configuration_is_disabled_by_default_and_rejects_production():
             internal_chat_enabled=True, internal_chat_endpoint="https://example.invalid/chat",
             internal_chat_model="fixture", internal_chat_token=SecretStr("test-token"),
         )
+
+
+@pytest.mark.parametrize("content,expected_reply,expected_requirements", [
+    ("برای انتخاب مقصد ابتدا بگویید چند روز وقت دارید؟",
+     "برای انتخاب مقصد ابتدا بگویید چند روز وقت دارید؟", {}),
+    ('```json\n{"reply":"کاشان را بررسی کنیم.","requirements":{"destination":"کاشان","duration_days":3},"clarification":null}\n```',
+     "کاشان را بررسی کنیم.", {"destination": "کاشان", "duration_days": 3}),
+])
+def test_bounded_persian_reply_accepts_prose_and_json_fences(
+    content, expected_reply, expected_requirements,
+):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={
+            "choices": [{"finish_reason": "stop", "message": {"content": content}}],
+        })
+
+    reply = asyncio.run(adapter(handler).invoke(
+        ChatRequest(locale="fa-IR", text="سفر سه روزه به کاشان")))
+    assert reply.reply == expected_reply
+    assert reply.requirements == expected_requirements
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("content", [
+    '{"reply":',
+    '```python\nprint("bad")\n```',
+    "\0",
+    "x" * 2001,
+])
+def test_malformed_or_overlong_chat_text_is_rejected_without_retry(content):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={
+            "choices": [{"finish_reason": "stop", "message": {"content": content}}],
+        })
+
+    with pytest.raises(AiCapabilityUnavailable):
+        asyncio.run(adapter(handler).invoke(
+            ChatRequest(locale="fa-IR", text="لطفاً کمک کن")))
+    assert len(calls) == 1
