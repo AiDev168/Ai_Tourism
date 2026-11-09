@@ -21,9 +21,12 @@ if ($LASTEXITCODE -ne 0 -or -not $ImageId) {
     throw 'Build image only: docker build -t ai-tourism-postgres:17-postgis36-vector087 -f engineering/database-prep/Dockerfile engineering/database-prep'
 }
 function Hex([int]$Length) {
-    $buffer = [byte[]]::new($Length)
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($buffer)
-    return [Convert]::ToHexString($buffer).ToLowerInvariant()
+    # Windows PowerShell 5.1 runs on .NET Framework: neither the static
+    # RandomNumberGenerator.Fill nor Convert.ToHexString exists there.
+    $buffer = New-Object byte[] $Length
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($buffer) } finally { $rng.Dispose() }
+    return [BitConverter]::ToString($buffer).Replace('-', '').ToLowerInvariant()
 }
 $Suffix = Hex 6
 $Name = "ai-tourism-mvp-pg17-$Suffix"
@@ -95,6 +98,13 @@ try {
     Sql -Options @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','ai_tourism_dev','-c',$MarkerSql)
     # Rename only within this new disposable container to preserve historic migration 0004.
     Sql -Options @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','postgres','-c',"ALTER DATABASE ai_tourism_dev RENAME TO $TestDb;")
+    # Validate the same application role and marker the E2E harness will use.
+    # Do not publish AUTH_TEST_DATABASE_* until the disposable target is proven.
+    $MarkerCheckSql = "SELECT CASE WHEN current_database()='$TestDb' AND current_user='$AppUser' AND (SELECT COUNT(*) FROM public.ai_tourism_auth_test_marker)=1 AND (SELECT marker_value FROM public.ai_tourism_auth_test_marker LIMIT 1)='$Marker' AND (SELECT COUNT(*) FROM system.schema_migrations)=12 THEN 'ok' ELSE 'bad' END;"
+    $MarkerCheck = & docker exec -e ("PGPASSWORD=" + $AppPassword) $Name psql -h 127.0.0.1 -X -A -t -v ON_ERROR_STOP=1 -U $AppUser -d $TestDb -c $MarkerCheckSql
+    if ($LASTEXITCODE -ne 0 -or (($MarkerCheck | Out-String).Trim()) -ne 'ok') {
+        throw 'Disposable application-role/marker/migration verification failed.'
+    }
     $env:AUTH_INTEGRATION_TESTS = '1'
     $env:AUTH_TEST_DATABASE_HOST = '127.0.0.1'
     $env:AUTH_TEST_DATABASE_PORT = [string]$Port
