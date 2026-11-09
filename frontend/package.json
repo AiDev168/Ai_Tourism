@@ -7,7 +7,9 @@
   "engines": {"node": ">=20.19.0 <27"},
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/inject-pwa-assets.mjs",
+    "test:pwa-build": "node --test scripts/inject-pwa-assets.test.mjs",
+    "test:pwa-offline": "node scripts/pwa-offline-e2e.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "visual-qa": "node scripts/visual-qa.mjs"

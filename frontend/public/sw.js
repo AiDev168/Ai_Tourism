@@ -1,5 +1,8 @@
-const CACHE = 'rahgard-shell-v4';
+// The production build injects its content-derived revision and hashed assets.
+const CACHE = 'rahgard-shell-__RAHGARD_BUILD_ID__';
+const BUILD_ASSETS = /* __RAHGARD_BUILD_ASSETS__ */ [];
 const ASSETS = [
+  ...BUILD_ASSETS,
   '/', '/manifest.webmanifest', '/mark.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/fonts/estedad.css',
   '/fonts/estedad-arabic-variable.woff2', '/fonts/estedad-latin-variable.woff2',
   ...['naghshe-jahan', 'fin-garden', 'yazd-windcatchers', 'qeshm-hara'].flatMap(name =>
