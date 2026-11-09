@@ -78,6 +78,57 @@ describe('multi-turn traveler-only requirement integration', () => {
     expect(result.requirements.extractionStatus).toBe('needs_clarification');
   });
 
+  it('accepts a short city answer only while destination is missing', () => {
+    const original = initial('Plan a 3-day trip');
+    expect(original.destinations.value).toBeNull();
+    const result = apply(original, 'Shiraz');
+    expect(result.kind).toBe('ready');
+    if (result.kind === 'invalid') return;
+    expect(result.requirements.destinations.value).toEqual(['Shiraz']);
+    expect(result.requirements.destinations.evidence).toBe('Shiraz');
+    expect(result.requirements.destinationVerification).toBe('user_input_unverified');
+  });
+
+  it('accepts a short Persian destination reply without inventing a verified ID', () => {
+    const original = initial('یک سفر سه روزه می‌خواهم', 'fa-IR');
+    const result = apply(original, 'کاشان');
+    expect(result.kind).toBe('ready');
+    if (result.kind === 'invalid') return;
+    expect(result.requirements.destinations.value).toEqual(['کاشان']);
+    expect(result.requirements.durationDays.value).toBe(3);
+  });
+
+  it('requires an explicit correction before overwriting a known city', () => {
+    const original = initial('Plan a 3-day trip to Shiraz');
+    const unexplained = apply(original, 'Kashan');
+    if (unexplained.kind === 'invalid') throw new Error('Unexpected invalid text');
+    expect(unexplained.requirements.destinations.value).toEqual(['Shiraz']);
+    const corrected = apply(original, 'No, Kashan');
+    if (corrected.kind === 'invalid') throw new Error('Unexpected invalid correction');
+    expect(corrected.requirements.destinations.value).toEqual(['Kashan']);
+  });
+
+  it('never treats uncertainty, unrelated detail, or ambiguous cities as confirmed destinations', () => {
+    const original = initial('Plan a 3-day trip');
+    for (const answer of ['not sure', '5 travelers', 'I prefer a quiet place']) {
+      const result = apply(original, answer);
+      if (result.kind === 'invalid') throw new Error('Unexpected invalid answer');
+      expect(result.requirements.destinations.value).toBeNull();
+    }
+    const ambiguous = apply(original, 'Kashan or Shiraz');
+    expect(ambiguous.kind).toBe('clarification');
+    if (ambiguous.kind === 'invalid') return;
+    expect(ambiguous.requirements.ambiguousRequired).toContain('destination');
+  });
+
+  it('never overwrites a previously reviewed city with an unprefixed short answer', () => {
+    const original = initial('Plan a 3-day trip');
+    const reviewed = { confirmation_source: 'traveler_reviewed', destinations: ['Yazd'] };
+    const result = apply(original, 'Kashan', reviewed);
+    if (result.kind === 'invalid') throw new Error('Unexpected invalid answer');
+    expect(result.requirements.destinations.value).toEqual(['Yazd']);
+  });
+
   it('rejects an impossible length and preserves the prior source data without confirmation', () => {
     const first = initial('Plan a 3-day trip to Shiraz');
     expect(apply(first, 'Make it 400 days')).toEqual({ kind: 'invalid', reason: 'duration-too-long' });

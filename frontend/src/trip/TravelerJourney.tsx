@@ -8,6 +8,7 @@ import { resolveDestinationNames, confirmDestinationCandidate, type DestinationR
 import { ApiDestinationCatalogPort } from './destinationCatalogApi';
 import { reviewableAssistantCandidate } from './assistantCandidate';
 import { TravelerGuidance } from './TravelerGuidance';
+import { nextTripQuestion } from './clarificationGuide';
 import {
   travelerApi, TravelerApiError, type ConversationRecord, type ConversationSummary,
   type ItineraryRecord, type ItineraryStop, type RecommendationResult, type RequirementConsentDecision,
@@ -266,6 +267,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
     && Number(travelerCountText) >= 1 && Number(travelerCountText) <= 50);
   const consentComplete = consentIsComplete(consentFields, requirementChoices, advisoryAcknowledgements);
   const reviewedAssistantCandidate = reviewableAssistantCandidate(assistantCandidate);
+  const guidedQuestion = activeTrip ? nextTripQuestion(locale, destinationNames, durationText) : null;
   const invalidateConsent = () => {
     setRequirementChoices({});
     setAdvisoryAcknowledgements({});
@@ -796,6 +798,13 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             </div>)}
             {!currentMessages.length && <p>{copy.emptyAssistant}</p>}
           </div>
+          {guidedQuestion && <div className="traveler-clarification" role="status">
+            <strong>{guidedQuestion.question}</strong>
+            <p>{guidedQuestion.instruction}</p>
+            <button type="button" disabled={busy || !online} onClick={() => {
+              document.getElementById('trip-follow-up')?.focus();
+            }}>{guidedQuestion.answerLabel}</button>
+          </div>}
           <div className="assistant-prompt-suggestions" aria-label={assistantCopy[locale].promptsTitle}>
             <p>{assistantCopy[locale].promptsTitle}</p>
             <div>{assistantCopy[locale].prompts.map(prompt => <button key={prompt} type="button"

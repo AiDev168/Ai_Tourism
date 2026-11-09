@@ -12,6 +12,35 @@ import { createTripRequirements, type Field, type TripIntakeResult, type TripReq
  * erase earlier facts; ambiguous corrections remain ambiguous and must be
  * reviewed. Mandatory constraints and access needs are cumulative.
  */
+/** Accept a short, explicit city answer only in a trip conversation that is
+ * awaiting a destination (or an explicit "no, <city>" correction).
+ * This is traveler-provided text, NOT verification or AI inference.
+ */
+function shortCityReply(text: string, permitCorrection: boolean): Field<string[]> | null {
+  let answer = text.normalize('NFC').trim();
+  const correction = /^(?:نه[\s،,:!]+|no[\s,:!]+)(.+)$/iu.exec(answer);
+  if (correction) {
+    if (!permitCorrection) return null;
+    answer = correction[1].trim();
+  } else if (!permitCorrection) {
+    // Only the missing-destination path accepts an unprefixed short answer.
+  } else {
+    return null; // Never overwrite a known city with arbitrary prose.
+  }
+  answer = answer.replace(/^[،,\s]+|[.،,؟?!\s]+$/gu, '').trim();
+  if (!answer || answer.length > 80 || answer.split(/\s+/u).length > 4
+      || /\d/u.test(answer)
+      || /(?:\b(?:days?|weeks?|budget|not|maybe|perhaps|unsure|unknown|don't|dont|need|prefer|want|from|with|travel|trip|city)\b|روز|هفته|بودجه|نمی|نمیدان|نمی‌دان|نمیدون|نمی‌دون|شاید|مطمئن|ترجیح|سفر|مسافرت|برای|مدت|نفر|نمیخوا|میخوا|مقصد|أيام|ايام|ميزانية|ربما|لا\s+أعرف|لا\s+اعرف|رحلة)/iu.test(answer)) {
+    return null;
+  }
+  const choices = answer.split(/\s+(?:یا|or|أو|او)\s+/iu);
+  if (choices.some(choice => !/^[\p{L}\p{M}\u200c -]+$/u.test(choice.trim()) || !choice.trim())) return null;
+  if (choices.length > 1) {
+    return { value: null, status: 'ambiguous', evidence: text, candidates: [choices.map(v => v.trim())] };
+  }
+  return { value: [answer], status: 'extracted', evidence: text };
+}
+
 export function integrateTripFollowUp(
   previous: TripRequirements,
   followUpText: string,
@@ -42,6 +71,14 @@ export function integrateTripFollowUp(
     if (typeof travelers === 'number' && Number.isInteger(travelers) && travelers >= 1 && travelers <= 50) {
       base.travelerCount = { value: travelers, status: 'extracted', evidence: null };
     }
+  }
+
+  // A short standalone answer like "کاشان" is otherwise invisible to the
+  // generic trip parser, which intentionally requires travel context.
+  // Determine correction authority AFTER loading a manually reviewed profile.
+  if (correction.destinations.status === 'unknown') {
+    const explicitAnswer = shortCityReply(followUpText, Boolean(base.destinations.value));
+    if (explicitAnswer) correction.destinations = explicitAnswer;
   }
 
   const takeExplicit = <T>(oldField: Field<T>, newField: Field<T>): Field<T> =>
