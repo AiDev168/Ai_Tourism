@@ -1,4 +1,5 @@
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +18,9 @@ class Settings(BaseSettings):
     database_user: str = "ai_tourism_app"
     database_password: SecretStr
     database_connect_timeout_seconds: int = Field(default=2, ge=1, le=10)
+    tourism_rag_enabled: bool = False
+    tourism_rag_api_url: str = "http://127.0.0.1:8765"
+    tourism_rag_api_token: SecretStr | None = None
     auth_enabled: bool = False
     auth_sms_adapter: str = "disabled"
     sms_ir_sandbox_api_key: SecretStr | None = None
@@ -55,6 +59,27 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_auth_configuration(self):
+        if self.tourism_rag_enabled:
+            parsed_rag_url = urlsplit(self.tourism_rag_api_url)
+            if (
+                self.app_env.lower() not in {"development", "test"}
+                or parsed_rag_url.scheme != "http"
+                or parsed_rag_url.hostname != "127.0.0.1"
+                or parsed_rag_url.port != 8765
+                or parsed_rag_url.path not in {"", "/"}
+                or parsed_rag_url.query
+                or parsed_rag_url.fragment
+                or parsed_rag_url.username
+                or parsed_rag_url.password
+            ):
+                raise ValueError(
+                    "TOURISM_RAG_API_URL must target the local development service on 127.0.0.1:8765"
+                )
+            if self.tourism_rag_api_token is None:
+                raise ValueError("TOURISM_RAG_API_TOKEN is required when TOURISM_RAG_ENABLED is true")
+            rag_token = self.tourism_rag_api_token.get_secret_value()
+            if not rag_token or rag_token != rag_token.strip() or "\r" in rag_token or "\n" in rag_token:
+                raise ValueError("TOURISM_RAG_API_TOKEN is invalid")
         if self.auth_sms_adapter not in {"disabled", "fake", "sms_ir_sandbox"}:
             raise ValueError("AUTH_SMS_ADAPTER must be disabled, fake, or sms_ir_sandbox")
         if self.app_env.lower() == "production":

@@ -19,6 +19,7 @@ RetrievalLocale = Literal["fa-IR", "en-US", "ar"]
 RetrievalCorpus = Literal["spatial_destinations", "culinary_knowledge"]
 RetrievalStatus = Literal["ok", "no_evidence", "unavailable", "invalid_request"]
 MAX_RETRIEVAL_LIMIT = 1_000
+MAX_OWNER_HTTP_LIMIT = 20
 
 
 class TrustedRetrievalFilters(BaseModel):
@@ -30,6 +31,7 @@ class TrustedRetrievalFilters(BaseModel):
     destination_keys: list[StrictStr] = Field(default_factory=list, max_length=100)
     city_names: list[StrictStr] = Field(default_factory=list, max_length=20)
     province_names: list[StrictStr] = Field(default_factory=list, max_length=20)
+    canonical_entity_key: StrictStr | None = Field(default=None, min_length=1, max_length=240)
 
     @field_validator("destination_ids", "destination_keys", "city_names", "province_names")
     @classmethod
@@ -39,6 +41,13 @@ class TrustedRetrievalFilters(BaseModel):
         if len(values) != len(set(values)):
             raise ValueError("filter values must be unique")
         return values
+
+    @field_validator("canonical_entity_key")
+    @classmethod
+    def validate_canonical_entity_key(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("canonical entity key must not be blank")
+        return value
 
 
 class RetrievalRequest(BaseModel):
@@ -57,8 +66,8 @@ class RetrievalRequest(BaseModel):
     @field_validator("query")
     @classmethod
     def validate_query(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("query must not be blank")
+        if not value.strip() or "\x00" in value:
+            raise ValueError("query must be nonblank and contain no NUL")
         return value
 
     @field_validator("as_of")
@@ -74,12 +83,12 @@ class RetrievalSource(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    source_id: str | None = Field(default=None, min_length=1, max_length=240)
+    source_id: str = Field(min_length=1, max_length=240)
     source_name: str = Field(min_length=1, max_length=500)
     source_url: str = Field(min_length=1, max_length=2_048)
     source_role: str = Field(min_length=1, max_length=64)
     license: str | None = Field(default=None, max_length=500)
-    retrieved_at: datetime
+    retrieved_at: datetime | None = None
     valid_from: datetime | None = None
     valid_until: datetime | None = None
 
@@ -87,18 +96,14 @@ class RetrievalSource(BaseModel):
     @classmethod
     def validate_source_url(cls, value: str) -> str:
         parsed = urlsplit(value)
-        if (
-            parsed.scheme not in {"https", "http"}
-            or not parsed.hostname
-            or parsed.username
-            or parsed.password
-        ):
-            raise ValueError("source URL must be credential-free HTTP(S)")
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("source URL must be credential-free HTTPS")
         return value
 
     @model_validator(mode="after")
     def validate_source_window(self) -> RetrievalSource:
-        _require_aware(self.retrieved_at)
+        if self.retrieved_at is not None:
+            _require_aware(self.retrieved_at)
         if self.valid_from is not None:
             _require_aware(self.valid_from)
         if self.valid_until is not None:
@@ -113,23 +118,29 @@ class RetrievedEvidence(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    canonical_id: str = Field(min_length=1, max_length=240)
+    evidence_id: str | None = Field(default=None, min_length=1, max_length=240)
+    canonical_entity_key: str | None = Field(default=None, min_length=1, max_length=240)
+    claim_key: str | None = Field(default=None, min_length=1, max_length=240)
+    # Legacy application-fake fields remain optional; owner wire identities are
+    # preserved in their distinct canonical_entity_key/claim_key fields.
+    canonical_id: str | None = Field(default=None, min_length=1, max_length=240)
     document_id: str = Field(min_length=1, max_length=240)
-    claim_id: str = Field(min_length=1, max_length=240)
+    claim_id: str | None = Field(default=None, min_length=1, max_length=240)
     chunk_id: str | None = Field(default=None, min_length=1, max_length=240)
     content_hash: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
     locale: RetrievalLocale
     text: str = Field(min_length=1, max_length=8_000)
-    version: str = Field(min_length=1, max_length=160)
-    retrieved_at: datetime
+    version: str | None = Field(default=None, min_length=1, max_length=160)
+    retrieved_at: datetime | None = None
     valid_from: datetime | None = None
     valid_until: datetime | None = None
-    retrieval_score: float = Field(strict=True, ge=0, le=1)
+    retrieval_score: float | None = Field(default=None, strict=True, allow_inf_nan=False)
     sources: list[RetrievalSource] = Field(min_length=1, max_length=32)
 
     @model_validator(mode="after")
     def validate_evidence_window(self) -> RetrievedEvidence:
-        _require_aware(self.retrieved_at)
+        if self.retrieved_at is not None:
+            _require_aware(self.retrieved_at)
         if self.valid_from is not None:
             _require_aware(self.valid_from)
         if self.valid_until is not None:
@@ -148,7 +159,11 @@ class RetrievalResponse(BaseModel):
     corpus: RetrievalCorpus
     locale: RetrievalLocale
     status: RetrievalStatus
-    retrieval_version: str = Field(min_length=1, max_length=160)
+    contract_version: str | None = Field(default=None, max_length=32)
+    corpus_version: str | None = Field(default=None, max_length=160)
+    retrieval_version: str | None = Field(default=None, max_length=160)
+    generated_at: datetime | None = None
+    warnings: list[str] = Field(default_factory=list, max_length=32)
     evidence: list[RetrievedEvidence] = Field(max_length=MAX_RETRIEVAL_LIMIT)
 
     @model_validator(mode="after")
@@ -157,6 +172,8 @@ class RetrievalResponse(BaseModel):
             raise ValueError("ok retrieval requires evidence")
         if self.status != "ok" and self.evidence:
             raise ValueError("non-ok retrieval must not contain evidence")
+        if self.generated_at is not None:
+            _require_aware(self.generated_at)
         return self
 
 
@@ -166,11 +183,29 @@ class RetrievalPort(Protocol):
     async def retrieve(self, request: RetrievalRequest, /) -> RetrievalResponse: ...
 
 
-class RetrievalUnavailable(RuntimeError):
+class RetrievalPortError(RuntimeError):
+    """Safe typed failures returned by a RetrievalPort adapter."""
+
+
+class RetrievalUnavailable(RetrievalPortError):
     """Safe provider-neutral failure; contains no request or provider details."""
 
     def __init__(self) -> None:
         super().__init__("Retrieval is temporarily unavailable.")
+
+
+class RetrievalAuthenticationFailed(RetrievalPortError):
+    """The RAG service rejected its configured server-side credential."""
+
+    def __init__(self) -> None:
+        super().__init__("Retrieval service authentication failed.")
+
+
+class RetrievalInvalidRequest(RetrievalPortError):
+    """The application request cannot be represented by the owner wire API."""
+
+    def __init__(self) -> None:
+        super().__init__("Retrieval request is invalid or unsupported.")
 
 
 def _require_aware(value: datetime) -> None:
@@ -203,19 +238,32 @@ def validate_response_for_request(
         ):
             raise ValueError("retrieval response does not match request")
         identities: set[tuple[str, str, str]] = set()
+        evidence_ids: set[str] = set()
         for hit in result.evidence:
-            identity = (hit.canonical_id, hit.document_id, hit.claim_id)
-            if identity in identities or hit.locale != request.locale:
+            canonical_key = hit.canonical_entity_key or hit.canonical_id or ""
+            claim_key = hit.claim_key or hit.claim_id or ""
+            identity = (canonical_key, hit.document_id, claim_key)
+            if (
+                (hit.canonical_entity_key is not None or hit.canonical_id is not None)
+                and (hit.claim_key is not None or hit.claim_id is not None)
+                and identity in identities
+            ) or hit.locale != request.locale:
                 raise ValueError("duplicate or wrong-locale evidence")
-            identities.add(identity)
-            if hit.retrieved_at > request.as_of:
+            if hit.canonical_entity_key is not None or hit.canonical_id is not None:
+                if hit.claim_key is not None or hit.claim_id is not None:
+                    identities.add(identity)
+            if hit.evidence_id is not None:
+                if hit.evidence_id in evidence_ids:
+                    raise ValueError("duplicate evidence identity")
+                evidence_ids.add(hit.evidence_id)
+            if hit.retrieved_at is not None and hit.retrieved_at > request.as_of:
                 raise ValueError("evidence was retrieved after the request time")
             if hit.valid_from is not None and request.as_of < hit.valid_from:
                 raise ValueError("evidence is not yet valid")
             if hit.valid_until is not None and request.as_of > hit.valid_until:
                 raise ValueError("evidence has expired")
             for source in hit.sources:
-                if source.retrieved_at > request.as_of:
+                if source.retrieved_at is not None and source.retrieved_at > request.as_of:
                     raise ValueError("source was retrieved after the request time")
                 if source.valid_from is not None and request.as_of < source.valid_from:
                     raise ValueError("source is not yet valid")

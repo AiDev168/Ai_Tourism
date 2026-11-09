@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.modules.retrieval.contracts import (
     RetrievalPort,
+    RetrievalPortError,
     RetrievalRequest,
     RetrievalResponse,
     RetrievalUnavailable,
@@ -19,6 +20,8 @@ async def retrieve_validated(
 
     try:
         response = await port.retrieve(request)
+    except RetrievalPortError:
+        raise
     except Exception:
         raise RetrievalUnavailable() from None
     return validate_response_for_request(request, response)
