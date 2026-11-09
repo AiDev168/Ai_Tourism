@@ -80,7 +80,7 @@ describe('visible traveler-only clarification flow', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     function Harness() {
-      const [requirements, setRequirements] = useState<TripRequirements | null>(parsed.requirements);
+      const [requirements, setRequirements] = useState<TripRequirements | null>(initialTrip.extracted_requirements);
       return <TravelerJourney session={session} online locale="en-US" requirements={requirements}
         onSessionExpired={() => undefined} onRestoreRequest={(_raw, updated) => setRequirements(updated)}
         onStartNewDraft={() => setRequirements(null)} />;
