@@ -59,10 +59,10 @@ try {
     if (-not $Ready) { throw 'Disposable database is not ready.' }
     $Pg = [int](Scalar "SELECT current_setting('server_version_num');")
     if ($Pg -lt 170000 -or $Pg -ge 180000) { throw 'Expected PostgreSQL 17.' }
-    Sql @('-X','-v','ON_ERROR_STOP=1','-v',"app_user=$AppUser",'-v',"app_password=$AppPassword",'-U',$Owner,'-d','ai_tourism_dev','-f','/opt/ai-tourism/sql/000_bootstrap.sql')
-    Sql @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','ai_tourism_dev','-f','/opt/ai-tourism/legacy/tourism_points.sql')
+    Sql -Options @('-X','-v','ON_ERROR_STOP=1','-v',"app_user=$AppUser",'-v',"app_password=$AppPassword",'-U',$Owner,'-d','ai_tourism_dev','-f','/opt/ai-tourism/sql/000_bootstrap.sql')
+    Sql -Options @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','ai_tourism_dev','-f','/opt/ai-tourism/legacy/tourism_points.sql')
     $LegacyHash = (Get-FileHash -LiteralPath $Legacy -Algorithm SHA256).Hash.ToLowerInvariant()
-    Sql @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','ai_tourism_dev','-c',"INSERT INTO system.schema_migrations (migration_id,sha256) VALUES ('0000_legacy_tourism_points_baseline','$LegacyHash');")
+    Sql -Options @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','ai_tourism_dev','-c',"INSERT INTO system.schema_migrations (migration_id,sha256) VALUES ('0000_legacy_tourism_points_baseline','$LegacyHash');")
     $Migrations = @(
         '0001_core_schema|001_core_schema.sql',
         '0002_synthetic_knowledge_seed|002_synthetic_knowledge_seed.sql',
@@ -84,17 +84,17 @@ try {
         $opts = @('-X','-v','ON_ERROR_STOP=1','-v',"migration_hash=$hash",'-U',$Owner,'-d','ai_tourism_dev')
         if ($parts[0] -eq '0004_app_role_grants') { $opts += @('-v',"app_user=$AppUser") }
         $opts += @('-f',"/opt/ai-tourism/sql/$($parts[1])")
-        Sql $opts
+        Sql -Options $opts
         if ((Scalar "SELECT sha256 FROM system.schema_migrations WHERE migration_id='$($parts[0])';") -ne $hash) {
             throw "Migration checksum mismatch: $($parts[0])"
         }
     }
-    Sql @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','ai_tourism_dev','-c',"UPDATE operations.dataset_import_batches SET source_checksum='$LegacyHash' WHERE batch_key='legacy-user-supplied-destinations-v1';")
+    Sql -Options @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','ai_tourism_dev','-c',"UPDATE operations.dataset_import_batches SET source_checksum='$LegacyHash' WHERE batch_key='legacy-user-supplied-destinations-v1';")
     if ((Scalar "SELECT source_checksum FROM operations.dataset_import_batches WHERE batch_key='legacy-user-supplied-destinations-v1';") -ne $LegacyHash) { throw 'Legacy checksum mismatch.' }
     $MarkerSql = "CREATE TABLE public.ai_tourism_auth_test_marker (marker_value TEXT NOT NULL); INSERT INTO public.ai_tourism_auth_test_marker (marker_value) VALUES ('$Marker'); GRANT USAGE ON SCHEMA public TO $AppUser; GRANT SELECT ON public.ai_tourism_auth_test_marker TO $AppUser; GRANT USAGE ON SCHEMA system TO $AppUser; GRANT SELECT ON system.schema_migrations TO $AppUser;"
-    Sql @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','ai_tourism_dev','-c',$MarkerSql)
+    Sql -Options @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','ai_tourism_dev','-c',$MarkerSql)
     # Rename only within this new disposable container to preserve historic migration 0004.
-    Sql @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','postgres','-c',"ALTER DATABASE ai_tourism_dev RENAME TO $TestDb;")
+    Sql -Options @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','postgres','-c',"ALTER DATABASE ai_tourism_dev RENAME TO $TestDb;")
     $env:AUTH_INTEGRATION_TESTS = '1'
     $env:AUTH_TEST_DATABASE_HOST = '127.0.0.1'
     $env:AUTH_TEST_DATABASE_PORT = [string]$Port
