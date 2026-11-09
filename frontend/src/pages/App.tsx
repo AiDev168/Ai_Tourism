@@ -252,6 +252,24 @@ export function App() {
           </figure>
         </section>
 
+        <PwaUpdateNotice locale={locale} />
+        <TravelerJourney
+          locale={locale}
+          session={authSession}
+          online={online}
+          requirements={requirements}
+          onSessionExpired={() => setAuthSession(null)}
+          onRestoreRequest={(text, restored) => {
+            requestTextRef.current = text;
+            if (promptRef.current) promptRef.current.value = text;
+            setRequirements(restored);
+            setClarifications(restored.missingRequired);
+            setAmbiguities(restored.ambiguousRequired);
+            setDestinationResolution(null);
+          }}
+          onStartNewDraft={clearTripDraft}
+        />
+
         <section className="section discover" id="discover">
           <div className="section-heading">
             <div>
@@ -300,23 +318,6 @@ export function App() {
           </div>
         </section>
 
-        <PwaUpdateNotice locale={locale} />
-        <TravelerJourney
-          locale={locale}
-          session={authSession}
-          online={online}
-          requirements={requirements}
-          onSessionExpired={() => setAuthSession(null)}
-          onRestoreRequest={(text, restored) => {
-            requestTextRef.current = text;
-            if (promptRef.current) promptRef.current.value = text;
-            setRequirements(restored);
-            setClarifications(restored.missingRequired);
-            setAmbiguities(restored.ambiguousRequired);
-            setDestinationResolution(null);
-          }}
-          onStartNewDraft={clearTripDraft}
-        />
       </main>
 
       <footer>
