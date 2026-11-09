@@ -91,6 +91,49 @@ def test_bounded_persian_reply_accepts_prose_and_json_fences(
     assert len(calls) == 1
 
 
+
+def test_travel_origin_and_party_size_remain_bounded_unconfirmed_hints():
+    def handler(request):
+        payload = json.loads(request.content)
+        prompt = payload["messages"][0]["content"]
+        assert "traveler_count" in prompt and "latest traveler statements" in prompt
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop",
+            "message": {"content": json.dumps({
+                "reply": "برای روشن شدن بودجه، حدود هزینه را بگویید.",
+                "requirements": {
+                    "origin": "  تهران  ", "traveler_count": 4,
+                    "destination": "کاشان", "duration_days": 3,
+                    "budget": 100000, "internal_secret": "never exposed",
+                },
+                "clarification": "بودجهٔ سفر چقدر است؟",
+            }, ensure_ascii=False)},
+        }]})
+
+    result = asyncio.run(adapter(handler).invoke(
+        ChatRequest(locale="fa-IR", text="چهار نفر از تهران، سه روز کاشان")))
+    assert result.requirements == {
+        "destination": "کاشان", "origin": "تهران",
+        "duration_days": 3, "traveler_count": 4,
+    }
+    assert "never exposed" not in str(result)
+
+
+def test_untrusted_out_of_range_profile_hints_are_discarded():
+    def handler(request):
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop", "message": {"content": json.dumps({
+                "reply": "لطفاً مدت سفر را مشخص کنید.",
+                "requirements": {"origin": "bad\\ncity", "traveler_count": 51,
+                                 "duration_days": 500, "destination": ""},
+            })},
+        }]})
+
+    result = asyncio.run(adapter(handler).invoke(ChatRequest(locale="fa-IR", text="سلام")))
+    assert result.requirements == {}
+
+
+
 @pytest.mark.parametrize("content", [
     '{"reply":',
     '```python\nprint("bad")\n```',

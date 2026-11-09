@@ -137,6 +137,13 @@ def _public_conversation_message(row: Mapping[str, Any]) -> dict[str, Any]:
             days = raw.get("duration_days")
             if type(days) is int and 1 <= days <= 365:
                 candidate["duration_days"] = days
+            origin = raw.get("origin")
+            if (isinstance(origin, str) and 0 < len(origin.strip()) <= 100
+                    and not any(ord(char) < 32 or ord(char) == 127 for char in origin)):
+                candidate["origin"] = origin.strip()
+            travelers = raw.get("traveler_count")
+            if type(travelers) is int and 1 <= travelers <= 50:
+                candidate["traveler_count"] = travelers
     message["candidate_requirements"] = candidate
     return message
 

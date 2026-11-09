@@ -42,3 +42,21 @@ def test_user_metadata_and_invalid_ai_hints_are_not_public():
             role, {"requirements_candidate": candidate, "internal": "private"}))
         assert MessageResponse.model_validate(row).candidate_requirements == {}
         assert "metadata" not in row
+
+
+def test_public_owner_history_exposes_bounded_origin_and_traveler_count_only():
+    row = _public_conversation_message(message(
+        "assistant",
+        {"requirements_candidate": {
+            "destination": "کاشان", "duration_days": 3,
+            "origin": "  تهران ", "traveler_count": 4,
+            "budget": "private", "secret": "never-public",
+        }},
+    ))
+    parsed = MessageResponse.model_validate(row)
+    assert parsed.candidate_requirements == {
+        "destination": "کاشان", "duration_days": 3,
+        "origin": "تهران", "traveler_count": 4,
+    }
+    assert "never-public" not in str(parsed.model_dump())
+    assert "metadata" not in row

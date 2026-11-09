@@ -19,6 +19,7 @@ const assistantCopy: Record<Locale, {
   consent: string; send: string; review: string; initial: string; unavailable: string;
   destination: string; duration: string; apply: string; dismiss: string; unsaved: string; reviewSaved: string;
   speaker: string; promptsTitle: string; prompts: readonly string[];
+  origin: string; travelerCount: string;
 }> = {
   'fa-IR': { consent: 'با ارسال این پیام و تاریخچهٔ گفت‌وگوی سفر به سرویس هوش مصنوعی موافقم.',
     send: 'پرسش از دستیار سفر', review: 'پیشنهاد مدل؛ پیش از تأیید سفر بررسی کنید:',
@@ -27,6 +28,7 @@ const assistantCopy: Record<Locale, {
     destination: 'مقصد پیشنهادی', duration: 'تعداد روز پیشنهادی',
     apply: 'انتقال به فرم سفر', dismiss: 'نادیده گرفتن', reviewSaved: 'بازبینی پیشنهاد ذخیره‌شده',
     unsaved: 'این پیشنهاد هنوز ذخیره یا تأیید نشده است. پس از انتقال، فرم سفر را بررسی و تأیید کنید.',
+    origin: 'شهر مبدأ پیشنهادی', travelerCount: 'تعداد مسافران پیشنهادی',
     speaker: 'مشاور هوش مصنوعی', promptsTitle: 'برای ادامه می‌توانید از مشاور بخواهید:',
     prompts: ['دربارهٔ علایق و سبک سفرم یک سؤال تکمیلی بپرس.', 'برای روشن شدن بودجه و تعداد همراهانم سؤال بپرس.', 'محدودیت‌های ضروری سفرم را مرور کن و موارد مبهم را بپرس.'] },
   'en-US': { consent: 'I consent to sending this message and prior trip conversation to the AI service.',
@@ -36,6 +38,7 @@ const assistantCopy: Record<Locale, {
     destination: 'Suggested destination', duration: 'Suggested days',
     apply: 'Use in trip form', dismiss: 'Dismiss', reviewSaved: 'Review saved suggestion',
     unsaved: 'Not saved or confirmed. Review and confirm the trip form after applying.',
+    origin: 'Suggested departure city', travelerCount: 'Suggested travelers',
     speaker: 'AI travel advisor', promptsTitle: 'Suggested follow-up questions:',
     prompts: ['Ask me about my interests and travel style.', 'Clarify my budget and number of travelers.', 'Review my essential constraints and ask what is unclear.'] },
   ar: { consent: 'أوافق على إرسال هذه الرسالة وسجل محادثة الرحلة إلى خدمة الذكاء الاصطناعي.',
@@ -45,6 +48,7 @@ const assistantCopy: Record<Locale, {
     destination: 'الوجهة المقترحة', duration: 'الأيام المقترحة',
     apply: 'نقل إلى نموذج الرحلة', dismiss: 'تجاهل', reviewSaved: 'مراجعة الاقتراح المحفوظ',
     unsaved: 'لم يُحفظ هذا الاقتراح أو يُؤكَّد. راجع نموذج الرحلة وأكّده بعد النقل.',
+    origin: 'مدينة المغادرة المقترحة', travelerCount: 'عدد المسافرين المقترح',
     speaker: 'مستشار السفر بالذكاء الاصطناعي', promptsTitle: 'يمكنك متابعة المحادثة عبر:',
     prompts: ['اسألني عن اهتماماتي وطريقة سفري.', 'اسألني عن الميزانية وعدد المسافرين.', 'راجع الشروط الأساسية واسأل عن الأمور غير الواضحة.'] },
 };
@@ -102,6 +106,17 @@ function unresolvedConsentFields(value: TripRequirements | null): RequirementFie
     return fieldValue !== null && fieldValue !== undefined
       && (typeof fieldValue !== 'string' || fieldValue.trim().length > 0);
   });
+}
+
+function consentFieldsForReviewedProfile(
+  extracted: TripRequirements | null,
+  origin: string,
+  travelers: string,
+): RequirementFieldCode[] {
+  const fields = unresolvedConsentFields(extracted);
+  if (origin.trim() && !fields.includes('origin')) fields.push('origin');
+  if (travelers.trim() && !fields.includes('traveler_count')) fields.push('traveler_count');
+  return fields;
 }
 
 function restoredConsent(
@@ -185,6 +200,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const [resolution, setResolution] = useState<DestinationResolution | null>(null);
   const [destinationNames, setDestinationNames] = useState<string[]>([]);
   const [durationText, setDurationText] = useState('');
+  const [originText, setOriginText] = useState('');
+  const [travelerCountText, setTravelerCountText] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [requirementChoices, setRequirementChoices] = useState<Partial<Record<RequirementFieldCode, RequirementConsentDecision>>>({});
   const [advisoryAcknowledgements, setAdvisoryAcknowledgements] = useState<Partial<Record<RequirementFieldCode, boolean>>>({});
@@ -204,7 +221,10 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const restoringRequestRef = useRef<string | null>(null);
 
   const extracted = useMemo(() => safeRequirements(activeTrip?.extracted_requirements, activeTrip?.locale ?? locale), [activeTrip, locale]);
-  const consentFields = useMemo(() => unresolvedConsentFields(extracted), [extracted]);
+  const consentFields = useMemo(() => consentFieldsForReviewedProfile(extracted, originText, travelerCountText),
+    [extracted, originText, travelerCountText]);
+  const travelerCountValid = travelerCountText.trim() === '' || (/^[0-9]{1,2}$/.test(travelerCountText.trim())
+    && Number(travelerCountText) >= 1 && Number(travelerCountText) <= 50);
   const consentComplete = consentIsComplete(consentFields, requirementChoices, advisoryAcknowledgements);
   const reviewedAssistantCandidate = reviewableAssistantCandidate(assistantCandidate);
   const invalidateConsent = () => {
@@ -282,6 +302,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       if (!(restoring && activeTrip?.confirmed_requirements.confirmation_source === 'traveler_reviewed')) {
         setDestinationNames(requirements.destinations.value ? [...requirements.destinations.value] : []);
         setDurationText(requirements.durationDays.value === null ? '' : String(requirements.durationDays.value));
+        setOriginText(requirements.origin.value ?? '');
+        setTravelerCountText(requirements.travelerCount.value === null ? '' : String(requirements.travelerCount.value));
         const suggestedDays = validDayCount(requirements.durationDays.value);
         if (!activeTrip?.latest_itinerary_id && suggestedDays !== null) setDayCount(suggestedDays);
         void resolveNames(requirements.destinations.value ?? []);
@@ -360,18 +382,28 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         : (parsed?.durationDays.value ?? null);
       setDestinationNames(restoredNames.slice());
       setDurationText(restoredDays === null ? '' : String(restoredDays));
+      const approvedOrigin = trip.confirmed_requirements.origin;
+      const restoredOrigin = hasReviewedProfile && typeof approvedOrigin === 'string' && approvedOrigin.length <= 100
+        ? approvedOrigin : (parsed?.origin.value ?? '');
+      const approvedCount = validDayCount(trip.confirmed_requirements.traveler_count);
+      const restoredTravelerCount = hasReviewedProfile && approvedCount !== null && approvedCount <= 50
+        ? String(approvedCount) : (parsed?.travelerCount.value === null || parsed?.travelerCount.value === undefined
+          ? '' : String(parsed.travelerCount.value));
+      setOriginText(restoredOrigin);
+      setTravelerCountText(restoredTravelerCount);
       if (parsed) {
         restoringRequestRef.current = parsed.requestText;
         onRestoreRequest(parsed.requestText, parsed);
       }
       void resolveNames(restoredNames);
-      const savedConsent = restoredConsent(trip, unresolvedConsentFields(parsed));
+      const restoredConsentFields = consentFieldsForReviewedProfile(parsed, restoredOrigin, restoredTravelerCount);
+      const savedConsent = restoredConsent(trip, restoredConsentFields);
       setRequirementChoices(savedConsent?.decisions ?? {});
       setAdvisoryAcknowledgements(Object.fromEntries(
         (savedConsent?.acknowledgedFields ?? []).map(field => [field, true]),
       ) as Partial<Record<RequirementFieldCode, boolean>>);
       setConfirmed(hasReviewedProfile && savedConsent !== null
-        && consentIsComplete(unresolvedConsentFields(parsed), savedConsent.decisions,
+        && consentIsComplete(restoredConsentFields, savedConsent.decisions,
           Object.fromEntries(savedConsent.acknowledgedFields.map(field => [field, true]))));
       const latestRecs = trip.latest_recommendation_request_id
         ? await travelerApi.latestRecommendations(trip.trip_id).catch(() => null) : null;
@@ -458,21 +490,31 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
     if (reviewedAssistantCandidate.durationDays !== null) {
       setDurationText(String(reviewedAssistantCandidate.durationDays));
     }
+    if (reviewedAssistantCandidate.origin !== undefined) {
+      setOriginText(reviewedAssistantCandidate.origin);
+    }
+    if (reviewedAssistantCandidate.travelerCount !== undefined) {
+      setTravelerCountText(String(reviewedAssistantCandidate.travelerCount));
+    }
     setDirty(true);
     invalidateConsent(); // Explicit profile confirmation remains mandatory.
     setAssistantCandidate(null);
   };
 
   const confirmProfile = async () => {
-    if (!session || !activeTrip || !online || !consentComplete) { if (!online) setError(copy.offline); return; }
+    if (!session || !activeTrip || !online || !consentComplete || !travelerCountValid) {
+      if (!online) setError(copy.offline);
+      else if (!travelerCountValid) setError(copy.profileTravelersInvalid);
+      return;
+    }
     setBusy(true); setError(''); setStatus('');
     const duration = durationText.trim() === '' ? null : Number(durationText);
     const confirmedRequirements = {
       destinations: destinationNames.map(name => name.trim()).filter(Boolean),
       duration_days: duration,
-      origin: extracted?.origin.value ?? null,
+      origin: originText.trim() || null,
       travel_dates: extracted?.travelDates.value ?? null,
-      traveler_count: extracted?.travelerCount.value ?? null,
+      traveler_count: travelerCountText.trim() ? Number(travelerCountText.trim()) : null,
       accessibility: extracted?.accessibility?.value ?? [],
       budget: extracted?.budget.value ?? null,
       soft_preferences: extracted?.softPreferences.value ?? [],
@@ -683,6 +725,14 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
                     <dt>{assistantCopy[locale].duration}</dt>
                     <dd>{formatNumber(locale, reviewedAssistantCandidate.durationDays)}</dd>
                   </>}
+                  {reviewedAssistantCandidate.origin !== undefined && <>
+                    <dt>{assistantCopy[locale].origin}</dt>
+                    <dd dir="auto">{reviewedAssistantCandidate.origin}</dd>
+                  </>}
+                  {reviewedAssistantCandidate.travelerCount !== undefined && <>
+                    <dt>{assistantCopy[locale].travelerCount}</dt>
+                    <dd>{formatNumber(locale, reviewedAssistantCandidate.travelerCount)}</dd>
+                  </>}
                 </dl>
                 <p>{assistantCopy[locale].unsaved}</p>
                 <button type="button" onClick={applyAssistantCandidate} disabled={busy}>{assistantCopy[locale].apply}</button>
@@ -708,6 +758,13 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             </fieldset>
             <label htmlFor="profile-duration">{copy.profileDuration}</label>
             <input id="profile-duration" type="number" min="1" max="365" value={durationText} onChange={event => { setDurationText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            <label htmlFor="profile-origin">{copy.profileOrigin}</label>
+            <input id="profile-origin" type="text" maxLength={100} dir="auto" value={originText}
+              onChange={event => { setOriginText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            <label htmlFor="profile-travelers">{copy.profileTravelers}</label>
+            <input id="profile-travelers" type="number" min="1" max="50" step="1" value={travelerCountText}
+              aria-invalid={!travelerCountValid} onChange={event => { setTravelerCountText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            {!travelerCountValid && <p className="journey-error" role="alert">{copy.profileTravelersInvalid}</p>}
             {!!consentFields.length && <fieldset className="requirement-consent" aria-describedby="requirement-consent-intro">
               <legend>{copy.requirementConsentTitle}</legend>
               <p id="requirement-consent-intro">{copy.requirementConsentIntro}</p>
@@ -761,7 +818,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
               {item.candidates.map(candidate => <label key={candidate.destinationId} dir="auto"><input type="radio" name={`traveler-choice-${index}`} checked={resolution.items[index]?.kind === 'confirmed' && resolution.items[index].destination.destinationId === candidate.destinationId} onChange={() => setResolution(current => current ? confirmDestinationCandidate(current, index, candidate.destinationId) : current)} />{candidate.localizedNames[locale] ?? candidate.canonicalName} · {candidate.provinceName}</label>)}
               <button type="button" onClick={() => { setError(copy.recommendationClarify); document.getElementById(`profile-destination-${index}`)?.focus(); }}>{copy.noneOfThese}</button>
             </fieldset> : item.kind === 'resolved' || item.kind === 'confirmed' ? <p key={index} role="status" dir="auto">{item.destination.localizedNames[locale] ?? item.destination.canonicalName} · {item.kind === 'resolved' ? copy.catalogueMatch : copy.selectedByYou}</p> : item.kind === 'not-found' ? <p key={index} role="status">{item.originalPhrase}: {copy.recommendationClarify}</p> : null)}
-            <button type="button" onClick={() => void confirmProfile()} disabled={busy || (!dirty && confirmed) || !online || !consentComplete}>{copy.confirmProfile}</button>
+            <button type="button" onClick={() => void confirmProfile()} disabled={busy || (!dirty && confirmed) || !online || !consentComplete || !travelerCountValid}>{copy.confirmProfile}</button>
           </div>}
           {confirmed && <div className="recommendation-controls">
             <h3>{copy.recommendationTitle}</h3>
