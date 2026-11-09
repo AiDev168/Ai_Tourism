@@ -1,6 +1,6 @@
 const CACHE = 'rahgard-shell-v4';
 const ASSETS = [
-  '/', '/manifest.webmanifest', '/mark.svg', '/fonts/estedad.css',
+  '/', '/manifest.webmanifest', '/mark.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/fonts/estedad.css',
   '/fonts/estedad-arabic-variable.woff2', '/fonts/estedad-latin-variable.woff2',
   ...['naghshe-jahan', 'fin-garden', 'yazd-windcatchers', 'qeshm-hara'].flatMap(name =>
     [640, 960, 1280].flatMap(width => [`/images/${name}-${width}.webp`, `/images/${name}-${width}.avif`])),

@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     internal_chat_endpoint: str = ""
     internal_chat_model: str = ""
     internal_chat_token: SecretStr | None = None
+    internal_chat_daily_user_limit: int = Field(default=8, ge=1, le=1000)
+    internal_chat_daily_global_limit: int = Field(default=100, ge=1, le=100000)
     tourism_rag_enabled: bool = False
     tourism_rag_api_url: str = "http://127.0.0.1:8765"
     tourism_rag_api_token: SecretStr | None = None

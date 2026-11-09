@@ -208,6 +208,21 @@ export const travelerApi = {
   }) => request<{ conversation: ConversationRecord; trip: TripRecord; message: ConversationMessage }>(
     `/conversations/${encodeURIComponent(conversationId)}/messages`, csrf, json('POST', body),
   ),
+  assistantTurn: (csrf: string, conversationId: string, body: {
+    trip_id: string;
+    content: string;
+    idempotency_key: string;
+    expected_version: number;
+    remote_processing_consent: true;
+    extracted_requirements?: TripRequirements;
+  }) => request<{
+    conversation: ConversationRecord;
+    trip: TripRecord;
+    message: ConversationMessage;
+    candidate_requirements: Record<string, string | number | null>;
+    clarification: string | null;
+    replayed: boolean;
+  }>(`/conversations/${encodeURIComponent(conversationId)}/assistant-turns`, csrf, json('POST', body)),
   confirmTripProfile: (csrf: string, tripId: string, body: {
     expected_version: number;
     confirmed_requirements: Record<string, unknown>;

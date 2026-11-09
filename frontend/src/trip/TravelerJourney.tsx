@@ -13,6 +13,21 @@ import {
 
 const catalog = new ApiDestinationCatalogPort();
 
+const assistantCopy: Record<Locale, { consent: string; send: string; review: string; initial: string; unavailable: string }> = {
+  'fa-IR': { consent: 'با ارسال این پیام و تاریخچهٔ گفت‌وگوی سفر به سرویس هوش مصنوعی موافقم.',
+    send: 'پرسش از دستیار سفر', review: 'پیشنهاد مدل؛ پیش از تأیید سفر بررسی کنید:',
+    initial: 'لطفاً برای سفر شرح‌داده‌شده سؤال تکمیلی مناسب بپرس.',
+    unavailable: 'دستیار در حال حاضر در دسترس نیست؛ همچنان می‌توانید سفر را بدون آن ثبت کنید.' },
+  'en-US': { consent: 'I consent to sending this message and prior trip conversation to the AI service.',
+    send: 'Ask travel assistant', review: 'AI suggestions — review before confirming:',
+    initial: 'Please ask a useful clarification about the trip described above.',
+    unavailable: 'The assistant is unavailable. You can still save your trip.' },
+  ar: { consent: 'أوافق على إرسال هذه الرسالة وسجل محادثة الرحلة إلى خدمة الذكاء الاصطناعي.',
+    send: 'اسأل مساعد السفر', review: 'اقتراحات النموذج — راجعها قبل التأكيد:',
+    initial: 'يرجى طرح سؤال توضيحي مناسب عن الرحلة المذكورة أعلاه.',
+    unavailable: 'المساعد غير متاح حاليًا. يمكنك حفظ الرحلة بدونه.' },
+};
+
 function newIdempotencyKey(): string {
   return crypto.randomUUID();
 }
@@ -153,6 +168,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const [requirementChoices, setRequirementChoices] = useState<Partial<Record<RequirementFieldCode, RequirementConsentDecision>>>({});
   const [advisoryAcknowledgements, setAdvisoryAcknowledgements] = useState<Partial<Record<RequirementFieldCode, boolean>>>({});
   const [messageText, setMessageText] = useState('');
+  const [remoteConsent, setRemoteConsent] = useState(false);
+  const [assistantCandidate, setAssistantCandidate] = useState<Record<string, string | number | null> | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationResult | null>(null);
   const [itinerary, setItinerary] = useState<ItineraryRecord | null>(null);
   const [editableStops, setEditableStops] = useState<ItineraryStop[]>([]);
@@ -359,6 +376,39 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
     finally { setBusy(false); }
   };
 
+  const askAssistant = async () => {
+    if (!session || !activeConversation || !activeTrip || !remoteConsent || !online) return;
+    const content = messageText.trim() || assistantCopy[locale].initial;
+    if (content.length > 1200) return;
+    setBusy(true); setError(''); setStatus('');
+    try {
+      const result = await travelerApi.assistantTurn(csrf, activeConversation.conversation_id, {
+        trip_id: activeTrip.trip_id,
+        content,
+        idempotency_key: newIdempotencyKey(),
+        expected_version: activeConversation.version,
+        remote_processing_consent: true,
+      });
+      setActiveConversation(result.conversation);
+      setActiveTrip(result.trip);
+      setAssistantCandidate(result.candidate_requirements);
+      setMessageText('');
+      // AI replies are advisory: do not reset consent, the reviewed trip,
+      // recommendations, or a saved itinerary after a chat message.
+    } catch (value) {
+      applyFailure(value);
+      // A failed provider request still persists the user turn. Refresh the
+      // optimistic version so a subsequent explicit attempt is not stale.
+      try {
+        const [conversation, trip] = await Promise.all([
+          travelerApi.getConversation(activeConversation.conversation_id),
+          travelerApi.getTrip(activeTrip.trip_id),
+        ]);
+        setActiveConversation(conversation); setActiveTrip(trip);
+      } catch { /* Keep the original safe error. */ }
+    } finally { setBusy(false); }
+  };
+
   const confirmProfile = async () => {
     if (!session || !activeTrip || !online || !consentComplete) { if (!online) setError(copy.offline); return; }
     setBusy(true); setError(''); setStatus('');
@@ -539,6 +589,22 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
           <label htmlFor="trip-follow-up">{copy.messagePlaceholder}</label>
           <textarea id="trip-follow-up" value={messageText} onChange={event => setMessageText(event.target.value)} maxLength={1200} rows={3} dir="auto" />
           <button type="button" onClick={() => void sendMessage()} disabled={busy || !messageText.trim() || !online}>{copy.sendMessage}</button>
+          <div className="assistant-controls">
+            <label htmlFor="assistant-remote-consent">
+              <input id="assistant-remote-consent" type="checkbox" checked={remoteConsent}
+                onChange={event => setRemoteConsent(event.currentTarget.checked)} />
+              {assistantCopy[locale].consent}
+            </label>
+            <button type="button" onClick={() => void askAssistant()}
+              disabled={busy || !online || !remoteConsent || messageText.length > 1200}>
+              {assistantCopy[locale].send}
+            </button>
+            {assistantCandidate && Object.keys(assistantCandidate).length > 0 &&
+              <div className="assistant-candidate" role="status">
+                <strong>{assistantCopy[locale].review}</strong>
+                <pre dir="auto">{JSON.stringify(assistantCandidate, null, 2)}</pre>
+              </div>}
+          </div>
         </article>
 
         <article className="recommend-panel journey-panel">

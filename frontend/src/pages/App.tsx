@@ -9,6 +9,7 @@ import { useLocale } from '../i18n/LocaleContext';
 import { AuthPanel } from '../auth/AuthPanel';
 import type { AuthSession } from '../auth/authApi';
 import { TravelerJourney } from '../trip/TravelerJourney';
+import { PwaUpdateNotice } from '../pwa/PwaUpdateNotice';
 
 const destinationCatalog = new ApiDestinationCatalogPort();
 
@@ -299,6 +300,7 @@ export function App() {
           </div>
         </section>
 
+        <PwaUpdateNotice locale={locale} />
         <TravelerJourney
           locale={locale}
           session={authSession}
