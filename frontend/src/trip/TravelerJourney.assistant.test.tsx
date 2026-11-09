@@ -67,7 +67,7 @@ describe('assistant suggestions and reviewed trip restoration', () => {
         return reply({ conversation: { ...conversation, version: 3 }, trip,
           message: { message_id: 'assistant-1', trip_id: trip.trip_id, role: 'assistant',
             content: 'Would you prefer Kashan?', created_at: now },
-          candidate_requirements: { destination: 'Kashan', duration_days: 1 },
+          candidate_requirements: { destination: 'Kashan', duration_days: 1, origin: 'Tehran', traveler_count: 4 },
           clarification: null, replayed: false });
       }
       if (url === '/api/v1/trips/trip-1' && method === 'PATCH') {
@@ -105,12 +105,27 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     await act(async () => clickLabel('Use in trip form')); await settle();
     expect(host.querySelector<HTMLInputElement>('#profile-destination-0')?.value).toBe('Kashan');
     expect(host.querySelector<HTMLInputElement>('#profile-duration')?.value).toBe('1');
+    expect(host.querySelector<HTMLInputElement>('#profile-origin')?.value).toBe('Tehran');
+    expect(host.querySelector<HTMLInputElement>('#profile-travelers')?.value).toBe('4');
     expect(fetchMock.mock.calls.filter(call => call[1]?.method === 'PATCH')).toHaveLength(0);
+    const saveButton = [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Save trip details');
+    expect(saveButton?.disabled).toBe(true); // Unreviewed AI fields cannot silently change trip consent.
+    await act(async () => {
+      host.querySelector<HTMLInputElement>('#requirement-consent-origin-must')!.click();
+      host.querySelector<HTMLInputElement>('#requirement-consent-traveler_count-must')!.click();
+    });
+    await settle();
+    expect(saveButton?.disabled).toBe(false);
     await act(async () => clickLabel('Save trip details')); await settle();
     const saved = fetchMock.mock.calls.find(call => call[1]?.method === 'PATCH');
     expect(saved).toBeDefined();
     const body = JSON.parse(String(saved![1]?.body));
     expect(body.confirmed_requirements.destinations).toEqual(['Kashan']);
     expect(body.confirmed_requirements.duration_days).toBe(1);
+    expect(body.confirmed_requirements.origin).toBe('Tehran');
+    expect(body.confirmed_requirements.traveler_count).toBe(4);
+    expect(body.requirement_consent.field_decisions).toEqual({
+      origin: 'must_have', traveler_count: 'must_have',
+    });
   });
 });
