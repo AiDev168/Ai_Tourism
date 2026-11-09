@@ -96,7 +96,7 @@ def test_travel_origin_and_party_size_remain_bounded_unconfirmed_hints():
     def handler(request):
         payload = json.loads(request.content)
         prompt = payload["messages"][0]["content"]
-        assert "traveler_count" in prompt and "latest traveler statements" in prompt
+        assert "traveler_count" in prompt and "explicitly supported by traveler statements" in prompt
         return httpx.Response(200, json={"choices": [{
             "finish_reason": "stop",
             "message": {"content": json.dumps({
