@@ -1,0 +1,1832 @@
+{
+  "dataset_key": "shiraz-dalahoo-wikipedia-v1",
+  "created_at": "2026-11-05",
+  "language": "fa",
+  "scope": "Shiraz urban pilot plus separately classified nearby trip (Naqsh-e Rostam); food experiences linked to Shiraz city.",
+  "classification_contract": {
+    "is_synthetic": false,
+    "record_origin": "verified_external",
+    "verification_status": "verified",
+    "publication_status": "needs_review",
+    "data_confidence": 0,
+    "note": "These are source-backed factual candidates, not owner-approved production records. They must remain excluded from production views until editorial approval. `is_synthetic=false` does not itself mean approved/published."
+  },
+  "sources": [
+    {
+      "source_key": "dalahoo-destination-index",
+      "source_name": "Dalahoo domestic destination index",
+      "source_type": "tourism_editorial_discovery",
+      "verification_status": "verified",
+      "url": "https://dalahoo.com/destinationlist.cfm",
+      "role": "discovery",
+      "notes": "Dalahoo destination index used only to discover listed Iranian destinations and provincial grouping. Presence in this index does not verify detailed descriptions, coordinates, opening hours, access, safety, prices, or suitability. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "dalahoo-shiraz-guide",
+      "source_name": "Dalahoo Shiraz destination guide",
+      "source_type": "tourism_editorial_guide",
+      "verification_status": "verified",
+      "url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+      "role": "discovery",
+      "notes": "Dalahoo Shiraz destination guide used for place and local-food discovery and limited visitor-oriented context. Descriptions are independently paraphrased. Tour-specific walking durations, ages, transport and itinerary details are NOT generalized to individual places. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-shiraz",
+      "source_name": "Wikipedia — Shiraz",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Shiraz",
+      "role": "secondary",
+      "notes": "Secondary reference for Shiraz identity, location and representative city coordinate. Coordinate is a city reference point, not an entrance or user-position point. Cross-check against authoritative mapping before publication. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-hafez",
+      "source_name": "Wikipedia — Tomb of Hafez",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Tomb_of_Hafez",
+      "role": "secondary",
+      "notes": "Secondary identity/location reference and article coordinate for the Hafezieh site. Coordinate is stored as a representative point, not an entrance. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-saadi",
+      "source_name": "Wikipedia — Tomb of Saadi",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Tomb_of_Saadi",
+      "role": "secondary",
+      "notes": "Secondary identity/location reference and article coordinate for Saadieh. Coordinate is stored as a representative point, not an entrance. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-arg-karim-khan",
+      "source_name": "Wikipedia — Arg of Karim Khan",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Arg_of_Karim_Khan",
+      "role": "secondary",
+      "notes": "Secondary historical/identity reference and article coordinate. Coordinate is stored as a representative point, not a visitor entrance. Article contains citation-quality limitations; owner review remains required. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-qavam-house",
+      "source_name": "Wikipedia — Qavam House",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Qavam_House",
+      "role": "secondary",
+      "notes": "Secondary identity/location and coordinate reference for Qavam House/Narenjestan-e Qavam. Coordinate is a representative point, not an entrance. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-eram-garden",
+      "source_name": "Wikipedia — Eram Garden",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Eram_Garden",
+      "role": "secondary",
+      "notes": "Secondary identity/location and coordinate reference for Eram Garden. Coordinate is a representative point, not an entrance. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-delgosha-garden",
+      "source_name": "Wikipedia — Delgosha Garden",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Delgosha_Garden",
+      "role": "secondary",
+      "notes": "Secondary identity/location and coordinate reference for Delgosha Garden. Coordinate is a representative point, not an entrance. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-vakil-bathhouse",
+      "source_name": "Wikipedia — Vakil Bathhouse",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Vakil_Bathhouse",
+      "role": "secondary",
+      "notes": "Secondary identity/location and coordinate reference for Vakil Bathhouse. Coordinate is a representative point, not an entrance. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-shah-cheragh",
+      "source_name": "Wikipedia — Shah Cheragh",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Shah_Cheragh",
+      "role": "secondary",
+      "notes": "Secondary identity/location and coordinate reference for the Shah Cheragh complex. Coordinate is a representative point, not an entrance. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-vakil-bazaar",
+      "source_name": "Wikipedia — Vakil Bazaar",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Vakil_Bazaar",
+      "role": "secondary",
+      "notes": "Secondary identity/location and coordinate reference for Vakil Bazaar. Coordinate is a representative point, not an entrance. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-nasir-ol-molk",
+      "source_name": "Wikipedia — Nasir-ol-Molk Mosque",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Nasir-ol-Molk_Mosque",
+      "role": "secondary",
+      "notes": "Secondary identity/location, coordinate and construction-period reference. Article notes the building was completed in 1888 and includes stained-glass features. Coordinate is a representative point, not an entrance. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-afifabad",
+      "source_name": "Wikipedia — Afif-Abad Garden",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Afif-Abad_Garden",
+      "role": "secondary",
+      "notes": "Secondary identity/location and coordinate reference. The article describes the site as a garden/museum complex in Shiraz. Coordinate is a representative point, not an entrance. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "wikipedia-naqsh-e-rostam",
+      "source_name": "Wikipedia — Naqsh-e Rostam",
+      "source_type": "encyclopedia_reference",
+      "verification_status": "verified",
+      "url": "https://en.wikipedia.org/wiki/Naqsh-e_Rostam",
+      "role": "secondary",
+      "notes": "Secondary identity/location and article coordinate reference. The site is in Marvdasht, Fars Province, about 13 km northwest of Persepolis; it is not inside urban Shiraz. Coordinate is a representative site point. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "dalahoo-maragheh-guide",
+      "source_name": "Dalahoo Maragheh Observatory destination guide",
+      "source_type": "tourism_editorial_guide",
+      "verification_status": "verified",
+      "url": "https://dalahoo.com/destination.cfm?id=16333&loc=1",
+      "role": "secondary",
+      "notes": "Dalahoo guide used for discovery and visitor-oriented description of Maragheh Observatory and nearby attractions. Tour itinerary durations and transport times are not generalized as permanent site attributes. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "astronomical-heritage-maragheh",
+      "source_name": "UNESCO Portal to the Heritage of Astronomy — Maragheh Observatory",
+      "source_type": "institutional_heritage_reference",
+      "verification_status": "verified",
+      "url": "https://web.astronomicalheritage.net/index.php/show-entity?identity=29&idsubentity=1&tmpl=system",
+      "role": "primary",
+      "notes": "Institutional astronomical-heritage reference for the observatory's historical significance and published geographic position: 37°23′46″N, 46°12′33″E. Accessed 2026-11-05."
+    },
+    {
+      "source_key": "mapcarta-maragheh",
+      "source_name": "Mapcarta / OpenStreetMap — Maragheh Observatory",
+      "source_type": "geographic_cross_check",
+      "verification_status": "verified",
+      "url": "https://mapcarta.com/W474626923",
+      "role": "verification",
+      "notes": "Map-based secondary cross-check based on OpenStreetMap/Wikidata and related sources. Coordinates differ by only a small offset from the institutional reference; use for cross-check only, not as the primary coordinate authority. Accessed 2026-11-05."
+    }
+  ],
+  "places": [
+    {
+      "key": "shiraz-city-v1",
+      "name_fa": "شیراز",
+      "name_en": "Shiraz",
+      "aliases": [
+        "Shiraz",
+        "Shīrāz",
+        "شهر شیراز"
+      ],
+      "type": "city",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": null,
+      "description": "شیراز مرکز استان فارس در جنوب‌غرب ایران است. این شهر به‌واسطهٔ پیوندهای شناخته‌شده با شعر فارسی، باغ‌های تاریخی و آثار فرهنگی و معماری، یکی از مقصدهای مهم گردشگری فرهنگی ایران به‌شمار می‌رود.",
+      "lat": 29.61,
+      "lon": 52.5425,
+      "coordinate_role": "representative_point",
+      "scope": "city",
+      "tags": [
+        "pilot:shiraz",
+        "geographic_level:city",
+        "destination_scope:in_city",
+        "cultural_destination"
+      ],
+      "categories": [
+        "historical"
+      ],
+      "source_keys": [
+        "dalahoo-shiraz-guide",
+        "wikipedia-shiraz"
+      ],
+      "evidence": "Dalahoo معرفی فرهنگی مقصد شیراز را ارائه می‌کند؛ مختصات نقطه مرجع شهر از مقاله Wikipedia — Shiraz استخراج شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-city-v1-doc",
+        "title": "پرونده دانش گردشگری: شیراز",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Shiraz",
+        "source_key": "wikipedia-shiraz",
+        "raw_content": "نام: شیراز\nنام انگلیسی: Shiraz\nنوع رکورد: city\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: city\nتوضیح: شیراز مرکز استان فارس در جنوب‌غرب ایران است. این شهر به‌واسطهٔ پیوندهای شناخته‌شده با شعر فارسی، باغ‌های تاریخی و آثار فرهنگی و معماری، یکی از مقصدهای مهم گردشگری فرهنگی ایران به‌شمار می‌رود.\nنقطه مرجع جغرافیایی: عرض 29.61, طول 52.5425\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo معرفی فرهنگی مقصد شیراز را ارائه می‌کند؛ مختصات نقطه مرجع شهر از مقاله Wikipedia — Shiraz استخراج شده است.",
+        "chunk_index": 0,
+        "char_count": 540,
+        "content_sha256": "25042d6524d9e30d52e163bbb8d2508e12801fc9f56a06f05c87c6fe2dd65e2c",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-hafezieh-v1",
+      "name_fa": "آرامگاه حافظ (حافظیه)",
+      "name_en": "Tomb of Hafez / Hafezieh",
+      "aliases": [
+        "حافظیه",
+        "آرامگاه خواجه شمس‌الدین حافظ شیرازی",
+        "Tomb of Hafez",
+        "Hafezieh"
+      ],
+      "type": "historic_memorial",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "آرامگاه حافظ، شاعر فارسی‌گوی سدهٔ هشتم هجری، در مجموعهٔ باغ مصلی در بخش شمالی شیراز قرار دارد. این مکان از جاذبه‌های شاخص فرهنگی شهر است.",
+      "lat": 29.6254028,
+      "lon": 52.5583194,
+      "coordinate_role": "representative_point",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "attraction",
+        "literary_heritage",
+        "historic_memorial"
+      ],
+      "categories": [
+        "historical"
+      ],
+      "source_keys": [
+        "dalahoo-shiraz-guide",
+        "wikipedia-hafez"
+      ],
+      "evidence": "Dalahoo نام حافظیه را در فهرست جاذبه‌های شیراز آورده است؛ Wikipedia موقعیت شهری و مختصات مقاله را پشتیبانی می‌کند.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-hafezieh-v1-doc",
+        "title": "پرونده دانش گردشگری: آرامگاه حافظ (حافظیه)",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Tomb_of_Hafez",
+        "source_key": "wikipedia-hafez",
+        "raw_content": "نام: آرامگاه حافظ (حافظیه)\nنام انگلیسی: Tomb of Hafez / Hafezieh\nنوع رکورد: historic_memorial\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: آرامگاه حافظ، شاعر فارسی‌گوی سدهٔ هشتم هجری، در مجموعهٔ باغ مصلی در بخش شمالی شیراز قرار دارد. این مکان از جاذبه‌های شاخص فرهنگی شهر است.\nنقطه مرجع جغرافیایی: عرض 29.6254028, طول 52.5583194\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo نام حافظیه را در فهرست جاذبه‌های شیراز آورده است؛ Wikipedia موقعیت شهری و مختصات مقاله را پشتیبانی می‌کند.",
+        "chunk_index": 0,
+        "char_count": 544,
+        "content_sha256": "7e6dbd961d6ab9fc70e200b15715073118dc6bd1a74891585df5d9725c7a0091",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-saadieh-v1",
+      "name_fa": "آرامگاه سعدی (سعدیه)",
+      "name_en": "Tomb of Saadi / Saadieh",
+      "aliases": [
+        "سعدیه",
+        "آرامگاه سعدی شیرازی",
+        "Tomb of Saadi",
+        "Saadieh"
+      ],
+      "type": "historic_memorial",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "آرامگاه سعدی، شاعر و نویسندهٔ فارسی‌زبان سدهٔ هفتم هجری، در شیراز قرار دارد و از مکان‌های مهم میراث ادبی شهر محسوب می‌شود.",
+      "lat": 29.6225,
+      "lon": 52.58306,
+      "coordinate_role": "representative_point",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "attraction",
+        "literary_heritage",
+        "historic_memorial"
+      ],
+      "categories": [
+        "historical"
+      ],
+      "source_keys": [
+        "dalahoo-shiraz-guide",
+        "wikipedia-saadi"
+      ],
+      "evidence": "Dalahoo آرامگاه سعدی را در فهرست جاذبه‌های شیراز معرفی می‌کند؛ Wikipedia موقعیت و مختصات را پشتیبانی می‌کند.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-saadieh-v1-doc",
+        "title": "پرونده دانش گردشگری: آرامگاه سعدی (سعدیه)",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Tomb_of_Saadi",
+        "source_key": "wikipedia-saadi",
+        "raw_content": "نام: آرامگاه سعدی (سعدیه)\nنام انگلیسی: Tomb of Saadi / Saadieh\nنوع رکورد: historic_memorial\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: آرامگاه سعدی، شاعر و نویسندهٔ فارسی‌زبان سدهٔ هفتم هجری، در شیراز قرار دارد و از مکان‌های مهم میراث ادبی شهر محسوب می‌شود.\nنقطه مرجع جغرافیایی: عرض 29.6225, طول 52.58306\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo آرامگاه سعدی را در فهرست جاذبه‌های شیراز معرفی می‌کند؛ Wikipedia موقعیت و مختصات را پشتیبانی می‌کند.",
+        "chunk_index": 0,
+        "char_count": 516,
+        "content_sha256": "f5fd7162e709d83bf7a3c60455404c17a15d140a141d620a43ee4c42d8ce2e16",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-arg-karim-khan-v1",
+      "name_fa": "ارگ کریم‌خان زند",
+      "name_en": "Arg of Karim Khan / Karim Khan Citadel",
+      "aliases": [
+        "ارگ کریم خان",
+        "ارگ کریم‌خان",
+        "Karim Khan Citadel",
+        "Arg-e Karim Khan"
+      ],
+      "type": "historic_citadel",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "ارگ کریم‌خان در مرکز شیراز از بناهای شاخص دورهٔ زندیه است. ساخت آن در دههٔ ۱۷۶۰ میلادی آغاز و در همان دوره تکمیل شد و در منابع تاریخی به‌عنوان ارگ و محل اقامت کریم‌خان زند معرفی می‌شود.",
+      "lat": 29.6174,
+      "lon": 52.5446,
+      "coordinate_role": "representative_point",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "attraction",
+        "zand_era",
+        "historic_citadel"
+      ],
+      "categories": [
+        "historical"
+      ],
+      "source_keys": [
+        "dalahoo-shiraz-guide",
+        "wikipedia-arg-karim-khan"
+      ],
+      "evidence": "Dalahoo نام ارگ را در جاذبه‌های شیراز آورده؛ مقاله Wikipedia برای هویت تاریخی، دوره ساخت و مختصات استفاده شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-arg-karim-khan-v1-doc",
+        "title": "پرونده دانش گردشگری: ارگ کریم‌خان زند",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Arg_of_Karim_Khan",
+        "source_key": "wikipedia-arg-karim-khan",
+        "raw_content": "نام: ارگ کریم‌خان زند\nنام انگلیسی: Arg of Karim Khan / Karim Khan Citadel\nنوع رکورد: historic_citadel\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: ارگ کریم‌خان در مرکز شیراز از بناهای شاخص دورهٔ زندیه است. ساخت آن در دههٔ ۱۷۶۰ میلادی آغاز و در همان دوره تکمیل شد و در منابع تاریخی به‌عنوان ارگ و محل اقامت کریم‌خان زند معرفی می‌شود.\nنقطه مرجع جغرافیایی: عرض 29.6174, طول 52.5446\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo نام ارگ را در جاذبه‌های شیراز آورده؛ مقاله Wikipedia برای هویت تاریخی، دوره ساخت و مختصات استفاده شده است.",
+        "chunk_index": 0,
+        "char_count": 594,
+        "content_sha256": "ed4ddbbbf493a0f9712a46d2307c547b6f81b8cec8cf1ac3ff86b87d9e0ca270",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-narenjestan-qavam-v1",
+      "name_fa": "نارنجستان قوام (خانه قوام)",
+      "name_en": "Qavam House / Narenjestan-e Qavam",
+      "aliases": [
+        "نارنجستان قوام",
+        "خانه قوام",
+        "باغ قوام",
+        "Qavam House",
+        "Narenjestan-e Qavam"
+      ],
+      "type": "historic_house_garden",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "نارنجستان قوام یا خانهٔ قوام، مجموعه‌ای تاریخی از خانه و باغ در شیراز است که در دورهٔ قاجار و در نیمهٔ دوم سدهٔ نوزدهم ساخته شد.",
+      "lat": 29.6078444,
+      "lon": 52.5525694,
+      "coordinate_role": "representative_point",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "attraction",
+        "qajar_era",
+        "historic_house_garden"
+      ],
+      "categories": [
+        "historical"
+      ],
+      "source_keys": [
+        "dalahoo-shiraz-guide",
+        "wikipedia-qavam-house"
+      ],
+      "evidence": "Dalahoo نام نارنجستان قوام را در جاذبه‌های شیراز آورده؛ Wikipedia هویت بنا و مختصات مقاله را پشتیبانی می‌کند.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-narenjestan-qavam-v1-doc",
+        "title": "پرونده دانش گردشگری: نارنجستان قوام (خانه قوام)",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Qavam_House",
+        "source_key": "wikipedia-qavam-house",
+        "raw_content": "نام: نارنجستان قوام (خانه قوام)\nنام انگلیسی: Qavam House / Narenjestan-e Qavam\nنوع رکورد: historic_house_garden\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: نارنجستان قوام یا خانهٔ قوام، مجموعه‌ای تاریخی از خانه و باغ در شیراز است که در دورهٔ قاجار و در نیمهٔ دوم سدهٔ نوزدهم ساخته شد.\nنقطه مرجع جغرافیایی: عرض 29.6078444, طول 52.5525694\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo نام نارنجستان قوام را در جاذبه‌های شیراز آورده؛ Wikipedia هویت بنا و مختصات مقاله را پشتیبانی می‌کند.",
+        "chunk_index": 0,
+        "char_count": 548,
+        "content_sha256": "b7c08344902cdec7fdf8abe3479fff336d28259de09355ee2e9446c8e401fb87",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-eram-garden-v1",
+      "name_fa": "باغ ارم",
+      "name_en": "Eram Garden",
+      "aliases": [
+        "باغ ارم شیراز",
+        "Eram Garden",
+        "Bagh-e Eram"
+      ],
+      "type": "historic_garden",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "باغ ارم از باغ‌های تاریخی شناخته‌شدهٔ شیراز است و در مجموعهٔ میراث جهانی «باغ ایرانی» ثبت شده است. این رکورد به باغ اشاره دارد و مختصات آن نقطهٔ مرجع مکانی است، نه ورودی بازدیدکنندگان.",
+      "lat": 29.63583,
+      "lon": 52.52528,
+      "coordinate_role": "representative_point",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "attraction",
+        "historic_garden",
+        "persian_garden"
+      ],
+      "categories": [
+        "historical",
+        "nature"
+      ],
+      "source_keys": [
+        "dalahoo-shiraz-guide",
+        "wikipedia-eram-garden"
+      ],
+      "evidence": "Dalahoo باغ ارم را در جاذبه‌های شیراز فهرست می‌کند؛ Wikipedia برای هویت باغ و مختصات استفاده شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-eram-garden-v1-doc",
+        "title": "پرونده دانش گردشگری: باغ ارم",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Eram_Garden",
+        "source_key": "wikipedia-eram-garden",
+        "raw_content": "نام: باغ ارم\nنام انگلیسی: Eram Garden\nنوع رکورد: historic_garden\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: باغ ارم از باغ‌های تاریخی شناخته‌شدهٔ شیراز است و در مجموعهٔ میراث جهانی «باغ ایرانی» ثبت شده است. این رکورد به باغ اشاره دارد و مختصات آن نقطهٔ مرجع مکانی است، نه ورودی بازدیدکنندگان.\nنقطه مرجع جغرافیایی: عرض 29.63583, طول 52.52528\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo باغ ارم را در جاذبه‌های شیراز فهرست می‌کند؛ Wikipedia برای هویت باغ و مختصات استفاده شده است.",
+        "chunk_index": 0,
+        "char_count": 545,
+        "content_sha256": "9c3ee65d5d30eacc736d38890846ab62a615ad48d3dc6726d88a24d75a1ccfbb",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-delgosha-garden-v1",
+      "name_fa": "باغ دلگشا",
+      "name_en": "Delgosha Garden",
+      "aliases": [
+        "باغ دلگشا شیراز",
+        "Delgosha Garden"
+      ],
+      "type": "historic_garden",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "باغ دلگشا باغی تاریخی در شیراز و در نزدیکی آرامگاه سعدی است. مختصات ذخیره‌شده نقطهٔ مرجع مقالهٔ جغرافیایی است و به‌معنای ورودی باغ نیست.",
+      "lat": 29.6197,
+      "lon": 52.5751,
+      "coordinate_role": "representative_point",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "attraction",
+        "historic_garden",
+        "persian_garden"
+      ],
+      "categories": [
+        "historical",
+        "nature"
+      ],
+      "source_keys": [
+        "dalahoo-shiraz-guide",
+        "wikipedia-delgosha-garden"
+      ],
+      "evidence": "Dalahoo باغ دلگشا را در فهرست جاذبه‌های شیراز آورده؛ Wikipedia موقعیت نزدیک سعدیه و مختصات را پشتیبانی می‌کند.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-delgosha-garden-v1-doc",
+        "title": "پرونده دانش گردشگری: باغ دلگشا",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Delgosha_Garden",
+        "source_key": "wikipedia-delgosha-garden",
+        "raw_content": "نام: باغ دلگشا\nنام انگلیسی: Delgosha Garden\nنوع رکورد: historic_garden\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: باغ دلگشا باغی تاریخی در شیراز و در نزدیکی آرامگاه سعدی است. مختصات ذخیره‌شده نقطهٔ مرجع مقالهٔ جغرافیایی است و به‌معنای ورودی باغ نیست.\nنقطه مرجع جغرافیایی: عرض 29.6197, طول 52.5751\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo باغ دلگشا را در فهرست جاذبه‌های شیراز آورده؛ Wikipedia موقعیت نزدیک سعدیه و مختصات را پشتیبانی می‌کند.",
+        "chunk_index": 0,
+        "char_count": 510,
+        "content_sha256": "218e58fabc048fe291b9a9a4338ff1abaf1f6983bc6563d28c044c96da3cd2da",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-vakil-bathhouse-v1",
+      "name_fa": "حمام وکیل",
+      "name_en": "Vakil Bathhouse",
+      "aliases": [
+        "حمام وکیل شیراز",
+        "Vakil Bathhouse",
+        "Hammam-e Vakil"
+      ],
+      "type": "historic_bathhouse",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "حمام وکیل از بناهای تاریخی مجموعهٔ وکیل در شیراز و متعلق به دورهٔ زندیه است. این بنا نمونه‌ای از حمام عمومی سنتی ایرانی در بافت تاریخی شهر به‌شمار می‌رود.",
+      "lat": 29.61477,
+      "lon": 52.54512,
+      "coordinate_role": "representative_point",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "attraction",
+        "zand_era",
+        "historic_bathhouse"
+      ],
+      "categories": [
+        "historical"
+      ],
+      "source_keys": [
+        "dalahoo-shiraz-guide",
+        "wikipedia-vakil-bathhouse"
+      ],
+      "evidence": "Dalahoo حمام وکیل را در فهرست جاذبه‌های شیراز آورده؛ Wikipedia برای هویت بنا، دوره تاریخی و مختصات استفاده شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-vakil-bathhouse-v1-doc",
+        "title": "پرونده دانش گردشگری: حمام وکیل",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Vakil_Bathhouse",
+        "source_key": "wikipedia-vakil-bathhouse",
+        "raw_content": "نام: حمام وکیل\nنام انگلیسی: Vakil Bathhouse\nنوع رکورد: historic_bathhouse\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: حمام وکیل از بناهای تاریخی مجموعهٔ وکیل در شیراز و متعلق به دورهٔ زندیه است. این بنا نمونه‌ای از حمام عمومی سنتی ایرانی در بافت تاریخی شهر به‌شمار می‌رود.\nنقطه مرجع جغرافیایی: عرض 29.61477, طول 52.54512\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo حمام وکیل را در فهرست جاذبه‌های شیراز آورده؛ Wikipedia برای هویت بنا، دوره تاریخی و مختصات استفاده شده است.",
+        "chunk_index": 0,
+        "char_count": 538,
+        "content_sha256": "a9d9fca9a415b6caaa38a4792c3de484109e30f9ed8df8985d2881515b97fe70",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-shah-cheragh-v1",
+      "name_fa": "شاه‌چراغ",
+      "name_en": "Shah Cheragh",
+      "aliases": [
+        "آستان شاهچراغ",
+        "شاه چراغ",
+        "Shah Cheragh",
+        "Shah-e Cheragh"
+      ],
+      "type": "religious_complex",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "شاه‌چراغ مجموعه‌ای زیارتی و مذهبی در شیراز است که با آرامگاه احمد بن موسی شناخته می‌شود. مختصات این رکورد نقطهٔ مرجع مجموعه است و ورودی کنترل‌شده یا مسیر دسترسی را مشخص نمی‌کند.",
+      "lat": 29.609611,
+      "lon": 52.543306,
+      "coordinate_role": "representative_point",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "attraction",
+        "religious_heritage",
+        "religious_complex"
+      ],
+      "categories": [
+        "historical"
+      ],
+      "source_keys": [
+        "dalahoo-shiraz-guide",
+        "wikipedia-shah-cheragh"
+      ],
+      "evidence": "Dalahoo شاه‌چراغ را در فهرست جاذبه‌های شیراز می‌آورد؛ Wikipedia هویت مجموعه و مختصات مقاله را پشتیبانی می‌کند.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-shah-cheragh-v1-doc",
+        "title": "پرونده دانش گردشگری: شاه‌چراغ",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Shah_Cheragh",
+        "source_key": "wikipedia-shah-cheragh",
+        "raw_content": "نام: شاه‌چراغ\nنام انگلیسی: Shah Cheragh\nنوع رکورد: religious_complex\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: شاه‌چراغ مجموعه‌ای زیارتی و مذهبی در شیراز است که با آرامگاه احمد بن موسی شناخته می‌شود. مختصات این رکورد نقطهٔ مرجع مجموعه است و ورودی کنترل‌شده یا مسیر دسترسی را مشخص نمی‌کند.\nنقطه مرجع جغرافیایی: عرض 29.609611, طول 52.543306\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo شاه‌چراغ را در فهرست جاذبه‌های شیراز می‌آورد؛ Wikipedia هویت مجموعه و مختصات مقاله را پشتیبانی می‌کند.",
+        "chunk_index": 0,
+        "char_count": 553,
+        "content_sha256": "65d5f17ff21dc794cbe167cf2490aa6fd8974660690eac788cf43810b74b9338",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-vakil-bazaar-v1",
+      "name_fa": "بازار وکیل",
+      "name_en": "Vakil Bazaar",
+      "aliases": [
+        "بازار وکیل شیراز",
+        "Vakil Bazaar",
+        "Bazar-e Vakil"
+      ],
+      "type": "historic_bazaar",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "بازار وکیل از بازارهای تاریخی مرکز شیراز و از آثار مرتبط با دورهٔ زندیه است. مختصات ثبت‌شده نقطهٔ مرجع بازار است؛ برای مسیریابی دقیق باید ورودی یا گذر موردنظر جداگانه مشخص شود.",
+      "lat": 29.6149806,
+      "lon": 52.5467972,
+      "coordinate_role": "representative_point",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "attraction",
+        "zand_era",
+        "historic_bazaar",
+        "shopping"
+      ],
+      "categories": [
+        "historical"
+      ],
+      "source_keys": [
+        "dalahoo-shiraz-guide",
+        "wikipedia-vakil-bazaar"
+      ],
+      "evidence": "Dalahoo بازار وکیل را در فهرست جاذبه‌های شیراز می‌آورد؛ Wikipedia برای موقعیت مرکزی و مختصات مقاله استفاده شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-vakil-bazaar-v1-doc",
+        "title": "پرونده دانش گردشگری: بازار وکیل",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Vakil_Bazaar",
+        "source_key": "wikipedia-vakil-bazaar",
+        "raw_content": "نام: بازار وکیل\nنام انگلیسی: Vakil Bazaar\nنوع رکورد: historic_bazaar\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: بازار وکیل از بازارهای تاریخی مرکز شیراز و از آثار مرتبط با دورهٔ زندیه است. مختصات ثبت‌شده نقطهٔ مرجع بازار است؛ برای مسیریابی دقیق باید ورودی یا گذر موردنظر جداگانه مشخص شود.\nنقطه مرجع جغرافیایی: عرض 29.6149806, طول 52.5467972\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo بازار وکیل را در فهرست جاذبه‌های شیراز می‌آورد؛ Wikipedia برای موقعیت مرکزی و مختصات مقاله استفاده شده است.",
+        "chunk_index": 0,
+        "char_count": 559,
+        "content_sha256": "0734075a463d821d1674afd0e112fd91ba5bfbba3252fc31fc6148bc9867a4a3",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-nasir-ol-molk-v1",
+      "name_fa": "مسجد نصیرالملک",
+      "name_en": "Nasir-ol-Molk Mosque / Pink Mosque",
+      "aliases": [
+        "مسجد صورتی",
+        "مسجد نصیر الملک",
+        "Nasir al-Mulk Mosque",
+        "Pink Mosque"
+      ],
+      "type": "historic_mosque",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "مسجد نصیرالملک در محلهٔ گود عربان شیراز قرار دارد. ساخت آن در دورهٔ قاجار آغاز شد و در سال ۱۸۸۸ میلادی تکمیل شد؛ شیشه‌های رنگی و آرایه‌های معماری آن از ویژگی‌های شناخته‌شدهٔ بنا هستند.",
+      "lat": 29.60861,
+      "lon": 52.54833,
+      "coordinate_role": "representative_point",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "attraction",
+        "qajar_era",
+        "historic_mosque",
+        "architecture"
+      ],
+      "categories": [
+        "historical"
+      ],
+      "source_keys": [
+        "wikipedia-nasir-ol-molk"
+      ],
+      "evidence": "صفحه Wikipedia — Nasir-ol-Molk Mosque موقعیت، دوره ساخت، سال تکمیل و مختصات را گزارش می‌کند؛ در فهرست صفحه اختصاصی دالاهو که بررسی شد نام این مسجد به‌طور قطعی در فهرست جاذبه‌ها احراز نشد، بنابراین منبع دالاهو به آن نسبت داده نشده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-nasir-ol-molk-v1-doc",
+        "title": "پرونده دانش گردشگری: مسجد نصیرالملک",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Nasir-ol-Molk_Mosque",
+        "source_key": "wikipedia-nasir-ol-molk",
+        "raw_content": "نام: مسجد نصیرالملک\nنام انگلیسی: Nasir-ol-Molk Mosque / Pink Mosque\nنوع رکورد: historic_mosque\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: مسجد نصیرالملک در محلهٔ گود عربان شیراز قرار دارد. ساخت آن در دورهٔ قاجار آغاز شد و در سال ۱۸۸۸ میلادی تکمیل شد؛ شیشه‌های رنگی و آرایه‌های معماری آن از ویژگی‌های شناخته‌شدهٔ بنا هستند.\nنقطه مرجع جغرافیایی: عرض 29.60861, طول 52.54833\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: صفحه Wikipedia — Nasir-ol-Molk Mosque موقعیت، دوره ساخت، سال تکمیل و مختصات را گزارش می‌کند؛ در فهرست صفحه اختصاصی دالاهو که بررسی شد نام این مسجد به‌طور قطعی در فهرست جاذبه‌ها احراز نشد، بنابراین منبع دالاهو به آن نسبت داده نشده است.",
+        "chunk_index": 0,
+        "char_count": 708,
+        "content_sha256": "1bd686f2bf690664c21d13b7d57eccdbcb26b5e95d0cc7f862ad4b4418c21587",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-afifabad-garden-v1",
+      "name_fa": "باغ عفیف‌آباد (باغ گلشن)",
+      "name_en": "Afif-Abad Garden / Gulshan Garden",
+      "aliases": [
+        "باغ عفیف آباد",
+        "باغ گلشن",
+        "Afif-Abad Garden",
+        "Gulshan Garden"
+      ],
+      "type": "historic_garden_museum",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "باغ عفیف‌آباد که با نام باغ گلشن نیز شناخته می‌شود، مجموعه‌ای از باغ و عمارت تاریخی در شیراز است و در منابع معرفی‌شده کارکرد موزه‌ای نیز برای آن ذکر شده است.",
+      "lat": 29.6231611,
+      "lon": 52.498361,
+      "coordinate_role": "representative_point",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "attraction",
+        "historic_garden",
+        "museum"
+      ],
+      "categories": [
+        "historical",
+        "nature"
+      ],
+      "source_keys": [
+        "wikipedia-afifabad"
+      ],
+      "evidence": "Wikipedia — Afif-Abad Garden هویت مجموعه، جایگاه آن در شیراز و مختصات را پشتیبانی می‌کند؛ Dalahoo Shiraz guide به‌عنوان منبع اختصاصی این رکورد استفاده نشده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-afifabad-garden-v1-doc",
+        "title": "پرونده دانش گردشگری: باغ عفیف‌آباد (باغ گلشن)",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Afif-Abad_Garden",
+        "source_key": "wikipedia-afifabad",
+        "raw_content": "نام: باغ عفیف‌آباد (باغ گلشن)\nنام انگلیسی: Afif-Abad Garden / Gulshan Garden\nنوع رکورد: historic_garden_museum\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: باغ عفیف‌آباد که با نام باغ گلشن نیز شناخته می‌شود، مجموعه‌ای از باغ و عمارت تاریخی در شیراز است و در منابع معرفی‌شده کارکرد موزه‌ای نیز برای آن ذکر شده است.\nنقطه مرجع جغرافیایی: عرض 29.6231611, طول 52.498361\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Wikipedia — Afif-Abad Garden هویت مجموعه، جایگاه آن در شیراز و مختصات را پشتیبانی می‌کند؛ Dalahoo Shiraz guide به‌عنوان منبع اختصاصی این رکورد استفاده نشده است.",
+        "chunk_index": 0,
+        "char_count": 626,
+        "content_sha256": "bc0c85313adadb7d798b1b35b3fa882f3d33c6393c1dd63a3deb678ed0fa2289",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-naqsh-e-rostam-v1",
+      "name_fa": "نقش رستم",
+      "name_en": "Naqsh-e Rostam",
+      "aliases": [
+        "نقش‌رستم",
+        "Naqsh-e Rostam",
+        "Naqsh-i Rustam"
+      ],
+      "type": "archaeological_necropolis",
+      "province": "فارس",
+      "city": "مرودشت",
+      "parent_key": null,
+      "description": "نقش رستم محوطه‌ای باستانی و آرامستان شاهی در شهرستان مرودشت استان فارس است؛ حدود ۱۳ کیلومتر شمال‌غرب تخت‌جمشید قرار دارد و آرامگاه‌های صخره‌ای هخامنشی و نقش‌برجسته‌های دورهٔ ساسانی را دربرمی‌گیرد. این مکان داخل محدودهٔ شهری شیراز نیست و باید به‌عنوان سفر جداگانهٔ اطراف شیراز در نظر گرفته شود.",
+      "lat": 29.98889,
+      "lon": 52.87472,
+      "coordinate_role": "representative_point",
+      "scope": "nearby_trip",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:nearby_trip",
+        "outside_shiraz",
+        "archaeology",
+        "achaemenid",
+        "sassanid"
+      ],
+      "categories": [
+        "historical"
+      ],
+      "source_keys": [
+        "dalahoo-shiraz-guide",
+        "wikipedia-naqsh-e-rostam"
+      ],
+      "evidence": "Wikipedia موقعیت نقش‌رستم در مرودشت و فاصله تقریبی آن تا تخت‌جمشید را گزارش می‌کند؛ Dalahoo آن را در محتوای مقصد شیراز/تورهای مرتبط فهرست می‌کند. این رابطه به‌معنای قرارگیری در شهر شیراز نیست.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-naqsh-e-rostam-v1-doc",
+        "title": "پرونده دانش گردشگری: نقش رستم",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://en.wikipedia.org/wiki/Naqsh-e_Rostam",
+        "source_key": "wikipedia-naqsh-e-rostam",
+        "raw_content": "نام: نقش رستم\nنام انگلیسی: Naqsh-e Rostam\nنوع رکورد: archaeological_necropolis\nاستان: فارس\nشهر/محدوده: مرودشت\nدامنه مکانی: nearby_trip\nتوضیح: نقش رستم محوطه‌ای باستانی و آرامستان شاهی در شهرستان مرودشت استان فارس است؛ حدود ۱۳ کیلومتر شمال‌غرب تخت‌جمشید قرار دارد و آرامگاه‌های صخره‌ای هخامنشی و نقش‌برجسته‌های دورهٔ ساسانی را دربرمی‌گیرد. این مکان داخل محدودهٔ شهری شیراز نیست و باید به‌عنوان سفر جداگانهٔ اطراف شیراز در نظر گرفته شود.\nنقطه مرجع جغرافیایی: عرض 29.98889, طول 52.87472\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Wikipedia موقعیت نقش‌رستم در مرودشت و فاصله تقریبی آن تا تخت‌جمشید را گزارش می‌کند؛ Dalahoo آن را در محتوای مقصد شیراز/تورهای مرتبط فهرست می‌کند. این رابطه به‌معنای قرارگیری در شهر شیراز نیست.",
+        "chunk_index": 0,
+        "char_count": 764,
+        "content_sha256": "a91a4a3908378b5c1ba632bbb7c1f3e46db542dad278a3b175629f9361196ed2",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-shirazi-polo-v1",
+      "name_fa": "شیرازی‌پلو",
+      "name_en": "Shirazi Polo",
+      "aliases": [
+        "شیرازی پلو",
+        "Shirazi Polo"
+      ],
+      "type": "food_dish",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "دالاهو شیرازی‌پلو را در معرفی خوراک‌های محلی شیراز نام می‌برد و برای آن ترکیبی از برنج، مرغ، بادمجان و زرشک را ذکر می‌کند. این توصیف بازنویسی منبع است و جایگزین دستور پخت منطقه‌ای یا استاندارد واحد نیست.",
+      "lat": null,
+      "lon": null,
+      "coordinate_role": "unknown",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "food_experience",
+        "local_dish",
+        "shiraz_cuisine"
+      ],
+      "categories": [],
+      "source_keys": [
+        "dalahoo-shiraz-guide"
+      ],
+      "evidence": "صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-shirazi-polo-v1-doc",
+        "title": "پرونده دانش گردشگری: شیرازی‌پلو",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+        "source_key": "dalahoo-shiraz-guide",
+        "raw_content": "نام: شیرازی‌پلو\nنام انگلیسی: Shirazi Polo\nنوع رکورد: food_dish\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: دالاهو شیرازی‌پلو را در معرفی خوراک‌های محلی شیراز نام می‌برد و برای آن ترکیبی از برنج، مرغ، بادمجان و زرشک را ذکر می‌کند. این توصیف بازنویسی منبع است و جایگزین دستور پخت منطقه‌ای یا استاندارد واحد نیست.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+        "chunk_index": 0,
+        "char_count": 517,
+        "content_sha256": "28580753336d4245af47911e503fde532eb3aea829b0878a72f7874ea6805214",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-shakar-polo-v1",
+      "name_fa": "شکرپلو",
+      "name_en": "Shakar Polo",
+      "aliases": [
+        "شکر پلو",
+        "Shakar Polo"
+      ],
+      "type": "food_dish",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "دالاهو شکرپلو را از غذاهای محلی مرتبط با شیراز معرفی می‌کند و می‌گوید معمولاً در کنار خورش قیمه سرو می‌شود. جزئیات مواد اولیه و دستور تهیه در این رکورد فراتر از منبع گسترش داده نشده است.",
+      "lat": null,
+      "lon": null,
+      "coordinate_role": "unknown",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "food_experience",
+        "local_dish",
+        "shiraz_cuisine"
+      ],
+      "categories": [],
+      "source_keys": [
+        "dalahoo-shiraz-guide"
+      ],
+      "evidence": "صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-shakar-polo-v1-doc",
+        "title": "پرونده دانش گردشگری: شکرپلو",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+        "source_key": "dalahoo-shiraz-guide",
+        "raw_content": "نام: شکرپلو\nنام انگلیسی: Shakar Polo\nنوع رکورد: food_dish\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: دالاهو شکرپلو را از غذاهای محلی مرتبط با شیراز معرفی می‌کند و می‌گوید معمولاً در کنار خورش قیمه سرو می‌شود. جزئیات مواد اولیه و دستور تهیه در این رکورد فراتر از منبع گسترش داده نشده است.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+        "chunk_index": 0,
+        "char_count": 495,
+        "content_sha256": "f6a94ed0ff3a7180a1aca315f0e0f3c05ecab04b407bdabdaa2cfbbc6e217f96",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-ghormeh-beh-v1",
+      "name_fa": "قورمه‌به",
+      "name_en": "Ghormeh Beh",
+      "aliases": [
+        "قورمه به",
+        "Ghormeh Beh"
+      ],
+      "type": "food_dish",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "نام قورمه‌به در فهرست غذاهای محلی معرفی‌شده برای شیراز در صفحهٔ دالاهو آمده است. مواد اولیه، دستور، شیوهٔ سرو و محل‌های ارائه در این منبع به‌اندازه‌ای مستند نشده که به‌صورت ویژگی قطعی ثبت شود.",
+      "lat": null,
+      "lon": null,
+      "coordinate_role": "unknown",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "food_experience",
+        "local_dish",
+        "shiraz_cuisine"
+      ],
+      "categories": [],
+      "source_keys": [
+        "dalahoo-shiraz-guide"
+      ],
+      "evidence": "صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-ghormeh-beh-v1-doc",
+        "title": "پرونده دانش گردشگری: قورمه‌به",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+        "source_key": "dalahoo-shiraz-guide",
+        "raw_content": "نام: قورمه‌به\nنام انگلیسی: Ghormeh Beh\nنوع رکورد: food_dish\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: نام قورمه‌به در فهرست غذاهای محلی معرفی‌شده برای شیراز در صفحهٔ دالاهو آمده است. مواد اولیه، دستور، شیوهٔ سرو و محل‌های ارائه در این منبع به‌اندازه‌ای مستند نشده که به‌صورت ویژگی قطعی ثبت شود.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+        "chunk_index": 0,
+        "char_count": 503,
+        "content_sha256": "68ccfa3b62c1d6fbe995c8699578fd2db5b68b8837a0a11a02d2b192277f6678",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-do-piazeh-aloo-v1",
+      "name_fa": "دوپیازه‌آلو",
+      "name_en": "Do Piazeh Aloo",
+      "aliases": [
+        "دو پیازه آلو",
+        "Do-piazeh Aloo"
+      ],
+      "type": "food_dish",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "نام دوپیازه‌آلو در فهرست غذاهای محلی معرفی‌شده برای شیراز در صفحهٔ دالاهو آمده است. این رکورد فقط حضور نام در فهرست منبع را ثبت می‌کند و دربارهٔ مواد اولیه یا دستور تهیه ادعای مستقلی ندارد.",
+      "lat": null,
+      "lon": null,
+      "coordinate_role": "unknown",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "food_experience",
+        "local_dish",
+        "shiraz_cuisine"
+      ],
+      "categories": [],
+      "source_keys": [
+        "dalahoo-shiraz-guide"
+      ],
+      "evidence": "صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-do-piazeh-aloo-v1-doc",
+        "title": "پرونده دانش گردشگری: دوپیازه‌آلو",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+        "source_key": "dalahoo-shiraz-guide",
+        "raw_content": "نام: دوپیازه‌آلو\nنام انگلیسی: Do Piazeh Aloo\nنوع رکورد: food_dish\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: نام دوپیازه‌آلو در فهرست غذاهای محلی معرفی‌شده برای شیراز در صفحهٔ دالاهو آمده است. این رکورد فقط حضور نام در فهرست منبع را ثبت می‌کند و دربارهٔ مواد اولیه یا دستور تهیه ادعای مستقلی ندارد.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+        "chunk_index": 0,
+        "char_count": 506,
+        "content_sha256": "f185ec63b69c624e2dff0ad7143e33381afabaee105f8e9e2a9e5897d7a0a5c8",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-kalam-polo-v1",
+      "name_fa": "کلم‌پلو شیرازی",
+      "name_en": "Shirazi Kalam Polo",
+      "aliases": [
+        "کلم پلو شیرازی",
+        "Kalam Polo Shirazi"
+      ],
+      "type": "food_dish",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "کلم‌پلو شیرازی در فهرست خوراک‌های محلی صفحهٔ دالاهو برای شیراز ذکر شده است. این رکورد برای شناسایی تجربهٔ غذایی است؛ دستور، مواد اولیه و کیفیت رستوران‌ها جداگانه نیازمند منبع‌اند.",
+      "lat": null,
+      "lon": null,
+      "coordinate_role": "unknown",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "food_experience",
+        "local_dish",
+        "shiraz_cuisine"
+      ],
+      "categories": [],
+      "source_keys": [
+        "dalahoo-shiraz-guide"
+      ],
+      "evidence": "صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-kalam-polo-v1-doc",
+        "title": "پرونده دانش گردشگری: کلم‌پلو شیرازی",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+        "source_key": "dalahoo-shiraz-guide",
+        "raw_content": "نام: کلم‌پلو شیرازی\nنام انگلیسی: Shirazi Kalam Polo\nنوع رکورد: food_dish\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: کلم‌پلو شیرازی در فهرست خوراک‌های محلی صفحهٔ دالاهو برای شیراز ذکر شده است. این رکورد برای شناسایی تجربهٔ غذایی است؛ دستور، مواد اولیه و کیفیت رستوران‌ها جداگانه نیازمند منبع‌اند.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+        "chunk_index": 0,
+        "char_count": 503,
+        "content_sha256": "b437e7b6841c72f89d2f7128bce5631ad9fbf094548ba258dfcc029c94822e3a",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-rob-polo-v1",
+      "name_fa": "رب‌پلو",
+      "name_en": "Rob Polo",
+      "aliases": [
+        "رب پلو",
+        "Rob Polo"
+      ],
+      "type": "food_dish",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "رب‌پلو در فهرست خوراک‌های محلی صفحهٔ دالاهو برای شیراز ذکر شده است. جزئیات دستور و ترکیب مواد در رکورد فعلی تأیید نشده و عمداً حدس زده نشده است.",
+      "lat": null,
+      "lon": null,
+      "coordinate_role": "unknown",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "food_experience",
+        "local_dish",
+        "shiraz_cuisine"
+      ],
+      "categories": [],
+      "source_keys": [
+        "dalahoo-shiraz-guide"
+      ],
+      "evidence": "صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-rob-polo-v1-doc",
+        "title": "پرونده دانش گردشگری: رب‌پلو",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+        "source_key": "dalahoo-shiraz-guide",
+        "raw_content": "نام: رب‌پلو\nنام انگلیسی: Rob Polo\nنوع رکورد: food_dish\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: رب‌پلو در فهرست خوراک‌های محلی صفحهٔ دالاهو برای شیراز ذکر شده است. جزئیات دستور و ترکیب مواد در رکورد فعلی تأیید نشده و عمداً حدس زده نشده است.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+        "chunk_index": 0,
+        "char_count": 450,
+        "content_sha256": "604c8c98aeda6450b1db5fd65956c6f3a232cea75b1fc8090d53ae12c5974ee9",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-masghati-v1",
+      "name_fa": "مسقطی",
+      "name_en": "Masghati",
+      "aliases": [
+        "مسقطی شیرازی",
+        "Masghati"
+      ],
+      "type": "local_sweet",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "مسقطی در بخش خوراکی‌ها و سوغات مرتبط با شیراز در صفحهٔ دالاهو نام برده شده است. این رکورد نوع خوراکی را ثبت می‌کند؛ تولیدکننده، فروشگاه و دستور دقیق آن هنوز مستند نشده‌اند.",
+      "lat": null,
+      "lon": null,
+      "coordinate_role": "unknown",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "food_experience",
+        "local_sweet",
+        "souvenir_food"
+      ],
+      "categories": [],
+      "source_keys": [
+        "dalahoo-shiraz-guide"
+      ],
+      "evidence": "صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-masghati-v1-doc",
+        "title": "پرونده دانش گردشگری: مسقطی",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+        "source_key": "dalahoo-shiraz-guide",
+        "raw_content": "نام: مسقطی\nنام انگلیسی: Masghati\nنوع رکورد: local_sweet\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: مسقطی در بخش خوراکی‌ها و سوغات مرتبط با شیراز در صفحهٔ دالاهو نام برده شده است. این رکورد نوع خوراکی را ثبت می‌کند؛ تولیدکننده، فروشگاه و دستور دقیق آن هنوز مستند نشده‌اند.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+        "chunk_index": 0,
+        "char_count": 479,
+        "content_sha256": "cd086afdf455a4119da56e77d54150acbc52c8b9ae5be08527ac217481092d59",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-kak-v1",
+      "name_fa": "کاک",
+      "name_en": "Kak",
+      "aliases": [
+        "کاک شیرازی",
+        "کاک"
+      ],
+      "type": "local_sweet",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "کاک در فهرست خوراکی‌ها و سوغات مرتبط با شیراز در صفحهٔ دالاهو نام برده شده است. این رکورد تنها نام محصول را به مقصد مرتبط می‌کند و دربارهٔ مواد اولیه یا فروشندگان ادعایی ندارد.",
+      "lat": null,
+      "lon": null,
+      "coordinate_role": "unknown",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "food_experience",
+        "local_sweet",
+        "souvenir_food"
+      ],
+      "categories": [],
+      "source_keys": [
+        "dalahoo-shiraz-guide"
+      ],
+      "evidence": "صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-kak-v1-doc",
+        "title": "پرونده دانش گردشگری: کاک",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+        "source_key": "dalahoo-shiraz-guide",
+        "raw_content": "نام: کاک\nنام انگلیسی: Kak\nنوع رکورد: local_sweet\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: کاک در فهرست خوراکی‌ها و سوغات مرتبط با شیراز در صفحهٔ دالاهو نام برده شده است. این رکورد تنها نام محصول را به مقصد مرتبط می‌کند و دربارهٔ مواد اولیه یا فروشندگان ادعایی ندارد.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+        "chunk_index": 0,
+        "char_count": 476,
+        "content_sha256": "368c77bf9404060801882f729a1bb87ffaced010f86de441410c030162dccc56",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    },
+    {
+      "key": "shiraz-bidmeshk-distillate-v1",
+      "name_fa": "عرق بیدمشک",
+      "name_en": "Bidmeshk Distillate",
+      "aliases": [
+        "عرق بیدمشک",
+        "Bidmeshk"
+      ],
+      "type": "local_drink",
+      "province": "فارس",
+      "city": "شیراز",
+      "parent_key": "shiraz-city-v1",
+      "description": "عرق بیدمشک در بخش عرقیات و خوراکی‌های محلی/سوغات صفحهٔ دالاهو برای شیراز ذکر شده است. این رکورد به محصول محلی اشاره دارد و محل تولید، فروشنده یا ویژگی‌های درمانی را ادعا نمی‌کند.",
+      "lat": null,
+      "lon": null,
+      "coordinate_role": "unknown",
+      "scope": "in_city",
+      "tags": [
+        "pilot:shiraz",
+        "destination_scope:in_city",
+        "food_experience",
+        "local_drink",
+        "souvenir_food"
+      ],
+      "categories": [],
+      "source_keys": [
+        "dalahoo-shiraz-guide"
+      ],
+      "evidence": "صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "knowledge_document": {
+        "document_key": "shiraz-bidmeshk-distillate-v1-doc",
+        "title": "پرونده دانش گردشگری: عرق بیدمشک",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+        "source_key": "dalahoo-shiraz-guide",
+        "raw_content": "نام: عرق بیدمشک\nنام انگلیسی: Bidmeshk Distillate\nنوع رکورد: local_drink\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: عرق بیدمشک در بخش عرقیات و خوراکی‌های محلی/سوغات صفحهٔ دالاهو برای شیراز ذکر شده است. این رکورد به محصول محلی اشاره دارد و محل تولید، فروشنده یا ویژگی‌های درمانی را ادعا نمی‌کند.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+        "chunk_index": 0,
+        "char_count": 501,
+        "content_sha256": "92994be2ff35d3a1c0a96d728e5962ed340490f5e9ba93053cfe0a72e221f7b6",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      }
+    }
+  ],
+  "existing_destination_enrichment": [
+    {
+      "key": "maragheh-observatory-v1",
+      "name_fa": "رصدخانه مراغه",
+      "name_en": "Maragheh Observatory",
+      "type": "historical_astronomical_site",
+      "province": "آذربایجان شرقی",
+      "city": "مراغه",
+      "scope": "existing_destination_enrichment",
+      "description": "رصدخانهٔ مراغه در تپهٔ رصد داغی در شمال‌غرب شهر مراغه قرار دارد و در سدهٔ هفتم هجری به فرمان هلاکوخان و با سرپرستی خواجه نصیرالدین طوسی ساخته شد. این مجموعه از مراکز مهم رصد و پژوهش نجومی در جهان اسلام در سدهٔ میانه بود.",
+      "lat": 37.396111,
+      "lon": 46.209167,
+      "coordinate_role": "representative_point",
+      "aliases": [
+        "رصدخانه مراغه",
+        "Maragheh Observatory",
+        "Maragha Observatory"
+      ],
+      "source_keys": [
+        "astronomical-heritage-maragheh",
+        "dalahoo-maragheh-guide",
+        "mapcarta-maragheh"
+      ],
+      "evidence": "مرجع نهادی میراث نجومی تاریخ و مختصات منتشرشده را پشتیبانی می‌کند؛ دالاهو برای معرفی گردشگری و Mapcarta/OSM برای کنترل مستقل مکانی استفاده شده است.",
+      "knowledge_document": {
+        "document_key": "maragheh-observatory-v1-doc",
+        "title": "پرونده دانش گردشگری: رصدخانه مراغه",
+        "language_code": "fa",
+        "document_type": "destination_profile",
+        "canonical_url": "https://web.astronomicalheritage.net/index.php/show-entity?identity=29&idsubentity=1&tmpl=system",
+        "source_key": "astronomical-heritage-maragheh",
+        "raw_content": "نام: رصدخانه مراغه\nنام انگلیسی: Maragheh Observatory\nنوع رکورد: historical_astronomical_site\nاستان: آذربایجان شرقی\nشهر/محدوده: مراغه\nدامنه مکانی: existing_destination_enrichment\nتوضیح: رصدخانهٔ مراغه در تپهٔ رصد داغی در شمال‌غرب شهر مراغه قرار دارد و در سدهٔ هفتم هجری به فرمان هلاکوخان و با سرپرستی خواجه نصیرالدین طوسی ساخته شد. این مجموعه از مراکز مهم رصد و پژوهش نجومی در جهان اسلام در سدهٔ میانه بود.\nنقطه مرجع جغرافیایی: عرض 37.396111, طول 46.209167\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: مرجع نهادی میراث نجومی تاریخ و مختصات منتشرشده را پشتیبانی می‌کند؛ دالاهو برای معرفی گردشگری و Mapcarta/OSM برای کنترل مستقل مکانی استفاده شده است.",
+        "chunk_index": 0,
+        "char_count": 691,
+        "content_sha256": "08fe0d7ada30bccf304fa45ba01f874e884a00d44997d57fc93028120d5def28",
+        "record_origin": "verified_external",
+        "is_synthetic": false,
+        "ingestion_status": "processed"
+      },
+      "record_origin": "verified_external",
+      "verification_status": "verified",
+      "is_synthetic": false,
+      "status": "needs_review",
+      "data_confidence": 0,
+      "tags": [
+        "astronomy",
+        "observatory",
+        "historical",
+        "source_enriched"
+      ],
+      "categories": [
+        "historical"
+      ]
+    }
+  ],
+  "dalahoo_index_discovery_links": [
+    {
+      "canonical_name": "رصدخانه مراغه",
+      "province_name": "آذربایجان شرقی",
+      "city_name": "مراغه"
+    },
+    {
+      "canonical_name": "شهرستانک",
+      "province_name": "البرز",
+      "city_name": "کرج"
+    },
+    {
+      "canonical_name": "دره زمان",
+      "province_name": "تهران",
+      "city_name": "تهران"
+    },
+    {
+      "canonical_name": "دشت لار",
+      "province_name": "تهران",
+      "city_name": "تهران"
+    },
+    {
+      "canonical_name": "جنگل ابر",
+      "province_name": "سمنان",
+      "city_name": "شاهرود"
+    },
+    {
+      "canonical_name": "سافاری اوپرت تا اولنگ",
+      "province_name": "سمنان",
+      "city_name": "شاهرود"
+    },
+    {
+      "canonical_name": "کالپوش تا آبشار لوه",
+      "province_name": "سمنان",
+      "city_name": "دامغان"
+    },
+    {
+      "canonical_name": "باداب سورت",
+      "province_name": "مازندران",
+      "city_name": "ساری"
+    },
+    {
+      "canonical_name": "رامسر و شمال",
+      "province_name": "مازندران",
+      "city_name": "رامسر"
+    },
+    {
+      "canonical_name": "آبشار عروس دامن",
+      "province_name": "مازندران",
+      "city_name": "ساری"
+    },
+    {
+      "canonical_name": "آبشار گزو",
+      "province_name": "مازندران",
+      "city_name": "مازندران"
+    },
+    {
+      "canonical_name": "دشت دریاسر",
+      "province_name": "مازندران",
+      "city_name": "ساری"
+    },
+    {
+      "canonical_name": "همدان",
+      "province_name": "همدان",
+      "city_name": "همدان"
+    }
+  ],
+  "existing_nearby_heritage_links": [
+    {
+      "destination_key": "unesco-persepolis-v1",
+      "canonical_name": "تخت جمشید",
+      "relationship": "Dalahoo Shiraz guide discovery relation only; already exists in UNESCO dataset; do not duplicate or overwrite its official coordinate."
+    },
+    {
+      "destination_key": "unesco-pasargadae-v1",
+      "canonical_name": "پاسارگاد",
+      "relationship": "Dalahoo Shiraz guide discovery relation only; already exists in UNESCO dataset; do not duplicate or overwrite its official coordinate."
+    }
+  ],
+  "limitations": [
+    "Wikipedia coordinates are article/site representative points, not verified visitor entrances.",
+    "The Dalahoo Shiraz tour's age limits, transport durations and walking itinerary are tour-specific; they were not written into attraction-level difficulty/access fields.",
+    "Opening hours, current prices, entrance gates, parking, accessibility, safety, exact routes and operational conditions were not inferred.",
+    "Dalahoo lists six local dishes; only Shirazi Polo and Shakar Polo have the limited ingredient/serving detail described above. Remaining dish descriptions intentionally state that detail is unknown.",
+    "The schema has no normalized access-route or activity-profile tables; this import does not invent such fields or perform a schema migration.",
+    "All new rows remain needs_review and must not appear in production retrieval until owner/editor approval."
+  ],
+  "dalahoo_index_discovery_links_note": "Index links are discovery-only. Existing target rows keep their current record_origin='user_supplied_unverified', verification_status='pending', is_synthetic=false, and status='needs_review'; the index relation does not promote them.",
+  "knowledge_documents": [
+    {
+      "document_key": "shiraz-city-v1-doc",
+      "title": "پرونده دانش گردشگری: شیراز",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Shiraz",
+      "source_key": "wikipedia-shiraz",
+      "raw_content": "نام: شیراز\nنام انگلیسی: Shiraz\nنوع رکورد: city\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: city\nتوضیح: شیراز مرکز استان فارس در جنوب‌غرب ایران است. این شهر به‌واسطهٔ پیوندهای شناخته‌شده با شعر فارسی، باغ‌های تاریخی و آثار فرهنگی و معماری، یکی از مقصدهای مهم گردشگری فرهنگی ایران به‌شمار می‌رود.\nنقطه مرجع جغرافیایی: عرض 29.61, طول 52.5425\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo معرفی فرهنگی مقصد شیراز را ارائه می‌کند؛ مختصات نقطه مرجع شهر از مقاله Wikipedia — Shiraz استخراج شده است.",
+      "chunk_index": 0,
+      "char_count": 540,
+      "content_sha256": "25042d6524d9e30d52e163bbb8d2508e12801fc9f56a06f05c87c6fe2dd65e2c",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-hafezieh-v1-doc",
+      "title": "پرونده دانش گردشگری: آرامگاه حافظ (حافظیه)",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Tomb_of_Hafez",
+      "source_key": "wikipedia-hafez",
+      "raw_content": "نام: آرامگاه حافظ (حافظیه)\nنام انگلیسی: Tomb of Hafez / Hafezieh\nنوع رکورد: historic_memorial\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: آرامگاه حافظ، شاعر فارسی‌گوی سدهٔ هشتم هجری، در مجموعهٔ باغ مصلی در بخش شمالی شیراز قرار دارد. این مکان از جاذبه‌های شاخص فرهنگی شهر است.\nنقطه مرجع جغرافیایی: عرض 29.6254028, طول 52.5583194\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo نام حافظیه را در فهرست جاذبه‌های شیراز آورده است؛ Wikipedia موقعیت شهری و مختصات مقاله را پشتیبانی می‌کند.",
+      "chunk_index": 0,
+      "char_count": 544,
+      "content_sha256": "7e6dbd961d6ab9fc70e200b15715073118dc6bd1a74891585df5d9725c7a0091",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-saadieh-v1-doc",
+      "title": "پرونده دانش گردشگری: آرامگاه سعدی (سعدیه)",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Tomb_of_Saadi",
+      "source_key": "wikipedia-saadi",
+      "raw_content": "نام: آرامگاه سعدی (سعدیه)\nنام انگلیسی: Tomb of Saadi / Saadieh\nنوع رکورد: historic_memorial\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: آرامگاه سعدی، شاعر و نویسندهٔ فارسی‌زبان سدهٔ هفتم هجری، در شیراز قرار دارد و از مکان‌های مهم میراث ادبی شهر محسوب می‌شود.\nنقطه مرجع جغرافیایی: عرض 29.6225, طول 52.58306\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo آرامگاه سعدی را در فهرست جاذبه‌های شیراز معرفی می‌کند؛ Wikipedia موقعیت و مختصات را پشتیبانی می‌کند.",
+      "chunk_index": 0,
+      "char_count": 516,
+      "content_sha256": "f5fd7162e709d83bf7a3c60455404c17a15d140a141d620a43ee4c42d8ce2e16",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-arg-karim-khan-v1-doc",
+      "title": "پرونده دانش گردشگری: ارگ کریم‌خان زند",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Arg_of_Karim_Khan",
+      "source_key": "wikipedia-arg-karim-khan",
+      "raw_content": "نام: ارگ کریم‌خان زند\nنام انگلیسی: Arg of Karim Khan / Karim Khan Citadel\nنوع رکورد: historic_citadel\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: ارگ کریم‌خان در مرکز شیراز از بناهای شاخص دورهٔ زندیه است. ساخت آن در دههٔ ۱۷۶۰ میلادی آغاز و در همان دوره تکمیل شد و در منابع تاریخی به‌عنوان ارگ و محل اقامت کریم‌خان زند معرفی می‌شود.\nنقطه مرجع جغرافیایی: عرض 29.6174, طول 52.5446\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo نام ارگ را در جاذبه‌های شیراز آورده؛ مقاله Wikipedia برای هویت تاریخی، دوره ساخت و مختصات استفاده شده است.",
+      "chunk_index": 0,
+      "char_count": 594,
+      "content_sha256": "ed4ddbbbf493a0f9712a46d2307c547b6f81b8cec8cf1ac3ff86b87d9e0ca270",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-narenjestan-qavam-v1-doc",
+      "title": "پرونده دانش گردشگری: نارنجستان قوام (خانه قوام)",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Qavam_House",
+      "source_key": "wikipedia-qavam-house",
+      "raw_content": "نام: نارنجستان قوام (خانه قوام)\nنام انگلیسی: Qavam House / Narenjestan-e Qavam\nنوع رکورد: historic_house_garden\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: نارنجستان قوام یا خانهٔ قوام، مجموعه‌ای تاریخی از خانه و باغ در شیراز است که در دورهٔ قاجار و در نیمهٔ دوم سدهٔ نوزدهم ساخته شد.\nنقطه مرجع جغرافیایی: عرض 29.6078444, طول 52.5525694\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo نام نارنجستان قوام را در جاذبه‌های شیراز آورده؛ Wikipedia هویت بنا و مختصات مقاله را پشتیبانی می‌کند.",
+      "chunk_index": 0,
+      "char_count": 548,
+      "content_sha256": "b7c08344902cdec7fdf8abe3479fff336d28259de09355ee2e9446c8e401fb87",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-eram-garden-v1-doc",
+      "title": "پرونده دانش گردشگری: باغ ارم",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Eram_Garden",
+      "source_key": "wikipedia-eram-garden",
+      "raw_content": "نام: باغ ارم\nنام انگلیسی: Eram Garden\nنوع رکورد: historic_garden\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: باغ ارم از باغ‌های تاریخی شناخته‌شدهٔ شیراز است و در مجموعهٔ میراث جهانی «باغ ایرانی» ثبت شده است. این رکورد به باغ اشاره دارد و مختصات آن نقطهٔ مرجع مکانی است، نه ورودی بازدیدکنندگان.\nنقطه مرجع جغرافیایی: عرض 29.63583, طول 52.52528\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo باغ ارم را در جاذبه‌های شیراز فهرست می‌کند؛ Wikipedia برای هویت باغ و مختصات استفاده شده است.",
+      "chunk_index": 0,
+      "char_count": 545,
+      "content_sha256": "9c3ee65d5d30eacc736d38890846ab62a615ad48d3dc6726d88a24d75a1ccfbb",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-delgosha-garden-v1-doc",
+      "title": "پرونده دانش گردشگری: باغ دلگشا",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Delgosha_Garden",
+      "source_key": "wikipedia-delgosha-garden",
+      "raw_content": "نام: باغ دلگشا\nنام انگلیسی: Delgosha Garden\nنوع رکورد: historic_garden\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: باغ دلگشا باغی تاریخی در شیراز و در نزدیکی آرامگاه سعدی است. مختصات ذخیره‌شده نقطهٔ مرجع مقالهٔ جغرافیایی است و به‌معنای ورودی باغ نیست.\nنقطه مرجع جغرافیایی: عرض 29.6197, طول 52.5751\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo باغ دلگشا را در فهرست جاذبه‌های شیراز آورده؛ Wikipedia موقعیت نزدیک سعدیه و مختصات را پشتیبانی می‌کند.",
+      "chunk_index": 0,
+      "char_count": 510,
+      "content_sha256": "218e58fabc048fe291b9a9a4338ff1abaf1f6983bc6563d28c044c96da3cd2da",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-vakil-bathhouse-v1-doc",
+      "title": "پرونده دانش گردشگری: حمام وکیل",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Vakil_Bathhouse",
+      "source_key": "wikipedia-vakil-bathhouse",
+      "raw_content": "نام: حمام وکیل\nنام انگلیسی: Vakil Bathhouse\nنوع رکورد: historic_bathhouse\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: حمام وکیل از بناهای تاریخی مجموعهٔ وکیل در شیراز و متعلق به دورهٔ زندیه است. این بنا نمونه‌ای از حمام عمومی سنتی ایرانی در بافت تاریخی شهر به‌شمار می‌رود.\nنقطه مرجع جغرافیایی: عرض 29.61477, طول 52.54512\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo حمام وکیل را در فهرست جاذبه‌های شیراز آورده؛ Wikipedia برای هویت بنا، دوره تاریخی و مختصات استفاده شده است.",
+      "chunk_index": 0,
+      "char_count": 538,
+      "content_sha256": "a9d9fca9a415b6caaa38a4792c3de484109e30f9ed8df8985d2881515b97fe70",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-shah-cheragh-v1-doc",
+      "title": "پرونده دانش گردشگری: شاه‌چراغ",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Shah_Cheragh",
+      "source_key": "wikipedia-shah-cheragh",
+      "raw_content": "نام: شاه‌چراغ\nنام انگلیسی: Shah Cheragh\nنوع رکورد: religious_complex\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: شاه‌چراغ مجموعه‌ای زیارتی و مذهبی در شیراز است که با آرامگاه احمد بن موسی شناخته می‌شود. مختصات این رکورد نقطهٔ مرجع مجموعه است و ورودی کنترل‌شده یا مسیر دسترسی را مشخص نمی‌کند.\nنقطه مرجع جغرافیایی: عرض 29.609611, طول 52.543306\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo شاه‌چراغ را در فهرست جاذبه‌های شیراز می‌آورد؛ Wikipedia هویت مجموعه و مختصات مقاله را پشتیبانی می‌کند.",
+      "chunk_index": 0,
+      "char_count": 553,
+      "content_sha256": "65d5f17ff21dc794cbe167cf2490aa6fd8974660690eac788cf43810b74b9338",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-vakil-bazaar-v1-doc",
+      "title": "پرونده دانش گردشگری: بازار وکیل",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Vakil_Bazaar",
+      "source_key": "wikipedia-vakil-bazaar",
+      "raw_content": "نام: بازار وکیل\nنام انگلیسی: Vakil Bazaar\nنوع رکورد: historic_bazaar\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: بازار وکیل از بازارهای تاریخی مرکز شیراز و از آثار مرتبط با دورهٔ زندیه است. مختصات ثبت‌شده نقطهٔ مرجع بازار است؛ برای مسیریابی دقیق باید ورودی یا گذر موردنظر جداگانه مشخص شود.\nنقطه مرجع جغرافیایی: عرض 29.6149806, طول 52.5467972\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Dalahoo بازار وکیل را در فهرست جاذبه‌های شیراز می‌آورد؛ Wikipedia برای موقعیت مرکزی و مختصات مقاله استفاده شده است.",
+      "chunk_index": 0,
+      "char_count": 559,
+      "content_sha256": "0734075a463d821d1674afd0e112fd91ba5bfbba3252fc31fc6148bc9867a4a3",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-nasir-ol-molk-v1-doc",
+      "title": "پرونده دانش گردشگری: مسجد نصیرالملک",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Nasir-ol-Molk_Mosque",
+      "source_key": "wikipedia-nasir-ol-molk",
+      "raw_content": "نام: مسجد نصیرالملک\nنام انگلیسی: Nasir-ol-Molk Mosque / Pink Mosque\nنوع رکورد: historic_mosque\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: مسجد نصیرالملک در محلهٔ گود عربان شیراز قرار دارد. ساخت آن در دورهٔ قاجار آغاز شد و در سال ۱۸۸۸ میلادی تکمیل شد؛ شیشه‌های رنگی و آرایه‌های معماری آن از ویژگی‌های شناخته‌شدهٔ بنا هستند.\nنقطه مرجع جغرافیایی: عرض 29.60861, طول 52.54833\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: صفحه Wikipedia — Nasir-ol-Molk Mosque موقعیت، دوره ساخت، سال تکمیل و مختصات را گزارش می‌کند؛ در فهرست صفحه اختصاصی دالاهو که بررسی شد نام این مسجد به‌طور قطعی در فهرست جاذبه‌ها احراز نشد، بنابراین منبع دالاهو به آن نسبت داده نشده است.",
+      "chunk_index": 0,
+      "char_count": 708,
+      "content_sha256": "1bd686f2bf690664c21d13b7d57eccdbcb26b5e95d0cc7f862ad4b4418c21587",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-afifabad-garden-v1-doc",
+      "title": "پرونده دانش گردشگری: باغ عفیف‌آباد (باغ گلشن)",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Afif-Abad_Garden",
+      "source_key": "wikipedia-afifabad",
+      "raw_content": "نام: باغ عفیف‌آباد (باغ گلشن)\nنام انگلیسی: Afif-Abad Garden / Gulshan Garden\nنوع رکورد: historic_garden_museum\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: باغ عفیف‌آباد که با نام باغ گلشن نیز شناخته می‌شود، مجموعه‌ای از باغ و عمارت تاریخی در شیراز است و در منابع معرفی‌شده کارکرد موزه‌ای نیز برای آن ذکر شده است.\nنقطه مرجع جغرافیایی: عرض 29.6231611, طول 52.498361\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Wikipedia — Afif-Abad Garden هویت مجموعه، جایگاه آن در شیراز و مختصات را پشتیبانی می‌کند؛ Dalahoo Shiraz guide به‌عنوان منبع اختصاصی این رکورد استفاده نشده است.",
+      "chunk_index": 0,
+      "char_count": 626,
+      "content_sha256": "bc0c85313adadb7d798b1b35b3fa882f3d33c6393c1dd63a3deb678ed0fa2289",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-naqsh-e-rostam-v1-doc",
+      "title": "پرونده دانش گردشگری: نقش رستم",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://en.wikipedia.org/wiki/Naqsh-e_Rostam",
+      "source_key": "wikipedia-naqsh-e-rostam",
+      "raw_content": "نام: نقش رستم\nنام انگلیسی: Naqsh-e Rostam\nنوع رکورد: archaeological_necropolis\nاستان: فارس\nشهر/محدوده: مرودشت\nدامنه مکانی: nearby_trip\nتوضیح: نقش رستم محوطه‌ای باستانی و آرامستان شاهی در شهرستان مرودشت استان فارس است؛ حدود ۱۳ کیلومتر شمال‌غرب تخت‌جمشید قرار دارد و آرامگاه‌های صخره‌ای هخامنشی و نقش‌برجسته‌های دورهٔ ساسانی را دربرمی‌گیرد. این مکان داخل محدودهٔ شهری شیراز نیست و باید به‌عنوان سفر جداگانهٔ اطراف شیراز در نظر گرفته شود.\nنقطه مرجع جغرافیایی: عرض 29.98889, طول 52.87472\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: Wikipedia موقعیت نقش‌رستم در مرودشت و فاصله تقریبی آن تا تخت‌جمشید را گزارش می‌کند؛ Dalahoo آن را در محتوای مقصد شیراز/تورهای مرتبط فهرست می‌کند. این رابطه به‌معنای قرارگیری در شهر شیراز نیست.",
+      "chunk_index": 0,
+      "char_count": 764,
+      "content_sha256": "a91a4a3908378b5c1ba632bbb7c1f3e46db542dad278a3b175629f9361196ed2",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-shirazi-polo-v1-doc",
+      "title": "پرونده دانش گردشگری: شیرازی‌پلو",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+      "source_key": "dalahoo-shiraz-guide",
+      "raw_content": "نام: شیرازی‌پلو\nنام انگلیسی: Shirazi Polo\nنوع رکورد: food_dish\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: دالاهو شیرازی‌پلو را در معرفی خوراک‌های محلی شیراز نام می‌برد و برای آن ترکیبی از برنج، مرغ، بادمجان و زرشک را ذکر می‌کند. این توصیف بازنویسی منبع است و جایگزین دستور پخت منطقه‌ای یا استاندارد واحد نیست.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "chunk_index": 0,
+      "char_count": 517,
+      "content_sha256": "28580753336d4245af47911e503fde532eb3aea829b0878a72f7874ea6805214",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-shakar-polo-v1-doc",
+      "title": "پرونده دانش گردشگری: شکرپلو",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+      "source_key": "dalahoo-shiraz-guide",
+      "raw_content": "نام: شکرپلو\nنام انگلیسی: Shakar Polo\nنوع رکورد: food_dish\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: دالاهو شکرپلو را از غذاهای محلی مرتبط با شیراز معرفی می‌کند و می‌گوید معمولاً در کنار خورش قیمه سرو می‌شود. جزئیات مواد اولیه و دستور تهیه در این رکورد فراتر از منبع گسترش داده نشده است.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "chunk_index": 0,
+      "char_count": 495,
+      "content_sha256": "f6a94ed0ff3a7180a1aca315f0e0f3c05ecab04b407bdabdaa2cfbbc6e217f96",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-ghormeh-beh-v1-doc",
+      "title": "پرونده دانش گردشگری: قورمه‌به",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+      "source_key": "dalahoo-shiraz-guide",
+      "raw_content": "نام: قورمه‌به\nنام انگلیسی: Ghormeh Beh\nنوع رکورد: food_dish\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: نام قورمه‌به در فهرست غذاهای محلی معرفی‌شده برای شیراز در صفحهٔ دالاهو آمده است. مواد اولیه، دستور، شیوهٔ سرو و محل‌های ارائه در این منبع به‌اندازه‌ای مستند نشده که به‌صورت ویژگی قطعی ثبت شود.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "chunk_index": 0,
+      "char_count": 503,
+      "content_sha256": "68ccfa3b62c1d6fbe995c8699578fd2db5b68b8837a0a11a02d2b192277f6678",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-do-piazeh-aloo-v1-doc",
+      "title": "پرونده دانش گردشگری: دوپیازه‌آلو",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+      "source_key": "dalahoo-shiraz-guide",
+      "raw_content": "نام: دوپیازه‌آلو\nنام انگلیسی: Do Piazeh Aloo\nنوع رکورد: food_dish\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: نام دوپیازه‌آلو در فهرست غذاهای محلی معرفی‌شده برای شیراز در صفحهٔ دالاهو آمده است. این رکورد فقط حضور نام در فهرست منبع را ثبت می‌کند و دربارهٔ مواد اولیه یا دستور تهیه ادعای مستقلی ندارد.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "chunk_index": 0,
+      "char_count": 506,
+      "content_sha256": "f185ec63b69c624e2dff0ad7143e33381afabaee105f8e9e2a9e5897d7a0a5c8",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-kalam-polo-v1-doc",
+      "title": "پرونده دانش گردشگری: کلم‌پلو شیرازی",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+      "source_key": "dalahoo-shiraz-guide",
+      "raw_content": "نام: کلم‌پلو شیرازی\nنام انگلیسی: Shirazi Kalam Polo\nنوع رکورد: food_dish\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: کلم‌پلو شیرازی در فهرست خوراک‌های محلی صفحهٔ دالاهو برای شیراز ذکر شده است. این رکورد برای شناسایی تجربهٔ غذایی است؛ دستور، مواد اولیه و کیفیت رستوران‌ها جداگانه نیازمند منبع‌اند.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "chunk_index": 0,
+      "char_count": 503,
+      "content_sha256": "b437e7b6841c72f89d2f7128bce5631ad9fbf094548ba258dfcc029c94822e3a",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-rob-polo-v1-doc",
+      "title": "پرونده دانش گردشگری: رب‌پلو",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+      "source_key": "dalahoo-shiraz-guide",
+      "raw_content": "نام: رب‌پلو\nنام انگلیسی: Rob Polo\nنوع رکورد: food_dish\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: رب‌پلو در فهرست خوراک‌های محلی صفحهٔ دالاهو برای شیراز ذکر شده است. جزئیات دستور و ترکیب مواد در رکورد فعلی تأیید نشده و عمداً حدس زده نشده است.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "chunk_index": 0,
+      "char_count": 450,
+      "content_sha256": "604c8c98aeda6450b1db5fd65956c6f3a232cea75b1fc8090d53ae12c5974ee9",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-masghati-v1-doc",
+      "title": "پرونده دانش گردشگری: مسقطی",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+      "source_key": "dalahoo-shiraz-guide",
+      "raw_content": "نام: مسقطی\nنام انگلیسی: Masghati\nنوع رکورد: local_sweet\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: مسقطی در بخش خوراکی‌ها و سوغات مرتبط با شیراز در صفحهٔ دالاهو نام برده شده است. این رکورد نوع خوراکی را ثبت می‌کند؛ تولیدکننده، فروشگاه و دستور دقیق آن هنوز مستند نشده‌اند.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "chunk_index": 0,
+      "char_count": 479,
+      "content_sha256": "cd086afdf455a4119da56e77d54150acbc52c8b9ae5be08527ac217481092d59",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-kak-v1-doc",
+      "title": "پرونده دانش گردشگری: کاک",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+      "source_key": "dalahoo-shiraz-guide",
+      "raw_content": "نام: کاک\nنام انگلیسی: Kak\nنوع رکورد: local_sweet\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: کاک در فهرست خوراکی‌ها و سوغات مرتبط با شیراز در صفحهٔ دالاهو نام برده شده است. این رکورد تنها نام محصول را به مقصد مرتبط می‌کند و دربارهٔ مواد اولیه یا فروشندگان ادعایی ندارد.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "chunk_index": 0,
+      "char_count": 476,
+      "content_sha256": "368c77bf9404060801882f729a1bb87ffaced010f86de441410c030162dccc56",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "shiraz-bidmeshk-distillate-v1-doc",
+      "title": "پرونده دانش گردشگری: عرق بیدمشک",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://dalahoo.com/destination.cfm?id=17785&loc=1",
+      "source_key": "dalahoo-shiraz-guide",
+      "raw_content": "نام: عرق بیدمشک\nنام انگلیسی: Bidmeshk Distillate\nنوع رکورد: local_drink\nاستان: فارس\nشهر/محدوده: شیراز\nدامنه مکانی: in_city\nتوضیح: عرق بیدمشک در بخش عرقیات و خوراکی‌های محلی/سوغات صفحهٔ دالاهو برای شیراز ذکر شده است. این رکورد به محصول محلی اشاره دارد و محل تولید، فروشنده یا ویژگی‌های درمانی را ادعا نمی‌کند.\nیادداشت شواهد: صفحهٔ مقصد شیراز دالاهو نام این خوراکی/محصول را در فهرست خوراک‌های محلی یا سوغات مرتبط با شیراز آورده است. برای اقلامی که توضیح تفصیلی ندارند، فقط نام و پیوند مکانی ثبت شده است.",
+      "chunk_index": 0,
+      "char_count": 501,
+      "content_sha256": "92994be2ff35d3a1c0a96d728e5962ed340490f5e9ba93053cfe0a72e221f7b6",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    },
+    {
+      "document_key": "maragheh-observatory-v1-doc",
+      "title": "پرونده دانش گردشگری: رصدخانه مراغه",
+      "language_code": "fa",
+      "document_type": "destination_profile",
+      "canonical_url": "https://web.astronomicalheritage.net/index.php/show-entity?identity=29&idsubentity=1&tmpl=system",
+      "source_key": "astronomical-heritage-maragheh",
+      "raw_content": "نام: رصدخانه مراغه\nنام انگلیسی: Maragheh Observatory\nنوع رکورد: historical_astronomical_site\nاستان: آذربایجان شرقی\nشهر/محدوده: مراغه\nدامنه مکانی: existing_destination_enrichment\nتوضیح: رصدخانهٔ مراغه در تپهٔ رصد داغی در شمال‌غرب شهر مراغه قرار دارد و در سدهٔ هفتم هجری به فرمان هلاکوخان و با سرپرستی خواجه نصیرالدین طوسی ساخته شد. این مجموعه از مراکز مهم رصد و پژوهش نجومی در جهان اسلام در سدهٔ میانه بود.\nنقطه مرجع جغرافیایی: عرض 37.396111, طول 46.209167\nمعنای مختصات: representative_point؛ این مختصات ورودی بازدیدکنندگان نیست.\nیادداشت شواهد: مرجع نهادی میراث نجومی تاریخ و مختصات منتشرشده را پشتیبانی می‌کند؛ دالاهو برای معرفی گردشگری و Mapcarta/OSM برای کنترل مستقل مکانی استفاده شده است.",
+      "chunk_index": 0,
+      "char_count": 691,
+      "content_sha256": "08fe0d7ada30bccf304fa45ba01f874e884a00d44997d57fc93028120d5def28",
+      "record_origin": "verified_external",
+      "is_synthetic": false,
+      "ingestion_status": "processed"
+    }
+  ]
+}

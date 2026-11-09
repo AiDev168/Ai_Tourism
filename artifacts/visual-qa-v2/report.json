@@ -1,0 +1,1760 @@
+{
+  "generatedAt": "2026-11-07T03:22:49.968Z",
+  "browser": "Installed Google Chrome, headless",
+  "cases": 18,
+  "offlineCheck": {
+    "controlled": true,
+    "shell": true,
+    "imageCached": true,
+    "fontCached": true
+  },
+  "failures": [],
+  "results": [
+    {
+      "locale": "fa-IR",
+      "width": 360,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 36,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "برداشت ما از سفرت\nپاک‌کردن پیش‌نویس\n\nاین فقط استخراج از متن خودت است؛ نام مقصد تأیید یا راستی‌آزمایی نشده است.\n\nفعلاً امکان بررسی مقصد در فهرست تأییدشده را نداریم. نامی که نوشته‌ای همان‌طور حفظ شده؛ می‌توانی آن را ویرایش یا روشن‌تر کنی. شیراز\n\nمقصدها (به ترتیب)\nشیراز\nمتن اصلی درخواست\nسفر ۳ روزه به شیراز به همراه خانواده\nمدت درخواستی\n۳ روز\nتعداد همراهان\nدر متن مشخص نشده\nبودجه و واحد گفته‌شده\nدر متن مشخص نشده\nعلایق گفته‌شده\nدر متن مشخص نشده\nتاریخ سفر\nدر متن مشخص نشده\nترجیحات و محدودیت‌ها\nدر متن مشخص نشده",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "mixedScriptLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "editLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/fa-IR/360.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 390,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 36,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "برداشت ما از سفرت\nپاک‌کردن پیش‌نویس\n\nاین فقط استخراج از متن خودت است؛ نام مقصد تأیید یا راستی‌آزمایی نشده است.\n\nفعلاً امکان بررسی مقصد در فهرست تأییدشده را نداریم. نامی که نوشته‌ای همان‌طور حفظ شده؛ می‌توانی آن را ویرایش یا روشن‌تر کنی. شیراز\n\nمقصدها (به ترتیب)\nشیراز\nمتن اصلی درخواست\nسفر ۳ روزه به شیراز به همراه خانواده\nمدت درخواستی\n۳ روز\nتعداد همراهان\nدر متن مشخص نشده\nبودجه و واحد گفته‌شده\nدر متن مشخص نشده\nعلایق گفته‌شده\nدر متن مشخص نشده\nتاریخ سفر\nدر متن مشخص نشده\nترجیحات و محدودیت‌ها\nدر متن مشخص نشده",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "mixedScriptLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "editLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/fa-IR/390.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 430,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 36,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "برداشت ما از سفرت\nپاک‌کردن پیش‌نویس\n\nاین فقط استخراج از متن خودت است؛ نام مقصد تأیید یا راستی‌آزمایی نشده است.\n\nفعلاً امکان بررسی مقصد در فهرست تأییدشده را نداریم. نامی که نوشته‌ای همان‌طور حفظ شده؛ می‌توانی آن را ویرایش یا روشن‌تر کنی. شیراز\n\nمقصدها (به ترتیب)\nشیراز\nمتن اصلی درخواست\nسفر ۳ روزه به شیراز به همراه خانواده\nمدت درخواستی\n۳ روز\nتعداد همراهان\nدر متن مشخص نشده\nبودجه و واحد گفته‌شده\nدر متن مشخص نشده\nعلایق گفته‌شده\nدر متن مشخص نشده\nتاریخ سفر\nدر متن مشخص نشده\nترجیحات و محدودیت‌ها\nدر متن مشخص نشده",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "mixedScriptLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "editLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/fa-IR/430.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 768,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 36,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "برداشت ما از سفرت\nپاک‌کردن پیش‌نویس\n\nاین فقط استخراج از متن خودت است؛ نام مقصد تأیید یا راستی‌آزمایی نشده است.\n\nفعلاً امکان بررسی مقصد در فهرست تأییدشده را نداریم. نامی که نوشته‌ای همان‌طور حفظ شده؛ می‌توانی آن را ویرایش یا روشن‌تر کنی. شیراز\n\nمقصدها (به ترتیب)\nشیراز\nمتن اصلی درخواست\nسفر ۳ روزه به شیراز به همراه خانواده\nمدت درخواستی\n۳ روز\nتعداد همراهان\nدر متن مشخص نشده\nبودجه و واحد گفته‌شده\nدر متن مشخص نشده\nعلایق گفته‌شده\nدر متن مشخص نشده\nتاریخ سفر\nدر متن مشخص نشده\nترجیحات و محدودیت‌ها\nدر متن مشخص نشده",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "mixedScriptLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "editLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/fa-IR/768.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 1024,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 36,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "برداشت ما از سفرت\nپاک‌کردن پیش‌نویس\n\nاین فقط استخراج از متن خودت است؛ نام مقصد تأیید یا راستی‌آزمایی نشده است.\n\nفعلاً امکان بررسی مقصد در فهرست تأییدشده را نداریم. نامی که نوشته‌ای همان‌طور حفظ شده؛ می‌توانی آن را ویرایش یا روشن‌تر کنی. شیراز\n\nمقصدها (به ترتیب)\nشیراز\nمتن اصلی درخواست\nسفر ۳ روزه به شیراز به همراه خانواده\nمدت درخواستی\n۳ روز\nتعداد همراهان\nدر متن مشخص نشده\nبودجه و واحد گفته‌شده\nدر متن مشخص نشده\nعلایق گفته‌شده\nدر متن مشخص نشده\nتاریخ سفر\nدر متن مشخص نشده\nترجیحات و محدودیت‌ها\nدر متن مشخص نشده",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "mixedScriptLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "editLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/fa-IR/1024.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 1440,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 36,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "برداشت ما از سفرت\nپاک‌کردن پیش‌نویس\n\nاین فقط استخراج از متن خودت است؛ نام مقصد تأیید یا راستی‌آزمایی نشده است.\n\nفعلاً امکان بررسی مقصد در فهرست تأییدشده را نداریم. نامی که نوشته‌ای همان‌طور حفظ شده؛ می‌توانی آن را ویرایش یا روشن‌تر کنی. شیراز\n\nمقصدها (به ترتیب)\nشیراز\nمتن اصلی درخواست\nسفر ۳ روزه به شیراز به همراه خانواده\nمدت درخواستی\n۳ روز\nتعداد همراهان\nدر متن مشخص نشده\nبودجه و واحد گفته‌شده\nدر متن مشخص نشده\nعلایق گفته‌شده\nدر متن مشخص نشده\nتاریخ سفر\nدر متن مشخص نشده\nترجیحات و محدودیت‌ها\nدر متن مشخص نشده",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "mixedScriptLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "editLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/fa-IR/1440.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 360,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 39,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "What we understood about your trip\nClear draft\n\nThis is an extraction from your own text. Destinations have not been verified.\n\nWe cannot check this name against the approved destination list right now. Your wording is preserved; you can edit it or add detail. Shiraz\n\nDestinations (in order)\nShiraz\nOriginal request\nPlan a three-day family trip to Shiraz.\nRequested duration\n3 days\nTravelers\nNot specified in your message\nBudget and stated unit\nNot specified in your message\nStated interests\nNot specified in your message\nTravel dates\nNot specified in your message\nPreferences and constraints\nNot specified in your message",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "mixedScriptLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "editLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/en-US/360.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 390,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 39,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "What we understood about your trip\nClear draft\n\nThis is an extraction from your own text. Destinations have not been verified.\n\nWe cannot check this name against the approved destination list right now. Your wording is preserved; you can edit it or add detail. Shiraz\n\nDestinations (in order)\nShiraz\nOriginal request\nPlan a three-day family trip to Shiraz.\nRequested duration\n3 days\nTravelers\nNot specified in your message\nBudget and stated unit\nNot specified in your message\nStated interests\nNot specified in your message\nTravel dates\nNot specified in your message\nPreferences and constraints\nNot specified in your message",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "mixedScriptLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "editLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/en-US/390.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 430,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 39,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "What we understood about your trip\nClear draft\n\nThis is an extraction from your own text. Destinations have not been verified.\n\nWe cannot check this name against the approved destination list right now. Your wording is preserved; you can edit it or add detail. Shiraz\n\nDestinations (in order)\nShiraz\nOriginal request\nPlan a three-day family trip to Shiraz.\nRequested duration\n3 days\nTravelers\nNot specified in your message\nBudget and stated unit\nNot specified in your message\nStated interests\nNot specified in your message\nTravel dates\nNot specified in your message\nPreferences and constraints\nNot specified in your message",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "mixedScriptLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "editLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/en-US/430.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 768,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 39,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "What we understood about your trip\nClear draft\n\nThis is an extraction from your own text. Destinations have not been verified.\n\nWe cannot check this name against the approved destination list right now. Your wording is preserved; you can edit it or add detail. Shiraz\n\nDestinations (in order)\nShiraz\nOriginal request\nPlan a three-day family trip to Shiraz.\nRequested duration\n3 days\nTravelers\nNot specified in your message\nBudget and stated unit\nNot specified in your message\nStated interests\nNot specified in your message\nTravel dates\nNot specified in your message\nPreferences and constraints\nNot specified in your message",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "mixedScriptLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "editLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/en-US/768.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 1024,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 39,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "What we understood about your trip\nClear draft\n\nThis is an extraction from your own text. Destinations have not been verified.\n\nWe cannot check this name against the approved destination list right now. Your wording is preserved; you can edit it or add detail. Shiraz\n\nDestinations (in order)\nShiraz\nOriginal request\nPlan a three-day family trip to Shiraz.\nRequested duration\n3 days\nTravelers\nNot specified in your message\nBudget and stated unit\nNot specified in your message\nStated interests\nNot specified in your message\nTravel dates\nNot specified in your message\nPreferences and constraints\nNot specified in your message",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "mixedScriptLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "editLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/en-US/1024.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 1440,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 39,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "What we understood about your trip\nClear draft\n\nThis is an extraction from your own text. Destinations have not been verified.\n\nWe cannot check this name against the approved destination list right now. Your wording is preserved; you can edit it or add detail. Shiraz\n\nDestinations (in order)\nShiraz\nOriginal request\nPlan a three-day family trip to Shiraz.\nRequested duration\n3 days\nTravelers\nNot specified in your message\nBudget and stated unit\nNot specified in your message\nStated interests\nNot specified in your message\nTravel dates\nNot specified in your message\nPreferences and constraints\nNot specified in your message",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "mixedScriptLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "editLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/en-US/1440.png"
+    },
+    {
+      "locale": "ar",
+      "width": 360,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 42,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "ما فهمناه عن رحلتك\nمسح المسودة\n\nهذا استخلاص من نصك فقط؛ لم يتم التحقق من الوجهات.\n\nلا يمكننا مطابقة هذا الاسم مع قائمة الوجهات المعتمدة الآن. احتفظنا بعبارتك كما كتبتها؛ يمكنك تعديلها أو إضافة توضيح. شيراز\n\nالوجهات بالترتيب\nشيراز\nنص الطلب الأصلي\nرحلة لمدة ثلاثة أيام إلى شيراز مع العائلة.\nالمدة المطلوبة\n٣ أيام\nعدد المسافرين\nغير محدد في رسالتك\nالميزانية والوحدة المذكورة\nغير محدد في رسالتك\nالاهتمامات المذكورة\nغير محدد في رسالتك\nتواريخ السفر\nغير محدد في رسالتك\nالتفضيلات والقيود\nغير محدد في رسالتك",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "mixedScriptLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "editLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/ar/360.png"
+    },
+    {
+      "locale": "ar",
+      "width": 390,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 42,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "ما فهمناه عن رحلتك\nمسح المسودة\n\nهذا استخلاص من نصك فقط؛ لم يتم التحقق من الوجهات.\n\nلا يمكننا مطابقة هذا الاسم مع قائمة الوجهات المعتمدة الآن. احتفظنا بعبارتك كما كتبتها؛ يمكنك تعديلها أو إضافة توضيح. شيراز\n\nالوجهات بالترتيب\nشيراز\nنص الطلب الأصلي\nرحلة لمدة ثلاثة أيام إلى شيراز مع العائلة.\nالمدة المطلوبة\n٣ أيام\nعدد المسافرين\nغير محدد في رسالتك\nالميزانية والوحدة المذكورة\nغير محدد في رسالتك\nالاهتمامات المذكورة\nغير محدد في رسالتك\nتواريخ السفر\nغير محدد في رسالتك\nالتفضيلات والقيود\nغير محدد في رسالتك",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "mixedScriptLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "editLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/ar/390.png"
+    },
+    {
+      "locale": "ar",
+      "width": 430,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 42,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "ما فهمناه عن رحلتك\nمسح المسودة\n\nهذا استخلاص من نصك فقط؛ لم يتم التحقق من الوجهات.\n\nلا يمكننا مطابقة هذا الاسم مع قائمة الوجهات المعتمدة الآن. احتفظنا بعبارتك كما كتبتها؛ يمكنك تعديلها أو إضافة توضيح. شيراز\n\nالوجهات بالترتيب\nشيراز\nنص الطلب الأصلي\nرحلة لمدة ثلاثة أيام إلى شيراز مع العائلة.\nالمدة المطلوبة\n٣ أيام\nعدد المسافرين\nغير محدد في رسالتك\nالميزانية والوحدة المذكورة\nغير محدد في رسالتك\nالاهتمامات المذكورة\nغير محدد في رسالتك\nتواريخ السفر\nغير محدد في رسالتك\nالتفضيلات والقيود\nغير محدد في رسالتك",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "mixedScriptLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "editLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/ar/430.png"
+    },
+    {
+      "locale": "ar",
+      "width": 768,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 42,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "ما فهمناه عن رحلتك\nمسح المسودة\n\nهذا استخلاص من نصك فقط؛ لم يتم التحقق من الوجهات.\n\nلا يمكننا مطابقة هذا الاسم مع قائمة الوجهات المعتمدة الآن. احتفظنا بعبارتك كما كتبتها؛ يمكنك تعديلها أو إضافة توضيح. شيراز\n\nالوجهات بالترتيب\nشيراز\nنص الطلب الأصلي\nرحلة لمدة ثلاثة أيام إلى شيراز مع العائلة.\nالمدة المطلوبة\n٣ أيام\nعدد المسافرين\nغير محدد في رسالتك\nالميزانية والوحدة المذكورة\nغير محدد في رسالتك\nالاهتمامات المذكورة\nغير محدد في رسالتك\nتواريخ السفر\nغير محدد في رسالتك\nالتفضيلات والقيود\nغير محدد في رسالتك",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "mixedScriptLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "editLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/ar/768.png"
+    },
+    {
+      "locale": "ar",
+      "width": 1024,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 42,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "ما فهمناه عن رحلتك\nمسح المسودة\n\nهذا استخلاص من نصك فقط؛ لم يتم التحقق من الوجهات.\n\nلا يمكننا مطابقة هذا الاسم مع قائمة الوجهات المعتمدة الآن. احتفظنا بعبارتك كما كتبتها؛ يمكنك تعديلها أو إضافة توضيح. شيراز\n\nالوجهات بالترتيب\nشيراز\nنص الطلب الأصلي\nرحلة لمدة ثلاثة أيام إلى شيراز مع العائلة.\nالمدة المطلوبة\n٣ أيام\nعدد المسافرين\nغير محدد في رسالتك\nالميزانية والوحدة المذكورة\nغير محدد في رسالتك\nالاهتمامات المذكورة\nغير محدد في رسالتك\nتواريخ السفر\nغير محدد في رسالتك\nالتفضيلات والقيود\nغير محدد في رسالتك",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "mixedScriptLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "editLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/ar/1024.png"
+    },
+    {
+      "locale": "ar",
+      "width": 1440,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 42,
+      "clarificationCount": 0,
+      "intakeReady": true,
+      "intakeSummary": "ما فهمناه عن رحلتك\nمسح المسودة\n\nهذا استخلاص من نصك فقط؛ لم يتم التحقق من الوجهات.\n\nلا يمكننا مطابقة هذا الاسم مع قائمة الوجهات المعتمدة الآن. احتفظنا بعبارتك كما كتبتها؛ يمكنك تعديلها أو إضافة توضيح. شيراز\n\nالوجهات بالترتيب\nشيراز\nنص الطلب الأصلي\nرحلة لمدة ثلاثة أيام إلى شيراز مع العائلة.\nالمدة المطلوبة\n٣ أيام\nعدد المسافرين\nغير محدد في رسالتك\nالميزانية والوحدة المذكورة\nغير محدد في رسالتك\nالاهتمامات المذكورة\nغير محدد في رسالتك\nتواريخ السفر\nغير محدد في رسالتك\nالتفضيلات والقيود\nغير محدد في رسالتك",
+      "capturedRequestText": true,
+      "catalogueUnavailableShown": true,
+      "staleSummaryCleared": true,
+      "staleResolutionCleared": true,
+      "clarificationShown": true,
+      "separateFieldsRemoved": true,
+      "daysScenarios": [
+        {
+          "days": 4,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 7,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 14,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        },
+        {
+          "days": 30,
+          "ready": true,
+          "preservesText": true,
+          "includesLocalizedDayCount": true,
+          "hasUnavailableResolution": true
+        }
+      ],
+      "sameOrigin404s": [],
+      "mixedDestinationLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "mixedScriptLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "editLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa-v2/ar/1440.png"
+    }
+  ]
+}

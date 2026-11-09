@@ -3,7 +3,16 @@
 DO $$
 DECLARE
     n BIGINT;
+    expected_source_links BIGINT;
 BEGIN
+    IF EXISTS (
+        SELECT 1 FROM system.schema_migrations
+        WHERE migration_id='0007_shiraz_dalahoo_wikipedia_dataset_v1'
+    ) THEN
+        expected_source_links := 24;
+    ELSE
+        expected_source_links := 22;
+    END IF;
     SELECT COUNT(*) INTO n
       FROM knowledge.destinations
      WHERE destination_key LIKE 'unesco-%-v1'
@@ -15,18 +24,25 @@ BEGIN
        AND location IS NOT NULL;
     IF n <> 10 THEN RAISE EXCEPTION 'Expected 10 externally sourced UNESCO destinations held for editorial review; found %', n; END IF;
 
-    SELECT COUNT(*) INTO n
-      FROM knowledge.knowledge_sources
-     WHERE source_name LIKE 'UNESCO WHC %'
-       AND verification_status='verified' AND is_synthetic=FALSE
-       AND url LIKE 'https://whc.unesco.org/%';
-    IF n <> 20 THEN RAISE EXCEPTION 'Expected 20 official UNESCO property/map sources; found %', n; END IF;
+    -- Keep this first-batch assertion scoped to its ten destinations.
+    -- Later UNESCO batches add sources to the same global source table.
+    SELECT COUNT(DISTINCT s.source_id) INTO n
+      FROM knowledge.knowledge_sources s
+      JOIN knowledge.destination_sources ds ON ds.source_id=s.source_id
+      JOIN knowledge.destinations d ON d.destination_id=ds.destination_id
+     WHERE d.destination_key LIKE 'unesco-%-v1'
+       AND s.source_name LIKE 'UNESCO WHC %'
+       AND s.verification_status='verified' AND s.is_synthetic=FALSE
+       AND s.url LIKE 'https://whc.unesco.org/%';
+    IF n <> 20 THEN RAISE EXCEPTION 'Expected 20 official UNESCO property/map sources for the first batch; found %', n; END IF;
 
     SELECT COUNT(*) INTO n
       FROM knowledge.destination_sources ds
       JOIN knowledge.destinations d ON d.destination_id=ds.destination_id
      WHERE d.destination_key LIKE 'unesco-%-v1';
-    IF n <> 22 THEN RAISE EXCEPTION 'Expected 22 source links for the 10 UNESCO sites; found %', n; END IF;
+    IF n <> expected_source_links THEN
+        RAISE EXCEPTION 'Expected % UNESCO source links for the detected migration state, found %', expected_source_links, n;
+    END IF;
 
     SELECT COUNT(*) INTO n
       FROM knowledge.destination_sources ds
@@ -133,5 +149,5 @@ BEGIN
              OR c.content_sha256 <> encode(sha256(convert_to(c.content,'UTF8')),'hex'))
     ) THEN RAISE EXCEPTION 'A stored factual chunk character count or hash is invalid'; END IF;
 
-    RAISE NOTICE 'PASS: 10 UNESCO factual records, 20 official and 2 supplemental provenance links, exact source/document links, coordinates, 10 docs, 20 chunks, hashes and editorial publication gate.';
+    RAISE NOTICE 'PASS: 10 UNESCO factual records, 20 official and 2 supplemental provenance links, two separate nearby discovery links, exact source/document links, coordinates, 10 docs, 20 chunks, hashes and editorial publication gate.';
 END $$;

@@ -10,6 +10,9 @@ DECLARE
     v_document_id UUID;
     v_chunk_id UUID;
     v_space_id UUID;
+    v_synthetic_source_id BIGINT;
+    v_synthetic_destination_id BIGINT;
+    v_synthetic_document_id UUID;
     v_count BIGINT;
 BEGIN
     -- Empty initial state: nothing supplied by the legacy/unverified or synthetic
@@ -134,6 +137,50 @@ BEGIN
     SELECT COUNT(*) INTO v_count FROM knowledge.production_chunk_embeddings
      WHERE chunk_id = v_chunk_id AND embedding_space_id = v_space_id;
     IF v_count <> 1 THEN RAISE EXCEPTION 'Embedding for eligible chunk/space did not enter retrieval view'; END IF;
+
+    -- Synthetic QA content remains excluded even when it is marked active and
+    -- has an otherwise verified source. This prevents fixtures becoming candidates.
+    INSERT INTO knowledge.knowledge_sources
+        (source_name, source_type, verification_status, reliability_score, url, notes, is_synthetic)
+    VALUES
+        ('TEMP synthetic publication-gate control', 'test_control', 'verified', 1.0,
+         'https://example.invalid/temporary-synthetic-control', 'Synthetic control; transaction-only.', TRUE)
+    RETURNING source_id INTO v_synthetic_source_id;
+
+    INSERT INTO knowledge.destinations
+        (destination_key, canonical_name, destination_type, province_name, city_name,
+         description, latitude, longitude, coordinate_role, status, data_confidence,
+         record_origin, verification_status, is_synthetic)
+    VALUES
+        ('temp-synthetic-publication-gate-control', 'مقصد ساختگی کنترل انتشار', 'test_location',
+         'استان آزمایشی', 'شهر آزمایشی', 'رکورد ساختگی موقت برای آزمون View انتشار.',
+         0.1, 0.1, 'visitor_entrance', 'active', 1.0, 'synthetic_fixture', 'verified', TRUE)
+    RETURNING destination_id INTO v_synthetic_destination_id;
+
+    INSERT INTO knowledge.destination_sources
+        (destination_id, source_id, source_role, evidence_note, retrieved_at)
+    VALUES (v_synthetic_destination_id, v_synthetic_source_id, 'verification', 'Synthetic negative control.', NOW());
+
+    INSERT INTO knowledge.knowledge_documents
+        (document_key, source_id, destination_id, title, language_code,
+         raw_content, content_sha256, ingestion_status, record_origin,
+         is_synthetic, retrieved_at)
+    VALUES
+        ('temp-synthetic-publication-gate-document', v_synthetic_source_id, v_synthetic_destination_id,
+         'Temporary synthetic publication gate control', 'fa',
+         'Synthetic content used only to test exclusion from production views.', repeat('c',64),
+         'processed', 'synthetic_fixture', TRUE, NOW())
+    RETURNING document_id INTO v_synthetic_document_id;
+
+    SELECT COUNT(*) INTO v_count FROM knowledge.production_destinations
+     WHERE destination_id = v_synthetic_destination_id;
+    IF v_count <> 0 THEN RAISE EXCEPTION 'Active synthetic destination leaked into production candidates'; END IF;
+    SELECT COUNT(*) INTO v_count FROM knowledge.production_destination_sources
+     WHERE destination_id = v_synthetic_destination_id;
+    IF v_count <> 0 THEN RAISE EXCEPTION 'Synthetic source provenance leaked into production'; END IF;
+    SELECT COUNT(*) INTO v_count FROM knowledge.production_retrieval_documents
+     WHERE document_id = v_synthetic_document_id;
+    IF v_count <> 0 THEN RAISE EXCEPTION 'Synthetic document leaked into production retrieval candidates'; END IF;
 
     -- Negative controls: source revocation immediately removes evidence-backed
     -- documents/chunks/embeddings and destination provenance from safe views.

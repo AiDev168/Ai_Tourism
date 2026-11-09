@@ -1,53 +1,120 @@
-# شمارش دقیق مورد انتظار دیتابیس — Pre-Codex v0.2
+# شمارش دقیق مورد انتظار دیتابیس — وضعیت‌های 0006 و 0007
 
-این سند Manifest مورد انتظار Seed اولیه است. تست `sql/tests/001_schema_seed_invariants.sql` تعداد جدول‌ها و تعدادهای اصلی را کنترل می‌کند و `sql/reports/final_row_counts.sql` مقدار واقعی هر جدول را در کنار مقدار مورد انتظار چاپ می‌کند. هر اختلافی باید Fail محسوب شود؛ نه اینکه تعداد مورد انتظار برای سبز شدن تست به‌صورت خودکار تغییر کند.
+این سند دو وضعیت معتبر و دقیق دیتابیس را تعریف می‌کند. وضعیت فعلی دیتابیس Development مشترک مالک، Migration 0006 با ۳۰ جدول و ۴۱۹ ردیف است؛ Migration 0007 هنوز روی آن اجرا نشده است. وضعیت 0007 با ۶۹۵ ردیف یک ارتقای اختیاری است و فقط پس از تأیید جداگانهٔ مالک مجاز است. تست `sql/tests/001_schema_seed_invariants.sql` و گزارش `sql/reports/final_row_counts.sql` وضعیت را از Migration ledger تشخیص می‌دهند و تعداد دقیق همان وضعیت را بررسی می‌کنند. هر اختلاف باید Fail شود؛ تعداد مورد انتظار هرگز برای سبز شدن تست به‌صورت خودکار تغییر نمی‌کند.
 
-**۳۰ جدول متعلق به پروژه، ۳۲۹ ردیف مورد انتظار.** ردیف‌های صفر عمدی هستند؛ Embedding واقعی و رویدادهای واقعی قبل از اتصال Pipeline یا رخ دادن رویداد نباید ساخته شوند.
+**وضعیت A — Migration 0006:** ۳۰ جدول / ۴۱۹ ردیف؛ Migration 0007 غایب.
 
-| Schema | Table | Expected rows |
-|---|---|---:|
-| `identity` | `users` | 1 |
-| `identity` | `user_consents` | 1 |
-| `identity` | `user_preferences` | 3 |
-| `conversation` | `conversations` | 1 |
-| `conversation` | `messages` | 4 |
-| `travel` | `trips` | 1 |
-| `travel` | `trip_constraints` | 3 |
-| `travel` | `trip_interests` | 3 |
-| `travel` | `itineraries` | 1 |
-| `travel` | `itinerary_stops` | 6 |
-| `knowledge` | `knowledge_sources` | 24 |
-| `knowledge` | `destinations` | 37 |
-| `knowledge` | `destination_sources` | 49 |
-| `knowledge` | `destination_tags` | 67 |
-| `knowledge` | `destination_categories` | 12 |
-| `knowledge` | `destination_category_map` | 23 |
-| `knowledge` | `knowledge_documents` | 22 |
-| `knowledge` | `knowledge_chunks` | 44 |
-| `knowledge` | `embedding_spaces` | 0 |
-| `knowledge` | `chunk_embeddings` | 0 |
-| `recommendation` | `recommendation_requests` | 1 |
-| `recommendation` | `recommendations` | 3 |
-| `recommendation` | `recommendation_score_components` | 9 |
-| `integration` | `external_links` | 3 |
-| `integration` | `outbound_clicks` | 0 |
-| `operations` | `feedback` | 1 |
-| `operations` | `ai_model_calls` | 0 |
-| `operations` | `audit_events` | 0 |
-| `operations` | `dataset_import_batches` | 4 |
-| `system` | `schema_migrations` | 6 |
+**وضعیت B — Migration 0007:** ۳۰ جدول / ۶۹۵ ردیف؛ دقیقاً ۲۲ مقصد جدید و تکمیل یک ردیف مراغه، ۱۸ منبع، ۵۱ رابطهٔ مقصد/منبع، ۱۲۰ برچسب خالص، ۱۷ نگاشت دسته، ۲۳ سند و ۲۳ Chunk، یک Batch و یک سابقهٔ Migration افزوده شده است. صفرهای Embedding، کلیک خروجی، LLM و Audit عمدی هستند.
 
-| **TOTAL** | **30 project-owned tables** | **329** |
+| Schema | Table | 0006 baseline | 0007 Shiraz |
+|---|---|---:|---:|
+| `identity` | `users` | 1 | 1 |
+| `identity` | `user_consents` | 1 | 1 |
+| `identity` | `user_preferences` | 3 | 3 |
+| `conversation` | `conversations` | 1 | 1 |
+| `conversation` | `messages` | 4 | 4 |
+| `travel` | `trips` | 1 | 1 |
+| `travel` | `trip_constraints` | 3 | 3 |
+| `travel` | `trip_interests` | 3 | 3 |
+| `travel` | `itineraries` | 1 | 1 |
+| `travel` | `itinerary_stops` | 6 | 6 |
+| `knowledge` | `knowledge_sources` | 40 | 58 |
+| `knowledge` | `destinations` | 44 | 66 |
+| `knowledge` | `destination_sources` | 65 | 116 |
+| `knowledge` | `destination_tags` | 88 | 208 |
+| `knowledge` | `destination_categories` | 12 | 12 |
+| `knowledge` | `destination_category_map` | 30 | 47 |
+| `knowledge` | `knowledge_documents` | 29 | 52 |
+| `knowledge` | `knowledge_chunks` | 58 | 81 |
+| `knowledge` | `embedding_spaces` | 0 | 0 |
+| `knowledge` | `chunk_embeddings` | 0 | 0 |
+| `recommendation` | `recommendation_requests` | 1 | 1 |
+| `recommendation` | `recommendations` | 3 | 3 |
+| `recommendation` | `recommendation_score_components` | 9 | 9 |
+| `integration` | `external_links` | 3 | 3 |
+| `integration` | `outbound_clicks` | 0 | 0 |
+| `operations` | `feedback` | 1 | 1 |
+| `operations` | `ai_model_calls` | 0 | 0 |
+| `operations` | `audit_events` | 0 | 0 |
+| `operations` | `dataset_import_batches` | 5 | 6 |
+| `system` | `schema_migrations` | 7 | 8 |
+
+| **TOTAL** | **30 project-owned tables** | **419** | **695** |
+
+The `identity.users` value above is the immutable synthetic QA identity seed count, not a cap on real users. Repeatable validation counts only that synthetic seed row in the exact seed manifest and reports non-synthetic users separately. After Migration 0008, OTP challenges, verified-phone evidence, web sessions, and rate-limit rows are runtime data and may be non-empty. Validation checks their schema, permissions, provenance/time boundary, and migration state; it does not require them to remain empty. The `420` / `696` totals shown for 0006+0008 / 0007+0008 describe the clean post-migration baseline before runtime authentication activity.
 
 ## ترکیب داده‌ها
 
-- ۱۵ مقصد منتقل‌شده از SQL فعلی پروژه: همگی `needs_review` و بدون مختصات تأییدشده.
-- ۱۲ مقصد مصنوعی QA + ۱۲ سند + ۲۴ Chunk: فقط برای تست؛ همگی `test_only` و `is_synthetic=true`.
-- ۱۰ مقصد میراث جهانی دارای منابع رسمی + ۱۰ سند فارسی + ۲۰ Chunk: `verification_status=verified` اما `status=needs_review`؛ هیچ‌کدام فعلاً در Viewهای Production/RAG منتشر نمی‌شوند.
-- ۲۴ منبع اطلاعات: ۱ Legacy، ۱ مصنوعی، ۲۰ صفحه/نقشه رسمی UNESCO و ۲ منبع تکمیلی اداری.
-- یک گراف E2E مصنوعی برای کاربر، رضایت، ترجیحات، مکالمه، سفر، پیشنهاد، امتیاز، برنامه سفر و بازخورد.
-- ۶ Migration ledger entry: یک Baseline مربوط به SQL قدیمی و پنج Migration کنترل‌شده.
+- **وضعیت فعلی دیتابیس مشترک مالک:** Migration 0006، ۳۰ جدول و ۴۱۹ ردیف؛ Migration 0007 در ledger وجود ندارد و این سند یا Validator آن را اعمال نمی‌کند.
+- **وضعیت اختیاری پس از 0007:** ۳۰ جدول و ۶۹۵ ردیف؛ فقط با opt-in صریح پس از تأیید جداگانهٔ مالک. برای دیتابیس موجود 0006، Initialize در حالت پیش‌فرض باید پیش از هر Migration متوقف شود.
+
+- **۱۴ مقصد قدیمی باقی‌مانده از پروژه:** از `database/tourism_points.sql`؛ همگی `needs_review`، منبع اولیه pending و بدون مختصات تأییدشده. هویت هر ۱۵ ردیف اصلی حفظ شده؛ رصدخانهٔ مراغه یکی از همان ردیف‌هاست که با Migration 0007 منبع‌دار شد و وضعیتش همچنان `needs_review` است.
+
+## افزودن اختیاری زیرساخت احراز هویت — Migration 0008
+
+Migration `0008_authentication_foundation` فقط جداول OTP، شواهد شمارهٔ تأییدشده، نشست‌های وب و محدودکنندهٔ نرخ را به‌صورت افزایشی می‌سازد. هیچ شمارهٔ قدیمی را تأیید نمی‌کند و هیچ دادهٔ ورود/نشستی seed نمی‌کند.
+
+| وضعیت معتبر | جداول پروژه | ردیف‌های کل | وضعیت پیشین |
+|---|---:|---:|---|
+| `0006-auth` — ledger شامل 0000–0006 و 0008 | ۳۴ | ۴۲۰ | ۰۰۰۶ / ۴۱۹ به‌علاوهٔ یک ledger row |
+| `0007-auth` — ledger شامل 0000–0008 | ۳۴ | ۶۹۶ | ۰۰۰۷ / ۶۹۵ به‌علاوهٔ یک ledger row |
+
+در هر دو حالت چهار جدول جدید `identity.otp_challenges`، `identity.verified_phones`، `identity.web_sessions` و `identity.auth_rate_limits` در شروع خالی هستند. اعتبارسنجی lifecycle فقط این چهار ترکیب دقیق ledger را می‌پذیرد: 0006، 0007، 0006+0008 و 0007+0008. هر حالت ناقص یا شمارش متفاوت fail-closed می‌شود. اعمال Migration 0008 روی دیتابیس موجود به opt-in جداگانهٔ `-ApplyAuthenticationMigrationToExistingDatabase` نیاز دارد؛ این opt-in مجوزی برای دیتابیس مشترک محسوب نمی‌شود.
+- **۱۲ مقصد QA مصنوعی + ۱۲ سند + ۲۴ Chunk:** صرفاً برای تست؛ همه با `is_synthetic=true`، منشأ `synthetic_fixture` و وضعیت `test_only`.
+- **۴۰ مقصد منبع‌دار و در انتظار بازبینی:** ۱۷ اثر میراث جهانی و ۲۳ موجودیت پایلوت شیراز/مراغه. همه `verified_external`, غیرمصنوعی و `needs_review` هستند و در Viewهای Production/RAG منتشر نمی‌شوند.
+- **۵۸ منبع اطلاعات:** ۴۰ منبع Baseline و ۱۸ منبع ثبت‌شده در Shiraz Dataset.
+- **۱۱۶ پیوند مقصد/منبع:** ۶۵ پیوند Baseline و ۵۱ رابطهٔ جدید پایلوت (شامل روابط discovery).
+- **۲۰۸ برچسب مقصد:** ۸۸ برچسب Baseline و ۱۲۰ برچسب خالص جدید، پس از حذف دو برچسب بی‌پشتوانهٔ مراغه.
+- **۴۷ نگاشت دسته‌بندی:** ۳۰ نگاشت Baseline و ۱۷ نگاشت جدید برای مقصدهای پایلوت و رصدخانهٔ مراغه.
+- **۵۲ سند فارسی + ۸۱ Chunk:** ۲۹/۵۸ در Baseline و ۲۳/۲۳ جدید. داده‌های جدید یک Chunk برای هر سند دارند.
+- **یک گراف E2E مصنوعی:** کاربر، رضایت، ترجیحات، مکالمه و پیام‌ها، سفر و محدودیت‌ها، پیشنهادها و امتیازها، برنامه سفر و بازخورد.
+- **۶ Batch ورود داده:** پنج Baseline و یک Shiraz dataset batch.
+- **۸ سابقه Migration:** یک Baseline مربوط به SQL قدیمی و هفت Migration کنترل‌شده.
+
+## Batch دوم داده منبع‌دار
+
+Migration `0006_verified_unesco_destination_seed_batch2` هفت اثر دیگر را اضافه می‌کند:
+
+1. تخت سلیمان — UNESCO WHC 1077
+2. چغازنبیل — UNESCO WHC 113
+3. مجموعه شیخ صفی‌الدین اردبیلی — UNESCO WHC 1345
+4. مسجد جامع اصفهان — UNESCO WHC 1397
+5. شهر سوخته — UNESCO WHC 1456
+6. منظر فرهنگی میمند — UNESCO WHC 1423
+7. هگمتانه — UNESCO WHC 1716
+
+برای هر اثر، یک منبع توصیف رسمی، یک منبع نقشه رسمی، یک سند فارسیِ بازنویسی‌شده، دو Chunk و یک نگاشت دسته‌بندی ثبت می‌شود. دو مرجع تکمیلی رسمی نیز برای موقعیت اداری شهر سوخته و میمند اضافه شده‌اند. مختصات از نقشه رسمی به‌عنوان `property_reference` ثبت شده‌اند، نه ورودی بازدیدکننده یا مسیر دسترسی.
 
 ## چرا Embeddingها صفرند؟
 
-جداول `embedding_spaces` و `chunk_embeddings` عمداً خالی هستند تا هیچ مدل یا بُعد برداری پیش‌فرض در Schema تحمیل نشود. تست RAG با Vectorهای مصنوعی ۳بعدی و ۴بعدی داخل تراکنش Rollbackشونده، قرارداد ذخیره‌سازی، جداسازی فضای برداری، ترتیب nearest-neighbor و رد ابعاد نادرست را کنترل می‌کند. این تست کیفیت معنایی RAG یا Recall واقعی فارسی را تأیید نمی‌کند؛ آن بخش پس از اتصال الگوریتم مورد تأیید مالک پروژه تست خواهد شد.
+جداول `embedding_spaces` و `chunk_embeddings` عمداً خالی هستند تا مدل، Provider یا بُعد برداری خاصی به پروژه تحمیل نشود. تست RAG با بردارهای مصنوعی ۳بعدی و ۴بعدی در تراکنش Rollbackشونده، قرارداد ذخیره‌سازی، جداسازی فضاهای برداری، ترتیب nearest-neighbor و رد ابعاد نامعتبر را بررسی می‌کند.
+
+این تست، کیفیت معنایی، Recall فارسی یا صحت پاسخ LLM را اثبات نمی‌کند. آن مرحله بعد از اتصال الگوریتم RAG مورد تأیید مالک پروژه و مجموعه ارزیابی مستقل آن انجام خواهد شد.
+
+## کنترل انتشار و مجوز
+
+- هر ۱۷ رکورد UNESCO دارای منبع و نقطه مرجع رسمی هستند، اما همگی `needs_review` باقی می‌مانند؛ بنابراین تا تأیید تحریریه وارد پیشنهادهای Production یا RAG عملیاتی نمی‌شوند.
+- مختصات UNESCO نقطه مرجع ملک ثبت‌شده است؛ از آن برای ادعای ورودی، ساعات بازدید، پارکینگ یا مسیر استفاده نمی‌شود.
+- صفحات توصیفی UNESCO اعلامیه مجوز CC-BY-SA IGO 3.0 دارند. متن فارسی این بسته بازنویسی مستقل است، نه نقل‌قول؛ با این حال تعهدات انتساب و Share-Alike باید پیش از بازنشر تجاری توسط مالک محصول/مشاور حقوقی بررسی شود.
+- ۱۳ اثر دیگر از فهرست ۳۰ اثر ثبت‌شده ایران در این دو Batch پوشش داده نشده‌اند. برخی از آن‌ها چندجزئی یا گسترده‌اند و باید پیش از ورود، مدل والد/جزء، هندسه و مرجع مکانی‌شان دقیق طراحی شود؛ یک نقطه دلخواه برای آن‌ها کافی نیست.
+- داده مصنوعی، داده تأییدنشده یا داده صرفاً منبع‌دار ولی بازبینی‌نشده نباید به Production منتقل شود.
+
+## Migration 0009 — traveler core
+
+Migration `0009_traveler_core` معتبر فقط پس از Migration 0008 است. این Migration تعداد جدول‌ها یا محتوای seed را افزایش نمی‌دهد؛ یک ردیف به migration ledger اضافه می‌کند و قراردادهای مدت سفر تا ۳۶۵ روز، مبدا و تعداد همراه nullable، حفظ دقیق واحد تومان/ریال، نسخه‌گذاری و idempotency، حذف آبشاری محتوای شخصی و یادداشت itinerary چندزبانه را به‌صورت additive اضافه می‌کند.
+
+وضعیت‌های `0006-auth-0009` و `0007-auth-0009` به‌ترتیب manifest دقیق ۴۲۱ و ۶۹۷ ردیفی دارند. ردیف‌های runtime غیرمصنوعی مکالمه، پیام، سفر، پیشنهاد و itinerary از شمارش immutable seed حذف و جداگانه گزارش می‌شوند؛ صحت seed همچنان با شمارش دقیق `is_synthetic=true` و جدول‌های محتوای ثابت سنجیده می‌شود. ردیف‌های OTP، شماره تأییدشده، نشست و محدودکننده نرخ نیز داده runtime هستند و نباید صفر فرض شوند.
+
+برای پایگاه موجود در وضعیت `0006-auth` یا `0007-auth`، `Initialize-Database.ps1` به‌طور پیش‌فرض متوقف می‌شود. اجرای `0009` روی پایگاه موجود به opt-in مجزای `-ApplyTravelerCoreMigrationToExistingDatabase` پس از تأیید مالک نیاز دارد. این opt-in مجوزی برای پایگاه مشترک `ai_tourism_dev` نیست و در این Task تغییری روی پایگاه مشترک انجام نمی‌شود.
+
+## Migration 0010 — Task 3.1 content, privacy cleanup, and itinerary bounds
+
+Migration `0010_task31_content_privacy_full_itinerary` is additive after 0009. It adds four proposal/review tables and one migration-ledger row; it does not import candidate content or mutate canonical destination/document/source records. This raises immutable seed-plus-ledger totals by one to 422 rows for the 0006 dataset and 698 rows for the 0007 dataset. The four spatial/culinary proposal tables are mutable review/runtime data and are reported separately, never counted as immutable seed rows. A fresh authenticated database has 38 project-owned tables after this migration.
+
+The migration keeps all content proposals non-publishable by default. The non-spatial culinary production view returns only fully localized, explicitly approved, verified, non-synthetic records with currently valid verified provenance for every claim. It has no destination or coordinate requirement and does not join legacy spatial identities. The application role can read the approved view but cannot read proposal/raw knowledge tables.
+
+OTP cleanup is an explicit operator-run operation: `identity.purge_terminal_otp_challenges(cutoff, batch_limit)`. The cutoff must not be in the future and each call is capped at 1,000 rows. It removes only terminal/expired challenges and preserves a currently valid sent challenge. The stored verified-phone reference becomes nullable when a challenge is purged. No scheduler or retention period is introduced by this migration. Operators must select and document a privacy/security-reviewed retention cutoff and schedule a bounded invocation cadence before production activation; raw phone-bearing challenge rows must not be retained indefinitely by default.
+
+Itinerary `day_count` and `day_number` are bounded to 1–365, each day supports at most 50 stops, and an itinerary supports at most 1,000 total stops. Database triggers also require the itinerary to fit within its confirmed parent trip duration. These are technical limits; they do not promise that matching content exists for each requested day.
+
+For an existing 0009 database, initialization recognizes but does not apply Migration 0010 unless explicitly invoked with `-ApplyTask31MigrationToExistingDatabase`. This opt-in does not authorize applying it to any shared database.

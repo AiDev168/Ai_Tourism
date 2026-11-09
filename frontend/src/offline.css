@@ -1,0 +1,18 @@
+.offline-banner {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  padding: 10px 20px;
+  text-align: center;
+  background: #8a4e2f;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.form-error { overflow-wrap: anywhere; }
+textarea, button, select, input { max-width: 100%; }
+.place-card h3, .hero-body, .section-heading p, .chat-bubble p, .empty-state p { overflow-wrap: anywhere; }
+.state-preview { margin-block-start: 11px; color: #3e4b43; font-size: 10px; }
+.state-preview summary { width: fit-content; cursor: pointer; }
+.state-preview p { margin: 7px 0; line-height: 1.6; }
+.state-preview [role="alert"] { color: #a12d27; }

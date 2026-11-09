@@ -1,9 +1,15 @@
 [CmdletBinding()]
 param(
-    [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
+    [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path,
+    [switch]$ApplyPendingMigrationsToExistingDatabase,
+    [switch]$ApplyAuthenticationMigrationToExistingDatabase,
+    [switch]$ApplyTravelerCoreMigrationToExistingDatabase,
+    [switch]$ApplyTask31MigrationToExistingDatabase
 )
 
 $ErrorActionPreference = 'Stop'
+$LifecycleModule = Join-Path $PSScriptRoot 'Database-Lifecycle.psm1'
+Import-Module $LifecycleModule -Force
 $PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $LegacySource = Join-Path $ProjectRoot 'database\tourism_points.sql'
 $LegacyDir = Join-Path $PackageRoot 'legacy'
@@ -18,12 +24,81 @@ if (-not (Test-Path $LegacySource)) {
 }
 
 # Refuse to adopt unrelated resources that happen to use this package's fixed names.
-$existingContainerProject = & docker container inspect ai-tourism-postgres --format '{{ index .Config.Labels "com.docker.compose.project" }}' 2>$null
-if ($LASTEXITCODE -eq 0 -and (($existingContainerProject | Out-String).Trim() -ne 'ai-tourism-db')) {
+# Read Docker's JSON output instead of using a Go template with a quoted label key.
+# The latter is not passed reliably to docker.exe by Windows PowerShell 5.1.
+function Get-DockerComposeProjectLabel {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('container', 'volume')]
+        [string]$ResourceType,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ResourceName
+    )
+
+    # Windows PowerShell 5.1 converts native stderr into PowerShell error
+    # records. With this script's Stop preference, even the expected
+    # "No such container/volume" response can terminate the script.
+    # Temporarily use Continue and capture both streams so we can inspect the
+    # native exit code and distinguish an absent resource from a real CLI error.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $inspectOutput = @(& docker $ResourceType inspect $ResourceName 2>&1)
+        $inspectExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($inspectExitCode -ne 0) {
+        $diagnostic = ($inspectOutput | Out-String).Trim()
+        if ($diagnostic -match '(?i)(no such container|no such volume|no such object|container .* not found|volume .* not found)') {
+            return $null
+        }
+        throw "Docker inspect failed for $ResourceType '$ResourceName' (exit $inspectExitCode): $diagnostic"
+    }
+
+    # A successful inspect must contain JSON only. Do not silently treat
+    # malformed output as an absent resource.
+    try {
+        $inspectJson = ($inspectOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+        $inspectObjects = @($inspectJson | ConvertFrom-Json -ErrorAction Stop)
+    }
+    catch {
+        throw "Docker returned invalid JSON while inspecting $ResourceType '$ResourceName': $($_.Exception.Message)"
+    }
+
+    if ($inspectObjects.Count -ne 1) {
+        throw "Expected one inspect result for $ResourceType '$ResourceName'; received $($inspectObjects.Count)."
+    }
+
+    if ($ResourceType -eq 'container') {
+        $labels = $inspectObjects[0].Config.Labels
+    }
+    else {
+        $labels = $inspectObjects[0].Labels
+    }
+
+    if ($null -eq $labels) {
+        return ''
+    }
+
+    $labelProperty = $labels.PSObject.Properties['com.docker.compose.project']
+    if ($null -eq $labelProperty) {
+        return ''
+    }
+
+    return [string]$labelProperty.Value
+}
+
+$existingContainerProject = Get-DockerComposeProjectLabel -ResourceType 'container' -ResourceName 'ai-tourism-postgres'
+if ($null -ne $existingContainerProject -and $existingContainerProject -ne 'ai-tourism-db') {
     throw 'A container named ai-tourism-postgres exists but is not owned by Compose project ai-tourism-db. It will not be modified.'
 }
-$existingVolumeProject = & docker volume inspect ai_tourism_pgdata --format '{{ index .Labels "com.docker.compose.project" }}' 2>$null
-if ($LASTEXITCODE -eq 0 -and (($existingVolumeProject | Out-String).Trim() -ne 'ai-tourism-db')) {
+
+$existingVolumeProject = Get-DockerComposeProjectLabel -ResourceType 'volume' -ResourceName 'ai_tourism_pgdata'
+if ($null -ne $existingVolumeProject -and $existingVolumeProject -ne 'ai-tourism-db') {
     throw 'A volume named ai_tourism_pgdata exists but is not owned by Compose project ai-tourism-db. It will not be reused or modified.'
 }
 
@@ -89,15 +164,90 @@ try {
         return (($result | Out-String).Trim())
     }
 
+    # Classify existing data before bootstrap, seed, checksum-ledger, or import
+    # writes. Only an exact recognized migration state is accepted; pending
+    # additive migrations require their separate explicit opt-in switches.
+    $ledgerExists = Get-PsqlScalar "SELECT CASE WHEN to_regclass('system.schema_migrations') IS NULL THEN 'no' ELSE 'yes' END;"
+    $projectTableCount = Get-PsqlScalar "SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname IN ('identity','conversation','travel','knowledge','recommendation','integration','operations','system');"
+    $projectSchemaCount = Get-PsqlScalar "SELECT COUNT(*) FROM pg_catalog.pg_namespace WHERE nspname IN ('identity','conversation','travel','knowledge','recommendation','integration','operations','system');"
+    $projectExtensionCount = Get-PsqlScalar "SELECT COUNT(*) FROM pg_catalog.pg_extension WHERE extname IN ('postgis','vector');"
+    $databaseState = ''
+    if ($ledgerExists -eq 'no' -and $projectTableCount -eq '0' -and $projectSchemaCount -eq '0' -and $projectExtensionCount -eq '0') {
+        $databaseState = 'fresh'
+    }
+    elseif ($ledgerExists -ne 'yes') {
+        throw "Database has partial or unexpected state without a migration ledger ($projectSchemaCount project schemas, $projectTableCount project tables, $projectExtensionCount project extensions). Initialization stopped without applying migrations. Inspect this database manually."
+    }
+    else {
+        $appliedIds = @((Get-PsqlScalar "SELECT COALESCE(string_agg(migration_id, ',' ORDER BY migration_id), '') FROM system.schema_migrations;").Split(',', [StringSplitOptions]::RemoveEmptyEntries))
+        $state = Resolve-DatabaseLifecycleState -AppliedMigrationIds $appliedIds
+        $databaseState = $state.Name
+        $expectedMigrations = $state.MigrationIds
+
+        $migrationFiles = @(
+            @{ Id = '0000_legacy_tourism_points_baseline'; Path = $LegacySource },
+            @{ Id = '0001_core_schema'; Path = (Join-Path $PackageRoot 'sql\001_core_schema.sql') },
+            @{ Id = '0002_synthetic_knowledge_seed'; Path = (Join-Path $PackageRoot 'sql\002_synthetic_knowledge_seed.sql') },
+            @{ Id = '0003_synthetic_e2e_seed'; Path = (Join-Path $PackageRoot 'sql\003_synthetic_e2e_seed.sql') },
+            @{ Id = '0004_app_role_grants'; Path = (Join-Path $PackageRoot 'sql\004_app_role_grants.sql') },
+            @{ Id = '0005_verified_unesco_destination_seed'; Path = (Join-Path $PackageRoot 'sql\005_verified_unesco_destination_seed.sql') },
+            @{ Id = '0006_verified_unesco_destination_seed_batch2'; Path = (Join-Path $PackageRoot 'sql\006_verified_unesco_destination_seed_batch2.sql') },
+            @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; Path = (Join-Path $PackageRoot 'sql\007_shiraz_dalahoo_wikipedia_dataset_v1.sql') },
+            @{ Id = '0008_authentication_foundation'; Path = (Join-Path $PackageRoot 'sql\008_authentication_foundation.sql') },
+            @{ Id = '0009_traveler_core'; Path = (Join-Path $PackageRoot 'sql\009_traveler_core.sql') },
+            @{ Id = '0010_task31_content_privacy_full_itinerary'; Path = (Join-Path $PackageRoot 'sql\010_task31_content_privacy_full_itinerary.sql') }
+        ) | Where-Object { $_.Id -in $expectedMigrations }
+        foreach ($migration in $migrationFiles) {
+            $localHash = (Get-FileHash -LiteralPath $migration.Path -Algorithm SHA256).Hash.ToLowerInvariant()
+            $databaseHash = Get-PsqlScalar "SELECT COALESCE((SELECT sha256 FROM system.schema_migrations WHERE migration_id = '$($migration.Id)'), '');"
+            if ($databaseHash -ne $localHash) {
+                throw "Migration checksum mismatch for $($migration.Id). Initialization stopped without applying pending migrations."
+            }
+        }
+
+        Write-Host "Validating existing database state $databaseState without applying migrations..." -ForegroundColor Cyan
+        Invoke-PsqlFile '/opt/ai-tourism/sql/reports/final_row_counts.sql'
+        $initializationAction = Resolve-DatabaseInitializationAction -State $databaseState `
+            -ApplyPendingMigrationsToExistingDatabase:$ApplyPendingMigrationsToExistingDatabase `
+            -ApplyAuthenticationMigrationToExistingDatabase:$ApplyAuthenticationMigrationToExistingDatabase `
+            -ApplyTravelerCoreMigrationToExistingDatabase:$ApplyTravelerCoreMigrationToExistingDatabase `
+            -ApplyTask31MigrationToExistingDatabase:$ApplyTask31MigrationToExistingDatabase
+
+        if ($initializationAction -eq 'already-integrated') {
+            Write-Host 'Database already has the validated 0007 / 695-row state. No changes are needed.' -ForegroundColor Green
+            return
+        }
+        if ($initializationAction -eq 'already-authenticated') {
+            Write-Host "Database state $databaseState already includes the validated authentication migration. No changes are needed." -ForegroundColor Green
+            return
+        }
+        if ($initializationAction -eq 'already-traveler-core') {
+            Write-Host "Database state $databaseState already includes the validated traveler-core migration. No changes are needed." -ForegroundColor Green
+            return
+        }
+        if ($initializationAction -eq 'already-task31') {
+            Write-Host "Database state $databaseState already includes the validated Task 3.1 migration. No changes are needed." -ForegroundColor Green
+            return
+        }
+        if ($initializationAction -eq 'apply-pending-0007') {
+            Write-Host 'Explicit opt-in received for applying pending Migration 0007 to the validated 0006 database.' -ForegroundColor Yellow
+        }
+    }
+
     function Register-Migration([string]$MigrationId, [string]$Hash) {
         $sql = "INSERT INTO system.schema_migrations (migration_id, sha256) VALUES ('$MigrationId', '$Hash') ON CONFLICT (migration_id) DO NOTHING;"
         & docker compose --project-name ai-tourism-db --env-file $EnvFile exec -T db psql -X -v ON_ERROR_STOP=1 -U ai_tourism_owner -d ai_tourism_dev -c $sql
         if ($LASTEXITCODE -ne 0) { throw "Could not register migration $MigrationId" }
     }
 
-    Write-Host "`n========== EXTENSIONS AND MIGRATION CONTROL ==========" -ForegroundColor Cyan
-    & docker compose --project-name ai-tourism-db --env-file $EnvFile exec -T db psql -X -v ON_ERROR_STOP=1 -v "app_user=$($envValues['POSTGRES_APP_USER'])" -v "app_password=$($envValues['POSTGRES_APP_PASSWORD'])" -U ai_tourism_owner -d ai_tourism_dev -f '/opt/ai-tourism/sql/000_bootstrap.sql'
-    if ($LASTEXITCODE -ne 0) { throw 'Bootstrap failed: extensions, migration ledger or application role.' }
+    if ($databaseState -eq 'fresh') {
+        Write-Host "`n========== EXTENSIONS AND MIGRATION CONTROL ==========" -ForegroundColor Cyan
+        & docker compose --project-name ai-tourism-db --env-file $EnvFile exec -T db psql -X -v ON_ERROR_STOP=1 -v "app_user=$($envValues['POSTGRES_APP_USER'])" -v "app_password=$($envValues['POSTGRES_APP_PASSWORD'])" -U ai_tourism_owner -d ai_tourism_dev -f '/opt/ai-tourism/sql/000_bootstrap.sql'
+        if ($LASTEXITCODE -ne 0) { throw 'Bootstrap failed: extensions, migration ledger or application role.' }
+    }
+    else {
+        Write-Host 'Existing database state validated; bootstrap and legacy seed are skipped.' -ForegroundColor DarkGreen
+    }
 
     $legacyId = '0000_legacy_tourism_points_baseline'
     $legacyHash = (Get-FileHash -LiteralPath $LegacySource -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -126,8 +276,31 @@ try {
         @{ Id = '0002_synthetic_knowledge_seed'; File = '002_synthetic_knowledge_seed.sql'; Path = '/opt/ai-tourism/sql/002_synthetic_knowledge_seed.sql' },
         @{ Id = '0003_synthetic_e2e_seed'; File = '003_synthetic_e2e_seed.sql'; Path = '/opt/ai-tourism/sql/003_synthetic_e2e_seed.sql' },
         @{ Id = '0004_app_role_grants'; File = '004_app_role_grants.sql'; Path = '/opt/ai-tourism/sql/004_app_role_grants.sql' },
-        @{ Id = '0005_verified_unesco_destination_seed'; File = '005_verified_unesco_destination_seed.sql'; Path = '/opt/ai-tourism/sql/005_verified_unesco_destination_seed.sql' }
+        @{ Id = '0005_verified_unesco_destination_seed'; File = '005_verified_unesco_destination_seed.sql'; Path = '/opt/ai-tourism/sql/005_verified_unesco_destination_seed.sql' },
+        @{ Id = '0006_verified_unesco_destination_seed_batch2'; File = '006_verified_unesco_destination_seed_batch2.sql'; Path = '/opt/ai-tourism/sql/006_verified_unesco_destination_seed_batch2.sql' },
+        @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; File = '007_shiraz_dalahoo_wikipedia_dataset_v1.sql'; Path = '/opt/ai-tourism/sql/007_shiraz_dalahoo_wikipedia_dataset_v1.sql' },
+        @{ Id = '0008_authentication_foundation'; File = '008_authentication_foundation.sql'; Path = '/opt/ai-tourism/sql/008_authentication_foundation.sql' },
+        @{ Id = '0009_traveler_core'; File = '009_traveler_core.sql'; Path = '/opt/ai-tourism/sql/009_traveler_core.sql' },
+        @{ Id = '0010_task31_content_privacy_full_itinerary'; File = '010_task31_content_privacy_full_itinerary.sql'; Path = '/opt/ai-tourism/sql/010_task31_content_privacy_full_itinerary.sql' }
     )
+
+    if ($databaseState -ne 'fresh') {
+        if ($initializationAction -eq 'apply-pending-0007') {
+            $migrations = @($migrations | Where-Object { $_.Id -eq '0007_shiraz_dalahoo_wikipedia_dataset_v1' })
+        }
+        elseif ($initializationAction -like 'apply-auth-0008-*') {
+            $migrations = @($migrations | Where-Object { $_.Id -eq '0008_authentication_foundation' })
+        }
+        elseif ($initializationAction -like 'apply-traveler-0009-*') {
+            $migrations = @($migrations | Where-Object { $_.Id -eq '0009_traveler_core' })
+        }
+        elseif ($initializationAction -like 'apply-task31-0010-*') {
+            $migrations = @($migrations | Where-Object { $_.Id -eq '0010_task31_content_privacy_full_itinerary' })
+        }
+        else {
+            throw "Unexpected migration action '$initializationAction'; stopped before writes."
+        }
+    }
 
     foreach ($migration in $migrations) {
         $filePath = Join-Path $PackageRoot (Join-Path 'sql' $migration.File)
@@ -156,9 +329,11 @@ try {
 
     # The import ledger is created by migration 001 and seeded by migration 002.
     # Record the source SQL checksum only after that table and batch row exist.
-    $batchChecksumSql = "UPDATE operations.dataset_import_batches SET source_checksum = '$legacyHash' WHERE batch_key = 'legacy-user-supplied-destinations-v1';"
-    & docker compose --project-name ai-tourism-db --env-file $EnvFile exec -T db psql -X -v ON_ERROR_STOP=1 -U ai_tourism_owner -d ai_tourism_dev -c $batchChecksumSql
-    if ($LASTEXITCODE -ne 0) { throw 'Could not store the original tourism SQL checksum in the dataset import ledger.' }
+    if ($databaseState -eq 'fresh') {
+        $batchChecksumSql = "UPDATE operations.dataset_import_batches SET source_checksum = '$legacyHash' WHERE batch_key = 'legacy-user-supplied-destinations-v1';"
+        & docker compose --project-name ai-tourism-db --env-file $EnvFile exec -T db psql -X -v ON_ERROR_STOP=1 -U ai_tourism_owner -d ai_tourism_dev -c $batchChecksumSql
+        if ($LASTEXITCODE -ne 0) { throw 'Could not store the original tourism SQL checksum in the dataset import ledger.' }
+    }
     $storedBatchChecksum = Get-PsqlScalar "SELECT COALESCE((SELECT source_checksum FROM operations.dataset_import_batches WHERE batch_key = 'legacy-user-supplied-destinations-v1'), '');"
     if ($storedBatchChecksum -ne $legacyHash) { throw 'Legacy import ledger checksum verification failed.' }
 

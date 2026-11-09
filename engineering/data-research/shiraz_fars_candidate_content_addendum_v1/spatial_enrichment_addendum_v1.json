@@ -1,0 +1,356 @@
+{
+  "dataset_key": "shiraz_fars_candidate_content_addendum_v1",
+  "version": "1.0.0",
+  "created_at": "2026-11-08",
+  "purpose": "Additional review-only enrichment proposals for four exact existing spatial identities already represented in the project data lineage. This is a separate addendum and does not modify the fixed v2 pack.",
+  "locale_contract": {
+    "locales": [
+      "fa-IR",
+      "en-US",
+      "ar"
+    ],
+    "translation_status": "draft_human_review_required"
+  },
+  "publication_contract": {
+    "record_origin": "verified_external",
+    "verification_status": "pending",
+    "is_synthetic": false,
+    "status": "needs_review",
+    "data_confidence": 0.0,
+    "publishable": false
+  },
+  "import_contract": {
+    "record_action": "stage_existing_record_enrichment_review",
+    "must_resolve_exactly_one_existing_record": true,
+    "must_not_insert_new_destination": true,
+    "must_not_mutate_canonical_record": true,
+    "if_target_missing_or_conflicting": "stop_and_report_identity_conflict"
+  },
+  "spatial_entities": [
+    {
+      "record_key": "shiraz-delgosha-garden-v1",
+      "target_record_action": "stage_existing_record_enrichment_review",
+      "canonical_name": "Delgosha Garden",
+      "names_by_locale": {
+        "fa-IR": "باغ دلگشا",
+        "en-US": "Delgosha Garden",
+        "ar": "حديقة دلگشا"
+      },
+      "destination_type": "garden",
+      "province_name": "Fars",
+      "city_name": "Shiraz",
+      "geographic_scope": "within_shiraz",
+      "description_by_locale_draft": {
+        "fa-IR": "باغ دلگشا یکی از باغ‌های شناخته‌شدهٔ شیراز است که در منابع گردشگری استان فارس در میان باغ‌های شاخص شهر نام برده می‌شود. منبع Visit Iran آرامگاه سعدی را در نزدیکی این باغ معرفی می‌کند؛ بنابراین می‌توان این دو مکان را در بررسی مسیرهای شهری مرتبط دانست، اما فاصله و زمان جابه‌جایی هنوز باید جداگانه سنجیده شود.",
+        "en-US": "Delgosha Garden is listed among Shiraz’s notable gardens in Visit Iran’s Fars Province guide. Visit Iran places the Tomb of Saadi near the garden, making the two relevant to a possible north-eastern Shiraz visit cluster. Exact distance and travel time have not been verified.",
+        "ar": "تُدرج حديقة دلگشا ضمن حدائق شيراز البارزة في دليل محافظة فارس على موقع Visit Iran. ويذكر المصدر نفسه أن ضريح سعدي يقع بالقرب من الحديقة، ما يجعل الموقعين مرشحين لدراسة مسار زيارة في شمال شرق شيراز. لم تُتحقق بعد المسافة الدقيقة أو مدة التنقل."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "delgosha-listed-as-shiraz-garden",
+          "claim_by_locale": {
+            "fa-IR": "Visit Iran باغ دلگشا را در میان باغ‌های شاخص شیراز معرفی می‌کند.",
+            "en-US": "Visit Iran lists Delgosha among Shiraz’s notable gardens.",
+            "ar": "يُدرج موقع Visit Iran حديقة دلگشا ضمن حدائق شيراز البارزة."
+          },
+          "source_ids": [
+            "VISITIRAN_FARS_PROVINCE"
+          ]
+        },
+        {
+          "claim_id": "near-saadi-tomb",
+          "claim_by_locale": {
+            "fa-IR": "Visit Iran آرامگاه سعدی را در نزدیکی باغ دلگشا قرار می‌دهد.",
+            "en-US": "Visit Iran describes the Tomb of Saadi as being near Delgosha Garden.",
+            "ar": "يذكر موقع Visit Iran أن ضريح سعدي يقع بالقرب من حديقة دلگشا."
+          },
+          "source_ids": [
+            "VISITIRAN_SAADI_TOMB"
+          ]
+        }
+      ],
+      "coordinate_policy": "Use only the existing canonical coordinate as a reference; do not overwrite, refine, or reinterpret it as a visitor entrance.",
+      "unknown_fields": [
+        "coordinate_role_revalidation",
+        "visitor_entrance",
+        "opening_hours",
+        "ticket_price",
+        "visit_duration",
+        "accessibility",
+        "route_duration",
+        "current_operating_status"
+      ],
+      "editorial_notes": [
+        "Only two narrow claims are included; no foundation date or garden design details are asserted.",
+        "The proximity claim does not establish a walkable route or measured distance.",
+        "Three-language text is a draft and requires native editorial review."
+      ]
+    },
+    {
+      "record_key": "shiraz-afifabad-garden-v1",
+      "target_record_action": "stage_existing_record_enrichment_review",
+      "canonical_name": "Afifabad Garden",
+      "names_by_locale": {
+        "fa-IR": "باغ عفیف‌آباد",
+        "en-US": "Afifabad Garden",
+        "ar": "حديقة عفيف آباد"
+      },
+      "destination_type": "garden",
+      "province_name": "Fars",
+      "city_name": "Shiraz",
+      "geographic_scope": "within_shiraz",
+      "description_by_locale_draft": {
+        "fa-IR": "باغ عفیف‌آباد یا گلشن در شیراز یک مجموعهٔ باغی و کاخی است که Visit Iran وجود موزهٔ سلاح‌های قدیمی و موزهٔ عبرت را نیز در آن گزارش می‌کند. همان منبع پیشینهٔ باغ را به دورهٔ صفوی نسبت می‌دهد و از خرید و مرمت آن در دورهٔ قاجار یاد می‌کند. وضعیت کنونی بازدید از بخش‌ها و شرایط دسترسی باید جداگانه تأیید شود.",
+        "en-US": "Afifabad, also known as Golshan Garden, is a garden-and-palace complex in Shiraz. Visit Iran describes an old-weapons museum and an Ebrat Museum within the complex, and traces the garden’s history to the Safavid period, followed by purchase and restoration during the Qajar era. Current access to individual buildings and museums requires fresh verification.",
+        "ar": "عفيف آباد، المعروفة أيضاً باسم حديقة كلشن، مجمّع يضم حديقة وقصراً في شيراز. ويذكر موقع Visit Iran وجود متحف للأسلحة القديمة ومتحف العِبرة ضمن المجمّع، ويربط تاريخ الحديقة بالعصر الصفوي ثم بشرائها وترميمها في العصر القاجاري. يجب التحقق بشكل مستقل من إمكانية دخول المباني والمتاحف حالياً."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "afifabad-complex-uses",
+          "claim_by_locale": {
+            "fa-IR": "Visit Iran مجموعهٔ عفیف‌آباد را شامل باغ، کاخ، موزهٔ سلاح‌های قدیمی و موزهٔ عبرت توصیف می‌کند.",
+            "en-US": "Visit Iran describes Afifabad as a garden, palace, old-weapons museum and Ebrat Museum complex.",
+            "ar": "يصف موقع Visit Iran عفيف آباد بأنه مجمّع يضم حديقة وقصراً ومتحفاً للأسلحة القديمة ومتحف العِبرة."
+          },
+          "source_ids": [
+            "VISITIRAN_AFIFABAD_GARDEN"
+          ]
+        },
+        {
+          "claim_id": "afifabad-history-source-attributed",
+          "claim_by_locale": {
+            "fa-IR": "بر اساس روایت Visit Iran، پیشینهٔ باغ به دورهٔ صفوی می‌رسد و در دورهٔ قاجار خریداری و مرمت شده است.",
+            "en-US": "According to Visit Iran, the garden’s history reaches back to the Safavid period and it was purchased and restored during the Qajar era.",
+            "ar": "وفقاً لرواية Visit Iran، يعود تاريخ الحديقة إلى العصر الصفوي، ثم اشتُريت ورُممت في العصر القاجاري."
+          },
+          "source_ids": [
+            "VISITIRAN_AFIFABAD_GARDEN"
+          ]
+        }
+      ],
+      "coordinate_policy": "Use only the existing canonical coordinate as a reference; do not overwrite or label it as an entrance.",
+      "unknown_fields": [
+        "visitor_entrance",
+        "opening_hours",
+        "ticket_price",
+        "visit_duration",
+        "museum_access_status",
+        "accessibility",
+        "route_duration",
+        "current_operating_status"
+      ],
+      "editorial_notes": [
+        "Source states the complex was built in 1863 SH; do not convert to Gregorian without editorial/calendar verification.",
+        "Source wording around ownership history contains potentially inconsistent phrasing; omitted from public-facing draft.",
+        "No visitor access to every described room or museum is inferred.",
+        "Three-language text is a draft and requires native editorial review."
+      ]
+    },
+    {
+      "record_key": "shiraz-shah-cheragh-v1",
+      "target_record_action": "stage_existing_record_enrichment_review",
+      "canonical_name": "Shah Cheragh",
+      "names_by_locale": {
+        "fa-IR": "شاهچراغ",
+        "en-US": "Shah Cheragh Shrine",
+        "ar": "مرقد شاه جراغ"
+      },
+      "destination_type": "religious_site",
+      "province_name": "Fars",
+      "city_name": "Shiraz",
+      "geographic_scope": "within_shiraz",
+      "description_by_locale_draft": {
+        "fa-IR": "شاهچراغ از زیارتگاه‌های شناخته‌شدهٔ شیراز است. Visit Iran آن را آرامگاه میر سید احمد، برادر امام رضا، معرفی می‌کند و از شکل‌گیری بنای نخستین در دورهٔ عضدالدوله دیلمی و تعمیرات و توسعه در دوره‌های بعدی یاد می‌کند. آینه‌کاری، کاشی‌کاری و کتیبه‌های فارسی و عربی از ویژگی‌های معماری داخلی معرفی‌شده در همان منبع‌اند. مقررات زیارت، دسترسی و عکاسی باید پیش از توصیهٔ عملی بررسی شوند.",
+        "en-US": "Shah Cheragh is a prominent shrine in Shiraz. Visit Iran identifies it as the shrine of Mir Seyed Ahmad, brother of Imam Reza, and attributes the earliest building to the era of Adud al-Dawla of the Buyid dynasty, with later repairs and additions in subsequent periods. The source highlights mirror work, tilework and Persian and Arabic inscriptions. Visitor rules, access arrangements and photography restrictions must be checked before practical trip advice is given.",
+        "ar": "يُعدّ مرقد شاه جراغ من المزارات البارزة في شيراز. ويعرّفه موقع Visit Iran بأنه مرقد مير سيد أحمد، شقيق الإمام الرضا، وينسب أقدم مبنى إلى عهد عضد الدولة البويهي، مع إصلاحات وإضافات في عصور لاحقة. ويشير المصدر إلى أعمال المرايا والبلاط والنقوش الفارسية والعربية. ينبغي التحقق من قواعد الزيارة وإجراءات الدخول وقيود التصوير قبل تقديم إرشادات عملية."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "shah-cheragh-identity",
+          "claim_by_locale": {
+            "fa-IR": "Visit Iran شاهچراغ را آرامگاه میر سید احمد، برادر امام رضا، معرفی می‌کند.",
+            "en-US": "Visit Iran identifies Shah Cheragh as the shrine of Mir Seyed Ahmad, brother of Imam Reza.",
+            "ar": "يعرّف موقع Visit Iran شاه جراغ بأنه مرقد مير سيد أحمد، شقيق الإمام الرضا."
+          },
+          "source_ids": [
+            "VISITIRAN_SHAH_CHERAGH"
+          ]
+        },
+        {
+          "claim_id": "shah-cheragh-architectural-features",
+          "claim_by_locale": {
+            "fa-IR": "Visit Iran آینه‌کاری، کاشی‌کاری و کتیبه‌های فارسی و عربی را از ویژگی‌های فضای زیارتگاه می‌داند.",
+            "en-US": "Visit Iran notes mirror work, tilework and Persian and Arabic inscriptions among the shrine’s features.",
+            "ar": "يذكر موقع Visit Iran أعمال المرايا والبلاط والنقوش الفارسية والعربية ضمن سمات المرقد."
+          },
+          "source_ids": [
+            "VISITIRAN_SHAH_CHERAGH"
+          ]
+        }
+      ],
+      "coordinate_policy": "Use existing canonical reference only; never overwrite or treat it as the current public entrance.",
+      "unknown_fields": [
+        "visitor_rules",
+        "restricted_areas",
+        "photography_rules",
+        "opening_hours",
+        "accessibility",
+        "visitor_entrance",
+        "ticket_price",
+        "visit_duration",
+        "current_operating_status"
+      ],
+      "editorial_notes": [
+        "Keep religious description neutral and source-attributed.",
+        "Do not infer gender-specific visitor arrangements, access restrictions, dress rules, or photography policy.",
+        "Three-language text is a draft and requires native editorial review."
+      ]
+    },
+    {
+      "record_key": "shiraz-naqsh-e-rostam-v1",
+      "target_record_action": "stage_existing_record_enrichment_review",
+      "canonical_name": "Naqsh-e Rostam",
+      "names_by_locale": {
+        "fa-IR": "نقش‌رستم",
+        "en-US": "Naqsh-e Rostam",
+        "ar": "نقش رستم"
+      },
+      "destination_type": "archaeological_site",
+      "province_name": "Fars",
+      "city_name": "Marvdasht",
+      "geographic_scope": "regional_day_trip",
+      "description_by_locale_draft": {
+        "fa-IR": "نقش‌رستم در محدودهٔ تاریخی مرودشتِ استان فارس قرار دارد و نباید به‌عنوان جاذبه‌ای داخل شهر شیراز نمایش داده شود. Visit Iran مجموعه را شامل آثار متعلق به دوره‌های ایلامی، هخامنشی و ساسانی معرفی می‌کند؛ از جمله آرامگاه‌های چهار شاه هخامنشی، نقش‌برجسته‌های ساسانی و بنای کعبهٔ زرتشت. کارکرد دقیق کعبهٔ زرتشت در همان منبع قطعی دانسته نشده است.",
+        "en-US": "Naqsh-e Rostam is in the historic Marvdasht area of Fars Province and must not be presented as an attraction within Shiraz city. Visit Iran describes monuments from the Elamite, Achaemenid and Sassanid periods, including the tombs of four Achaemenid kings, Sassanid reliefs and the Ka’ba-ye Zartosht. The source explicitly notes that the building’s original function remains uncertain.",
+        "ar": "يقع نقش رستم في المنطقة التاريخية لمَرودَشت بمحافظة فارس، ولا ينبغي عرضه بوصفه معلماً داخل مدينة شيراز. ويصف موقع Visit Iran آثاراً من العصور العيلامية والأخمينية والساسانية، منها مقابر أربعة ملوك أخمينيين ونقوش ساسانية ومبنى كعبة زرادشت. ويشير المصدر صراحةً إلى أن الوظيفة الأصلية للمبنى لا تزال غير محسومة."
+      },
+      "factual_claims": [
+        {
+          "claim_id": "naqsh-e-rostam-geographic-scope",
+          "claim_by_locale": {
+            "fa-IR": "Visit Iran نقش‌رستم را در محدودهٔ مرودشت معرفی می‌کند، نه در شهر شیراز.",
+            "en-US": "Visit Iran places Naqsh-e Rostam in Marvdasht, not in Shiraz city.",
+            "ar": "يضع موقع Visit Iran نقش رستم في مرودشت، وليس داخل مدينة شيراز."
+          },
+          "source_ids": [
+            "VISITIRAN_NAQSH_E_ROSTAM"
+          ]
+        },
+        {
+          "claim_id": "naqsh-e-rostam-periods-and-monuments",
+          "claim_by_locale": {
+            "fa-IR": "Visit Iran آثار نقش‌رستم را متعلق به دوره‌های ایلامی، هخامنشی و ساسانی معرفی می‌کند.",
+            "en-US": "Visit Iran describes Naqsh-e Rostam monuments from the Elamite, Achaemenid and Sassanid periods.",
+            "ar": "يصف موقع Visit Iran آثار نقش رستم بأنها تعود إلى العصور العيلامية والأخمينية والساسانية."
+          },
+          "source_ids": [
+            "VISITIRAN_NAQSH_E_ROSTAM"
+          ]
+        }
+      ],
+      "coordinate_policy": "Use existing canonical reference only; no coordinate changes and no visitor-entrance inference.",
+      "unknown_fields": [
+        "visitor_entrance",
+        "route_from_shiraz",
+        "travel_time",
+        "opening_hours",
+        "ticket_price",
+        "visit_duration",
+        "accessibility",
+        "surface_and_slope",
+        "safety_restrictions",
+        "current_operating_status"
+      ],
+      "editorial_notes": [
+        "Keep as a distinct Marvdasht regional day trip, not an in-city Shiraz POI.",
+        "The source includes some contested or interpretive explanations; the public draft uses only basic monument/period facts.",
+        "Do not infer that the site is suitable for all mobility profiles.",
+        "Three-language text is a draft and requires native editorial review."
+      ]
+    }
+  ],
+  "source_register": [
+    {
+      "source_id": "VISITIRAN_FARS_PROVINCE",
+      "title": "Fars Province",
+      "url": "https://visitiran.ir/en/province/fars-province",
+      "publisher": "Visit Iran — Ministry of Cultural Heritage, Tourism and Handicrafts",
+      "source_type": "official_tourism_portal",
+      "language": "en",
+      "retrieved_at": "2026-11-08",
+      "supports": [
+        "Shiraz garden list including Delgosha and Afifabad",
+        "Shiraz as provincial capital",
+        "regional context only"
+      ],
+      "limitations": "Does not establish current access, hours, ticket prices, opening status, visitor entrance, coordinates, or detailed history for each garden."
+    },
+    {
+      "source_id": "VISITIRAN_SAADI_TOMB",
+      "title": "Tomb of Saadi",
+      "url": "https://visitiran.ir/index.php/attraction/tomb-saadi",
+      "publisher": "Visit Iran — Ministry of Cultural Heritage, Tourism and Handicrafts",
+      "source_type": "official_tourism_portal",
+      "language": "en",
+      "retrieved_at": "2026-11-08",
+      "supports": [
+        "Saadi Tomb is in Shiraz near Delgosha Garden"
+      ],
+      "limitations": "Adjacency evidence only; not a source for Delgosha Garden opening hours, history, ticketing, or entrance."
+    },
+    {
+      "source_id": "VISITIRAN_AFIFABAD_GARDEN",
+      "title": "Afifabad Garden",
+      "url": "https://visitiran.ir/attraction/afifabad-garden",
+      "publisher": "Visit Iran — Ministry of Cultural Heritage, Tourism and Handicrafts",
+      "source_type": "official_tourism_portal",
+      "language": "en",
+      "retrieved_at": "2026-11-08",
+      "supports": [
+        "Garden/palace complex and museums",
+        "history as stated by Visit Iran",
+        "architectural description stated by Visit Iran"
+      ],
+      "limitations": "Date/calendar conversion and present operating details need independent review; no current opening hours, ticket price, entrance coordinates, or access profile established."
+    },
+    {
+      "source_id": "VISITIRAN_SHAH_CHERAGH",
+      "title": "Shah Cheragh",
+      "url": "https://visitiran.ir/attraction/shah-cheragh",
+      "publisher": "Visit Iran — Ministry of Cultural Heritage, Tourism and Handicrafts",
+      "source_type": "official_tourism_portal",
+      "language": "en",
+      "retrieved_at": "2026-11-08",
+      "supports": [
+        "Shrine identity as described by Visit Iran",
+        "historical phases described by Visit Iran",
+        "interior mirror work, tilework and inscriptions"
+      ],
+      "limitations": "Religious site visitor rules, access restrictions, photography rules, hours, gender-specific access, current conditions, and entrance details are not established by this source."
+    },
+    {
+      "source_id": "VISITIRAN_NAQSH_E_ROSTAM",
+      "title": "Naqsh-e Rostam",
+      "url": "https://visitiran.ir/attraction/naqsh-e-rostam",
+      "publisher": "Visit Iran — Ministry of Cultural Heritage, Tourism and Handicrafts",
+      "source_type": "official_tourism_portal",
+      "language": "en",
+      "retrieved_at": "2026-11-08",
+      "supports": [
+        "Site is in Marvdasht",
+        "Elamite, Achaemenid and Sassanid monuments",
+        "four Achaemenid royal tombs as described by Visit Iran",
+        "Kaaba-ye Zartosht and Sassanid reliefs"
+      ],
+      "limitations": "Do not classify as an attraction inside Shiraz city; current access, visitor route, hours, ticket price, safety, entrance coordinates, and transport are not established."
+    }
+  ],
+  "global_limitations": [
+    "This addendum is not an approval to publish any claim or activate Fars as the MVP pilot geography.",
+    "The stable target keys must resolve to exactly one existing canonical destination in the actual disposable database before staging; never fall back to name or coordinates.",
+    "All translated copy is draft and requires independent native review in Persian, English and Arabic.",
+    "No coordinate, visitor entrance, hours, prices, access, safety, transit, duration, capacity or current operating status is asserted by this addendum.",
+    "All records remain review-only. A verified, active, current source relationship and editorial approval are required before any production view can expose a record.",
+    "No new destination, source-registry row, document, embedding, or published catalogue record may be created by this addendum."
+  ]
+}

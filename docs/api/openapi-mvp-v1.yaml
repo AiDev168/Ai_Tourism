@@ -1,0 +1,1020 @@
+openapi: 3.1.0
+info:
+  title: AI Tourism MVP API
+  version: 0.1.0
+  description: |
+    This is a Phase 0 design contract, not a statement that these routes are
+    implemented or deployed. It captures the MVP route candidates from the
+    implementation handoff and makes data/publication boundaries explicit.
+
+    Locale contract: clients send `Accept-Language` using `fa-IR` (default),
+    `en-US`, or `ar`. Assistant language uses the same locale identifier.
+    Phase 1 implements no assistant operation and makes no LLM calls.
+
+    Provider boundary: all future AI requests pass through the server-side AI
+    Provider Gateway. Ordinary-user routes never expose provider names, model
+    identifiers, endpoints, credentials, routing/failover configuration or
+    infrastructure/provider status. Provider-specific failures map to safe,
+    provider-neutral product errors. Administrative provider-management routes
+    are not defined by this public API contract and require an approved
+    administrator authentication/authorization design before implementation.
+    Provider secrets remain server-side and protected at rest; they must never
+    appear in browser storage, client bundles, public responses or logs.
+
+    SECURITY GATE: User-owned /api/v1 routes require authenticated identity and
+    object-level authorization before implementation or release. Read-only
+    published-catalogue routes may be public only after the verified,
+    editorially-approved and non-synthetic publication gate is enforced. The
+    identity provider and session scheme are unresolved in ADR-0006, so this
+    document does not pretend a concrete bearer/cookie mechanism has been
+    selected. Codex must not implement user-owned routes as anonymous endpoints.
+
+    STREAMING GATE: Message submission is shown as a JSON request/response
+    baseline. SSE is the preferred future streaming direction, but event names,
+    partial-output persistence, disconnect/cancellation, duplicate submission
+    and finalization semantics must be reviewed before streaming is implemented.
+    See the MVP handoff section 7.1 and 10.
+
+    The schema uses UUID identifiers for user/conversation/trip/recommendation
+    records and integer identifiers for destination catalogue rows, matching
+    the current PostgreSQL schema. The implemented read-only destination
+    catalogue returns IDs as decimal strings to avoid JavaScript int64 loss.
+  contact:
+    name: AI Tourism project
+  license:
+    name: Proprietary project documentation
+servers:
+  - url: /
+    description: Relative server URL; deployment host is not selected.
+tags:
+  - name: Health
+  - name: Conversations
+  - name: Catalogue
+  - name: Recommendations
+  - name: Itineraries
+  - name: Feedback
+  - name: Integrations
+paths:
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      summary: Process liveness
+      description: Does not query or reveal private application configuration.
+      responses:
+        '200':
+          description: The API process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      summary: Application readiness
+      description: |
+        Returns a minimal status only. It must not return connection strings,
+        credentials, hostnames, stack traces or raw database/provider errors.
+      responses:
+        '200':
+          description: Required local dependencies are reachable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: The application is not ready.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/catalog/destinations:
+    get:
+      tags: [Catalogue]
+      operationId: listPublishedDestinations
+      summary: Read the complete bounded published spatial catalogue
+      description: |
+        Public, read-only response backed only by knowledge.production_destinations
+        and knowledge.production_destination_sources. It contains no trip text,
+        descriptions, internal publication flags, or raw source records. An empty
+        approved view returns 200 with an empty complete list. If the database is
+        unavailable, the projection is invalid, or more than the fixed server
+        limit is present, returns the same sanitized 503 response rather than a
+        truncated candidate set. This endpoint contains spatial destinations
+        only; non-spatial foods/products require a separate approved contract.
+      security: []
+      x-authentication-required: false
+      x-publication-boundary: knowledge.production_destinations
+      responses:
+        '200':
+          description: Complete bounded published destination catalogue, possibly empty.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailableDestinationCatalogue'
+        '503':
+          description: Catalogue is unavailable or exceeds the complete-response bound.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogueUnavailable'
+  /api/v1/conversations:
+    post:
+      tags: [Conversations]
+      operationId: createConversation
+      summary: Create a conversation
+      description: |
+        Creates a conversation owned by the authenticated principal. The
+        server derives the owner from the validated identity; clients cannot
+        choose user_id.
+      x-authentication-required: true
+      x-implementation-gate: ADR-0006
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConversationRequest'
+      responses:
+        '201':
+          description: Conversation created.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/conversations/{conversation_id}:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    get:
+      tags: [Conversations]
+      operationId: getConversation
+      summary: Read an owned conversation
+      x-authentication-required: true
+      x-implementation-gate: ADR-0006
+      responses:
+        '200':
+          description: Conversation and its permitted message history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/conversations/{conversation_id}/messages:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    post:
+      tags: [Conversations]
+      operationId: submitConversationMessage
+      summary: Submit a user message
+      description: |
+        Draft JSON contract for one conversational turn. The conversation
+        must belong to the authenticated principal. The backend persists the
+        user message idempotently and validates every model-produced field.
+        Hard constraints and factual provenance remain outside LLM authority.
+        The exact SSE event contract is deferred.
+      x-authentication-required: true
+      x-implementation-gate: ADR-0006
+      x-streaming-contract: deferred
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Client-generated key unique within the conversation.
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitMessageRequest'
+      responses:
+        '200':
+          description: The turn has completed and its messages are persisted.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationTurn'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The idempotency key was reused with a conflicting payload.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          description: A required dependency is temporarily unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/destinations:
+    get:
+      tags: [Catalogue]
+      operationId: listDestinations
+      summary: List approved destinations
+      description: |
+        Public catalogue query policy must return only explicitly published,
+        verified, non-synthetic rows. The 15 legacy rows and 17 UNESCO rows
+        currently marked needs_review must remain excluded. Synthetic QA rows
+        must never be returned.
+      x-authentication-required: false
+      x-publication-gate: verified-and-editorially-approved-and-non-synthetic
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 160
+        - name: province
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: page_token
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A page of published destinations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DestinationPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/destinations/{destination_id}:
+    parameters:
+      - name: destination_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+    get:
+      tags: [Catalogue]
+      operationId: getDestination
+      summary: Read one approved destination
+      x-authentication-required: false
+      x-publication-gate: verified-and-editorially-approved-and-non-synthetic
+      responses:
+        '200':
+          description: Published destination with source summaries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Destination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/recommendations/{recommendation_id}:
+    parameters:
+      - name: recommendation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Recommendations]
+      operationId: getRecommendation
+      summary: Read a recommendation owned by the current user
+      x-authentication-required: true
+      x-implementation-gate: ADR-0006
+      responses:
+        '200':
+          description: Recommendation, deterministic explanation and warnings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recommendation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/trips/{trip_id}/itineraries:
+    parameters:
+      - name: trip_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Itineraries]
+      operationId: createItinerary
+      summary: Create an editable evidence-backed plan draft
+      description: |
+        The requested day_count is 1–365 and cannot exceed the owner's
+        confirmed trip duration. The response includes every requested day
+        through day_count, marks uncovered days as unplanned, and never
+        invents places or schedules. A partial draft is valid when approved
+        evidence covers fewer days than requested.
+      x-authentication-required: true
+      x-implementation-gate: ADR-0006
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateItineraryRequest'
+      responses:
+        '201':
+          description: Created partial or complete editable itinerary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Itinerary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Trip duration is unconfirmed, exceeds the confirmed duration, or has no eligible recommendations.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/itineraries/{itinerary_id}:
+    parameters:
+      - name: itinerary_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Itineraries]
+      operationId: getItinerary
+      summary: Read an owned itinerary
+      x-authentication-required: true
+      x-implementation-gate: ADR-0006
+      responses:
+        '200':
+          description: Itinerary with ordered day stops.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Itinerary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Itineraries]
+      operationId: updateItinerary
+      summary: Update an owned itinerary
+      description: |
+        Only the authenticated owner can edit. The application validates that
+        day_count is 1–365 and cannot exceed the confirmed trip duration.
+        Each day may contain at most 50 stops and a plan at most 1,000 stops.
+        Stop order is unique within a day; referenced destinations are
+        revalidated against the approved catalogue. The response's status and
+        unplanned_days are derived from actual stop coverage. Route times and
+        travel durations remain unknown unless source-backed.
+      x-authentication-required: true
+      x-implementation-gate: ADR-0006
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateItineraryRequest'
+      responses:
+        '200':
+          description: Updated itinerary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Itinerary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/feedback:
+    post:
+      tags: [Feedback]
+      operationId: submitFeedback
+      summary: Submit feedback
+      x-authentication-required: true
+      x-implementation-gate: ADR-0006
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '201':
+          description: Feedback accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/outbound-clicks:
+    post:
+      tags: [Integrations]
+      operationId: recordOutboundClick
+      summary: Resolve and record an allowlisted external-link click
+      description: |
+        Request carries only an external_link_id. The server loads the active
+        allowlisted URL and records the click; it must not accept arbitrary
+        redirect URLs from the client.
+      x-authentication-required: true
+      x-implementation-gate: ADR-0006
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [external_link_id]
+              properties:
+                external_link_id:
+                  type: string
+                  format: uuid
+                trip_id:
+                  type: string
+                  format: uuid
+                recommendation_id:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Click recorded and an allowlisted target resolved.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [click_id, target_url]
+                properties:
+                  click_id:
+                    type: string
+                    format: uuid
+                  target_url:
+                    type: string
+                    format: uri
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+components:
+  headers:
+    RequestId:
+      description: Server-generated correlation/request identifier.
+      schema:
+        type: string
+  parameters:
+    ConversationId:
+      name: conversation_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Unauthorized:
+      description: Authentication is missing, expired or invalid.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Resource does not exist or is not visible to the caller.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ValidationError:
+      description: Request validation failed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    RateLimited:
+      description: Rate limit or quota exceeded.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    HealthStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, ready]
+        request_id:
+          type: string
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        request_id:
+          type: string
+        retryable:
+          type: boolean
+        details:
+          type: object
+          additionalProperties: true
+    CreateConversationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        language_code:
+          type: string
+          default: fa-IR
+          enum: [fa-IR, en-US, ar]
+        channel:
+          type: string
+          default: pwa
+          enum: [pwa, web, mobile_web]
+    Conversation:
+      type: object
+      additionalProperties: false
+      required: [conversation_id, language_code, status, started_at]
+      properties:
+        conversation_id:
+          type: string
+          format: uuid
+        language_code:
+          type: string
+        status:
+          type: string
+          enum: [active, completed, archived]
+        started_at:
+          type: string
+          format: date-time
+    ConversationDetail:
+      allOf:
+        - $ref: '#/components/schemas/Conversation'
+        - type: object
+          required: [messages]
+          properties:
+            messages:
+              type: array
+              items:
+                $ref: '#/components/schemas/Message'
+    Message:
+      type: object
+      additionalProperties: false
+      required: [message_id, role, content, message_type, created_at]
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        message_type:
+          type: string
+          enum: [text, structured, system_notice]
+        created_at:
+          type: string
+          format: date-time
+    SubmitMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 12000
+    ConversationTurn:
+      type: object
+      additionalProperties: false
+      required: [conversation_id, user_message, assistant_message, clarification_required]
+      properties:
+        conversation_id:
+          type: string
+          format: uuid
+        user_message:
+          $ref: '#/components/schemas/Message'
+        assistant_message:
+          $ref: '#/components/schemas/Message'
+        clarification_required:
+          type: boolean
+        structured_trip_summary:
+          type: object
+          description: Validated editable trip fields; exact field schema is refined in Phase 2.
+          additionalProperties: true
+    DestinationSummary:
+      type: object
+      additionalProperties: false
+      required: [destination_id, canonical_name, destination_type]
+      properties:
+        destination_id:
+          type: integer
+          format: int64
+        canonical_name:
+          type: string
+        destination_type:
+          type: string
+        province_name:
+          type: string
+        city_name:
+          type: [string, 'null']
+        coordinate:
+          type: [object, 'null']
+          additionalProperties: false
+          required: [latitude, longitude, coordinate_role]
+          properties:
+            latitude:
+              type: number
+              minimum: -90
+              maximum: 90
+            longitude:
+              type: number
+              minimum: -180
+              maximum: 180
+            coordinate_role:
+              type: string
+              enum: [property_reference, representative_point, visitor_entrance]
+    AvailableDestinationCatalogue:
+      type: object
+      additionalProperties: false
+      required: [status, complete, count, items]
+      properties:
+        status:
+          type: string
+          const: available
+        complete:
+          type: boolean
+          const: true
+        count:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        items:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/PublishedDestinationCandidate'
+    PublishedDestinationCandidate:
+      type: object
+      additionalProperties: false
+      required: [destination_id, destination_key, canonical_name, localized_names, aliases, destination_type, province_name, city_name]
+      properties:
+        destination_id:
+          type: string
+          pattern: '^[0-9]+$'
+          description: Decimal PostgreSQL bigint encoded as a string for JavaScript safety.
+        destination_key:
+          type: string
+          maxLength: 240
+        canonical_name:
+          type: string
+          maxLength: 240
+        localized_names:
+          type: object
+          additionalProperties: false
+          required: [fa-IR, en-US, ar]
+          properties:
+            fa-IR:
+              type: [string, 'null']
+              maxLength: 240
+            en-US:
+              type: [string, 'null']
+              maxLength: 240
+            ar:
+              type: [string, 'null']
+              maxLength: 240
+        aliases:
+          type: array
+          maxItems: 32
+          items:
+            type: object
+            additionalProperties: false
+            required: [locale, value, alias_type]
+            properties:
+              locale:
+                type: string
+                enum: [fa-IR, en-US, ar]
+              value:
+                type: string
+                maxLength: 200
+              alias_type:
+                type: string
+                enum: [canonical_display_name, spelling_variant, alternate_script_name, exonym]
+          description: Explicitly approved records from the version-controlled locale-tagged review manifest.
+        destination_type:
+          type: string
+          maxLength: 64
+        province_name:
+          type: string
+          maxLength: 240
+        city_name:
+          type: [string, 'null']
+          maxLength: 240
+    CatalogueUnavailable:
+      type: object
+      additionalProperties: false
+      required: [status, error]
+      properties:
+        status:
+          type: string
+          const: unavailable
+        error:
+          type: object
+          additionalProperties: false
+          required: [code]
+          properties:
+            code:
+              type: string
+              const: catalogue_unavailable
+    Destination:
+      allOf:
+        - $ref: '#/components/schemas/DestinationSummary'
+        - type: object
+          required: [description, sources]
+          properties:
+            description:
+              type: string
+            sources:
+              type: array
+              items:
+                $ref: '#/components/schemas/SourceSummary'
+    SourceSummary:
+      type: object
+      additionalProperties: false
+      required: [source_name, url]
+      properties:
+        source_name:
+          type: string
+        url:
+          type: string
+          format: uri
+    DestinationPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DestinationSummary'
+        next_page_token:
+          type: [string, 'null']
+    Recommendation:
+      type: object
+      additionalProperties: false
+      required: [recommendation_id, rank, final_score, explanation, warnings, destination]
+      properties:
+        recommendation_id:
+          type: string
+          format: uuid
+        rank:
+          type: integer
+          minimum: 1
+        final_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        explanation:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        destination:
+          $ref: '#/components/schemas/DestinationSummary'
+    ItineraryStop:
+      type: object
+      additionalProperties: false
+      required: [itinerary_stop_id, recommendation_id, destination_id, day_number, stop_order]
+      properties:
+        itinerary_stop_id:
+          type: string
+          format: uuid
+        recommendation_id:
+          type: string
+          format: uuid
+        destination_id:
+          type: string
+          pattern: '^[0-9]+$'
+        day_number:
+          type: integer
+          minimum: 1
+          maximum: 365
+        stop_order:
+          type: integer
+          minimum: 1
+          maximum: 50
+        planned_start_time:
+          type: [string, 'null']
+          format: time
+        duration_minutes:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 1440
+        notes_by_locale:
+          type: object
+          maxProperties: 3
+          additionalProperties:
+            type: string
+            maxLength: 2000
+        canonical_name:
+          type: string
+        localized_names:
+          type: object
+          additionalProperties:
+            type: [string, 'null']
+    Itinerary:
+      type: object
+      additionalProperties: false
+      required: [itinerary_id, trip_id, recommendation_request_id, version, revision, day_count, status, unplanned_days, title_by_locale, stops, updated_at]
+      properties:
+        itinerary_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        trip_id:
+          type: string
+          format: uuid
+        recommendation_request_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+        day_count:
+          type: integer
+          minimum: 1
+          maximum: 365
+        status:
+          type: string
+          enum: [complete, partial]
+          description: Coverage status; complete only when every requested day has an evidenced stop.
+        unplanned_days:
+          type: array
+          maxItems: 365
+          items:
+            type: integer
+            minimum: 1
+            maximum: 365
+        title_by_locale:
+          type: object
+          additionalProperties:
+            type: string
+        updated_at:
+          type: string
+          format: date-time
+        stops:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/ItineraryStop'
+    CreateItineraryRequest:
+      type: object
+      additionalProperties: false
+      required: [recommendation_request_id, day_count, locale]
+      properties:
+        recommendation_request_id:
+          type: string
+          format: uuid
+        day_count:
+          type: integer
+          minimum: 1
+          maximum: 365
+          description: Must not exceed the confirmed trip duration.
+        locale:
+          type: string
+          enum: [fa-IR, en-US, ar]
+    UpdateItineraryRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, title_by_locale, stops]
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 1
+          description: Current revision supplied by the client; stale edits are rejected.
+        title_by_locale:
+          type: object
+          maxProperties: 3
+          additionalProperties:
+            type: string
+            minLength: 1
+            maxLength: 200
+        stops:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/ItineraryStop'
+    FeedbackRequest:
+      type: object
+      additionalProperties: false
+      required: [feedback_type]
+      properties:
+        feedback_type:
+          type: string
+          enum: [recommendation_rating, answer_quality, itinerary_quality, bug_report, other]
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+          maxLength: 4000
+        conversation_id:
+          type: string
+          format: uuid
+        trip_id:
+          type: string
+          format: uuid
+        recommendation_id:
+          type: string
+          format: uuid
+    FeedbackAccepted:
+      type: object
+      additionalProperties: false
+      required: [feedback_id, created_at]
+      properties:
+        feedback_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+x-security-status: unresolved-mechanism; all user-owned /api/v1 operations require authentication and object-level authorization; published catalogue reads may be public only after publication gating
+x-deferred-contracts:
+  - Authentication/session scheme (ADR-0006)
+  - SSE event schema and disconnect/cancellation/idempotency semantics
+  - Structured trip requirement schema and clarification state machine
+  - Weather provider response and freshness contract
+  - Account deletion operation; retention/deletion policy is not approved
+  - Deployment server URL and production hosting/region

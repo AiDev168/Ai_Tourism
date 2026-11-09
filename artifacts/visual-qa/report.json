@@ -1,0 +1,1112 @@
+{
+  "generatedAt": "2026-11-05T11:04:49.888Z",
+  "browser": "Installed Google Chrome, headless",
+  "cases": 18,
+  "offlineCheck": {
+    "controlled": true,
+    "shell": true,
+    "imageCached": true,
+    "fontCached": true
+  },
+  "failures": [],
+  "results": [
+    {
+      "locale": "fa-IR",
+      "width": 360,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 58,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "نیازهای سفرت ثبت شد\nپاک‌کردن پیش‌نویس\n\nاین یک پیش‌نویس موقت در همین نشست است؛ هنوز مقصد یا اطلاعات سفر تأیید نشده‌اند.\n\nمقصد واردشده\nShiraz شیراز شيراز القاهرة Cairo\nمدت درخواستی\n۳ روز",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "mixedScriptLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "editLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/fa-IR/360.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 390,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 58,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "نیازهای سفرت ثبت شد\nپاک‌کردن پیش‌نویس\n\nاین یک پیش‌نویس موقت در همین نشست است؛ هنوز مقصد یا اطلاعات سفر تأیید نشده‌اند.\n\nمقصد واردشده\nShiraz شیراز شيراز القاهرة Cairo\nمدت درخواستی\n۳ روز",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "mixedScriptLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "editLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/fa-IR/390.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 430,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 58,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "نیازهای سفرت ثبت شد\nپاک‌کردن پیش‌نویس\n\nاین یک پیش‌نویس موقت در همین نشست است؛ هنوز مقصد یا اطلاعات سفر تأیید نشده‌اند.\n\nمقصد واردشده\nShiraz شیراز شيراز القاهرة Cairo\nمدت درخواستی\n۳ روز",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "mixedScriptLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "editLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/fa-IR/430.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 768,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 58,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "نیازهای سفرت ثبت شد\nپاک‌کردن پیش‌نویس\n\nاین یک پیش‌نویس موقت در همین نشست است؛ هنوز مقصد یا اطلاعات سفر تأیید نشده‌اند.\n\nمقصد واردشده\nShiraz شیراز شيراز القاهرة Cairo\nمدت درخواستی\n۳ روز",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "mixedScriptLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "editLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/fa-IR/768.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 1024,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 58,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "نیازهای سفرت ثبت شد\nپاک‌کردن پیش‌نویس\n\nاین یک پیش‌نویس موقت در همین نشست است؛ هنوز مقصد یا اطلاعات سفر تأیید نشده‌اند.\n\nمقصد واردشده\nShiraz شیراز شيراز القاهرة Cairo\nمدت درخواستی\n۳ روز",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "mixedScriptLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "editLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/fa-IR/1024.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 1440,
+      "direction": "rtl",
+      "title": "راه‌گرد | سفر، به روایت تو",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 58,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "نیازهای سفرت ثبت شد\nپاک‌کردن پیش‌نویس\n\nاین یک پیش‌نویس موقت در همین نشست است؛ هنوز مقصد یا اطلاعات سفر تأیید نشده‌اند.\n\nمقصد واردشده\nShiraz شیراز شيراز القاهرة Cairo\nمدت درخواستی\n۳ روز",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "mixedScriptLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "editLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/fa-IR/1440.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 360,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 51,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "Trip requirements captured\nClear draft\n\nThis is a temporary draft in this session. The destination and travel details are not verified.\n\nDestination entered\nShiraz شیراز شيراز القاهرة Cairo\nRequested length\n3 days",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "mixedScriptLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "editLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/en-US/360.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 390,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 51,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "Trip requirements captured\nClear draft\n\nThis is a temporary draft in this session. The destination and travel details are not verified.\n\nDestination entered\nShiraz شیراز شيراز القاهرة Cairo\nRequested length\n3 days",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "mixedScriptLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "editLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/en-US/390.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 430,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 51,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "Trip requirements captured\nClear draft\n\nThis is a temporary draft in this session. The destination and travel details are not verified.\n\nDestination entered\nShiraz شیراز شيراز القاهرة Cairo\nRequested length\n3 days",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "mixedScriptLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "editLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/en-US/430.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 768,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 51,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "Trip requirements captured\nClear draft\n\nThis is a temporary draft in this session. The destination and travel details are not verified.\n\nDestination entered\nShiraz شیراز شيراز القاهرة Cairo\nRequested length\n3 days",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "mixedScriptLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "editLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/en-US/768.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 1024,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 51,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "Trip requirements captured\nClear draft\n\nThis is a temporary draft in this session. The destination and travel details are not verified.\n\nDestination entered\nShiraz شیراز شيراز القاهرة Cairo\nRequested length\n3 days",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "mixedScriptLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "editLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/en-US/1024.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 1440,
+      "direction": "ltr",
+      "title": "Rahgard | Travel, in your own telling",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 51,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "Trip requirements captured\nClear draft\n\nThis is a temporary draft in this session. The destination and travel details are not verified.\n\nDestination entered\nShiraz شیراز شيراز القاهرة Cairo\nRequested length\n3 days",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "mixedScriptLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "editLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/en-US/1440.png"
+    },
+    {
+      "locale": "ar",
+      "width": 360,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 45,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "تم تسجيل متطلبات الرحلة\nمسح المسودة\n\nهذه مسودة مؤقتة ضمن الجلسة. الوجهة وتفاصيل السفر غير مؤكدة.\n\nالوجهة التي أدخلتها\nShiraz شیراز شيراز القاهرة Cairo\nالمدة المطلوبة\n٣ أيام",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "mixedScriptLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "editLayout": {
+        "viewport": 360,
+        "document": 360
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/ar/360.png"
+    },
+    {
+      "locale": "ar",
+      "width": 390,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 45,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "تم تسجيل متطلبات الرحلة\nمسح المسودة\n\nهذه مسودة مؤقتة ضمن الجلسة. الوجهة وتفاصيل السفر غير مؤكدة.\n\nالوجهة التي أدخلتها\nShiraz شیراز شيراز القاهرة Cairo\nالمدة المطلوبة\n٣ أيام",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "mixedScriptLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "editLayout": {
+        "viewport": 390,
+        "document": 390
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/ar/390.png"
+    },
+    {
+      "locale": "ar",
+      "width": 430,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 45,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "تم تسجيل متطلبات الرحلة\nمسح المسودة\n\nهذه مسودة مؤقتة ضمن الجلسة. الوجهة وتفاصيل السفر غير مؤكدة.\n\nالوجهة التي أدخلتها\nShiraz شیراز شيراز القاهرة Cairo\nالمدة المطلوبة\n٣ أيام",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "mixedScriptLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "editLayout": {
+        "viewport": 430,
+        "document": 430
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/ar/430.png"
+    },
+    {
+      "locale": "ar",
+      "width": 768,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 45,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "تم تسجيل متطلبات الرحلة\nمسح المسودة\n\nهذه مسودة مؤقتة ضمن الجلسة. الوجهة وتفاصيل السفر غير مؤكدة.\n\nالوجهة التي أدخلتها\nShiraz شیراز شيراز القاهرة Cairo\nالمدة المطلوبة\n٣ أيام",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "mixedScriptLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "editLayout": {
+        "viewport": 768,
+        "document": 768
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/ar/768.png"
+    },
+    {
+      "locale": "ar",
+      "width": 1024,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 45,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "تم تسجيل متطلبات الرحلة\nمسح المسودة\n\nهذه مسودة مؤقتة ضمن الجلسة. الوجهة وتفاصيل السفر غير مؤكدة.\n\nالوجهة التي أدخلتها\nShiraz شیراز شيراز القاهرة Cairo\nالمدة المطلوبة\n٣ أيام",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "mixedScriptLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "editLayout": {
+        "viewport": 1024,
+        "document": 1024
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/ar/1024.png"
+    },
+    {
+      "locale": "ar",
+      "width": 1440,
+      "direction": "rtl",
+      "title": "راهگرد | رحلتك كما تحب أن ترويها",
+      "fontStatus": {
+        "loaded": true,
+        "resources": [
+          "http://127.0.0.1:4179/fonts/estedad-arabic-variable.woff2",
+          "http://127.0.0.1:4179/fonts/estedad-latin-variable.woff2"
+        ]
+      },
+      "imageStatus": [
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        },
+        {
+          "loaded": true,
+          "local": true,
+          "format": "avif"
+        }
+      ],
+      "promptInputLength": 45,
+      "clarificationCount": 1,
+      "intakeReady": true,
+      "intakeSummary": "تم تسجيل متطلبات الرحلة\nمسح المسودة\n\nهذه مسودة مؤقتة ضمن الجلسة. الوجهة وتفاصيل السفر غير مؤكدة.\n\nالوجهة التي أدخلتها\nShiraz شیراز شيراز القاهرة Cairo\nالمدة المطلوبة\n٣ أيام",
+      "validationVisible": true,
+      "mixedDestinationLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "mixedScriptLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "editLayout": {
+        "viewport": 1440,
+        "document": 1440
+      },
+      "keyboardFocus": true,
+      "reducedMotion": {
+        "preference": true,
+        "transition": "1e-05s"
+      },
+      "accessibility": [],
+      "externalRequests": [],
+      "errors": [],
+      "screenshot": "artifacts/visual-qa/ar/1440.png"
+    }
+  ]
+}
