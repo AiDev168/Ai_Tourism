@@ -506,6 +506,77 @@ async function runPartialFixture(page, locale, tripId, tripVersion, screenshotRo
   }
 }
 
+// Browser -> real authenticated assistant endpoint -> durable PostgreSQL rows.
+// Only the external LLM is simulated by the guarded API server dependency.
+// The candidate is deliberately unverified and MUST NOT change the trip.
+async function verifySimulatedAssistant(page, api, locale, conversationId, tripId, csrf, initialTripVersion) {
+  const before = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
+  const assistantButton = page.locator('.assistant-controls > button');
+  if (await assistantButton.isEnabled()) throw new Error('assistant_without_remote_consent_enabled');
+  const noConsentStatus = await apiStatus(page,
+    '/api/v1/conversations/' + conversationId + '/assistant-turns', 'POST',
+    { 'X-CSRF-Token': csrf }, {
+      trip_id: tripId, content: 'Unauthorized provider processing',
+      idempotency_key: randomUUID(), expected_version: 1,
+      remote_processing_consent: false,
+    });
+  if (noConsentStatus !== 422) throw new Error('assistant_without_consent_api_not_rejected');
+  const prompt = {
+    'fa-IR': 'برای این سفر یک پیشنهاد آزمایشی بده.',
+    'en-US': 'Give an example suggestion for this trip.',
+    ar: 'أعطني اقتراحا تجريبيا لهذه الرحلة.',
+  }[locale];
+  await page.locator('#trip-follow-up').fill(prompt);
+  await page.locator('#assistant-remote-consent').check();
+  const path = '/api/v1/conversations/' + conversationId + '/assistant-turns';
+  const responsePending = page.waitForResponse(response =>
+    new URL(response.url()).pathname === path && response.request().method() === 'POST');
+  await assistantButton.click();
+  const response = await responsePending;
+  const body = await response.json();
+  if (response.status() !== 200 || !response.headers()['cache-control']?.includes('no-store')
+      || body.replayed || body.candidate_requirements?.destination !== 'Kashan'
+      || body.candidate_requirements?.duration_days !== 2
+      || body.trip?.version !== initialTripVersion
+      || Object.keys(body.trip?.confirmed_requirements ?? {}).length !== 0) {
+    throw new Error('simulated_assistant_endpoint_or_trip_invariant_failed_' + locale);
+  }
+  await page.locator('.saved-message-assistant p').waitFor({ state: 'visible' });
+  await page.locator('.assistant-candidate').waitFor({ state: 'visible' });
+  if (await page.locator('#profile-duration').inputValue() !== '10') {
+    throw new Error('assistant_changed_profile_without_confirmation_' + locale);
+  }
+  const stored = await page.request.get(webOrigin + '/api/v1/conversations/' + conversationId);
+  const conversation = await stored.json();
+  const saved = conversation.messages?.filter(m => m.role === 'assistant' && m.trip_id === tripId);
+  if (stored.status() !== 200 || saved?.length !== 1
+      || saved[0].candidate_requirements?.destination !== 'Kashan'
+      || saved[0].candidate_requirements?.duration_days !== 2
+      || 'metadata' in saved[0]) {
+    throw new Error('assistant_advisory_not_reopenable_or_metadata_exposed_' + locale);
+  }
+  // Same idempotency key must replay durable state, not call the simulated
+  // gateway again or create another assistant message.
+  const originalRequest = response.request().postDataJSON();
+  const replay = await page.evaluate(async ({ path, payload, csrfToken }) => {
+    const result = await fetch(path, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify(payload),
+    });
+    const data = await result.json();
+    return { status: result.status, replayed: data.replayed,
+      tripVersion: data.trip?.version, messageId: data.message?.message_id };
+  }, { path, payload: originalRequest, csrfToken: csrf });
+  const after = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
+  if (replay.status !== 200 || !replay.replayed || replay.tripVersion !== initialTripVersion
+      || replay.messageId !== body.message?.message_id || after.count !== before.count + 1) {
+    throw new Error('simulated_assistant_idempotency_or_call_budget_failed_' + locale);
+  }
+  await page.locator('.assistant-candidate button').last().click(); // Reject suggestion.
+  return true;
+}
+
 async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
   const copy = localeCopy[locale];
   const phones = [syntheticPhone(), syntheticPhone()];
@@ -589,6 +660,9 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       throw new Error(`conversation_trip_persistence_failed_${locale}_${persisted.status()}`);
     }
     await pageA.locator('.history-trip > button').first().waitFor({ state: 'visible' });
+    const assistantIntegrationVerified = await verifySimulatedAssistant(
+      pageA, api, locale, conversationId, tripId, csrfA, firstTripResponseBody.trip.version,
+    );
     await pageA.locator('#requirement-consent-budget-advisory').waitFor({ state: 'visible' });
     await pageA.locator('.requirement-accessibility-mandatory').waitFor({ state: 'visible' });
     if (await pageA.locator('#requirement-consent-accessibility-must, #requirement-consent-accessibility-advisory').count() !== 0) {
@@ -694,6 +768,12 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     if (!(await pageA.locator('.saved-message-user p').first().textContent())?.includes(copy.prompt)) {
       throw new Error(`history_request_not_restored_${locale}`);
     }
+    await pageA.locator('.saved-message-assistant button').first().click();
+    await pageA.locator('.assistant-candidate').waitFor({ state: 'visible' });
+    if (!(await pageA.locator('.assistant-candidate').textContent())?.includes('Kashan')) {
+      throw new Error('restored_assistant_candidate_missing_' + locale);
+    }
+    await pageA.locator('.assistant-candidate button').last().click();
     if (!(await pageA.locator('#requirement-consent-budget-advisory').isChecked())
       || !(await pageA.locator('#requirement-consent-budget-ack').isChecked())
       || !(await pageA.locator('#requirement-consent-soft_preference-advisory').isChecked())
@@ -741,11 +821,18 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       trip_id: tripId, content: 'Cross-owner authorization probe', idempotency_key: randomUUID(),
       expected_version: conversationVersion,
     });
+    const assistantDenied = await apiStatus(pageB,
+      '/api/v1/conversations/' + conversationId + '/assistant-turns', 'POST',
+      { 'X-CSRF-Token': csrfB }, {
+        trip_id: tripId, content: 'Cross-owner assistant probe',
+        idempotency_key: randomUUID(), expected_version: conversationVersion,
+        remote_processing_consent: true,
+      });
     const conversationDeleteDenied = await apiStatus(pageB, `/api/v1/conversations/${conversationId}`, 'DELETE', {
       'X-CSRF-Token': csrfB,
     });
     if (csrfDenied !== 403 || badOriginDenied !== 403 || ownerReadDenied !== 404 || ownerDeleteDenied !== 404
-      || appendDenied !== 404 || conversationDeleteDenied !== 404) {
+      || appendDenied !== 404 || assistantDenied !== 404 || conversationDeleteDenied !== 404) {
       throw new Error(`real_http_owner_csrf_boundary_failed_${locale}`);
     }
     ownerAndCsrfVerified = true;
@@ -844,6 +931,7 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
 
     return {
       locale, emptyProductionCatalogue: emptyResultVerified, consentSnapshotVerified,
+      simulatedAssistantIntegrationVerified: assistantIntegrationVerified,
       historyReopenVerified: true, ownerAndCsrfVerified, deletionVerified, localeChecks,
       noStoreMe, noStoreVerify: true, externalRequestsBlocked: true,
     };
@@ -890,7 +978,7 @@ async function main() {
     const report = {
       status: 'passed',
       browser: `Chromium ${browser.version()}`,
-      environment: 'live Vite same-origin proxy + FastAPI + guarded disposable PostgreSQL 17; fake SMS only',
+      environment: 'live Vite proxy + FastAPI + guarded disposable PostgreSQL 17; fake SMS and simulated Chat gateway (no remote model)',
       locales: results,
       screenshots: [
         ...['fa-IR', 'en-US', 'ar'].flatMap(locale => [
@@ -902,7 +990,7 @@ async function main() {
       ],
       audit: { externalRequestsBlocked: audit.externalRequests, successfulExternalResponses: 0, browserPageErrors: 0 },
       screenshotPolicy: 'Traveler-authored text is replaced in screenshot-only DOM captures; no phone, OTP, cookie, token, or request text is recorded.',
-      fixturePolicy: 'The partial ten-day fixture is intercepted in Playwright, marked test-only, and never written to PostgreSQL or production views.',
+      fixturePolicy: 'Simulated Chat gateway makes no HTTP requests. Partial ten-day fixture is Playwright-intercepted and never written to production views.',
     };
     writeFileSync(resolve(artifactRoot, 'report.json'), `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
     console.log(JSON.stringify({ status: report.status, browser: report.browser, locales: results.map(result => result.locale), screenshots: report.screenshots.length, artifactRoot: artifactRoot.replaceAll('\\', '/') }));

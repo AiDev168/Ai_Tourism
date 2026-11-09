@@ -13,6 +13,7 @@ import os
 import re
 import socketserver
 import sys
+from secrets import token_hex
 import threading
 import time
 from pathlib import Path
@@ -143,6 +144,9 @@ class _ControlHandler(socketserver.StreamRequestHandler):
                     if not messages:
                         time.sleep(0.025)
                 result = {"ok": len(messages) == 1, "code": messages[0].verification_code if len(messages) == 1 else None}
+            elif action == "assistant_call_count":
+                # The private authenticated control socket exposes only counts.
+                result = {"ok": True, "count": self.server.chat_gateway.call_count}
             elif action == "account_state":
                 user_id = str(command.get("user_id", ""))
                 phone = str(command.get("phone", ""))
@@ -190,6 +194,12 @@ def main() -> None:
         database_user=database["user"],
         database_password=database["password"],
         auth_enabled=True,
+        # Offline E2E enables the API route, but overrides its gateway before
+        # any request can reach the network. No paid or external model traffic.
+        internal_chat_enabled=True,
+        internal_chat_endpoint="https://example.invalid/v1/chat/completions",
+        internal_chat_model="offline-browser-fixture",
+        internal_chat_token=__import__("pydantic").SecretStr(token_hex(32)),
         auth_sms_adapter="fake",
         auth_cookie_secure=False,
         auth_allowed_origins=web_origin,
@@ -207,7 +217,31 @@ def main() -> None:
     config.get_settings = lambda: settings
     from app.main import app
     from app.modules.identity.sms import FakeSmsAdapter
+    from app.api.assistant import get_chat_gateway
+    from app.modules.integrations.chat_adapter import ChatReply
 
+    class SimulatedChatGateway:
+        """Only for guarded E2E. Simulates model content; makes zero HTTP calls."""
+
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        async def invoke(self, request):
+            self.call_count += 1
+            if not request.history or not request.text.strip():
+                raise RuntimeError("simulated_e2e_history_or_input_missing")
+            replies = {
+                "fa-IR": "پیشنهاد آزمایشی: کاشان برای دو روز؛ ابتدا خودتان بررسی کنید.",
+                "en-US": "Simulated suggestion: Kashan for two days. Review it first.",
+                "ar": "اقتراح تجريبي: كاشان لمدة يومين. راجعه أولاً.",
+            }
+            return ChatReply(
+                reply=replies[request.locale],
+                requirements={"destination": "Kashan", "duration_days": 2},
+            )
+
+    chat_gateway = SimulatedChatGateway()
+    app.dependency_overrides[get_chat_gateway] = lambda: chat_gateway
     adapter = FakeSmsAdapter()
     app.state.sms_adapter = adapter
     app.dependency_overrides[config.get_settings] = lambda: settings
@@ -225,6 +259,7 @@ def main() -> None:
     control.daemon_threads = True
     control.adapter = adapter
     control.database = database
+    control.chat_gateway = chat_gateway
     control.control_token = control_token
     control_thread = threading.Thread(target=control.serve_forever, daemon=True)
     control_thread.start()
