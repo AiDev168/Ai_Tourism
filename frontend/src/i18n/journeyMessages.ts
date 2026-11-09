@@ -3,7 +3,7 @@ import type { Locale } from './messages';
 export const journeyMessages = {
   'fa-IR': {
     workspaceTitle: 'برنامه‌های سفر من',
-    privacyNotice: 'با ذخیره‌سازی، گفت‌وگو و برنامهٔ سفر برای ادامه و مشاهدهٔ تاریخچه در حساب شما نگه‌داری می‌شود و فقط خودتان به آن دسترسی دارید. هر زمان می‌توانید سفر یا حساب را حذف کنید. در این نسخه، متن شما به سرویس هوش مصنوعی بیرونی فرستاده نمی‌شود.',
+    privacyNotice: 'با ذخیره‌سازی، گفت‌وگو و برنامهٔ سفر برای ادامه و مشاهدهٔ تاریخچه در حساب شما نگه‌داری می‌شود و فقط خودتان به آن دسترسی دارید. هر زمان می‌توانید سفر یا حساب را حذف کنید. پیام‌های شما فقط پس از انتخاب رضایت صریح و فشردن دکمهٔ دستیار، برای پردازش به سرویس هوش مصنوعی پیکربندی‌شده ارسال می‌شوند؛ در غیر این صورت ارسال بیرونی نداریم.',
     signInToSave: 'برای ذخیره و ادامهٔ سفر در دستگاه‌های دیگر، ابتدا وارد حساب شوید. پیش‌نویس فعلی تا وقتی این صفحه باز است در همین‌جا می‌ماند.',
     saveTrip: 'ذخیرهٔ سفر من',
     createAnotherTrip: 'شروع سفر دیگری در همین گفت‌وگو',
@@ -75,7 +75,7 @@ export const journeyMessages = {
     saveItinerary: 'ذخیرهٔ برنامه',
     itinerarySaved: 'برنامه ذخیره شد.',
     noItinerary: 'تا زمانی که مقصدهای تأییدشده در دسترس نباشند، برنامهٔ ساختگی تهیه نمی‌کنیم.',
-    emptyAssistant: 'پاسخ خود را در همین گفت‌وگو بنویسید. این نسخه از مدل هوش مصنوعی استفاده نمی‌کند.',
+    emptyAssistant: 'پاسخ خود را در همین گفت‌وگو بنویسید. برای پاسخ هوشمند، رضایت پردازش بیرونی را انتخاب و از دکمهٔ «پرسش از دستیار سفر» استفاده کنید.',
     sessionExpired: 'نشست شما پایان یافته است. متن واردشده حفظ شد؛ دوباره وارد شوید و سپس ذخیره را تکرار کنید.',
     forbidden: 'به این سفر دسترسی ندارید.',
     conflict: 'این سفر در جای دیگری تغییر کرده است. تازه‌سازی کنید و تغییرهای خود را دوباره بررسی کنید.',
@@ -98,7 +98,7 @@ export const journeyMessages = {
   },
   'en-US': {
     workspaceTitle: 'My travel plans',
-    privacyNotice: 'When you save, your conversation and trip are stored in your account so you can continue later and view history. Only you can access them. You can delete a trip or your account at any time. This release does not send your text to an external AI service.',
+    privacyNotice: 'When you save, your conversation and trip are stored in your account so you can continue later and view history. Only you can access them. You can delete a trip or your account at any time. Messages are sent to the configured external AI service only when you explicitly consent and ask the advisor; otherwise they stay within Rahgard.',
     signInToSave: 'Sign in to save this trip and continue on another device. Your current draft stays on this page while it remains open.',
     saveTrip: 'Save my trip',
     createAnotherTrip: 'Start another trip in this conversation',
@@ -170,7 +170,7 @@ export const journeyMessages = {
     saveItinerary: 'Save plan',
     itinerarySaved: 'The plan was saved.',
     noItinerary: 'We will not create a made-up itinerary while verified destinations are unavailable.',
-    emptyAssistant: 'Write your answer in this conversation. This release does not use an AI model.',
+    emptyAssistant: 'Write your answer in this conversation. For an AI reply, give explicit processing consent and select “Ask travel assistant”.',
     sessionExpired: 'Your session expired. Your text is preserved; sign in again and retry the save.',
     forbidden: 'You do not have access to this trip.',
     conflict: 'This trip changed elsewhere. Refresh it and review your edits before saving again.',
@@ -193,7 +193,7 @@ export const journeyMessages = {
   },
   ar: {
     workspaceTitle: 'خطط رحلاتي',
-    privacyNotice: 'عند الحفظ، تُخزَّن المحادثة والرحلة في حسابك كي تتابع لاحقًا وتراجع السجل، ولا يمكن لأحد سواك الوصول إليهما. يمكنك حذف الرحلة أو الحساب في أي وقت. لا يرسل هذا الإصدار نصك إلى خدمة ذكاء اصطناعي خارجية.',
+    privacyNotice: 'عند الحفظ، تُخزَّن المحادثة والرحلة في حسابك كي تتابع لاحقًا وتراجع السجل، ولا يمكن لأحد سواك الوصول إليهما. يمكنك حذف الرحلة أو الحساب في أي وقت. لا تُرسل رسائلك إلى خدمة الذكاء الاصطناعي الخارجية إلا بموافقتك الصريحة وعند طلب المساعدة؛ وإلا تبقى داخل التطبيق.',
     signInToSave: 'سجّل الدخول لحفظ الرحلة ومتابعتها من جهاز آخر. تبقى المسودة الحالية على هذه الصفحة ما دامت مفتوحة.',
     saveTrip: 'احفظ رحلتي',
     createAnotherTrip: 'ابدأ رحلة أخرى في هذه المحادثة',
@@ -265,7 +265,7 @@ export const journeyMessages = {
     saveItinerary: 'احفظ الخطة',
     itinerarySaved: 'تم حفظ الخطة.',
     noItinerary: 'لن ننشئ خطة غير حقيقية ما دامت الوجهات الموثقة غير متاحة.',
-    emptyAssistant: 'اكتب إجابتك في هذه المحادثة. لا يستخدم هذا الإصدار نموذج ذكاء اصطناعي.',
+    emptyAssistant: 'اكتب إجابتك في هذه المحادثة. للحصول على رد ذكي، وافق صراحة على المعالجة ثم اختر مساعد السفر.',
     sessionExpired: 'انتهت جلستك. احتفظنا بنصك؛ سجّل الدخول مجددًا ثم أعد الحفظ.',
     forbidden: 'ليس لديك إذن للوصول إلى هذه الرحلة.',
     conflict: 'تغيّرت هذه الرحلة في مكان آخر. حدّثها وراجع تعديلاتك قبل الحفظ مجددًا.',

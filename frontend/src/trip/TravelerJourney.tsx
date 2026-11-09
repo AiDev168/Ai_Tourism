@@ -6,6 +6,7 @@ import { createTripRequirements, type TripRequirements } from './tripIntake';
 import { resolveDestinationNames, confirmDestinationCandidate, type DestinationResolution } from './destinationResolution';
 import { ApiDestinationCatalogPort } from './destinationCatalogApi';
 import { reviewableAssistantCandidate } from './assistantCandidate';
+import { TravelerGuidance } from './TravelerGuidance';
 import {
   travelerApi, TravelerApiError, type ConversationRecord, type ConversationSummary,
   type ItineraryRecord, type ItineraryStop, type RecommendationResult, type RequirementConsentDecision,
@@ -17,6 +18,7 @@ const catalog = new ApiDestinationCatalogPort();
 const assistantCopy: Record<Locale, {
   consent: string; send: string; review: string; initial: string; unavailable: string;
   destination: string; duration: string; apply: string; dismiss: string; unsaved: string; reviewSaved: string;
+  speaker: string; promptsTitle: string; prompts: readonly string[];
 }> = {
   'fa-IR': { consent: 'با ارسال این پیام و تاریخچهٔ گفت‌وگوی سفر به سرویس هوش مصنوعی موافقم.',
     send: 'پرسش از دستیار سفر', review: 'پیشنهاد مدل؛ پیش از تأیید سفر بررسی کنید:',
@@ -24,21 +26,27 @@ const assistantCopy: Record<Locale, {
     unavailable: 'دستیار در حال حاضر در دسترس نیست؛ همچنان می‌توانید سفر را بدون آن ثبت کنید.',
     destination: 'مقصد پیشنهادی', duration: 'تعداد روز پیشنهادی',
     apply: 'انتقال به فرم سفر', dismiss: 'نادیده گرفتن', reviewSaved: 'بازبینی پیشنهاد ذخیره‌شده',
-    unsaved: 'این پیشنهاد هنوز ذخیره یا تأیید نشده است. پس از انتقال، فرم سفر را بررسی و تأیید کنید.' },
+    unsaved: 'این پیشنهاد هنوز ذخیره یا تأیید نشده است. پس از انتقال، فرم سفر را بررسی و تأیید کنید.',
+    speaker: 'مشاور هوش مصنوعی', promptsTitle: 'برای ادامه می‌توانید از مشاور بخواهید:',
+    prompts: ['دربارهٔ علایق و سبک سفرم یک سؤال تکمیلی بپرس.', 'برای روشن شدن بودجه و تعداد همراهانم سؤال بپرس.', 'محدودیت‌های ضروری سفرم را مرور کن و موارد مبهم را بپرس.'] },
   'en-US': { consent: 'I consent to sending this message and prior trip conversation to the AI service.',
     send: 'Ask travel assistant', review: 'AI suggestions — review before confirming:',
     initial: 'Please ask a useful clarification about the trip described above.',
     unavailable: 'The assistant is unavailable. You can still save your trip.',
     destination: 'Suggested destination', duration: 'Suggested days',
     apply: 'Use in trip form', dismiss: 'Dismiss', reviewSaved: 'Review saved suggestion',
-    unsaved: 'Not saved or confirmed. Review and confirm the trip form after applying.' },
+    unsaved: 'Not saved or confirmed. Review and confirm the trip form after applying.',
+    speaker: 'AI travel advisor', promptsTitle: 'Suggested follow-up questions:',
+    prompts: ['Ask me about my interests and travel style.', 'Clarify my budget and number of travelers.', 'Review my essential constraints and ask what is unclear.'] },
   ar: { consent: 'أوافق على إرسال هذه الرسالة وسجل محادثة الرحلة إلى خدمة الذكاء الاصطناعي.',
     send: 'اسأل مساعد السفر', review: 'اقتراحات النموذج — راجعها قبل التأكيد:',
     initial: 'يرجى طرح سؤال توضيحي مناسب عن الرحلة المذكورة أعلاه.',
     unavailable: 'المساعد غير متاح حاليًا. يمكنك حفظ الرحلة بدونه.',
     destination: 'الوجهة المقترحة', duration: 'الأيام المقترحة',
     apply: 'نقل إلى نموذج الرحلة', dismiss: 'تجاهل', reviewSaved: 'مراجعة الاقتراح المحفوظ',
-    unsaved: 'لم يُحفظ هذا الاقتراح أو يُؤكَّد. راجع نموذج الرحلة وأكّده بعد النقل.' },
+    unsaved: 'لم يُحفظ هذا الاقتراح أو يُؤكَّد. راجع نموذج الرحلة وأكّده بعد النقل.',
+    speaker: 'مستشار السفر بالذكاء الاصطناعي', promptsTitle: 'يمكنك متابعة المحادثة عبر:',
+    prompts: ['اسألني عن اهتماماتي وطريقة سفري.', 'اسألني عن الميزانية وعدد المسافرين.', 'راجع الشروط الأساسية واسأل عن الأمور غير الواضحة.'] },
 };
 
 function newIdempotencyKey(): string {
@@ -594,6 +602,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         {activeTrip && <span className="saved-pill">{copy.savedRecord}</span>}
       </div>
 
+      <TravelerGuidance locale={locale} hasTrip={Boolean(activeTrip)} confirmed={confirmed}
+        hasRecommendations={Boolean(recommendations)} hasItinerary={Boolean(itinerary)} />
       <p className="privacy-notice">{copy.privacyNotice}</p>
       {!session && <p className="trip-form-help">{copy.signInToSave}</p>}
       {dirty && activeTrip && <p className="journey-alert" role="status">{copy.draftChanged}</p>}
@@ -629,7 +639,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
           <div className="panel-title"><span className="mini-icon" aria-hidden="true">✳</span><span>{copy.continueTitle}</span></div>
           <div className="conversation-transcript" aria-live="polite">
             {currentMessages.map(message => <div className={`saved-message saved-message-${message.role}`} key={message.message_id}>
-              <small>{message.role === 'user' ? activeTrip.locale : copy.emptyAssistant}</small>
+              <small>{message.role === 'user' ? activeTrip.locale : assistantCopy[locale].speaker}</small>
               <p dir="auto">{message.content}</p>
               {message.role === 'assistant' &&
                 reviewableAssistantCandidate(message.candidate_requirements ?? null) &&
@@ -639,6 +649,14 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
                 </button>}
             </div>)}
             {!currentMessages.length && <p>{copy.emptyAssistant}</p>}
+          </div>
+          <div className="assistant-prompt-suggestions" aria-label={assistantCopy[locale].promptsTitle}>
+            <p>{assistantCopy[locale].promptsTitle}</p>
+            <div>{assistantCopy[locale].prompts.map(prompt => <button key={prompt} type="button"
+              disabled={busy || !online} onClick={() => {
+                setMessageText(prompt);
+                document.getElementById('trip-follow-up')?.focus();
+              }}>{prompt}</button>)}</div>
           </div>
           <label htmlFor="trip-follow-up">{copy.messagePlaceholder}</label>
           <textarea id="trip-follow-up" value={messageText} onChange={event => setMessageText(event.target.value)} maxLength={1200} rows={3} dir="auto" />
@@ -673,7 +691,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
           </div>
         </article>
 
-        <article className="recommend-panel journey-panel">
+        <article className="recommend-panel journey-panel" id="journey-recommendations">
           <div className="panel-title"><span className="mini-icon" aria-hidden="true">↗</span>{copy.profileTitle}</div>
           {extracted && <div className="profile-editor">
             <fieldset>
