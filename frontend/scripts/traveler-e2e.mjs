@@ -59,7 +59,14 @@ function syntheticPhone() {
 function makePipe(client) {
   const waiting = [];
   const queued = [];
+  let closed = false;
   const reader = createInterface({ input: client.stdout });
+  // A startup failure must be reported as an early child exit, not a
+  // misleading timeout after Python has already closed its stdout.
+  reader.on('close', () => {
+    closed = true;
+    while (waiting.length) waiting.shift()({ ok: false, event: 'process_closed' });
+  });
   reader.on('line', line => {
     let value;
     try { value = JSON.parse(line); } catch { return; }
@@ -70,6 +77,7 @@ function makePipe(client) {
   return {
     next(timeoutMs = 20_000) {
       if (queued.length) return Promise.resolve(queued.shift());
+      if (closed) return Promise.resolve({ ok: false, event: 'process_closed' });
       return new Promise((resolvePromise, reject) => {
         const timer = setTimeout(() => {
           const index = waiting.indexOf(finish);
@@ -128,9 +136,15 @@ async function startApi() {
   const controlPort = await reserveLoopbackPort();
   const controlToken = randomBytes(32).toString('hex');
   const ownerRag = ownerRagConfiguration();
+  const realGeoMode = process.env.RAHGARD_REAL_GEO_E2E === '1';
+  if (realGeoMode && process.env.RAHGARD_RUN_GEO_QA !== '1') {
+    throw new Error('real_geo_e2e_missing_explicit_disposable_qa_opt_in');
+  }
 
   const childEnv = runtimeEnv({
     AUTH_INTEGRATION_TESTS: '1',
+    RAHGARD_REAL_GEO_E2E: realGeoMode ? '1' : '0',
+    RAHGARD_RUN_GEO_QA: realGeoMode ? '1' : '0',
     AUTH_TEST_DATABASE_HOST: process.env.AUTH_TEST_DATABASE_HOST,
     AUTH_TEST_DATABASE_PORT: process.env.AUTH_TEST_DATABASE_PORT,
     AUTH_TEST_DATABASE_NAME: process.env.AUTH_TEST_DATABASE_NAME,
@@ -151,14 +165,28 @@ async function startApi() {
   const child = spawn(python, ['tests/traveler_e2e_server.py'], {
     cwd: backendRoot,
     env: childEnv,
-    stdio: ['ignore', 'pipe', 'ignore'],
+    stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
+  // Python only emits stable exception class labels to stderr. Retain a small
+  // bounded buffer internally; never print a Python traceback or credentials.
+  let safeErrorType = '';
+  child.stderr.on('data', chunk => {
+    const match = chunk.toString('utf8').match(/E2E server failed closed: ([A-Za-z]+Error)/);
+    if (match) safeErrorType = match[1].toLowerCase();
+  });
+  child.on('error', () => { safeErrorType = 'process_spawn_error'; });
   const pipe = makePipe(child);
-  const ready = await pipe.next(25_000);
+  let ready;
+  try {
+    ready = await pipe.next(25_000);
+  } catch {
+    child.kill();
+    throw new Error('guarded_api_ready_timeout');
+  }
   if (!ready?.ok || ready.event !== 'ready') {
     child.kill();
-    throw new Error('guarded_api_start_failed');
+    throw new Error('guarded_api_start_failed_' + (safeErrorType || ready?.event || 'unknown'));
   }
   return { child, pipe, controlPort, controlToken, ownerRagEnabled: ownerRag.enabled };
 }
