@@ -45,6 +45,33 @@ function Scalar([string]$Statement, [string]$Db = 'ai_tourism_dev') {
     if ($LASTEXITCODE -ne 0) { throw 'Isolated psql verification failed.' }
     return (($value | Out-String).Trim())
 }
+function Stop-RemoveOwnedContainer([string]$ContainerName) {
+    if ($ContainerName -notmatch '^ai-tourism-mvp-pg17-[a-f0-9]{12}$') {
+        throw 'Refusing cleanup for a container outside the task name contract.'
+    }
+    $raw = & docker inspect $ContainerName 2>$null
+    if ($LASTEXITCODE -ne 0) { return }
+    $metadata = ($raw | Out-String) | ConvertFrom-Json
+    if ($metadata[0].Name -ne "/$ContainerName" -or
+        $metadata[0].Config.Labels.'ai-tourism.disposable-mvp-e2e' -ne 'true') {
+        throw 'Refusing cleanup because the container name or safety label does not match.'
+    }
+    & docker stop $ContainerName | Out-Null
+    $stopCode = $LASTEXITCODE
+    $remaining = & docker inspect $ContainerName 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $remainingMetadata = ($remaining | Out-String) | ConvertFrom-Json
+        if ($remainingMetadata[0].Name -ne "/$ContainerName" -or
+            $remainingMetadata[0].Config.Labels.'ai-tourism.disposable-mvp-e2e' -ne 'true') {
+            throw 'Refusing explicit removal after the container identity changed.'
+        }
+        & docker rm $ContainerName | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not remove the verified task-created container.' }
+    }
+    elseif ($stopCode -ne 0) {
+        throw 'Task-created container was not stopped or found during cleanup.'
+    }
+}
 $Created = $false
 try {
     # Docker selects an unoccupied IPv4 loopback port; never interrupt a
@@ -132,6 +159,6 @@ try {
     Write-Host 'Run: node frontend/scripts/traveler-e2e.mjs'
     Write-Host 'After tests: docker stop $env:AI_TOURISM_MVP_E2E_CONTAINER'
 } catch {
-    if ($Created) { & docker stop $Name | Out-Null }
+    if ($Created) { Stop-RemoveOwnedContainer $Name }
     throw
 }

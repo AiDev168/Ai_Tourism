@@ -36,3 +36,31 @@ No approval is inferred from filling this table. Until signed decisions are reco
 ## Review boundary
 
 This packet does not stage data in PostgreSQL, alter the v2 research package, add source-registry records, create an approval, or enable RAG citation display. Existing seed SQL shows UNESCO descriptions as short Persian paraphrases and marks destination rows `needs_review`; the current production views should remain governed by their existing status/source-validity filters. Recheck those views only in a fresh disposable database as part of integration tests.
+
+## Executable review gate
+
+The machine-readable counterpart is produced by `backend/scripts/rahgard_content_workflow.py`. It is locked to the three canonical keys above, captures exact source-pack payload hashes and claim/source/locale decisions, and defaults every choice to `defer`.
+
+From `backend/`, inspect the safe current state and write a template to a protected operator-selected path:
+
+```powershell
+uv run python scripts/rahgard_content_workflow.py dry-run
+uv run python scripts/rahgard_content_workflow.py template --output C:\secure-review\rahgard-issue5-decisions.json
+```
+
+The dry run must report `candidate_records=3`, `deferred_records=3`, `approved_records=0`, `owner_index_jsonl_records=0`, `published=false`, and `indexed=false`. The template contains no approval and is not publishable. Keep completed decisions and HMAC key outside Git; provide `RAHGARD_CONTENT_APPROVAL_HMAC_KEY` through the owner’s approved secret-handling channel. `sign-decisions` will refuse incomplete approved records and will never create an approval itself.
+
+`stage-review` uses only the `AUTH_TEST_DATABASE_*` guard and operator password from a fresh disposable PG17 runner. It reuses `stage_review_content_pack`, stages exactly three pending proposals, and verifies that destination/source/document/production row counts did not change. It never publishes.
+
+`publish-approved --decisions <signed.json> --apply-owner-approval` requires the HMAC, exact unchanged pack hashes, independent publication visibility for each target destination/document/source, exact per-locale document/chunk hashes, and the explicit switch. It inserts only claim-evidence mappings in the guarded disposable staging DB. It cannot activate canonical destinations, sources, documents or chunks. Any missing production identity aborts the whole transaction.
+
+`export-owner-index --decisions <signed.json> --output <approved.jsonl>` re-reads only the current approved claim/document/chunk/source projection and emits only the exact identities in that signed packet, using the signed review timestamp and persisted `claim_evidence_id`. If there are no approved rows it fails without writing output.
+
+TourismRagApiV1 exposes no index-write HTTP endpoint. Its read-only, owner-operated ingestion command is:
+
+```powershell
+python -m owner_rag_api.cli build-index --source <approved.jsonl> --index-root <private-index-root>
+python -m owner_rag_api.cli index-info --index-root <private-index-root>
+```
+
+The first command builds from the exact ApprovedRecord JSONL format and loads the already-cached local embedding model; it must only be run by the owner after approval and with the chosen private index path. The service is then restarted using its existing `serve --index-root ...` command. No HTTP writer, model load, index build, or service restart is executed by this task. The review queue remains entirely deferred until the owner returns a signed decision file.
