@@ -233,3 +233,6 @@ artifacts/visual-qa-task32/
 .env
 .env.*
 !.env.example
+
+# Ignore future disposable E2E report runs; retain earlier committed artifacts.
+artifacts/visual-qa-task15d/run-*/
