@@ -18,13 +18,16 @@ import json
 import os
 import re
 import sys
+from datetime import UTC, datetime, time
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import psycopg
 from psycopg.rows import dict_row
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = BACKEND_ROOT.parent.resolve()
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -36,11 +39,16 @@ from app.modules.catalog.content_pack import (
 )
 from app.modules.catalog.owner_content_approval import (
     PILOT_RECORD_KEYS,
+    LOCALES,
     ApprovalBlocked,
     OwnerDecisionPacket,
     approved_owner_record,
+    bind_exact_content_mappings,
     build_review_queue,
     canonical_json_bytes,
+    owner_chunk_id,
+    owner_document_id,
+    owner_document_key,
     sign_decision_packet,
     validate_decisions,
 )
@@ -61,7 +69,8 @@ def _read_packet(path: Path) -> OwnerDecisionPacket:
 
 def _write_json(path: Path, data: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(canonical_json_bytes(data) + b"\n")
+    with path.open("xb") as output_file:
+        output_file.write(canonical_json_bytes(data) + b"\n")
 
 
 def _approval_key() -> bytes:
@@ -159,9 +168,9 @@ def _create_batch(connection, pack: CandidateContentPack) -> str:
             """INSERT INTO operations.dataset_import_batches
                (batch_key, data_class, record_counts, source_checksum, notes)
                VALUES (%s, 'verified_external', %s::JSONB, %s,
-                       'Issue #5 selected three-record proposal staging; review only')
+                       'Issue #5 Persepolis proposal staging; review only')
                ON CONFLICT (batch_key) DO NOTHING""",
-            (key, json.dumps({"spatial_proposals": 3, "culinary_proposals": 0}), digest),
+            (key, json.dumps({"spatial_proposals": len(PILOT_RECORD_KEYS), "culinary_proposals": 0}), digest),
         )
         row = connection.execute(
             """SELECT dataset_import_batch_id, data_class, source_checksum
@@ -199,8 +208,8 @@ def _stage_review(connection, pack: CandidateContentPack) -> dict[str, int]:
                  AND verification_status='pending' AND approval_confidence=0 AND publishable=FALSE""",
             (batch_id,),
         ).fetchone()["n"]
-        if pending != 3:
-            raise ApprovalBlocked("staged proposal set is not exactly three pending review rows")
+        if pending != len(PILOT_RECORD_KEYS):
+            raise ApprovalBlocked("staged proposal set is not exactly the Persepolis review row")
     return counts
 
 
@@ -424,6 +433,7 @@ def _dry_run_command(_args) -> None:
 def _sign_command(args) -> None:
     pack = load_candidate_content_pack()
     packet = _read_packet(args.decisions)
+    packet = bind_exact_content_mappings(packet)
     validate_decisions(pack, packet, require_signature=False)
     signed = sign_decision_packet(
         packet,
@@ -456,6 +466,265 @@ def _stage_command(args) -> None:
     print(json.dumps({"status": "review_only", "proposal_counts": counts, "published": False}, sort_keys=True))
 
 
+def _approved_source_row(connection, source_decision, approval_reference: str) -> dict[str, Any]:
+    """Resolve or create only the exact source explicitly approved in the packet."""
+    matches = connection.execute(
+        """SELECT source_id, source_name, source_type, verification_status,
+                  url, is_synthetic
+           FROM knowledge.knowledge_sources WHERE url=%s FOR UPDATE""",
+        (source_decision.source_url,),
+    ).fetchall()
+    if len(matches) > 1:
+        raise ApprovalBlocked("approved source URL is ambiguous in the source registry")
+    if matches:
+        source = matches[0]
+        if source["is_synthetic"] or source["verification_status"] in {"rejected", "stale"}:
+            raise ApprovalBlocked("existing source row cannot be approved for publication")
+        if (
+            source["source_name"] != source_decision.source_title
+            or source["source_type"] != source_decision.source_type
+        ):
+            raise ApprovalBlocked("existing source identity differs from the reviewed source register")
+        if source["verification_status"] not in {"pending", "verified"}:
+            raise ApprovalBlocked("existing source status is not eligible for reviewed publication")
+        if source["verification_status"] == "pending":
+            connection.execute(
+                """UPDATE knowledge.knowledge_sources
+                   SET verification_status='verified', updated_at=NOW()
+                   WHERE source_id=%s AND verification_status='pending' AND is_synthetic=FALSE""",
+                (source["source_id"],),
+            )
+        return source
+
+    same_name = connection.execute(
+        "SELECT source_id, url FROM knowledge.knowledge_sources WHERE source_name=%s FOR UPDATE",
+        (source_decision.source_title,),
+    ).fetchone()
+    if same_name is not None:
+        raise ApprovalBlocked("source title already exists with a different canonical URL")
+    notes = (
+        f"Owner-approved source; reference={approval_reference}; "
+        f"attribution={source_decision.attribution_text}; "
+        f"publisher={source_decision.publisher}; "
+        f"review_notes={source_decision.review_notes}"
+    )[:8000]
+    inserted = connection.execute(
+        """INSERT INTO knowledge.knowledge_sources
+           (source_name, source_type, verification_status, reliability_score, url, notes, is_synthetic)
+           VALUES (%s,%s,'verified',NULL,%s,%s,FALSE)
+           RETURNING source_id, source_name, source_type, verification_status, url, is_synthetic""",
+        (source_decision.source_title, source_decision.source_type,
+         source_decision.source_url, notes),
+    ).fetchone()
+    return inserted
+
+
+def _ensure_exact_document(connection, *, row: dict[str, Any]) -> UUID:
+    existing = connection.execute(
+        """SELECT document_id, source_id, destination_id, title, language_code,
+                  document_type, canonical_url, raw_content, content_sha256,
+                  ingestion_status, record_origin, is_synthetic, retrieved_at, valid_from, valid_until
+           FROM knowledge.knowledge_documents WHERE document_key=%s FOR UPDATE""",
+        (row["document_key"],),
+    ).fetchone()
+    expected = (
+        row["document_id"], row["source_id"], row["destination_id"], row["title"],
+        row["language_code"], "destination_profile", row["canonical_url"], row["raw_content"],
+        row["content_sha256"], "processed", "verified_external", False,
+        row["retrieved_at"], None, None,
+    )
+    if existing is not None:
+        actual = tuple(existing.values())
+        if actual != expected:
+            raise ApprovalBlocked("existing document identity/content conflicts with the signed review")
+        return UUID(str(existing["document_id"]))
+    connection.execute(
+        """INSERT INTO knowledge.knowledge_documents
+           (document_id, document_key, source_id, destination_id, title, language_code,
+            document_type, canonical_url, raw_content, content_sha256, ingestion_status,
+            record_origin, is_synthetic, retrieved_at)
+           VALUES (%s,%s,%s,%s,%s,%s,'destination_profile',%s,%s,%s,
+                   'processed','verified_external',FALSE,%s)""",
+        (row["document_id"], row["document_key"], row["source_id"], row["destination_id"],
+         row["title"], row["language_code"], row["canonical_url"], row["raw_content"],
+         row["content_sha256"], row["retrieved_at"]),
+    )
+    return row["document_id"]
+
+
+def _ensure_exact_chunk(connection, *, document_id: UUID, claim_key: str,
+                        locale: str, chunk_id: UUID, chunk_index: int, content: str) -> None:
+    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    existing = connection.execute(
+        """SELECT chunk_id, content, char_count, content_sha256, metadata, is_synthetic
+           FROM knowledge.knowledge_chunks WHERE document_id=%s AND chunk_index=%s FOR UPDATE""",
+        (document_id, chunk_index),
+    ).fetchone()
+    metadata = {"claim_key": claim_key, "locale": locale, "owner_reviewed": True}
+    if existing is not None:
+        actual = tuple(existing.values())
+        if actual[0] != chunk_id or actual[1] != content or actual[2] != len(content) \
+                or str(actual[3]).strip() != digest or actual[4] != metadata or actual[5] is not False:
+            raise ApprovalBlocked("existing chunk identity/content conflicts with the signed review")
+        return
+    connection.execute(
+        """INSERT INTO knowledge.knowledge_chunks
+           (chunk_id, document_id, chunk_index, content, char_count, content_sha256, metadata, is_synthetic)
+           VALUES (%s,%s,%s,%s,%s,%s,%s::JSONB,FALSE)""",
+        (chunk_id, document_id, chunk_index, content, len(content), digest, json.dumps(metadata)),
+    )
+
+
+def _activate_signed_record(connection, decision, proposal, approval_reference: str) -> None:
+    """Activate one exact staged destination and its signed locale content atomically."""
+    proposal_digest = payload_sha256(proposal.model_dump(mode="json"))
+    staged = connection.execute(
+        """SELECT proposal_id, payload_sha256, target_destination_id, target_destination_key,
+                  review_status, verification_status, approval_confidence, publishable
+           FROM knowledge.destination_enrichment_proposals
+           WHERE proposal_key=%s FOR UPDATE""",
+        (f"shiraz_fars_candidate_content_v2:2.0.0:{decision.record_key}",),
+    ).fetchall()
+    if len(staged) != 1:
+        raise ApprovalBlocked("the exact Persepolis review proposal is not staged exactly once")
+    proposal_row = staged[0]
+    if (proposal_row["target_destination_key"] != decision.record_key
+            or proposal_row["review_status"] != "needs_review"
+            or proposal_row["verification_status"] != "pending"
+            or float(proposal_row["approval_confidence"]) != 0.0
+            or proposal_row["publishable"] is not False
+            or proposal_row["payload_sha256"].strip() != proposal_digest):
+        raise ApprovalBlocked("staged proposal status or exact target identity changed")
+
+    destination_rows = connection.execute(
+        """SELECT destination_id, destination_key, canonical_name, destination_type,
+                  description,
+                  province_name, city_name, latitude, longitude, coordinate_role,
+                  status, verification_status, record_origin, is_synthetic
+           FROM knowledge.destinations WHERE destination_key=%s FOR UPDATE""",
+        (decision.record_key,),
+    ).fetchall()
+    if len(destination_rows) != 1:
+        raise ApprovalBlocked("the exact existing Persepolis destination identity is ambiguous")
+    destination = destination_rows[0]
+    if (
+        destination["destination_type"] != decision.expected_existing_identity.destination_type
+        or destination["province_name"] != decision.expected_existing_identity.province_name
+        or destination["latitude"] is None or destination["longitude"] is None
+        or destination["latitude"] != decision.coordinate_review.latitude
+        or destination["longitude"] != decision.coordinate_review.longitude
+        or destination["coordinate_role"] != decision.coordinate_review.coordinate_role
+        or destination["record_origin"] != "verified_external"
+        or destination["is_synthetic"] is not False
+        or destination["status"] not in {"needs_review", "active"}
+        or destination["verification_status"] not in {"pending", "verified"}
+    ):
+        raise ApprovalBlocked("existing canonical identity/coordinate differs from reviewed evidence")
+    if proposal_row["target_destination_id"] != destination["destination_id"]:
+        raise ApprovalBlocked("staged proposal points to a different canonical destination row")
+    if destination["status"] == "active" and (
+        destination["verification_status"] != "verified"
+        or destination["canonical_name"] != decision.reviewed_name_by_locale["fa-IR"]
+        or destination["description"] != decision.reviewed_description_by_locale["fa-IR"]
+        or destination["city_name"] != proposal.city_name
+        or destination["province_name"] != proposal.province_name
+    ):
+        raise ApprovalBlocked("already-active destination differs from the signed owner decision")
+    if destination["status"] == "needs_review" and (
+        destination["canonical_name"] != decision.expected_existing_identity.canonical_name
+        or destination["city_name"] != decision.expected_existing_identity.city_name
+    ):
+        raise ApprovalBlocked("existing canonical name or locality differs from the reviewed identity snapshot")
+
+    source_pack = {item.source_id: item for item in load_candidate_content_pack().source_register}
+    source_ids: dict[str, int] = {}
+    for source_decision in decision.sources:
+        source = source_pack[source_decision.source_id]
+        if source_decision.source_url != source.url:
+            raise ApprovalBlocked("signed source URL differs from the immutable source register")
+        db_source = _approved_source_row(connection, source_decision, approval_reference)
+        source_id = int(db_source["source_id"])
+        source_ids[source_decision.source_id] = source_id
+        retrieved_at = datetime.combine(source_decision.retrieved_at, time.min, tzinfo=UTC)
+        relation = connection.execute(
+            """SELECT source_role, evidence_note, retrieved_at, valid_from, valid_until
+               FROM knowledge.destination_sources
+               WHERE destination_id=%s AND source_id=%s FOR UPDATE""",
+            (destination["destination_id"], source_id),
+        ).fetchone()
+        expected_relation = (
+            source_decision.source_role, source_decision.review_notes, retrieved_at, None, None,
+        )
+        if relation is None:
+            connection.execute(
+                """INSERT INTO knowledge.destination_sources
+                   (destination_id, source_id, source_role, evidence_note, retrieved_at)
+                   VALUES (%s,%s,%s,%s,%s)""",
+                (destination["destination_id"], source_id, source_decision.source_role,
+                 source_decision.review_notes, retrieved_at),
+            )
+        elif tuple(relation.values()) != expected_relation:
+            raise ApprovalBlocked("existing destination/source association conflicts with owner review")
+
+    # One reviewed description document per locale; claim text is stored in
+    # deterministic chunks, each linked to every explicitly approved source.
+    all_claim_source_ids = sorted({source_id for claim in decision.claims for source_id in claim.source_ids})
+    if not all_claim_source_ids:
+        raise ApprovalBlocked("approved Persepolis record has no reviewed claim sources")
+    document_source_key = all_claim_source_ids[0]
+    document_source_id = source_ids[document_source_key]
+    document_source = next(item for item in decision.sources if item.source_id == document_source_key)
+    source_retrieved_at = datetime.combine(document_source.retrieved_at, time.min, tzinfo=UTC)
+    lang_codes = {"fa-IR": "fa", "en-US": "en", "ar": "ar"}
+    for locale in LOCALES:
+        description = decision.reviewed_description_by_locale[locale]
+        digest = hashlib.sha256(description.encode("utf-8")).hexdigest()
+        doc_id = owner_document_id(decision.record_key, locale)
+        _ensure_exact_document(connection, row={
+            "document_id": doc_id,
+            "document_key": owner_document_key(decision.record_key, locale),
+            "source_id": document_source_id,
+            "destination_id": destination["destination_id"],
+            "title": decision.reviewed_name_by_locale[locale],
+            "language_code": lang_codes[locale],
+            "canonical_url": document_source.source_url,
+            "raw_content": description,
+            "content_sha256": digest,
+            "retrieved_at": source_retrieved_at,
+        })
+        for chunk_index, claim in enumerate(decision.claims):
+            _ensure_exact_chunk(
+                connection,
+                document_id=doc_id,
+                claim_key=claim.claim_id,
+                locale=locale,
+                chunk_id=owner_chunk_id(decision.record_key, claim.claim_id, locale),
+                chunk_index=chunk_index,
+                content=claim.reviewed_text_by_locale[locale],
+            )
+
+    # Never touch or replace coordinates here. Only the signed exact canonical
+    # row can transition from needs_review to active/verified.
+    if destination["status"] == "needs_review":
+        changed = connection.execute(
+            """UPDATE knowledge.destinations
+               SET canonical_name=%s, city_name=%s, description=%s,
+                   status='active', verification_status='verified', updated_at=NOW()
+               WHERE destination_id=%s AND destination_key=%s AND status='needs_review'
+                 AND verification_status IN ('pending','verified')
+                 AND record_origin='verified_external' AND is_synthetic=FALSE
+                 AND latitude=%s AND longitude=%s AND coordinate_role=%s
+               RETURNING destination_id""",
+            (decision.reviewed_name_by_locale["fa-IR"], proposal.city_name,
+             decision.reviewed_description_by_locale["fa-IR"],
+             destination["destination_id"], decision.record_key,
+             decision.coordinate_review.latitude, decision.coordinate_review.longitude,
+             decision.coordinate_review.coordinate_role),
+        ).fetchone()
+        if changed is None:
+            raise ApprovalBlocked("canonical activation precondition changed during publication")
+
+
 def _publish_command(args) -> None:
     pack = load_candidate_content_pack()
     packet, approved = _verify_approval(args.decisions, pack)
@@ -464,13 +733,48 @@ def _publish_command(args) -> None:
         return
     if not args.apply_owner_approval:
         raise ApprovalBlocked("explicit --apply-owner-approval is required for isolated publication")
+    if len(approved) != 1 or approved[0].record_key != PILOT_RECORD_KEYS[0]:
+        raise ApprovalBlocked("this command can activate only the single Persepolis pilot record")
     connection = _guarded_operator_connection()
     try:
         # The identity/provenance reads, writes, and postcondition share one
         # transaction. A failed production-view check must roll back every row.
         with connection.transaction():
+            proposal = next(
+                item for item in pack.existing_destination_enrichment_proposals
+                if item.target_record_key == approved[0].record_key
+            )
+            _activate_signed_record(
+                connection, approved[0], proposal,
+                packet.owner_approval.approval_reference,
+            )
             resolved = _approved_db_rows(connection, approved, pack)
             result = _publish(connection, resolved)
+            expected_publication = {
+                (
+                    item["destination_key"], str(item["document_id"]), str(item["chunk_id"]),
+                    item["claim_key"], item["locale"], item["content_hash"],
+                    item["source"]["source_url"],
+                )
+                for item in resolved
+            }
+            expected_document_ids = sorted({item["document_id"] for item in resolved}, key=str)
+            actual_publication = {
+                (
+                    row["canonical_entity_key"], str(row["document_id"]), str(row["chunk_id"]),
+                    row["claim_key"], row["locale"], str(row["content_hash"]).strip(),
+                    row["source_url"],
+                )
+                for row in connection.execute(
+                    """SELECT canonical_entity_key, document_id, chunk_id, claim_key,
+                              locale, content_hash, source_url
+                       FROM knowledge.production_destination_claim_evidence
+                       WHERE canonical_entity_key = %s AND document_id = ANY(%s::UUID[])""",
+                    (PILOT_RECORD_KEYS[0], expected_document_ids),
+                ).fetchall()
+            }
+            if actual_publication != expected_publication:
+                raise ApprovalBlocked("published claim/source rows differ from the exact signed mapping")
             visible_keys = {
                 row["canonical_entity_key"]
                 for row in connection.execute(
@@ -495,6 +799,7 @@ def _export_command(args) -> None:
     packet, approved = _verify_approval(args.decisions, pack)
     if not approved:
         raise ApprovalBlocked("no approved records exist for owner index export")
+    output_path = _validate_private_export_path(args.output)
     connection = _guarded_operator_connection()
     try:
         records = _export_rows(connection, approved, packet.owner_approval.decided_at)
@@ -502,23 +807,44 @@ def _export_command(args) -> None:
         connection.close()
     if not records:
         raise ApprovalBlocked("approved production view returned no owner-index evidence")
-    args.output.parent.mkdir(parents=True, exist_ok=True)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     payload = b"".join(canonical_json_bytes(record) + b"\n" for record in records)
-    args.output.write_bytes(payload)
+    # Exclusive creation protects an operator's pre-existing private export
+    # from accidental replacement between validation and write.
+    with output_path.open("xb") as output_file:
+        output_file.write(payload)
     print(json.dumps({
         "status": "approved_jsonl_exported",
         "record_count": len(records),
         "sha256": hashlib.sha256(payload).hexdigest(),
-        "output": str(args.output),
+        "output": str(output_path),
         "index_command": "python -m owner_rag_api.cli build-index --source <approved.jsonl> --index-root <owner-private-index-root>",
     }, sort_keys=True))
+
+
+def _validate_private_export_path(output: Path) -> Path:
+    """Require an operator-approved, non-overwriting path outside this checkout."""
+    resolved = output.expanduser().resolve()
+    if resolved == REPOSITORY_ROOT or REPOSITORY_ROOT in resolved.parents:
+        raise ApprovalBlocked("owner index output must be stored outside the repository")
+    configured_root = os.environ.get("RAHGARD_OWNER_INDEX_DIR", "")
+    if not configured_root:
+        raise ApprovalBlocked("an operator-approved private owner-index directory is required")
+    private_root = Path(configured_root).expanduser().resolve()
+    if private_root == REPOSITORY_ROOT or REPOSITORY_ROOT in private_root.parents:
+        raise ApprovalBlocked("private owner-index directory must be outside the repository")
+    if resolved != private_root and private_root not in resolved.parents:
+        raise ApprovalBlocked("owner index output must be inside the configured private directory")
+    if resolved.exists():
+        raise ApprovalBlocked("owner index output already exists; refusing to overwrite it")
+    return resolved
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("dry-run", help="offline: prove all queue decisions defer and no JSONL exists")
-    template = sub.add_parser("template", help="write the fixed three-record review-only decision packet")
+    template = sub.add_parser("template", help="write the Persepolis-only review packet; all decisions defer")
     template.add_argument("--output", type=Path, required=True)
     sign = sub.add_parser("sign-decisions", help="HMAC-sign a complete owner-reviewed decision file")
     sign.add_argument("--decisions", type=Path, required=True)
@@ -527,8 +853,8 @@ def build_parser() -> argparse.ArgumentParser:
     sign.add_argument("--approver-role", required=True)
     sign.add_argument("--approval-reference", required=True)
     sign.add_argument("--decided-at", required=True, type=lambda value: __import__("datetime").datetime.fromisoformat(value.replace("Z", "+00:00")))
-    sub.add_parser("stage-review", help="idempotently stage three pending proposals in guarded disposable PG17")
-    publish = sub.add_parser("publish-approved", help="apply signed exact evidence mappings in guarded disposable PG17")
+    sub.add_parser("stage-review", help="idempotently stage the Persepolis proposal in guarded disposable PG17")
+    publish = sub.add_parser("publish-approved", help="activate signed Persepolis data and exact claim mappings in guarded disposable PG17")
     publish.add_argument("--decisions", type=Path, required=True)
     publish.add_argument("--apply-owner-approval", action="store_true")
     export = sub.add_parser("export-owner-index", help="export current approved evidence to owner's exact JSONL contract")

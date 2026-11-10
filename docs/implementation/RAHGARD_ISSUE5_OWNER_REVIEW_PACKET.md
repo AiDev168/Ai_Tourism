@@ -39,7 +39,7 @@ This packet does not stage data in PostgreSQL, alter the v2 research package, ad
 
 ## Executable review gate
 
-The machine-readable counterpart is produced by `backend/scripts/rahgard_content_workflow.py`. It is locked to the three canonical keys above, captures exact source-pack payload hashes and claim/source/locale decisions, and defaults every choice to `defer`.
+The machine-readable counterpart is produced by `backend/scripts/rahgard_content_workflow.py`. The current fixed queue is one Persepolis record only; see `RAHGARD_ISSUE5_PERSEPOLIS_OWNER_DECISION.md`. All choices default to `defer`.
 
 From `backend/`, inspect the safe current state and write a template to a protected operator-selected path:
 
@@ -48,13 +48,13 @@ uv run python scripts/rahgard_content_workflow.py dry-run
 uv run python scripts/rahgard_content_workflow.py template --output C:\secure-review\rahgard-issue5-decisions.json
 ```
 
-The dry run must report `candidate_records=3`, `deferred_records=3`, `approved_records=0`, `owner_index_jsonl_records=0`, `published=false`, and `indexed=false`. The template contains no approval and is not publishable. Keep completed decisions and HMAC key outside Git; provide `RAHGARD_CONTENT_APPROVAL_HMAC_KEY` through the owner’s approved secret-handling channel. `sign-decisions` will refuse incomplete approved records and will never create an approval itself.
+The dry run must report `candidate_records=1`, `deferred_records=1`, `approved_records=0`, `owner_index_jsonl_records=0`, `published=false`, and `indexed=false`. The template contains no approval and is not publishable. Template and signed-packet output paths use exclusive creation; the CLI will not overwrite an existing owner file. Keep completed decisions and HMAC key outside Git; provide `RAHGARD_CONTENT_APPROVAL_HMAC_KEY` through the owner’s approved secret-handling channel. `sign-decisions` will refuse incomplete approved records and will never create an approval itself.
 
-`stage-review` uses only the `AUTH_TEST_DATABASE_*` guard and operator password from a fresh disposable PG17 runner. It reuses `stage_review_content_pack`, stages exactly three pending proposals, and verifies that destination/source/document/production row counts did not change. It never publishes.
+`stage-review` uses only the `AUTH_TEST_DATABASE_*` guard and operator password from a fresh disposable PG17 runner. It reuses `stage_review_content_pack`, stages exactly one pending Persepolis proposal, and verifies that destination/source/document/production row counts did not change. It never publishes.
 
-`publish-approved --decisions <signed.json> --apply-owner-approval` requires the HMAC, exact unchanged pack hashes, independent publication visibility for each target destination/document/source, exact per-locale document/chunk hashes, and the explicit switch. It inserts only claim-evidence mappings in the guarded disposable staging DB. It cannot activate canonical destinations, sources, documents or chunks. Any missing production identity aborts the whole transaction.
+`publish-approved --decisions <signed.json> --apply-owner-approval` requires the HMAC, unchanged candidate hash, explicit scope/locale/claim/source-rights/coordinate decisions, exact existing Persepolis identity, locale document/chunk hashes, and the explicit switch. It atomically activates only Persepolis and creates/verifies its approved source, document, chunk, and claim-evidence projections in guarded disposable PG17. Coordinates are never changed; any mismatch rolls back all changes. See the single-record decision packet linked above.
 
-`export-owner-index --decisions <signed.json> --output <approved.jsonl>` re-reads only the current approved claim/document/chunk/source projection and emits only the exact identities in that signed packet, using the signed review timestamp and persisted `claim_evidence_id`. If there are no approved rows it fails without writing output.
+`export-owner-index --decisions <signed.json> --output <approved.jsonl>` re-reads only the current approved claim/document/chunk/source projection and emits only the exact identities in that signed packet, using the signed review timestamp and persisted `claim_evidence_id`. Set `RAHGARD_OWNER_INDEX_DIR` to an operator-approved, access-controlled private directory; the output must be inside it, outside the repository, and must not already exist. The CLI refuses other locations and overwrites. If there are no approved rows it fails without writing output. The owner-RAG index build remains a separate private operator action after the signed packet and export have been reviewed.
 
 TourismRagApiV1 exposes no index-write HTTP endpoint. Its read-only, owner-operated ingestion command is:
 
