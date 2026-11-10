@@ -67,7 +67,8 @@ try {
         @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; Path = (Join-Path $PackageRoot 'sql\007_shiraz_dalahoo_wikipedia_dataset_v1.sql') },
         @{ Id = '0008_authentication_foundation'; Path = (Join-Path $PackageRoot 'sql\008_authentication_foundation.sql') },
         @{ Id = '0009_traveler_core'; Path = (Join-Path $PackageRoot 'sql\009_traveler_core.sql') },
-        @{ Id = '0010_task31_content_privacy_full_itinerary'; Path = (Join-Path $PackageRoot 'sql\010_task31_content_privacy_full_itinerary.sql') }
+        @{ Id = '0010_task31_content_privacy_full_itinerary'; Path = (Join-Path $PackageRoot 'sql\010_task31_content_privacy_full_itinerary.sql') },
+        @{ Id = '0011_internal_chat_turns'; Path = (Join-Path $PackageRoot 'sql\011_internal_chat_turns.sql') }
     ) | Where-Object { $_.Id -in $expectedMigrations }
     foreach ($migration in $migrationSet) {
         $localHash = (Get-FileHash -LiteralPath $migration.Path -Algorithm SHA256).Hash.ToLowerInvariant()

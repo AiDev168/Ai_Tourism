@@ -1,0 +1,339 @@
+{
+  "dataset_key": "shiraz_fars_regional_claims_addendum_v1",
+  "version": "1.0.0",
+  "created_at": "2026-11-09",
+  "status": "source_attributed_claim_drafts_not_editorially_approved",
+  "claims": [
+    {
+      "record_key": "shirazi-afifabad-garden-v1",
+      "claim_key": "afifabad_complex_profile",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran describes Afifabad/Golshan as a garden-and-palace complex and mentions an old-weapons museum and an Ebrat Museum.",
+      "source_ids": [
+        "VISITIRAN_AFIFABAD"
+      ],
+      "unknowns": [
+        "current museum operation",
+        "opening hours",
+        "ticket price",
+        "current access",
+        "accessibility"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran مجموعهٔ عفیف‌آباد/گلشن را شامل باغ و کاخ معرفی می‌کند و از موزهٔ سلاح‌های قدیمی و موزهٔ عبرت در آن نام می‌برد.",
+        "en-US": "Visit Iran describes Afifabad/Golshan as a garden-and-palace complex and mentions an old-weapons museum and an Ebrat Museum.",
+        "ar": "يصف موقع Visit Iran مجمّع عفيف آباد/كلشن بأنه يضم حديقة وقصراً، ويذكر وجود متحف للأسلحة القديمة ومتحف العِبرة فيه."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "shirazi-jahan-nama-garden-v1",
+      "claim_key": "jahan_nama_zand_and_origin_variants",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran associates the garden and mansion with Karim Khan Zand's period while also recording accounts of an earlier origin; preserve both as source-attributed accounts.",
+      "source_ids": [
+        "VISITIRAN_JAHANNAMA"
+      ],
+      "unknowns": [
+        "exact foundation date",
+        "opening hours",
+        "ticket price",
+        "accessibility"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran باغ جهان‌نما و عمارت آن را با دورهٔ کریم‌خان زند مرتبط می‌کند، اما روایت‌هایی از پیشینهٔ قدیمی‌تر نیز گزارش می‌کند.",
+        "en-US": "Visit Iran associates the garden and mansion with Karim Khan Zand's period while also recording accounts of an earlier origin; preserve both as source-attributed accounts.",
+        "ar": "يربط موقع Visit Iran حديقة جهان نما ومبناها بعهد كريم خان زند، لكنه يذكر أيضاً روايات عن أصل أقدم للحديقة."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "shirazi-delgosha-garden-v1",
+      "claim_key": "delgosha_listing_and_saadi_proximity",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran lists Delgosha among Shiraz gardens and separately describes Saadi's tomb as near Delgosha Garden; no measured distance is provided.",
+      "source_ids": [
+        "VISITIRAN_FARS",
+        "VISITIRAN_SAADI"
+      ],
+      "unknowns": [
+        "dedicated garden profile",
+        "coordinates",
+        "entrance",
+        "hours",
+        "price"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran باغ دلگشا را در فهرست باغ‌های شیراز می‌آورد و آرامگاه سعدی را در نزدیکی آن توصیف می‌کند؛ فاصلهٔ دقیق در این ادعا مشخص نشده است.",
+        "en-US": "Visit Iran lists Delgosha among Shiraz gardens and separately describes Saadi's tomb as near Delgosha Garden; no measured distance is provided.",
+        "ar": "يُدرج موقع Visit Iran حديقة دلگشا ضمن حدائق شيراز، ويصف ضريح سعدي بأنه قريب منها؛ ولا تحدد هذه المعلومة مسافة دقيقة."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "marvdasht-naqsh-e-rajab-v1",
+      "claim_key": "naqsh_rajab_reliefs",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran describes four stone reliefs and two inscriptions at Naqsh-e Rajab and associates them with early Sassanid rulers and figures.",
+      "source_ids": [
+        "VISITIRAN_NAQSHRAJAB"
+      ],
+      "unknowns": [
+        "current hours",
+        "entrance",
+        "accessibility",
+        "route",
+        "conservation restrictions"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran از چهار نقش‌برجستهٔ سنگی و دو کتیبه در نقش رجب یاد می‌کند و آن‌ها را به چهره‌ها و فرمانروایان آغاز دورهٔ ساسانی مرتبط می‌سازد.",
+        "en-US": "Visit Iran describes four stone reliefs and two inscriptions at Naqsh-e Rajab and associates them with early Sassanid rulers and figures.",
+        "ar": "يذكر موقع Visit Iran وجود أربعة نقوش صخرية بارزة ونقشين كتابيين في نقش رجب، ويربطها بشخصيات وحكام أوائل العصر الساساني."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "marvdasht-naqsh-e-rostam-v1",
+      "claim_key": "naqsh_rostam_multi_period_complex",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran describes a multi-period archaeological area with royal tombs attributed to four Achaemenid kings and reliefs from multiple historical periods.",
+      "source_ids": [
+        "VISITIRAN_NAQSHROSTAM"
+      ],
+      "unknowns": [
+        "current hours",
+        "price",
+        "visitor entrance",
+        "accessibility"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran نقش رستم را محوطه‌ای با آثار چند دوره توصیف می‌کند که آرامگاه‌های منسوب به چهار شاه هخامنشی و نقش‌برجسته‌هایی از دوره‌های مختلف را دربر می‌گیرد.",
+        "en-US": "Visit Iran describes a multi-period archaeological area with royal tombs attributed to four Achaemenid kings and reliefs from multiple historical periods.",
+        "ar": "يصف موقع Visit Iran نقش رستم بأنه موقع أثري متعدد الفترات يضم مدافن منسوبة إلى أربعة ملوك أخمينيين ونقوشاً بارزة من عصور مختلفة."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "firuzabad-qaleh-dokhtar-v1",
+      "claim_key": "qaleh_dokhtar_fortress",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran describes Qaleh Dokhtar as a hilltop fortress with surviving multi-level structures; UNESCO map separately identifies the component and its property reference point.",
+      "source_ids": [
+        "VISITIRAN_SASSANID_FARS",
+        "UNESCO_SASSANID_FARS_MAP"
+      ],
+      "unknowns": [
+        "current access",
+        "trail safety",
+        "visitor entrance",
+        "accessibility"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran قلعه دختر را دژی بر فراز بلندی با بقایای سازه‌های چندسطحی توصیف می‌کند؛ نقشهٔ UNESCO نیز مؤلفه و نقطهٔ مرجع محوطه را جداگانه ثبت کرده است.",
+        "en-US": "Visit Iran describes Qaleh Dokhtar as a hilltop fortress with surviving multi-level structures; UNESCO map separately identifies the component and its property reference point.",
+        "ar": "يصف موقع Visit Iran قلعة دختر بأنها حصن على مرتفع بقيت منه منشآت متعددة المستويات؛ كما تسجل خريطة UNESCO هذا المكوّن ونقطة مرجعه للموقع بشكل مستقل."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "firuzabad-ardashir-investiture-relief-v1",
+      "claim_key": "ardashir_investiture_relief",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran describes the relief as a coronation/investiture scene associated with Ardashir Papakan and Ahura Mazda.",
+      "source_ids": [
+        "VISITIRAN_SASSANID_FARS",
+        "UNESCO_SASSANID_FARS"
+      ],
+      "unknowns": [
+        "current access",
+        "conservation restrictions",
+        "visitor facilities"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran این نقش‌برجسته را صحنهٔ تاج‌گذاری/تنفیذ اردشیر بابکان با حضور اهورامزدا توصیف می‌کند.",
+        "en-US": "Visit Iran describes the relief as a coronation/investiture scene associated with Ardashir Papakan and Ahura Mazda.",
+        "ar": "يصف موقع Visit Iran هذا النقش البارز بأنه مشهد تتويج أو تنصيب أردشير بابكان بحضور أهورامزدا."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "firuzabad-victory-relief-v1",
+      "claim_key": "ardashir_victory_relief",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran attributes the Victory Relief to Ardashir Papakan's victory over the last Parthian ruler; the historical interpretation remains source-attributed pending expert review.",
+      "source_ids": [
+        "VISITIRAN_SASSANID_FARS",
+        "UNESCO_SASSANID_FARS"
+      ],
+      "unknowns": [
+        "current access",
+        "conservation restrictions",
+        "visitor entrance"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran نقش پیروزی را به پیروزی اردشیر بابکان بر واپسین فرمانروای اشکانی نسبت می‌دهد؛ این تفسیر تاریخی تا بررسی تخصصی باید به همان منبع منتسب بماند.",
+        "en-US": "Visit Iran attributes the Victory Relief to Ardashir Papakan's victory over the last Parthian ruler; the historical interpretation remains source-attributed pending expert review.",
+        "ar": "ينسب موقع Visit Iran نقش الانتصار إلى انتصار أردشير بابكان على آخر حكام الفرثيين؛ وينبغي إبقاء هذا التفسير التاريخي منسوباً إلى المصدر إلى حين مراجعته من مختص."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "firuzabad-ardashir-khurreh-v1",
+      "claim_key": "ardashir_khurreh_circular_city",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran describes Ardashir Khurreh/Gor as an early circular city commissioned by Ardashir Papakan.",
+      "source_ids": [
+        "VISITIRAN_SASSANID_FARS",
+        "UNESCO_SASSANID_FARS"
+      ],
+      "unknowns": [
+        "current access",
+        "defined visitor area",
+        "routing",
+        "accessibility"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran اردشیرخوره/گور را شهری کهن با طرحی دایره‌ای معرفی می‌کند که به فرمان اردشیر بابکان شکل گرفت.",
+        "en-US": "Visit Iran describes Ardashir Khurreh/Gor as an early circular city commissioned by Ardashir Papakan.",
+        "ar": "يصف موقع Visit Iran أردشير خُرّه/غور بأنها مدينة قديمة ذات تخطيط دائري أُنشئت بأمر أردشير بابكان."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "firuzabad-ardashir-palace-v1",
+      "claim_key": "ardashir_palace_profile",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran identifies Ardashir Babakan Palace as a Sassanid-era palace in Firuzabad and describes its stone-and-mortar construction and domed spaces.",
+      "source_ids": [
+        "VISITIRAN_SASSANID_FARS",
+        "UNESCO_SASSANID_FARS"
+      ],
+      "unknowns": [
+        "current access",
+        "opening",
+        "visitor entrance",
+        "safety"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran کاخ اردشیر بابکان را کاخی از دورهٔ ساسانی در فیروزآباد معرفی می‌کند و به ساخت سنگی و ملات و فضاهای گنبددار آن اشاره دارد.",
+        "en-US": "Visit Iran identifies Ardashir Babakan Palace as a Sassanid-era palace in Firuzabad and describes its stone-and-mortar construction and domed spaces.",
+        "ar": "يعرّف موقع Visit Iran قصر أردشير بابكان بأنه قصر من العصر الساساني في فيروزآباد، ويصف بناءه الحجري واستخدام الملاط والفضاءات المقببة."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "bishapur-archaeological-city-v1",
+      "claim_key": "bishapur_city_profile",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran describes Bishapur as an ancient city built in the Sassanid period; UNESCO includes the city and related components within the serial property.",
+      "source_ids": [
+        "VISITIRAN_SASSANID_FARS",
+        "UNESCO_SASSANID_FARS"
+      ],
+      "unknowns": [
+        "component boundaries",
+        "current access",
+        "visitor entrance",
+        "route"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran بیشاپور را شهری باستانی می‌داند که در دورهٔ ساسانی ساخته شد؛ UNESCO نیز شهر و مؤلفه‌های مرتبط با آن را در مجموعهٔ میراث سریالی ثبت کرده است.",
+        "en-US": "Visit Iran describes Bishapur as an ancient city built in the Sassanid period; UNESCO includes the city and related components within the serial property.",
+        "ar": "يصف موقع Visit Iran بيشابور بأنها مدينة قديمة بُنيت في العصر الساساني؛ كما تضم UNESCO المدينة ومكوّناتها المرتبطة ضمن الممتلك المتسلسل."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "fars-sassanid-landscape-property-v1",
+      "claim_key": "sassanid_landscape_scope",
+      "locale": "en-US",
+      "claim_draft": "UNESCO identifies a serial property made of eight archaeological components across Firuzabad, Bishapur and Sarvestan; the components have separate official map records.",
+      "source_ids": [
+        "UNESCO_SASSANID_FARS",
+        "UNESCO_SASSANID_FARS_MAP"
+      ],
+      "unknowns": [
+        "one representative route",
+        "shared visitor entrance",
+        "shared opening schedule",
+        "inter-component transfer"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "UNESCO منظر ساسانی فارس را مجموعه‌ای سریالی از هشت مؤلفهٔ باستان‌شناختی در فیروزآباد، بیشاپور و سروستان معرفی می‌کند؛ نقشهٔ رسمی برای مؤلفه‌ها نقاط مرجع جداگانه دارد.",
+        "en-US": "UNESCO identifies a serial property made of eight archaeological components across Firuzabad, Bishapur and Sarvestan; the components have separate official map records.",
+        "ar": "تعرّف UNESCO المشهد الأثري الساساني في فارس بأنه ممتلك متسلسل يضم ثمانية مكوّنات أثرية في فيروزآباد وبيشابور وسروستان؛ وتعرض الخريطة الرسمية نقاطاً مرجعية منفصلة للمكوّنات."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "bishapur-shapur-cave-v1",
+      "claim_key": "shapur_cave_access_description",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran describes Shapur Cave near Bishapur and the Sassanid statue at its entrance; the page also describes a walking approach.",
+      "source_ids": [
+        "VISITIRAN_SHAPURCAVE",
+        "UNESCO_SASSANID_FARS"
+      ],
+      "unknowns": [
+        "current trail status",
+        "current safety",
+        "difficulty grade",
+        "mobility access",
+        "guide availability"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran غار شاپور را در نزدیکی بیشاپور و مجسمهٔ ساسانیِ واقع در ورودی غار توصیف می‌کند و در صفحهٔ خود به مسیر پیاده‌روی نیز اشاره دارد.",
+        "en-US": "Visit Iran describes Shapur Cave near Bishapur and the Sassanid statue at its entrance; the page also describes a walking approach.",
+        "ar": "يصف موقع Visit Iran كهف شاپور قرب بيشابور والتمثال الساساني عند مدخل الكهف، كما يشير في صفحته إلى وجود مسار للوصول سيراً على الأقدام."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "sarvestan-sassanid-monument-v1",
+      "claim_key": "sarvestan_palace_chahartaq",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran describes Sarvestan Palace as a Sassanid-era structure with chahartaq form; UNESCO identifies Sarvestan Monument as one component of the serial property.",
+      "source_ids": [
+        "VISITIRAN_SARVESTANPALACE",
+        "UNESCO_SASSANID_FARS"
+      ],
+      "unknowns": [
+        "final identity reconciliation",
+        "current visitor access",
+        "opening hours",
+        "route"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "Visit Iran کاخ سروستان را بنایی با فرم چهارتاقی از دورهٔ ساسانی توصیف می‌کند؛ UNESCO بنای سروستان را یکی از مؤلفه‌های مجموعهٔ سریالی معرفی می‌کند.",
+        "en-US": "Visit Iran describes Sarvestan Palace as a Sassanid-era structure with chahartaq form; UNESCO identifies Sarvestan Monument as one component of the serial property.",
+        "ar": "يصف موقع Visit Iran قصر سروستان بأنه مبنى من العصر الساساني بتصميم چَهارطاق؛ وتحدد UNESCO monument سروستان بوصفه أحد مكونات الممتلك المتسلسل."
+      },
+      "translation_status": "draft_native_review_required"
+    },
+    {
+      "record_key": "fars-reghez-canyon-activity-v1",
+      "claim_key": "reghez_general_hike_requirements",
+      "locale": "en-US",
+      "claim_draft": "Visit Iran's Fars guide says the Reghez Canyon hike requires equipment and a guide and takes a full day; this is a general source description, not a current safety bulletin or difficulty rating.",
+      "source_ids": [
+        "VISITIRAN_FARS"
+      ],
+      "unknowns": [
+        "current route condition",
+        "permit",
+        "water level",
+        "seasonal closure",
+        "rescue coverage",
+        "difficulty grade",
+        "current operator availability"
+      ],
+      "claim_by_locale": {
+        "fa-IR": "راهنمای فارس Visit Iran می‌گوید پیمایش دره رغز به تجهیزات و راهنما نیاز دارد و یک روز کامل زمان می‌برد؛ این توصیف کلی، هشدار ایمنی به‌روز یا درجه‌بندی سختی مسیر نیست.",
+        "en-US": "Visit Iran's Fars guide says the Reghez Canyon hike requires equipment and a guide and takes a full day; this is a general source description, not a current safety bulletin or difficulty rating.",
+        "ar": "يذكر دليل محافظة فارس على Visit Iran أن اجتياز وادي رغز يحتاج إلى معدات ومرشد ويستغرق يوماً كاملاً؛ وهذا وصف عام وليس نشرة سلامة حديثة أو تصنيفاً لدرجة صعوبة المسار."
+      },
+      "translation_status": "draft_native_review_required"
+    }
+  ],
+  "rule": "Localized claim text is a draft in fa-IR/en-US/ar and requires native review; it is not production content. Never infer missing operational/access/safety facts."
+}

@@ -4,7 +4,8 @@ param(
     [switch]$ApplyPendingMigrationsToExistingDatabase,
     [switch]$ApplyAuthenticationMigrationToExistingDatabase,
     [switch]$ApplyTravelerCoreMigrationToExistingDatabase,
-    [switch]$ApplyTask31MigrationToExistingDatabase
+    [switch]$ApplyTask31MigrationToExistingDatabase,
+    [switch]$ApplyChatMigrationToExistingDatabase
 )
 
 $ErrorActionPreference = 'Stop'
@@ -195,7 +196,8 @@ try {
             @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; Path = (Join-Path $PackageRoot 'sql\007_shiraz_dalahoo_wikipedia_dataset_v1.sql') },
             @{ Id = '0008_authentication_foundation'; Path = (Join-Path $PackageRoot 'sql\008_authentication_foundation.sql') },
             @{ Id = '0009_traveler_core'; Path = (Join-Path $PackageRoot 'sql\009_traveler_core.sql') },
-            @{ Id = '0010_task31_content_privacy_full_itinerary'; Path = (Join-Path $PackageRoot 'sql\010_task31_content_privacy_full_itinerary.sql') }
+            @{ Id = '0010_task31_content_privacy_full_itinerary'; Path = (Join-Path $PackageRoot 'sql\010_task31_content_privacy_full_itinerary.sql') },
+            @{ Id = '0011_internal_chat_turns'; Path = (Join-Path $PackageRoot 'sql\011_internal_chat_turns.sql') }
         ) | Where-Object { $_.Id -in $expectedMigrations }
         foreach ($migration in $migrationFiles) {
             $localHash = (Get-FileHash -LiteralPath $migration.Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -211,7 +213,8 @@ try {
             -ApplyPendingMigrationsToExistingDatabase:$ApplyPendingMigrationsToExistingDatabase `
             -ApplyAuthenticationMigrationToExistingDatabase:$ApplyAuthenticationMigrationToExistingDatabase `
             -ApplyTravelerCoreMigrationToExistingDatabase:$ApplyTravelerCoreMigrationToExistingDatabase `
-            -ApplyTask31MigrationToExistingDatabase:$ApplyTask31MigrationToExistingDatabase
+            -ApplyTask31MigrationToExistingDatabase:$ApplyTask31MigrationToExistingDatabase `
+            -ApplyChatMigrationToExistingDatabase:$ApplyChatMigrationToExistingDatabase
 
         if ($initializationAction -eq 'already-integrated') {
             Write-Host 'Database already has the validated 0007 / 695-row state. No changes are needed.' -ForegroundColor Green
@@ -223,6 +226,10 @@ try {
         }
         if ($initializationAction -eq 'already-traveler-core') {
             Write-Host "Database state $databaseState already includes the validated traveler-core migration. No changes are needed." -ForegroundColor Green
+            return
+        }
+        if ($initializationAction -eq 'already-chat') {
+            Write-Host 'Database already includes the validated internal Chat migration.' -ForegroundColor Green
             return
         }
         if ($initializationAction -eq 'already-task31') {
@@ -281,7 +288,8 @@ try {
         @{ Id = '0007_shiraz_dalahoo_wikipedia_dataset_v1'; File = '007_shiraz_dalahoo_wikipedia_dataset_v1.sql'; Path = '/opt/ai-tourism/sql/007_shiraz_dalahoo_wikipedia_dataset_v1.sql' },
         @{ Id = '0008_authentication_foundation'; File = '008_authentication_foundation.sql'; Path = '/opt/ai-tourism/sql/008_authentication_foundation.sql' },
         @{ Id = '0009_traveler_core'; File = '009_traveler_core.sql'; Path = '/opt/ai-tourism/sql/009_traveler_core.sql' },
-        @{ Id = '0010_task31_content_privacy_full_itinerary'; File = '010_task31_content_privacy_full_itinerary.sql'; Path = '/opt/ai-tourism/sql/010_task31_content_privacy_full_itinerary.sql' }
+        @{ Id = '0010_task31_content_privacy_full_itinerary'; File = '010_task31_content_privacy_full_itinerary.sql'; Path = '/opt/ai-tourism/sql/010_task31_content_privacy_full_itinerary.sql' },
+        @{ Id = '0011_internal_chat_turns'; File = '011_internal_chat_turns.sql'; Path = '/opt/ai-tourism/sql/011_internal_chat_turns.sql' }
     )
 
     if ($databaseState -ne 'fresh') {
@@ -296,6 +304,9 @@ try {
         }
         elseif ($initializationAction -like 'apply-task31-0010-*') {
             $migrations = @($migrations | Where-Object { $_.Id -eq '0010_task31_content_privacy_full_itinerary' })
+        }
+        elseif ($initializationAction -like 'apply-chat-0011-*') {
+            $migrations = @($migrations | Where-Object { $_.Id -eq '0011_internal_chat_turns' })
         }
         else {
             throw "Unexpected migration action '$initializationAction'; stopped before writes."
