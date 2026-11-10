@@ -16,6 +16,8 @@ $script:Migration0006AuthTravelerIds = $script:Migration0008Ids + '0009_traveler
 $script:Migration0007AuthTravelerIds = $script:Migration0007And0008Ids + '0009_traveler_core'
 $script:Migration0006AuthTask31Ids = $script:Migration0006AuthTravelerIds + '0010_task31_content_privacy_full_itinerary'
 $script:Migration0007AuthTask31Ids = $script:Migration0007AuthTravelerIds + '0010_task31_content_privacy_full_itinerary'
+$script:Migration0006ChatIds = $script:Migration0006AuthTask31Ids + '0011_internal_chat_turns'
+$script:Migration0007ChatIds = $script:Migration0007AuthTask31Ids + '0011_internal_chat_turns'
 
 function Resolve-DatabaseLifecycleState {
     [CmdletBinding()]
@@ -35,6 +37,8 @@ function Resolve-DatabaseLifecycleState {
     $travelerShiraz = @($script:Migration0007AuthTravelerIds | Sort-Object)
     $task31Baseline = @($script:Migration0006AuthTask31Ids | Sort-Object)
     $task31Shiraz = @($script:Migration0007AuthTask31Ids | Sort-Object)
+    $chatBaseline = @($script:Migration0006ChatIds | Sort-Object)
+    $chatShiraz = @($script:Migration0007ChatIds | Sort-Object)
     $appliedKey = $applied -join ','
 
     if ($appliedKey -ceq ($baseline -join ',')) {
@@ -121,17 +125,42 @@ function Resolve-DatabaseLifecycleState {
         }
     }
 
-        throw "Unsupported or partial database migration ledger. Expected an exact supported migration state through 0010; found: $appliedKey. No migration was applied."
+    if ($appliedKey -ceq ($chatBaseline -join ',')) {
+        return [pscustomobject]@{
+            Name = '0006-auth-0009-0010-0011'
+            ExpectedRows = 423
+            MigrationIds = $script:Migration0006ChatIds
+            IncludesShiraz = $false
+            IncludesAuthentication = $true
+            IncludesTravelerCore = $true
+            IncludesTask31 = $true
+            IncludesChat = $true
+        }
+    }
+    if ($appliedKey -ceq ($chatShiraz -join ',')) {
+        return [pscustomobject]@{
+            Name = '0007-auth-0009-0010-0011'
+            ExpectedRows = 699
+            MigrationIds = $script:Migration0007ChatIds
+            IncludesShiraz = $true
+            IncludesAuthentication = $true
+            IncludesTravelerCore = $true
+            IncludesTask31 = $true
+            IncludesChat = $true
+        }
+    }
+    throw "Unsupported or partial database migration ledger. Expected an exact supported migration state through 0011; found: $appliedKey. No migration was applied."
 }
 
 function Resolve-DatabaseInitializationAction {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)][ValidateSet('fresh', '0006', '0007', '0006-auth', '0007-auth', '0006-auth-0009', '0007-auth-0009', '0006-auth-0009-0010', '0007-auth-0009-0010')][string]$State,
+        [Parameter(Mandatory = $true)][ValidateSet('fresh', '0006', '0007', '0006-auth', '0007-auth', '0006-auth-0009', '0007-auth-0009', '0006-auth-0009-0010', '0007-auth-0009-0010', '0006-auth-0009-0010-0011', '0007-auth-0009-0010-0011')][string]$State,
         [switch]$ApplyPendingMigrationsToExistingDatabase,
         [switch]$ApplyAuthenticationMigrationToExistingDatabase,
         [switch]$ApplyTravelerCoreMigrationToExistingDatabase,
-        [switch]$ApplyTask31MigrationToExistingDatabase
+        [switch]$ApplyTask31MigrationToExistingDatabase,
+        [switch]$ApplyChatMigrationToExistingDatabase
     )
 
     switch ($State) {
@@ -152,8 +181,16 @@ function Resolve-DatabaseInitializationAction {
             if ($ApplyTask31MigrationToExistingDatabase) { return 'apply-task31-0010-from-0007-auth-0009' }
             throw 'Existing database has Migrations 0000–0009 with the 0007 dataset. Migration 0010 is pending and requires separate owner approval. Rerun with -ApplyTask31MigrationToExistingDatabase only after that approval. No database write was performed.'
         }
-        '0006-auth-0009-0010' { return 'already-task31' }
-        '0007-auth-0009-0010' { return 'already-task31' }
+        '0006-auth-0009-0010' {
+            if ($ApplyChatMigrationToExistingDatabase) { return 'apply-chat-0011-from-0006' }
+            return 'already-task31'
+        }
+        '0007-auth-0009-0010' {
+            if ($ApplyChatMigrationToExistingDatabase) { return 'apply-chat-0011-from-0007' }
+            return 'already-task31'
+        }
+        '0006-auth-0009-0010-0011' { return 'already-chat' }
+        '0007-auth-0009-0010-0011' { return 'already-chat' }
         '0006' {
             if ($ApplyAuthenticationMigrationToExistingDatabase) { return 'apply-auth-0008-from-0006' }
             if ($ApplyPendingMigrationsToExistingDatabase) { return 'apply-pending-0007' }

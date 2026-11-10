@@ -1,0 +1,55 @@
+{
+  "task": "Rahgard Launch Completion Issues #4-#6",
+  "date": "2026-11-10",
+  "git": {
+    "branch": "feat/rahgard-launch-integration-v1",
+    "base_sha": "d55dcda32d7465904ba60687d4d1d5875e2ce57d",
+    "final_committed_sha": "d55dcda32d7465904ba60687d4d1d5875e2ce57d",
+    "upstream": "origin/feat/c1-c3-internal-installable-mvp-v1",
+    "ahead_behind": "0/0",
+    "working_tree_changes_uncommitted": true
+  },
+  "issues": {
+    "4": {
+      "implementation": "delivered",
+      "real_owner_rag_http_calls": 3,
+      "outcomes": {"no_evidence": 3, "ok": 0, "unavailable": 0},
+      "traveler_evidence_text_returned": false,
+      "traveler_content_mapping": "blocked: no trusted owner-evidence to published-record identity projection",
+      "real_data_recommendations": "blocked: approved corpus empty"
+    },
+    "5": {"status": "blocked", "blockers": ["editorial/source approval and native review", "approved published corpus", "authorized remote Chat and data-processing consent"]},
+    "6": {"status": "blocked", "blockers": ["approved production host/security/operations", "production SMS credentials/carrier validation", "physical device/SIM acceptance", "auth recovery and admin security approvals"]}
+  },
+  "browser": {
+    "status": "passed",
+    "browser": "Chromium 156.0.8078.47",
+    "locales": ["fa-IR", "en-US", "ar"],
+    "screenshots": 12,
+    "artifact_root": "artifacts/visual-qa-task15d/run-2026-11-10T07-55-19-497Z-17016",
+    "production_catalogue_count": 0,
+    "chat": {"mode": "simulated", "live_calls": 0},
+    "rag": {"mode": "real_owner_http", "calls": 3, "no_evidence": 3, "traveler_evidence_text_returned": false},
+    "test_only_itinerary": {"days": 15, "initial_stops": 4, "final_stops": 3, "final_unplanned_days": 12, "real_fastapi_postgres_persistence": true},
+    "external_successful_responses": 0,
+    "page_errors": 0
+  },
+  "tests": [
+    {"name": "focused backend retrieval/recommendation/consent", "result": "79 passed, 1 warning", "exit_code": 0},
+    {"name": "full backend suite", "result": "274 passed, 14 skipped, 1 warning", "exit_code": 0, "note": "run before final harness-only edits"},
+    {"name": "Ruff app tests", "result": "all checks passed", "exit_code": 0},
+    {"name": "frontend suite", "result": "109 passed, 13 files", "exit_code": 0},
+    {"name": "frontend production build", "result": "passed", "exit_code": 0},
+    {"name": "guarded PostgreSQL positive itinerary and assistant", "result": "1 passed, 9 skipped", "exit_code": 0},
+    {"name": "three-locale integrated browser with real owner RAG HTTP", "result": "passed, 12 screenshots", "exit_code": 0},
+    {"name": "node syntax, Python compile, git diff check", "result": "passed", "exit_code": 0}
+  ],
+  "safety": {
+    "shared_postgres_accessed": false,
+    "root_env_read": false,
+    "live_paid_chat_called": false,
+    "real_sms_used": false,
+    "unapproved_content_published": false,
+    "merge_or_deploy": false
+  }
+}

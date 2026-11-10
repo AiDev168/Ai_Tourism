@@ -9,6 +9,7 @@ import { useLocale } from '../i18n/LocaleContext';
 import { AuthPanel } from '../auth/AuthPanel';
 import type { AuthSession } from '../auth/authApi';
 import { TravelerJourney } from '../trip/TravelerJourney';
+import { PwaUpdateNotice } from '../pwa/PwaUpdateNotice';
 
 const destinationCatalog = new ApiDestinationCatalogPort();
 
@@ -251,6 +252,24 @@ export function App() {
           </figure>
         </section>
 
+        <PwaUpdateNotice locale={locale} />
+        <TravelerJourney
+          locale={locale}
+          session={authSession}
+          online={online}
+          requirements={requirements}
+          onSessionExpired={() => setAuthSession(null)}
+          onRestoreRequest={(text, restored) => {
+            requestTextRef.current = text;
+            if (promptRef.current) promptRef.current.value = text;
+            setRequirements(restored);
+            setClarifications(restored.missingRequired);
+            setAmbiguities(restored.ambiguousRequired);
+            setDestinationResolution(null);
+          }}
+          onStartNewDraft={clearTripDraft}
+        />
+
         <section className="section discover" id="discover">
           <div className="section-heading">
             <div>
@@ -299,22 +318,6 @@ export function App() {
           </div>
         </section>
 
-        <TravelerJourney
-          locale={locale}
-          session={authSession}
-          online={online}
-          requirements={requirements}
-          onSessionExpired={() => setAuthSession(null)}
-          onRestoreRequest={(text, restored) => {
-            requestTextRef.current = text;
-            if (promptRef.current) promptRef.current.value = text;
-            setRequirements(restored);
-            setClarifications(restored.missingRequired);
-            setAmbiguities(restored.ambiguousRequired);
-            setDestinationResolution(null);
-          }}
-          onStartNewDraft={clearTripDraft}
-        />
       </main>
 
       <footer>

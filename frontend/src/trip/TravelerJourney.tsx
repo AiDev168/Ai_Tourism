@@ -3,8 +3,12 @@ import type { AuthSession } from '../auth/authApi';
 import { formatNumber, type Locale } from '../i18n/messages';
 import { journeyMessages, localizeRecommendationCode } from '../i18n/journeyMessages';
 import { createTripRequirements, type TripRequirements } from './tripIntake';
+import { integrateTripFollowUp } from './followUpIntake';
 import { resolveDestinationNames, confirmDestinationCandidate, type DestinationResolution } from './destinationResolution';
 import { ApiDestinationCatalogPort } from './destinationCatalogApi';
+import { reviewableAssistantCandidate } from './assistantCandidate';
+import { TravelerGuidance } from './TravelerGuidance';
+import { nextTripQuestion } from './clarificationGuide';
 import {
   travelerApi, TravelerApiError, type ConversationRecord, type ConversationSummary,
   type ItineraryRecord, type ItineraryStop, type RecommendationResult, type RequirementConsentDecision,
@@ -12,6 +16,64 @@ import {
 } from './travelerApi';
 
 const catalog = new ApiDestinationCatalogPort();
+
+const assistantCopy: Record<Locale, {
+  consent: string; send: string; review: string; initial: string; unavailable: string;
+  destination: string; duration: string; apply: string; dismiss: string; unsaved: string; reviewSaved: string;
+  speaker: string; promptsTitle: string; prompts: readonly string[];
+  promptForAi: string; advisorActionHelp: string; promptHelp: string;
+  saveWithoutAI: string; currentDuration: string;
+  origin: string; travelerCount: string; budget: string; dates: string; interest: string;
+}> = {
+  'fa-IR': { consent: 'با ارسال این پیام و تاریخچهٔ گفت‌وگوی سفر به سرویس هوش مصنوعی موافقم.',
+    send: 'پرسش از دستیار سفر', review: 'پیشنهاد مدل؛ پیش از تأیید سفر بررسی کنید:',
+    initial: 'لطفاً برای سفر شرح‌داده‌شده سؤال تکمیلی مناسب بپرس.',
+    unavailable: 'دستیار در حال حاضر در دسترس نیست؛ همچنان می‌توانید سفر را بدون آن ثبت کنید.',
+    destination: 'مقصد پیشنهادی', duration: 'تعداد روز پیشنهادی',
+    apply: 'انتقال به فرم سفر', dismiss: 'نادیده گرفتن', reviewSaved: 'بازبینی پیشنهاد ذخیره‌شده',
+    unsaved: 'این پیشنهاد هنوز ذخیره یا تأیید نشده است. پس از انتقال، فرم سفر را بررسی و تأیید کنید.',
+    origin: 'شهر مبدأ پیشنهادی', travelerCount: 'تعداد مسافران پیشنهادی',
+    budget: 'بودجهٔ پیشنهادی', dates: 'تاریخ‌های پیشنهادی (میلادی)', interest: 'علاقهٔ پیشنهادی',
+    speaker: 'مشاور هوش مصنوعی', promptsTitle: 'برای ادامه می‌توانید از مشاور بخواهید:',
+    promptForAi: 'این عبارت یک درخواست از مشاور هوش مصنوعی است؛ برای ارسال، رضایت پردازش بیرونی را فعال و «پرسش از دستیار سفر» را انتخاب کنید.',
+    advisorActionHelp: 'پرسش از دستیار: فقط با رضایت شما، پیام و سابقهٔ مرتبط سفر به سرویس هوش مصنوعی ارسال می‌شود.',
+    promptHelp: 'انتخاب پرسش فقط پیش‌نویس را پر می‌کند؛ تا انتخاب یکی از اقدام‌های زیر چیزی ذخیره یا ارسال نمی‌شود.',
+    saveWithoutAI: 'ثبت پاسخ بدون هوش مصنوعی',
+    currentDuration: 'مدت ثبت‌شدهٔ این سفر: {days} روز.',
+    prompts: ['دربارهٔ علایق و سبک سفرم یک سؤال تکمیلی بپرس.', 'برای روشن شدن بودجه و تعداد همراهانم سؤال بپرس.', 'محدودیت‌های ضروری سفرم را مرور کن و موارد مبهم را بپرس.'] },
+  'en-US': { consent: 'I consent to sending this message and prior trip conversation to the AI service.',
+    send: 'Ask travel assistant', review: 'AI suggestions — review before confirming:',
+    initial: 'Please ask a useful clarification about the trip described above.',
+    unavailable: 'The assistant is unavailable. You can still save your trip.',
+    destination: 'Suggested destination', duration: 'Suggested days',
+    apply: 'Use in trip form', dismiss: 'Dismiss', reviewSaved: 'Review saved suggestion',
+    unsaved: 'Not saved or confirmed. Review and confirm the trip form after applying.',
+    origin: 'Suggested departure city', travelerCount: 'Suggested travelers',
+    budget: 'Suggested budget', dates: 'Suggested dates (Gregorian)', interest: 'Suggested interest',
+    speaker: 'AI travel advisor', promptsTitle: 'Suggested follow-up questions:',
+    promptForAi: 'This prompt is intended for the AI advisor. Consent to external processing and select “Ask travel assistant” to send it.',
+    advisorActionHelp: 'Ask travel assistant sends the message and relevant trip history to the configured AI provider only with your consent.',
+    promptHelp: 'Choosing a prompt only fills the draft. Nothing is saved or sent until you choose one of the actions below.',
+    saveWithoutAI: 'Save reply without AI',
+    currentDuration: 'Recorded trip length: {days} days.',
+    prompts: ['Ask me about my interests and travel style.', 'Clarify my budget and number of travelers.', 'Review my essential constraints and ask what is unclear.'] },
+  ar: { consent: 'أوافق على إرسال هذه الرسالة وسجل محادثة الرحلة إلى خدمة الذكاء الاصطناعي.',
+    send: 'اسأل مساعد السفر', review: 'اقتراحات النموذج — راجعها قبل التأكيد:',
+    initial: 'يرجى طرح سؤال توضيحي مناسب عن الرحلة المذكورة أعلاه.',
+    unavailable: 'المساعد غير متاح حاليًا. يمكنك حفظ الرحلة بدونه.',
+    destination: 'الوجهة المقترحة', duration: 'الأيام المقترحة',
+    apply: 'نقل إلى نموذج الرحلة', dismiss: 'تجاهل', reviewSaved: 'مراجعة الاقتراح المحفوظ',
+    unsaved: 'لم يُحفظ هذا الاقتراح أو يُؤكَّد. راجع نموذج الرحلة وأكّده بعد النقل.',
+    origin: 'مدينة المغادرة المقترحة', travelerCount: 'عدد المسافرين المقترح',
+    budget: 'الميزانية المقترحة', dates: 'التواريخ المقترحة (ميلادي)', interest: 'الاهتمام المقترح',
+    speaker: 'مستشار السفر بالذكاء الاصطناعي', promptsTitle: 'يمكنك متابعة المحادثة عبر:',
+    promptForAi: 'هذا طلب موجه إلى مستشار الذكاء الاصطناعي. وافق على المعالجة الخارجية ثم اختر «اسأل مساعد السفر».',
+    advisorActionHelp: 'عند اختيار مستشار السفر وبموافقتك، تُرسل الرسالة وسجل الرحلة المرتبط إلى خدمة الذكاء الاصطناعي.',
+    promptHelp: 'اختيار السؤال يملأ المسودة فقط؛ لا يُحفظ شيء ولا يُرسل حتى تختار أحد الإجراءين أدناه.',
+    saveWithoutAI: 'احفظ الرد دون ذكاء اصطناعي',
+    currentDuration: 'مدة الرحلة المسجلة: {days} يومًا.',
+    prompts: ['اسألني عن اهتماماتي وطريقة سفري.', 'اسألني عن الميزانية وعدد المسافرين.', 'راجع الشروط الأساسية واسأل عن الأمور غير الواضحة.'] },
+};
 
 function newIdempotencyKey(): string {
   return crypto.randomUUID();
@@ -66,6 +128,42 @@ function unresolvedConsentFields(value: TripRequirements | null): RequirementFie
     return fieldValue !== null && fieldValue !== undefined
       && (typeof fieldValue !== 'string' || fieldValue.trim().length > 0);
   });
+}
+
+function parseReviewedBudget(text: string, locale: Locale): TripRequirements['budget']['value'] {
+  if (!text.trim()) return null;
+  const result = createTripRequirements({ requestText: text.trim(), locale });
+  return result.kind === 'invalid' ? null : result.requirements.budget.value;
+}
+
+function validIsoDay(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+  const date = new Date(value + 'T00:00:00Z');
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function validTravelDates(start: string, end: string): boolean {
+  return (!start && !end) || (validIsoDay(start) && validIsoDay(end) && start <= end);
+}
+
+function parseInterests(text: string): string[] {
+  return [...new Set(text.split(/[,،؛;]/u).map(value => value.trim()).filter(Boolean))];
+}
+
+function consentFieldsForReviewedProfile(
+  extracted: TripRequirements | null,
+  origin: string,
+  travelers: string,
+  budget: string,
+  dateStart: string,
+  dateEnd: string,
+): RequirementFieldCode[] {
+  const fields = unresolvedConsentFields(extracted);
+  if (origin.trim() && !fields.includes('origin')) fields.push('origin');
+  if (travelers.trim() && !fields.includes('traveler_count')) fields.push('traveler_count');
+  if (budget.trim() && !fields.includes('budget')) fields.push('budget');
+  if ((dateStart || dateEnd) && !fields.includes('travel_dates')) fields.push('travel_dates');
+  return fields;
 }
 
 function restoredConsent(
@@ -149,10 +247,19 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const [resolution, setResolution] = useState<DestinationResolution | null>(null);
   const [destinationNames, setDestinationNames] = useState<string[]>([]);
   const [durationText, setDurationText] = useState('');
+  const [originText, setOriginText] = useState('');
+  const [travelerCountText, setTravelerCountText] = useState('');
+  const [budgetText, setBudgetText] = useState('');
+  const [travelStartText, setTravelStartText] = useState('');
+  const [travelEndText, setTravelEndText] = useState('');
+  const [interestText, setInterestText] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [requirementChoices, setRequirementChoices] = useState<Partial<Record<RequirementFieldCode, RequirementConsentDecision>>>({});
   const [advisoryAcknowledgements, setAdvisoryAcknowledgements] = useState<Partial<Record<RequirementFieldCode, boolean>>>({});
   const [messageText, setMessageText] = useState('');
+  const [assistantPromptSelected, setAssistantPromptSelected] = useState(false);
+  const [remoteConsent, setRemoteConsent] = useState(false);
+  const [assistantCandidate, setAssistantCandidate] = useState<Record<string, string | number | null> | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationResult | null>(null);
   const [itinerary, setItinerary] = useState<ItineraryRecord | null>(null);
   const [editableStops, setEditableStops] = useState<ItineraryStop[]>([]);
@@ -166,8 +273,19 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const restoringRequestRef = useRef<string | null>(null);
 
   const extracted = useMemo(() => safeRequirements(activeTrip?.extracted_requirements, activeTrip?.locale ?? locale), [activeTrip, locale]);
-  const consentFields = useMemo(() => unresolvedConsentFields(extracted), [extracted]);
+  const consentFields = useMemo(() => consentFieldsForReviewedProfile(
+    extracted, originText, travelerCountText, budgetText, travelStartText, travelEndText,
+  ), [extracted, originText, travelerCountText, budgetText, travelStartText, travelEndText]);
+  const budgetValid = !budgetText.trim() || parseReviewedBudget(budgetText, locale) !== null;
+  const datesValid = validTravelDates(travelStartText, travelEndText);
+  const interests = parseInterests(interestText);
+  const interestsValid = interestText.length <= 300 && interests.length <= 10
+    && interests.every(value => value.length <= 100 && !/[\u0000-\u001f\u007f]/u.test(value));
+  const travelerCountValid = travelerCountText.trim() === '' || (/^[0-9]{1,2}$/.test(travelerCountText.trim())
+    && Number(travelerCountText) >= 1 && Number(travelerCountText) <= 50);
   const consentComplete = consentIsComplete(consentFields, requirementChoices, advisoryAcknowledgements);
+  const reviewedAssistantCandidate = reviewableAssistantCandidate(assistantCandidate);
+  const guidedQuestion = activeTrip ? nextTripQuestion(locale, destinationNames, durationText) : null;
   const invalidateConsent = () => {
     setRequirementChoices({});
     setAdvisoryAcknowledgements({});
@@ -237,12 +355,22 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         setRecommendations(null);
         setItinerary(null);
       }
-      setDestinationNames(requirements.destinations.value ? [...requirements.destinations.value] : []);
-      setDurationText(requirements.durationDays.value === null ? '' : String(requirements.durationDays.value));
-      const suggestedDays = validDayCount(requirements.durationDays.value);
-      if (!activeTrip?.latest_itinerary_id && suggestedDays !== null) setDayCount(suggestedDays);
-      void resolveNames(requirements.destinations.value ?? []);
       const restoring = restoringRequestRef.current === requirements.requestText;
+      // The restored, traveler-reviewed profile is authoritative for the form.
+      // Do not overwrite it with the older parser extraction from the parent.
+      if (!(restoring && activeTrip?.confirmed_requirements.confirmation_source === 'traveler_reviewed')) {
+        setDestinationNames(requirements.destinations.value ? [...requirements.destinations.value] : []);
+        setDurationText(requirements.durationDays.value === null ? '' : String(requirements.durationDays.value));
+        setOriginText(requirements.origin.value ?? '');
+        setTravelerCountText(requirements.travelerCount.value === null ? '' : String(requirements.travelerCount.value));
+        setBudgetText(requirements.budget.value?.raw ?? '');
+        setTravelStartText(requirements.travelDates.value?.start ?? '');
+        setTravelEndText(requirements.travelDates.value?.end ?? '');
+        setInterestText(requirements.interests.value?.join('، ') ?? '');
+        const suggestedDays = validDayCount(requirements.durationDays.value);
+        if (!activeTrip?.latest_itinerary_id && suggestedDays !== null) setDayCount(suggestedDays);
+        void resolveNames(requirements.destinations.value ?? []);
+      }
       if (requirements.requestText === activeTrip?.original_request) setDirty(false);
       if (restoring) restoringRequestRef.current = null;
       if (!restoring) {
@@ -304,25 +432,60 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       const trip = await travelerApi.getTrip(tripId);
       setActiveConversation(conversation);
       setActiveTrip(trip);
+      setAssistantCandidate(null);
+      setRemoteConsent(false);
       const parsed = safeRequirements(trip.extracted_requirements, trip.locale);
+      const hasReviewedProfile = trip.confirmed_requirements.confirmation_source === 'traveler_reviewed';
+      const storedNames = trip.confirmed_requirements.destinations;
+      const restoredNames = hasReviewedProfile && Array.isArray(storedNames)
+        && storedNames.every(name => typeof name === 'string' && name.trim().length > 0 && name.length <= 100)
+        ? storedNames as string[] : (parsed?.destinations.value ?? []);
+      const restoredDays = hasReviewedProfile
+        ? validDayCount(trip.confirmed_requirements.duration_days)
+        : (parsed?.durationDays.value ?? null);
+      setDestinationNames(restoredNames.slice());
+      setDurationText(restoredDays === null ? '' : String(restoredDays));
+      const approvedOrigin = trip.confirmed_requirements.origin;
+      const restoredOrigin = hasReviewedProfile && typeof approvedOrigin === 'string' && approvedOrigin.length <= 100
+        ? approvedOrigin : (parsed?.origin.value ?? '');
+      const approvedCount = validDayCount(trip.confirmed_requirements.traveler_count);
+      const restoredTravelerCount = hasReviewedProfile && approvedCount !== null && approvedCount <= 50
+        ? String(approvedCount) : (parsed?.travelerCount.value === null || parsed?.travelerCount.value === undefined
+          ? '' : String(parsed.travelerCount.value));
+      setOriginText(restoredOrigin);
+      setTravelerCountText(restoredTravelerCount);
+      const savedBudget = trip.confirmed_requirements.budget;
+      const restoredBudget = hasReviewedProfile && savedBudget && typeof savedBudget === 'object'
+        && !Array.isArray(savedBudget) && typeof (savedBudget as Record<string, unknown>).raw === 'string'
+        ? String((savedBudget as Record<string, unknown>).raw) : (parsed?.budget.value?.raw ?? '');
+      const savedDates = trip.confirmed_requirements.travel_dates;
+      const restoredDates = hasReviewedProfile && savedDates && typeof savedDates === 'object'
+        && !Array.isArray(savedDates) ? savedDates as Record<string, unknown> : null;
+      const restoredStart = typeof restoredDates?.start === 'string' ? restoredDates.start : (parsed?.travelDates.value?.start ?? '');
+      const restoredEnd = typeof restoredDates?.end === 'string' ? restoredDates.end : (parsed?.travelDates.value?.end ?? '');
+      const savedInterests = trip.confirmed_requirements.interests;
+      const restoredInterests = hasReviewedProfile && Array.isArray(savedInterests)
+        && savedInterests.every(value => typeof value === 'string')
+        ? savedInterests as string[] : (parsed?.interests.value ?? []);
+      setBudgetText(restoredBudget);
+      setTravelStartText(restoredStart);
+      setTravelEndText(restoredEnd);
+      setInterestText(restoredInterests.join('، '));
       if (parsed) {
-        setDestinationNames((parsed.destinations.value ?? []).slice());
-        setDurationText(parsed.durationDays.value === null ? '' : String(parsed.durationDays.value));
         restoringRequestRef.current = parsed.requestText;
         onRestoreRequest(parsed.requestText, parsed);
-        void resolveNames(trip.destination_ids.length ? trip.destination_ids.map(id => {
-          const name = (parsed.destinations.value ?? [])[trip.destination_ids.indexOf(id)];
-          return name ?? '';
-        }) : parsed.destinations.value ?? []);
       }
-      const savedConsent = restoredConsent(trip, unresolvedConsentFields(parsed));
+      void resolveNames(restoredNames);
+      const restoredConsentFields = consentFieldsForReviewedProfile(
+        parsed, restoredOrigin, restoredTravelerCount, restoredBudget, restoredStart, restoredEnd,
+      );
+      const savedConsent = restoredConsent(trip, restoredConsentFields);
       setRequirementChoices(savedConsent?.decisions ?? {});
       setAdvisoryAcknowledgements(Object.fromEntries(
         (savedConsent?.acknowledgedFields ?? []).map(field => [field, true]),
       ) as Partial<Record<RequirementFieldCode, boolean>>);
-      const hasReviewedProfile = trip.confirmed_requirements.confirmation_source === 'traveler_reviewed';
       setConfirmed(hasReviewedProfile && savedConsent !== null
-        && consentIsComplete(unresolvedConsentFields(parsed), savedConsent.decisions,
+        && consentIsComplete(restoredConsentFields, savedConsent.decisions,
           Object.fromEntries(savedConsent.acknowledgedFields.map(field => [field, true]))));
       const latestRecs = trip.latest_recommendation_request_id
         ? await travelerApi.latestRecommendations(trip.trip_id).catch(() => null) : null;
@@ -337,42 +500,151 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   };
 
   const sendMessage = async () => {
-    if (!session || !activeConversation || !activeTrip || !messageText.trim() || !online) { if (!online) setError(copy.offline); return; }
+    if (!session || !activeConversation || !activeTrip || !messageText.trim() || !online) {
+      if (!online) setError(copy.offline);
+      return;
+    }
+    const initial = createTripRequirements({ requestText: activeTrip.original_request, locale: activeTrip.locale });
+    const previous = safeRequirements(activeTrip.extracted_requirements, activeTrip.locale)
+      ?? (initial.kind === 'invalid' ? null : initial.requirements);
+    if (!previous) { setError(copy.genericError); return; }
+    // Parse the new utterance on its own. The original 1200-character request
+    // remains unchanged; later explicit corrections do not become conflicts
+    // merely because an earlier value also appears in the history.
+    const parsed = integrateTripFollowUp(
+      previous, messageText.trim(), activeTrip.locale, activeTrip.confirmed_requirements,
+    );
+    if (parsed.kind === 'invalid') { setError(copy.followUpInvalid); return; }
     setBusy(true); setError(''); setStatus('');
     try {
-      const merged = `${activeTrip.original_request}\n${messageText.trim()}`;
-      const parsed = createTripRequirements({ requestText: merged, locale: activeTrip.locale });
       const result = await travelerApi.appendMessage(csrf, activeConversation.conversation_id, {
         trip_id: activeTrip.trip_id,
         content: messageText.trim(),
-        extracted_requirements: parsed.kind === 'invalid' ? undefined : parsed.requirements,
+        extracted_requirements: parsed.requirements,
         idempotency_key: newIdempotencyKey(),
         expected_version: activeConversation.version,
       });
       setActiveConversation(result.conversation);
       setActiveTrip(result.trip);
       setMessageText('');
-      setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setStatus(copy.messageSaved);
+      setAssistantPromptSelected(false);
+      setAssistantCandidate(null);
+      setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({});
+      setRecommendations(null); setItinerary(null);
       const latest = safeRequirements(result.trip.extracted_requirements, result.trip.locale);
-      if (latest) { setDestinationNames(latest.destinations.value?.slice() ?? []); setDurationText(latest.durationDays.value === null ? '' : String(latest.durationDays.value)); restoringRequestRef.current = latest.requestText; onRestoreRequest(latest.requestText, latest); void resolveNames(latest.destinations.value ?? []); }
+      setStatus(latest?.extractionStatus === 'needs_clarification'
+        ? copy.followUpNeedsReview : copy.messageSaved);
+      if (latest) {
+        setDestinationNames(latest.destinations.value?.slice() ?? []);
+        setDurationText(latest.durationDays.value === null ? '' : String(latest.durationDays.value));
+        setOriginText(latest.origin.value ?? '');
+        setTravelerCountText(latest.travelerCount.value === null ? '' : String(latest.travelerCount.value));
+        setBudgetText(latest.budget.value?.raw ?? '');
+        setTravelStartText(latest.travelDates.value?.start ?? '');
+        setTravelEndText(latest.travelDates.value?.end ?? '');
+        setInterestText(latest.interests.value?.join('، ') ?? '');
+        restoringRequestRef.current = latest.requestText;
+        onRestoreRequest(latest.requestText, latest);
+        void resolveNames(latest.destinations.value ?? []);
+      }
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
   };
 
+  const askAssistant = async () => {
+    if (!session || !activeConversation || !activeTrip || !remoteConsent || !online) return;
+    const content = messageText.trim() || assistantCopy[locale].initial;
+    if (content.length > 1200) return;
+    setBusy(true); setError(''); setStatus('');
+    setAssistantCandidate(null);
+    try {
+      const result = await travelerApi.assistantTurn(csrf, activeConversation.conversation_id, {
+        trip_id: activeTrip.trip_id,
+        content,
+        idempotency_key: newIdempotencyKey(),
+        expected_version: activeConversation.version,
+        remote_processing_consent: true,
+      });
+      setActiveConversation(result.conversation);
+      setActiveTrip(result.trip);
+      setAssistantCandidate(result.candidate_requirements);
+      setMessageText('');
+      setAssistantPromptSelected(false);
+      // AI replies are advisory: do not reset consent, the reviewed trip,
+      // recommendations, or a saved itinerary after a chat message.
+    } catch (value) {
+      // A provider outage is different from an unavailable destination catalogue.
+      if (value instanceof TravelerApiError && value.status === 503) {
+        setError(assistantCopy[locale].unavailable);
+      } else {
+        applyFailure(value);
+      }
+      // A failed provider request still persists the user turn. Refresh the
+      // optimistic version so a subsequent explicit attempt is not stale.
+      try {
+        const [conversation, trip] = await Promise.all([
+          travelerApi.getConversation(activeConversation.conversation_id),
+          travelerApi.getTrip(activeTrip.trip_id),
+        ]);
+        setActiveConversation(conversation); setActiveTrip(trip);
+      } catch { /* Keep the original safe error. */ }
+    } finally { setBusy(false); }
+  };
+
+  const applyAssistantCandidate = () => {
+    if (!reviewedAssistantCandidate || !activeTrip) return;
+    if (reviewedAssistantCandidate.destination !== null) {
+      const names = [reviewedAssistantCandidate.destination];
+      setDestinationNames(names);
+      void resolveNames(names); // Catalogue verification is separate from AI text.
+    }
+    if (reviewedAssistantCandidate.durationDays !== null) {
+      setDurationText(String(reviewedAssistantCandidate.durationDays));
+    }
+    if (reviewedAssistantCandidate.origin !== undefined) {
+      setOriginText(reviewedAssistantCandidate.origin);
+    }
+    if (reviewedAssistantCandidate.travelerCount !== undefined) {
+      setTravelerCountText(String(reviewedAssistantCandidate.travelerCount));
+    }
+    if (reviewedAssistantCandidate.budgetText !== undefined) {
+      setBudgetText(reviewedAssistantCandidate.budgetText);
+    }
+    if (reviewedAssistantCandidate.travelStart !== undefined && reviewedAssistantCandidate.travelEnd !== undefined) {
+      setTravelStartText(reviewedAssistantCandidate.travelStart);
+      setTravelEndText(reviewedAssistantCandidate.travelEnd);
+    }
+    if (reviewedAssistantCandidate.interest !== undefined) {
+      setInterestText(current => parseInterests([current, reviewedAssistantCandidate.interest!].filter(Boolean).join('، ')).join('، '));
+    }
+    setDirty(true);
+    invalidateConsent(); // Explicit profile confirmation remains mandatory.
+    setAssistantCandidate(null);
+  };
+
   const confirmProfile = async () => {
-    if (!session || !activeTrip || !online || !consentComplete) { if (!online) setError(copy.offline); return; }
+    if (!session || !activeTrip || !online || !consentComplete || !travelerCountValid
+        || !budgetValid || !datesValid || !interestsValid) {
+      if (!online) setError(copy.offline);
+      else if (!travelerCountValid) setError(copy.profileTravelersInvalid);
+      else if (!budgetValid) setError(copy.profileBudgetInvalid);
+      else if (!datesValid) setError(copy.profileDatesInvalid);
+      else if (!interestsValid) setError(copy.profileInterestsInvalid);
+      return;
+    }
     setBusy(true); setError(''); setStatus('');
     const duration = durationText.trim() === '' ? null : Number(durationText);
     const confirmedRequirements = {
       destinations: destinationNames.map(name => name.trim()).filter(Boolean),
       duration_days: duration,
-      origin: extracted?.origin.value ?? null,
-      travel_dates: extracted?.travelDates.value ?? null,
-      traveler_count: extracted?.travelerCount.value ?? null,
+      origin: originText.trim() || null,
+      travel_dates: travelStartText && travelEndText
+        ? { start: travelStartText, end: travelEndText } : (extracted?.travelDates.value ?? null),
+      traveler_count: travelerCountText.trim() ? Number(travelerCountText.trim()) : null,
       accessibility: extracted?.accessibility?.value ?? [],
-      budget: extracted?.budget.value ?? null,
+      budget: parseReviewedBudget(budgetText, locale) ?? extracted?.budget.value ?? null,
       soft_preferences: extracted?.softPreferences.value ?? [],
-      interests: extracted?.interests.value ?? [],
+      interests: interests.length ? interests : (extracted?.interests.value ?? []),
       constraints: extracted?.constraints.value ?? [],
       confirmation_source: 'traveler_reviewed',
     };
@@ -498,6 +770,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         {activeTrip && <span className="saved-pill">{copy.savedRecord}</span>}
       </div>
 
+      <TravelerGuidance locale={locale} hasTrip={Boolean(activeTrip)} confirmed={confirmed}
+        hasRecommendations={Boolean(recommendations)} hasItinerary={Boolean(itinerary)} />
       <p className="privacy-notice">{copy.privacyNotice}</p>
       {!session && <p className="trip-form-help">{copy.signInToSave}</p>}
       {dirty && activeTrip && <p className="journey-alert" role="status">{copy.draftChanged}</p>}
@@ -507,7 +781,9 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       {requirements && !activeTrip && <button className="primary journey-action" type="button" onClick={() => void persistDraft()} disabled={busy || !session || !online}>
         {busy ? copy.saving : activeConversation ? copy.createAnotherTrip : copy.saveTrip}
       </button>}
-      {requirements && activeTrip && dirty && session && <button className="primary journey-action" type="button" onClick={() => void (async () => {
+      {requirements && activeTrip && dirty && session
+        && requirements.requestText !== activeTrip.original_request
+        && <button className="primary journey-action" type="button" onClick={() => void (async () => {
         if (!activeConversation) return;
         setBusy(true); setError('');
         try {
@@ -522,26 +798,108 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       })()} disabled={busy || !online}>{busy ? copy.saving : copy.updateTrip}</button>}
 
       {session && activeConversation && <div className="journey-new-actions">
-        <button type="button" onClick={() => { setActiveTrip(null); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.createAnotherTrip}</button>
-        <button type="button" onClick={() => { setActiveConversation(null); setActiveTrip(null); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.startNewConversation}</button>
+        <button type="button" onClick={() => { setActiveTrip(null); setAssistantCandidate(null); setRemoteConsent(false); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.createAnotherTrip}</button>
+        <button type="button" onClick={() => { setActiveConversation(null); setActiveTrip(null); setAssistantCandidate(null); setRemoteConsent(false); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.startNewConversation}</button>
       </div>}
 
       {activeTrip && activeConversation && <div className="journey-columns">
         <article className="conversation-panel journey-panel">
           <div className="panel-title"><span className="mini-icon" aria-hidden="true">✳</span><span>{copy.continueTitle}</span></div>
+          {requestedTripDays !== null && <p className="conversation-trip-duration" role="status">
+            {assistantCopy[locale].currentDuration.replace('{days}', formatNumber(locale, requestedTripDays))}
+          </p>}
           <div className="conversation-transcript" aria-live="polite">
             {currentMessages.map(message => <div className={`saved-message saved-message-${message.role}`} key={message.message_id}>
-              <small>{message.role === 'user' ? activeTrip.locale : copy.emptyAssistant}</small>
+              <small>{message.role === 'user' ? activeTrip.locale : assistantCopy[locale].speaker}</small>
               <p dir="auto">{message.content}</p>
+              {message.role === 'assistant' &&
+                reviewableAssistantCandidate(message.candidate_requirements ?? null) &&
+                <button type="button" disabled={busy}
+                  onClick={() => setAssistantCandidate(message.candidate_requirements ?? null)}>
+                  {assistantCopy[locale].reviewSaved}
+                </button>}
             </div>)}
             {!currentMessages.length && <p>{copy.emptyAssistant}</p>}
           </div>
+          {guidedQuestion && <div className="traveler-clarification" role="status">
+            <strong>{guidedQuestion.question}</strong>
+            <p>{guidedQuestion.instruction}</p>
+            <button type="button" disabled={busy || !online} onClick={() => {
+              document.getElementById('trip-follow-up')?.focus();
+            }}>{guidedQuestion.answerLabel}</button>
+          </div>}
+          <div className="assistant-prompt-suggestions" aria-label={assistantCopy[locale].promptsTitle}>
+            <p>{assistantCopy[locale].promptsTitle}</p>
+            <p>{assistantCopy[locale].promptHelp}</p>
+            <div>{assistantCopy[locale].prompts.map(prompt => <button key={prompt} type="button"
+              disabled={busy || !online} onClick={() => {
+                setMessageText(prompt);
+                setAssistantPromptSelected(true);
+                document.getElementById('trip-follow-up')?.focus();
+              }}>{prompt}</button>)}</div>
+          </div>
           <label htmlFor="trip-follow-up">{copy.messagePlaceholder}</label>
-          <textarea id="trip-follow-up" value={messageText} onChange={event => setMessageText(event.target.value)} maxLength={1200} rows={3} dir="auto" />
-          <button type="button" onClick={() => void sendMessage()} disabled={busy || !messageText.trim() || !online}>{copy.sendMessage}</button>
+          <textarea id="trip-follow-up" value={messageText}
+            onChange={event => { setMessageText(event.target.value); setAssistantPromptSelected(false); }}
+            maxLength={1200} rows={3} dir="auto" />
+          {assistantPromptSelected && <p className="assistant-prompt-warning" role="status">{assistantCopy[locale].promptForAi}</p>}
+          <div className="conversation-local-action">
+            <button type="button" onClick={() => void sendMessage()}
+              disabled={busy || !messageText.trim() || !online || assistantPromptSelected}>{assistantCopy[locale].saveWithoutAI}</button>
+            <small>{copy.localSaveHelp}</small>
+          </div>
+          <div className="assistant-controls">
+            <label htmlFor="assistant-remote-consent">
+              <input id="assistant-remote-consent" type="checkbox" checked={remoteConsent}
+                onChange={event => setRemoteConsent(event.currentTarget.checked)} />
+              {assistantCopy[locale].consent}
+            </label>
+            <p className="assistant-action-help">{assistantCopy[locale].advisorActionHelp}</p>
+            <button className="primary" type="button" onClick={() => void askAssistant()}
+              disabled={busy || !online || !remoteConsent || messageText.length > 1200}>
+              {assistantCopy[locale].send}
+            </button>
+            {reviewedAssistantCandidate &&
+              <div className="assistant-candidate" role="status">
+                <strong>{assistantCopy[locale].review}</strong>
+                <dl>
+                  {reviewedAssistantCandidate.destination !== null && <>
+                    <dt>{assistantCopy[locale].destination}</dt>
+                    <dd dir="auto">{reviewedAssistantCandidate.destination}</dd>
+                  </>}
+                  {reviewedAssistantCandidate.durationDays !== null && <>
+                    <dt>{assistantCopy[locale].duration}</dt>
+                    <dd>{formatNumber(locale, reviewedAssistantCandidate.durationDays)}</dd>
+                  </>}
+                  {reviewedAssistantCandidate.origin !== undefined && <>
+                    <dt>{assistantCopy[locale].origin}</dt>
+                    <dd dir="auto">{reviewedAssistantCandidate.origin}</dd>
+                  </>}
+                  {reviewedAssistantCandidate.travelerCount !== undefined && <>
+                    <dt>{assistantCopy[locale].travelerCount}</dt>
+                    <dd>{formatNumber(locale, reviewedAssistantCandidate.travelerCount)}</dd>
+                  </>}
+                  {reviewedAssistantCandidate.budgetText !== undefined && <>
+                    <dt>{assistantCopy[locale].budget}</dt>
+                    <dd dir="auto">{reviewedAssistantCandidate.budgetText}</dd>
+                  </>}
+                  {reviewedAssistantCandidate.travelStart !== undefined && reviewedAssistantCandidate.travelEnd !== undefined && <>
+                    <dt>{assistantCopy[locale].dates}</dt>
+                    <dd dir="ltr">{reviewedAssistantCandidate.travelStart} – {reviewedAssistantCandidate.travelEnd}</dd>
+                  </>}
+                  {reviewedAssistantCandidate.interest !== undefined && <>
+                    <dt>{assistantCopy[locale].interest}</dt>
+                    <dd dir="auto">{reviewedAssistantCandidate.interest}</dd>
+                  </>}
+                </dl>
+                <p>{assistantCopy[locale].unsaved}</p>
+                <button type="button" onClick={applyAssistantCandidate} disabled={busy}>{assistantCopy[locale].apply}</button>
+                <button type="button" onClick={() => setAssistantCandidate(null)} disabled={busy}>{assistantCopy[locale].dismiss}</button>
+              </div>}
+          </div>
         </article>
 
-        <article className="recommend-panel journey-panel">
+        <article className="recommend-panel journey-panel" id="journey-recommendations">
           <div className="panel-title"><span className="mini-icon" aria-hidden="true">↗</span>{copy.profileTitle}</div>
           {extracted && <div className="profile-editor">
             <fieldset>
@@ -558,6 +916,28 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             </fieldset>
             <label htmlFor="profile-duration">{copy.profileDuration}</label>
             <input id="profile-duration" type="number" min="1" max="365" value={durationText} onChange={event => { setDurationText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            <label htmlFor="profile-origin">{copy.profileOrigin}</label>
+            <input id="profile-origin" type="text" maxLength={100} dir="auto" value={originText}
+              onChange={event => { setOriginText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            <label htmlFor="profile-travelers">{copy.profileTravelers}</label>
+            <input id="profile-travelers" type="number" min="1" max="50" step="1" value={travelerCountText}
+              aria-invalid={!travelerCountValid} onChange={event => { setTravelerCountText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            {!travelerCountValid && <p className="journey-error" role="alert">{copy.profileTravelersInvalid}</p>}
+            <label htmlFor="profile-budget">{copy.profileBudget}</label>
+            <input id="profile-budget" type="text" maxLength={100} dir="auto" value={budgetText}
+              onChange={event => { setBudgetText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            {!budgetValid && <p className="journey-error" role="alert">{copy.profileBudgetInvalid}</p>}
+            <label htmlFor="profile-travel-start">{copy.profileTravelStart}</label>
+            <input id="profile-travel-start" type="date" value={travelStartText}
+              onChange={event => { setTravelStartText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            <label htmlFor="profile-travel-end">{copy.profileTravelEnd}</label>
+            <input id="profile-travel-end" type="date" value={travelEndText}
+              onChange={event => { setTravelEndText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            {!datesValid && <p className="journey-error" role="alert">{copy.profileDatesInvalid}</p>}
+            <label htmlFor="profile-interests">{copy.profileInterests}</label>
+            <textarea id="profile-interests" maxLength={300} rows={2} dir="auto" value={interestText}
+              onChange={event => { setInterestText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            {!interestsValid && <p className="journey-error" role="alert">{copy.profileInterestsInvalid}</p>}
             {!!consentFields.length && <fieldset className="requirement-consent" aria-describedby="requirement-consent-intro">
               <legend>{copy.requirementConsentTitle}</legend>
               <p id="requirement-consent-intro">{copy.requirementConsentIntro}</p>
@@ -611,7 +991,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
               {item.candidates.map(candidate => <label key={candidate.destinationId} dir="auto"><input type="radio" name={`traveler-choice-${index}`} checked={resolution.items[index]?.kind === 'confirmed' && resolution.items[index].destination.destinationId === candidate.destinationId} onChange={() => setResolution(current => current ? confirmDestinationCandidate(current, index, candidate.destinationId) : current)} />{candidate.localizedNames[locale] ?? candidate.canonicalName} · {candidate.provinceName}</label>)}
               <button type="button" onClick={() => { setError(copy.recommendationClarify); document.getElementById(`profile-destination-${index}`)?.focus(); }}>{copy.noneOfThese}</button>
             </fieldset> : item.kind === 'resolved' || item.kind === 'confirmed' ? <p key={index} role="status" dir="auto">{item.destination.localizedNames[locale] ?? item.destination.canonicalName} · {item.kind === 'resolved' ? copy.catalogueMatch : copy.selectedByYou}</p> : item.kind === 'not-found' ? <p key={index} role="status">{item.originalPhrase}: {copy.recommendationClarify}</p> : null)}
-            <button type="button" onClick={() => void confirmProfile()} disabled={busy || (!dirty && confirmed) || !online || !consentComplete}>{copy.confirmProfile}</button>
+            <button type="button" onClick={() => void confirmProfile()} disabled={busy || (!dirty && confirmed) || !online || !consentComplete || !travelerCountValid
+              || !budgetValid || !datesValid || !interestsValid}>{copy.confirmProfile}</button>
           </div>}
           {confirmed && <div className="recommendation-controls">
             <h3>{copy.recommendationTitle}</h3>
