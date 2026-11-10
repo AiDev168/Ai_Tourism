@@ -1,7 +1,6 @@
 """Focused safety and pure-contract tests for the geo-only owner operator."""
 from __future__ import annotations
 
-import copy
 from datetime import UTC, datetime
 
 import pytest
@@ -164,7 +163,7 @@ class _FakeConnection:
             }])
         raise AssertionError(f"unexpected SQL: {query}")
 
-        
+
 def test_one_approved_record_activates_once_and_verifies_production_view(monkeypatch):
     connection = _FakeConnection()
     monkeypatch.setattr(geo, "_guarded_operator_connection", lambda: connection)
