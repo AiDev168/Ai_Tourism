@@ -733,6 +733,207 @@ async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshot
   }
 }
 
+
+// Explicit opt-in browser acceptance: real canonical Fars IDs in disposable QA PG17.
+// No in-memory/synthetic candidate override, provider call, or public approval.
+async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) {
+  const keys = [
+    'shiraz-hafezieh-v1', 'shiraz-eram-garden-v1',
+    'shiraz-vakil-bazaar-v1', 'unesco-persepolis-v1',
+  ];
+  const roles = ['representative_point', 'representative_point',
+    'representative_point', 'property_reference'];
+  const prompts = {
+    'fa-IR': 'برنامه پانزده روزه شیراز، حافظیه، باغ ارم، بازار وکیل و تخت جمشید',
+    'en-US': '15-day Fars QA visit to Hafezieh, Eram Garden, Vakil Bazaar, Persepolis',
+    ar: 'رحلة تجريبية لمدة ١٥ يوماً إلى حافظية وحديقة إرم وسوق وكيل وبرسبوليس',
+  };
+  const context = await browser.newContext({ locale });
+  const page = await context.newPage();
+  const phone = syntheticPhone();
+  let authenticated = false;
+  reportResponseWaitCallsite(page);
+  await attachBrowserGuards(page, audit);
+  try {
+    await page.goto(webOrigin, { waitUntil: 'domcontentloaded' });
+    await selectAndVerifyLocale(page, locale);
+    const identity = await signIn(page, api.controlPort, api.controlToken, phone);
+    authenticated = true;
+    const csrf = identity.csrfToken;
+    const trace = [];
+    const catalog = await requestBrowserJson(
+      page, '/api/v1/catalog/destinations', 'GET', undefined, undefined, trace);
+    if (catalog.status !== 'available' || catalog.count !== 4 || catalog.items?.length !== 4) {
+      throw new Error('qa_real_geo_catalogue_not_four_destinations');
+    }
+    const byKey = new Map(catalog.items.map(item => [item.destination_key, item]));
+    const selected = keys.map((key, index) => {
+      const point = byKey.get(key);
+      if (!point || point.coordinate_role !== roles[index]
+          || !Number.isFinite(point.latitude) || !Number.isFinite(point.longitude)
+          || !/^[0-9]+$/.test(point.destination_id)) {
+        throw new Error('qa_real_geo_canonical_identity_coordinate_or_role_missing');
+      }
+      return point;
+    });
+    const selectedIds = selected.map(item => item.destination_id);
+    const names = selected.map(item => item.canonical_name);
+    const requestText = prompts[locale];
+    const extracted = fixtureRequirements(requestText, locale);
+    extracted.destinations = {
+      value: names, status: 'extracted',
+      evidence: 'selected seeded canonical Fars POIs in disposable QA',
+    };
+    const started = await requestBrowserJson(page, '/api/v1/conversations', 'POST', csrf, {
+      locale, request_text: requestText, extracted_requirements: extracted,
+      idempotency_key: randomUUID(),
+    }, trace);
+    const trip = started.trip;
+    const conversationId = started.conversation?.conversation_id;
+    if (!conversationId || !trip?.trip_id || trip.duration_days !== 15) {
+      throw new Error('qa_real_geo_conversation_not_persisted');
+    }
+    const tripPath = '/api/v1/trips/' + trip.trip_id;
+    await requestBrowserJson(page, tripPath, 'PATCH', csrf, {
+      expected_version: trip.version,
+      confirmed_requirements: {
+        confirmation_source: 'traveler_reviewed', duration_days: 15,
+        destinations: names, constraints: [],
+      },
+      destination_ids: selectedIds,
+    }, trace);
+
+    const historyWait = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'GET');
+    await page.locator('.trip-history-heading button').click();
+    await historyWait;
+    await page.getByRole('button', { name: requestText, exact: true }).click();
+    await page.locator('#profile-duration').waitFor({ state: 'visible' });
+    const mandatory = page.locator('.requirement-consent-field input[value="must_have"]');
+    for (let i = 0; i < await mandatory.count(); i += 1) {
+      await mandatory.nth(i).check({ force: true });
+    }
+    const confirmWait = page.waitForResponse(response =>
+      new URL(response.url()).pathname === tripPath && response.request().method() === 'PATCH');
+    await page.getByRole('button', { name: localeCopy[locale].confirm, exact: true }).click();
+    const confirmResponse = await confirmWait;
+    if (confirmResponse.status() !== 200) throw new Error('qa_real_geo_ui_confirmation_failed');
+    const confirmed = await confirmResponse.json();
+    const consent = confirmed.confirmed_requirements?.requirement_consent;
+    if (consent?.contract_version !== 'recommendation-consent-v1') {
+      throw new Error('qa_real_geo_consent_missing');
+    }
+    const finalProfile = { ...confirmed.confirmed_requirements };
+    delete finalProfile.requirement_consent;
+    const consentRequest = { ...consent };
+    delete consentRequest.profile_version;
+    const finalTrip = await requestBrowserJson(page, tripPath, 'PATCH', csrf, {
+      expected_version: confirmed.version, confirmed_requirements: finalProfile,
+      destination_ids: selectedIds, requirement_consent: consentRequest,
+    }, trace);
+    if (finalTrip.destination_ids?.join(',') !== selectedIds.join(',')
+        || finalTrip.confirmed_requirements?.requirement_consent?.profile_version !== finalTrip.version) {
+      throw new Error('qa_real_geo_selected_ids_or_consent_changed');
+    }
+
+    const recommendationPath = tripPath + '/recommendations';
+    const recommendationWait = page.waitForResponse(response =>
+      new URL(response.url()).pathname === recommendationPath
+      && response.request().method() === 'POST');
+    await page.getByRole('button', { name: localeCopy[locale].find, exact: true }).click();
+    const recommendationResponse = await recommendationWait;
+    const recommendation = await recommendationResponse.json();
+    if (recommendationResponse.status() !== 201
+        || recommendation.status !== 'available' || recommendation.items?.length !== 4
+        || !selectedIds.every(id => recommendation.items.some(item => item.destination_id === id))
+        || recommendation.items.some(item => !item.evidence?.length || item.evidence.some(source =>
+          !source.source_url?.startsWith('https://') || source.source_url.includes('.invalid')
+          || source.source_role === 'test_fixture'))) {
+      throw new Error('qa_real_geo_recommendation_not_real_canonical');
+    }
+    trace.push({ method: 'POST', path: recommendationPath, status: 201 });
+    await page.locator('#journey-day-count').waitFor({ state: 'visible' });
+    if (await page.locator('#journey-day-count').inputValue() !== '15') {
+      throw new Error('qa_real_geo_trip_duration_wrong');
+    }
+    const planPath = tripPath + '/itineraries';
+    const planWait = page.waitForResponse(response =>
+      new URL(response.url()).pathname === planPath && response.request().method() === 'POST');
+    await page.getByRole('button', { name: localeCopy[locale].createPlan, exact: true }).click();
+    const planResponse = await planWait;
+    const created = await planResponse.json();
+    if (planResponse.status() !== 201 || !created.itinerary_id
+        || created.day_count !== 15 || created.stops?.length !== 4
+        || created.status !== 'partial' || created.unplanned_days?.length !== 13) {
+      throw new Error('qa_real_geo_plan_not_created');
+    }
+    const days = new Map(created.stops.map(stop => [String(stop.destination_id), stop.day_number]));
+    const cityDays = new Set(selectedIds.slice(0, 3).map(id => days.get(id)));
+    const cityDay = cityDays.size === 1 ? [...cityDays][0] : null;
+    const regionalDay = days.get(selectedIds[3]);
+    if (cityDay == null || regionalDay == null || cityDay === regionalDay) {
+      throw new Error('qa_real_geo_grouping_wrong');
+    }
+    assertNoInventedSchedule(created, { coordinateAware: true });
+    trace.push({ method: 'POST', path: planPath, status: 201 });
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const restoreWait = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'GET');
+    await page.locator('.trip-history-heading button').click();
+    await restoreWait;
+    await page.getByRole('button', { name: requestText, exact: true }).click();
+    await page.locator('#itinerary-day-15').waitFor({ state: 'visible' });
+    if (await page.locator('.saved-stop').count() !== 4
+        || await page.locator('.unplanned-day').count() !== 13) {
+      throw new Error('qa_real_geo_plan_not_reopened_in_pwa');
+    }
+    await page.locator('#stop-day-' + created.stops[0].recommendation_id).selectOption('5');
+    await page.locator('.saved-stop').nth(1).locator('.stop-actions button').last().click();
+    const localeDir = resolve(artifactRoot, locale);
+    mkdirSync(localeDir, { recursive: true });
+    await sanitizeAndCapture(page, resolve(localeDir, 'qa-real-geo-' + locale + '.png'),
+      locale, 390, 844);
+    const editPath = '/api/v1/itineraries/' + created.itinerary_id;
+    const editWait = page.waitForResponse(response =>
+      new URL(response.url()).pathname === editPath && response.request().method() === 'PUT');
+    await page.locator('.saved-itinerary > button').last().click();
+    const editResponse = await editWait;
+    const saved = await editResponse.json();
+    if (editResponse.status() !== 200 || saved.revision !== 2 || saved.stops?.length !== 3) {
+      throw new Error('qa_real_geo_plan_edit_not_saved');
+    }
+    const reopened = await requestBrowserJson(page, editPath, 'GET', undefined, undefined, trace);
+    assertNoInventedSchedule(reopened, { coordinateAware: true });
+    if (reopened.revision !== 2 || reopened.day_count !== 15
+        || reopened.stops?.length !== 3 || reopened.unplanned_days?.length !== 12) {
+      throw new Error('qa_real_geo_plan_reopen_mismatch');
+    }
+    trace.push({ method: 'PUT', path: editPath, status: 200 });
+    await requestBrowserJson(page, '/api/v1/conversations/' + conversationId, 'DELETE', csrf);
+    return {
+      locale, mode: 'canonical_Fars_IDs_in_disposable_QA_database',
+      canonicalKeys: keys, coordinatesRoles: roles,
+      dayCount: 15, cityDay, regionalDay,
+      initialStops: 4, finalStops: 3,
+      initialUnplannedDays: 13, finalUnplannedDays: 12,
+      saveEditReopen: true, verifiedEntrance: false, verifiedRoadETA: false,
+      apiTrace: trace.filter(row => /recommendations|itineraries/.test(row.path)),
+    };
+  } finally {
+    if (authenticated) {
+      try {
+        await checkedControl(api.controlPort, api.controlToken,
+          { action: 'cleanup_phones', phones: [phone] });
+      } catch { /* only QA data; disposable container cleanup follows */ }
+    }
+    await page.close().catch(() => {});
+    await context.close().catch(() => {});
+  }
+}
+
 // Browser -> real authenticated assistant endpoint -> durable PostgreSQL rows.
 // Only the external LLM is simulated by the guarded API server dependency.
 // The candidate is deliberately unverified and MUST NOT change the trip.
@@ -1375,6 +1576,41 @@ async function main() {
       // process budget while still exercising the real installed Chromium.
       args: ['--disable-gpu', '--renderer-process-limit=2', '--disable-background-networking', '--no-first-run'],
     });
+    if (process.env.RAHGARD_REAL_GEO_E2E === '1') {
+      if (process.env.RAHGARD_RUN_GEO_QA !== '1' || api.ownerRagEnabled) {
+        throw new Error('qa_real_geo_requires_explicit_disposable_opt_in_and_rag_off');
+      }
+      const results = [];
+      for (const locale of ['fa-IR', 'en-US', 'ar']) {
+        results.push(await runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot));
+      }
+      if (audit.successfulExternalResponses || audit.pageErrors) {
+        throw new Error('qa_real_geo_external_response_or_browser_error');
+      }
+      const report = {
+        status: 'passed',
+        mode: 'real_canonical_Fars_PG17_QA_only_not_public_approval',
+        browser: 'Chromium ' + browser.version(),
+        database: { name: process.env.AUTH_TEST_DATABASE_NAME, host: '127.0.0.1',
+          majorVersion: 17, markerValidated: true },
+        chat: { mode: 'simulated', liveProviderCalls: 0 },
+        ownerRag: { mode: 'disabled', calls: 0 },
+        locales: results,
+        screenshots: results.map(result => ({
+          locale: result.locale, kind: 'disposable QA canonical-place itinerary',
+          path: result.locale + '/qa-real-geo-' + result.locale + '.png',
+        })),
+        audit: { externalRequestsBlocked: audit.externalRequests,
+          successfulExternalResponses: 0, pageErrors: 0 },
+        ownerApproval: false,
+        safety: 'Only four existing canonical POIs were activated in marked disposable QA PG17. This is neither persistent pilot publication nor evidence of visitor entrances, route feasibility, operating hours, or live remote Chat.',
+      };
+      writeFileSync(resolve(artifactRoot, 'report.json'), JSON.stringify(report, null, 2) + '\n',
+        { encoding: 'utf8', flag: 'wx' });
+      console.log(JSON.stringify({ status: report.status, mode: report.mode,
+        locales: results.map(result => result.locale), artifactRoot }));
+      return;
+    }
     const results = [];
     for (const locale of ['fa-IR', 'en-US', 'ar']) {
       results.push(await runLocaleJourney(browser, api, locale, audit, artifactRoot));
