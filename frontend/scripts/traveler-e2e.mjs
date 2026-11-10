@@ -229,7 +229,6 @@ const localeCopy = {
     prompt: 'سفر ۱۵ روزه به شیراز با بودجهٔ ۲۰ میلیون تومان؛ به طبیعت و جاهای تاریخی علاقه دارم؛ ترجیح می‌دهم مسیرها سنگ‌فرش باشند؛ دسترسی ویلچر ضروری است؛ باید از مسیرهای ناهموار پرهیز شود.',
     accessLabel: 'دسترس‌پذیری',
     softPreference: 'مسیرهای سنگ‌فرش باشد',
-    fixtureName: 'نمونهٔ آزمایشی',
   },
   'en-US': {
     workspace: 'My travel plans',
@@ -240,7 +239,6 @@ const localeCopy = {
     prompt: '10 day trip to Shiraz with a budget of 20 million IRR; I prefer paved paths; wheelchair access is essential; must avoid rough terrain.',
     accessLabel: 'Accessibility',
     softPreference: 'paved paths',
-    fixtureName: 'Test fixture',
   },
   ar: {
     workspace: 'خطط رحلاتي',
@@ -251,7 +249,6 @@ const localeCopy = {
     prompt: 'رحلة لمدة ١٠ أيام إلى شيراز بميزانية ٢٠ مليون درهم؛ أفضل المسارات المعبدة؛ إمكانية الوصول بالكراسي المتحركة ضرورية؛ يجب تجنب الطرق الوعرة.',
     accessLabel: 'إمكانية الوصول',
     softPreference: 'المسارات المعبدة',
-    fixtureName: 'نموذج اختباري',
   },
 };
 
@@ -341,168 +338,143 @@ async function sanitizeAndCapture(page, path, locale, width, height) {
   }, hiddenSensitiveStyles);
 }
 
-function fixtureRecommendation(tripId, tripVersion, locale) {
-  const requestId = randomUUID();
-  const items = Array.from({ length: 4 }, (_, index) => {
-    const destinationId = String(9_100_001 + index);
-    const sourceId = 99_001 + index;
-    const name = `${localeCopy[locale].fixtureName} ${index + 1}`;
-    return {
-      recommendation_id: randomUUID(),
-      destination_id: destinationId,
-      rank: index + 1,
-      final_score: 0,
-      matched_requirements: [],
-      unknown_fields: ['opening_hours', 'price', 'accessibility'],
-      warnings: ['test_fixture_only', 'ranking_is_structured_match_not_quality_score'],
-      explanation_key: 'published_area_candidate',
-      explanation_by_locale: {
-        'fa-IR': 'نمونهٔ صرفاً آزمایشی؛ دادهٔ واقعی یا منتشرشده نیست.',
-        'en-US': 'Test-only fixture; not real or published content.',
-        ar: 'نموذج للاختبار فقط؛ ليس محتوى حقيقيًا أو منشورًا.',
+async function requestBrowserJson(page, path, method, csrf, body) {
+  const response = await page.request.fetch(`${webOrigin}${path}`, {
+    method,
+    headers: {
+      Origin: webOrigin,
+      ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { data: body }),
+    timeout: 15_000,
+  });
+  let payload = null;
+  try { payload = await response.json(); } catch { /* Keep failure details to safe response codes only. */ }
+  if (!response.ok()) {
+    throw new Error(`browser_api_${method.toLowerCase()}_${response.status()}_${payload?.error?.code ?? 'failed'}`);
+  }
+  if (!response.headers()['cache-control']?.includes('no-store')) {
+    throw new Error(`browser_api_response_cacheable_${method.toLowerCase()}`);
+  }
+  return payload;
+}
+
+async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshotRoot, originalRequestText) {
+  const enabled = await checkedControl(api.controlPort, api.controlToken, {
+    action: 'enable_itinerary_fixture',
+  });
+  const destinationIds = enabled.destination_ids;
+  if (!Array.isArray(destinationIds) || destinationIds.length !== 4) {
+    throw new Error('isolated_four_destination_fixture_missing');
+  }
+  try {
+    const requestText = 'درخواست آزمایشی برای برنامه پانزده روزه';
+    const started = await requestBrowserJson(page, '/api/v1/conversations', 'POST', csrf, {
+      locale,
+      request_text: requestText,
+      extracted_requirements: { durationDays: { value: 15, status: 'extracted' } },
+      idempotency_key: randomUUID(),
+    });
+    const conversationId = started.conversation?.conversation_id;
+    const trip = started.trip;
+    if (!conversationId || !trip?.trip_id || trip.duration_days !== 15) {
+      throw new Error('real_browser_test_trip_not_persisted');
+    }
+    const confirmed = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}`, 'PATCH', csrf, {
+      expected_version: trip.version,
+      confirmed_requirements: {
+        confirmation_source: 'traveler_reviewed', duration_days: 15,
+        destinations: ['TEST ONLY'], constraints: [],
       },
-      score_components: [],
-      evidence: [{
-        source_id: sourceId,
-        source_name: 'TEST FIXTURE SOURCE — NOT A REAL SOURCE',
-        source_url: `https://example.test/task32/${sourceId}`,
-        source_role: 'test_fixture_only',
-        evidence_note: 'Synthetic test fixture; excluded from production views.',
-        retrieved_at: null,
-        valid_from: null,
-        valid_until: null,
-        reliability_score: null,
-      }],
-      canonical_name: name,
-      localized_names: { 'fa-IR': name, 'en-US': name, ar: name },
-      city_name: null,
-      province_name: 'TEST FIXTURE ONLY',
-      destination_type: 'synthetic_fixture',
-    };
-  });
-  return {
-    recommendation_request_id: requestId,
-    status: 'available',
-    reason_code: null,
-    algorithm_version: 'task32-test-fixture-only-v1',
-    retrieval_version: 'isolated-test-fixture-only-v1',
-    trip_version: tripVersion,
-    unresolved_fields: [],
-    requirement_assessments: [{ field: 'budget', decision: 'advisory', status: 'not_evaluated', reason_code: 'budget_unverifiable' }],
-    waived_fields: ['budget'],
-    not_evaluated_fields: ['budget'],
-    items,
-    test_fixture_only: true,
-    trip_id: tripId,
-  };
-}
+      destination_ids: destinationIds,
+    });
+    if (confirmed.duration_days !== 15
+      || confirmed.confirmed_requirements?.duration_days !== 15) {
+      throw new Error('real_browser_fifteen_day_confirmation_failed');
+    }
+    const recommendation = await requestBrowserJson(
+      page, `/api/v1/trips/${trip.trip_id}/recommendations`, 'POST', csrf,
+      { selected_destination_ids: destinationIds },
+    );
+    if (recommendation.status !== 'available' || recommendation.items?.length !== 4
+      || recommendation.items.some(item => !item.evidence?.some(source => source.source_url.includes('.invalid')))) {
+      throw new Error('real_browser_test_only_recommendations_failed');
+    }
+    const created = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}/itineraries`, 'POST', csrf, {
+      recommendation_request_id: recommendation.recommendation_request_id,
+      day_count: 15,
+      locale,
+    });
+    const itineraryId = created.itinerary_id;
+    if (!itineraryId || created.day_count !== 15 || created.status !== 'partial'
+      || created.stops?.length !== 4 || created.unplanned_days?.length !== 11) {
+      throw new Error('real_browser_fifteen_day_partial_itinerary_failed');
+    }
+    const catalogue = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET');
+    if (catalogue.count !== 0) throw new Error('test_fixture_leaked_to_production_catalogue');
 
-function fixtureItinerary(tripId, recommendation, itineraryId = randomUUID(), dayCount = 10) {
-  const stops = recommendation.items.map((item, index) => ({
-    itinerary_stop_id: randomUUID(),
-    recommendation_id: item.recommendation_id,
-    destination_id: item.destination_id,
-    day_number: index + 1,
-    stop_order: 1,
-    notes_by_locale: {},
-    canonical_name: item.canonical_name,
-    localized_names: item.localized_names,
-  }));
-  return {
-    itinerary_id: itineraryId,
-    trip_id: tripId,
-    recommendation_request_id: recommendation.recommendation_request_id,
-    version: 1,
-    revision: 1,
-    day_count: dayCount,
-    status: 'partial',
-    unplanned_days: Array.from({ length: dayCount - 4 }, (_, index) => index + 5),
-    title_by_locale: { 'fa-IR': 'نمونهٔ برنامه', 'en-US': 'Test fixture itinerary', ar: 'خطة اختبارية' },
-    stops,
-    updated_at: new Date().toISOString(),
-    test_fixture_only: true,
-  };
-}
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const historyPending = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'GET');
+    await page.locator('.trip-history-heading button').click();
+    await historyPending;
+    const requestButton = page.getByRole('button', { name: requestText, exact: true });
+    await requestButton.waitFor({ state: 'visible' });
+    await requestButton.click();
+    await page.locator('#itinerary-day-15').waitFor({ state: 'visible' });
+    if (await page.locator('.saved-itinerary-days .itinerary-day').count() !== 15
+      || await page.locator('.saved-stop').count() !== 4
+      || await page.locator('.unplanned-day').count() !== 11) {
+      throw new Error('real_persisted_fifteen_day_itinerary_not_restored_in_ui');
+    }
+    const lastDay = await page.locator('#itinerary-day-15').textContent();
+    const localizedDay = await page.evaluate(({ localeValue }) => new Intl.NumberFormat(localeValue, {
+      numberingSystem: localeValue === 'ar' ? 'arab' : localeValue === 'fa-IR' ? 'arabext' : 'latn',
+    }).format(15), { localeValue: locale });
+    if (!lastDay?.includes(localizedDay)) throw new Error(`fifteen_day_label_not_localized_${locale}`);
 
-async function runPartialFixture(page, locale, tripId, tripVersion, screenshotRoot, dayCount = 10) {
-  const recommendation = fixtureRecommendation(tripId, tripVersion, locale);
-  const itineraryId = randomUUID();
-  let current = fixtureItinerary(tripId, recommendation, itineraryId, dayCount);
-  let updateBody = null;
-  await page.route(`${webOrigin}/api/v1/trips/${tripId}/recommendations`, async route => {
-    if (route.request().method() === 'POST') {
-      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(recommendation) });
-    } else await route.continue();
-  });
-  await page.route(`${webOrigin}/api/v1/trips/${tripId}/itineraries`, async route => {
-    if (route.request().method() === 'POST') {
-      const request = route.request().postDataJSON();
-      if (request.day_count !== dayCount) throw new Error('fixture_itinerary_day_count_mismatch');
-      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(current) });
-    } else await route.continue();
-  });
-  await page.route(`${webOrigin}/api/v1/itineraries/${itineraryId}`, async route => {
-    const method = route.request().method();
-    if (method === 'GET') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) });
-    } else if (method === 'PUT') {
-      updateBody = route.request().postDataJSON();
-      if (updateBody.expected_revision !== 1 || updateBody.stops.length !== 3) {
-        throw new Error('fixture_edit_revision_or_stop_count_invalid');
-      }
-      const byId = new Map(current.stops.map(stop => [stop.recommendation_id, stop]));
-      current = {
-        ...current,
-        revision: 2,
-        stops: updateBody.stops.map((stop, index) => ({
-          ...byId.get(stop.recommendation_id),
-          day_number: stop.day_number,
-          stop_order: stop.stop_order,
-          notes_by_locale: stop.notes_by_locale,
-          itinerary_stop_id: randomUUID(),
-        })),
-      };
-      const planned = new Set(current.stops.map(stop => stop.day_number));
-      current.unplanned_days = Array.from({ length: dayCount }, (_, index) => index + 1).filter(day => !planned.has(day));
-      current.status = current.unplanned_days.length ? 'partial' : 'complete';
-      current.updated_at = new Date().toISOString();
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) });
-    } else await route.continue();
-  });
-
-  await page.getByRole('button', { name: localeCopy[locale].find }).click();
-  await page.locator('.itinerary-start').waitFor({ state: 'visible' });
-  await page.locator('#journey-day-count').fill(String(dayCount));
-  await page.locator('.itinerary-start button').click();
-  await page.locator('.saved-itinerary-days .itinerary-day').nth(dayCount - 1).waitFor({ state: 'visible' });
-  if (await page.locator('.saved-itinerary-days .itinerary-day').count() !== dayCount) throw new Error('fixture_requested_days_not_rendered');
-  const localizedLastDay = await page.locator(`#itinerary-day-${dayCount}`).textContent();
-  const formattedLastDay = await page.evaluate(({ localeValue, value }) => new Intl.NumberFormat(localeValue, {
-    numberingSystem: localeValue === 'ar' ? 'arab' : localeValue === 'fa-IR' ? 'arabext' : 'latn',
-  }).format(value), { localeValue: locale, value: dayCount });
-  if (!localizedLastDay?.includes(formattedLastDay)) throw new Error(`itinerary_day_number_not_localized_${locale}`);
-  if (await page.locator('.saved-stop').count() !== 4 || await page.locator('.unplanned-day').count() !== dayCount - 4) {
-    throw new Error('fixture_four_stops_unplanned_day_count_mismatch');
-  }
-  if ((await page.locator('.itinerary-coverage').textContent())?.trim() === '') throw new Error('fixture_partial_status_missing');
-
-  const firstStop = current.stops[0];
-  await page.locator(`#stop-day-${firstStop.recommendation_id}`).selectOption('5');
-  await page.locator('.saved-stop').nth(1).locator('.stop-actions button').last().click();
-  await sanitizeAndCapture(page, resolve(screenshotRoot, `partial-${locale}-390.png`), locale, 390, 844);
-  await sanitizeAndCapture(page, resolve(screenshotRoot, `partial-${locale}-1440.png`), locale, 1440, 1000);
-  const savedEditResponse = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/itineraries/${itineraryId}`
-    && response.request().method() === 'PUT');
-  await page.locator('.saved-itinerary > button').last().click();
-  const savedEdit = await savedEditResponse;
-  const savedEditBody = await savedEdit.json();
-  if (savedEdit.status() !== 200 || savedEditBody.revision !== 2 || savedEditBody.day_count !== dayCount) {
-    throw new Error('fixture_edit_response_revision_or_duration_failed');
-  }
-  if (!updateBody || updateBody.expected_revision !== 1 || updateBody.stops.length !== 3
-    || !updateBody.stops.some(stop => stop.recommendation_id === firstStop.recommendation_id && stop.day_number === 5)
-    || current.day_count !== dayCount || current.revision !== 2 || current.status !== 'partial') {
-    throw new Error('fixture_edit_save_revision_or_duration_failed');
+    await page.locator(`#stop-day-${created.stops[0].recommendation_id}`).selectOption('5');
+    await page.locator('.saved-stop').nth(1).locator('.stop-actions button').last().click();
+    await sanitizeAndCapture(page, resolve(screenshotRoot, `partial-${locale}-390.png`), locale, 390, 844);
+    await sanitizeAndCapture(page, resolve(screenshotRoot, `partial-${locale}-1440.png`), locale, 1440, 1000);
+    const savePending = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/itineraries/${itineraryId}`
+      && response.request().method() === 'PUT');
+    await page.locator('.saved-itinerary > button').last().click();
+    const savedResponse = await savePending;
+    const saved = await savedResponse.json();
+    if (savedResponse.status() !== 200 || saved.revision !== 2 || saved.day_count !== 15 || saved.stops?.length !== 3) {
+      throw new Error('real_browser_itinerary_edit_not_persisted');
+    }
+    const reopened = await requestBrowserJson(page, `/api/v1/itineraries/${itineraryId}`, 'GET');
+    if (reopened.revision !== 2 || reopened.day_count !== 15 || reopened.stops?.length !== 3
+      || reopened.unplanned_days?.length !== 12) {
+      throw new Error('real_browser_itinerary_edit_reopen_mismatch');
+    }
+    const catalogueAfter = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET');
+    if (catalogueAfter.count !== 0) throw new Error('test_fixture_leaked_after_itinerary_edit');
+    const deletedFixture = await requestBrowserJson(
+      page, `/api/v1/conversations/${conversationId}`, 'DELETE', csrf,
+    );
+    if (!deletedFixture.deleted) throw new Error('positive_fixture_conversation_cleanup_failed');
+    const refreshedHistory = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'GET');
+    await page.locator('.trip-history-heading button').click();
+    await refreshedHistory;
+    const originalTrip = page.getByRole('button', { name: originalRequestText, exact: true });
+    await originalTrip.waitFor({ state: 'visible' });
+    await originalTrip.click();
+    const originalRequestRestored = await page.waitForFunction(
+      expected => document.querySelector('#trip-prompt')?.value === expected,
+      originalRequestText,
+      { timeout: 15_000 },
+    );
+    if (!originalRequestRestored) {
+      throw new Error('original_journey_not_restored_after_positive_itinerary');
+    }
+    return { itineraryId, dayCount: 15, initialStops: 4, finalStops: 3, initialUnplannedDays: 11, finalUnplannedDays: 12 };
+  } finally {
+    await checkedControl(api.controlPort, api.controlToken, { action: 'disable_itinerary_fixture' });
   }
 }
 
@@ -1002,16 +974,13 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     }
     ownerAndCsrfVerified = true;
 
-    // A separate, explicitly labeled browser fixture exercises the partial
-    // duration editor (15 days in fa-IR; retain the 10-day locale smoke).
-    // Its API routes are intercepted in this test process and
-    // never write fixture identities or facts into PostgreSQL production views.
-    const fixtureDayCount = locale === 'fa-IR' ? 15 : 10;
-    await runPartialFixture(pageA, locale, tripId, firstTripVersion, artifactLocale, fixtureDayCount);
+    // A separate test-only 15-day journey goes through real FastAPI and
+    // PostgreSQL. Its four synthetic identities exist only in the isolated
+    // traveler dependency; no positive API calls are intercepted.
+    const positiveItinerary = await runPersistedFifteenDayFixture(
+      pageA, api, csrfA, locale, artifactLocale, copy.prompt,
+    );
     localeChecks = true;
-    await pageA.unroute(`${webOrigin}/api/v1/trips/${tripId}/recommendations`);
-    await pageA.unroute(`${webOrigin}/api/v1/trips/${tripId}/itineraries`);
-    await pageA.unroute(`${webOrigin}/api/v1/itineraries/**`);
     const productionAgain = await pageA.request.get(`${webOrigin}/api/v1/catalog/destinations`);
     const productionAgainBody = await productionAgain.json();
     if (productionAgain.status() !== 200 || productionAgainBody.count !== 0) {
@@ -1107,9 +1076,12 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       persistedUserTurnCount: locale === 'fa-IR' ? 13 : 2,
       simulatedAssistantIntegrationVerified: assistantIntegrationVerified,
       simulatedGatewayCalls: 2,
-      partialFixtureDays: fixtureDayCount,
-      partialFixtureStops: 4,
-      partialFixtureUnplannedDays: fixtureDayCount - 4,
+      partialFixtureDays: positiveItinerary.dayCount,
+      partialFixtureInitialStops: positiveItinerary.initialStops,
+      partialFixtureInitialUnplannedDays: positiveItinerary.initialUnplannedDays,
+      partialFixtureStops: positiveItinerary.finalStops,
+      partialFixtureUnplannedDays: positiveItinerary.finalUnplannedDays,
+      positiveItinerary,
       historyReopenVerified: true, ownerAndCsrfVerified, deletionVerified, localeChecks,
       noStoreMe, noStoreVerify: true, externalRequestsBlocked: true,
     };
@@ -1162,13 +1134,13 @@ async function main() {
         ...['fa-IR', 'en-US', 'ar'].flatMap(locale => [
           { locale, width: 390, height: 844, kind: 'live empty production catalogue', path: `${locale}/empty-${locale}-390.png` },
           { locale, width: 1440, height: 1000, kind: 'live empty production catalogue', path: `${locale}/empty-${locale}-1440.png` },
-          { locale, width: 390, height: 844, dayCount: locale === 'fa-IR' ? 15 : 10, kind: 'test-only four-stop partial itinerary fixture', path: `${locale}/partial-${locale}-390.png` },
-          { locale, width: 1440, height: 1000, dayCount: locale === 'fa-IR' ? 15 : 10, kind: 'test-only four-stop partial itinerary fixture', path: `${locale}/partial-${locale}-1440.png` },
+          { locale, width: 390, height: 844, dayCount: 15, kind: 'real API/DB edited test-only three-stop partial itinerary', path: `${locale}/partial-${locale}-390.png` },
+          { locale, width: 1440, height: 1000, dayCount: 15, kind: 'real API/DB edited test-only three-stop partial itinerary', path: `${locale}/partial-${locale}-1440.png` },
         ]),
       ],
       audit: { externalRequestsBlocked: audit.externalRequests, successfulExternalResponses: 0, browserPageErrors: 0 },
       screenshotPolicy: 'Traveler-authored text is replaced in screenshot-only DOM captures; no phone, OTP, cookie, token, or request text is recorded.',
-      fixturePolicy: 'Simulated Chat gateway makes no HTTP requests. The fa-IR 15-day and en-US/ar 10-day partial fixtures are Playwright-intercepted and never written to production views.',
+      fixturePolicy: 'The simulated Chat gateway makes no HTTP requests. Positive 15-day itinerary requests use real FastAPI and PostgreSQL with four existing synthetic-only identities exposed through a private loopback test control; no positive recommendation or itinerary API call is intercepted, and production catalogue views remain empty.',
     };
     writeFileSync(resolve(artifactRoot, 'report.json'), `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
     console.log(JSON.stringify({ status: report.status, browser: report.browser, locales: results.map(result => result.locale), screenshots: report.screenshots.length, artifactRoot: artifactRoot.replaceAll('\\', '/') }));

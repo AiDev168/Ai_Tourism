@@ -144,7 +144,7 @@ def test_positive_fifteen_day_itinerary_api_persists_edits_and_reopens(monkeypat
             headers=headers,
             json={"selected_destination_ids": ids},
         )
-        assert suggestion.status_code == 201, suggestion.status_code
+        assert suggestion.status_code == 201, suggestion.text
         recommendation = suggestion.json()
         assert recommendation["status"] == "available", recommendation["reason_code"]
         assert len(recommendation["items"]) == 4
@@ -160,7 +160,7 @@ def test_positive_fifteen_day_itinerary_api_persists_edits_and_reopens(monkeypat
                 "day_count": 15, "locale": "fa-IR",
             },
         )
-        assert created.status_code == 201, created.status_code
+        assert created.status_code == 201, created.text
         itinerary = created.json()
         assert itinerary["day_count"] == 15
         assert itinerary["status"] == "partial"

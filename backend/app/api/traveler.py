@@ -377,6 +377,10 @@ def _recommendation_response(
         if destination is None:
             continue
         item_data = item.model_dump(mode="python")
+        item_data["evidence"] = [
+            source.model_dump(exclude={"destination_id"})
+            for source in item.evidence
+        ]
         if persisted_scores is not None:
             item_data["score_components"] = persisted_scores.get(item.destination_id, [])
         items.append({
@@ -607,7 +611,7 @@ def _enrich_itinerary(row: dict[str, Any], by_id: dict[str, ProductionDestinatio
     planned_days = {stop["day_number"] for stop in enriched_stops}
     unplanned_days = [day for day in range(1, row["day_count"] + 1) if day not in planned_days]
     return {
-        **row,
+        **{key: value for key, value in row.items() if key != "user_id"},
         "stops": enriched_stops,
         "status": "partial" if unplanned_days else "complete",
         "unplanned_days": unplanned_days,

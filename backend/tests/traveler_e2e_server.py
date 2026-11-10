@@ -147,6 +147,22 @@ class _ControlHandler(socketserver.StreamRequestHandler):
             elif action == "assistant_call_count":
                 # The private authenticated control socket exposes only counts.
                 result = {"ok": True, "count": self.server.chat_gateway.call_count}
+            elif action == "enable_itinerary_fixture":
+                # This test-only projection is deliberately isolated to the
+                # traveler recommendation dependency. Public catalogue views
+                # remain unchanged and empty; no canonical rows are written.
+                with psycopg.connect(**self.server.database, connect_timeout=2, row_factory=dict_row) as connection:
+                    published = connection.execute(
+                        "SELECT COUNT(*) AS n FROM knowledge.production_destinations"
+                    ).fetchone()["n"]
+                if published != 0:
+                    result = {"ok": False}
+                else:
+                    self.server.fixture_state["enabled"] = True
+                    result = {"ok": True, "destination_ids": self.server.itinerary_fixture_ids}
+            elif action == "disable_itinerary_fixture":
+                self.server.fixture_state["enabled"] = False
+                result = {"ok": True}
             elif action == "account_state":
                 user_id = str(command.get("user_id", ""))
                 phone = str(command.get("phone", ""))
@@ -219,6 +235,10 @@ def main() -> None:
     from app.modules.identity.sms import FakeSmsAdapter
     from app.api.assistant import get_chat_gateway
     from app.modules.integrations.chat_adapter import ChatReply
+    from app.api import traveler as traveler_api
+    from app.modules.catalog.schemas import ProductionDestinationItem
+    from app.modules.recommendation.contracts import EvidenceSource
+    from app.modules.recommendation.retrieval import StructuredDestinationMetadata
 
     class SimulatedChatGateway:
         """Only for guarded E2E. Simulates model content; makes zero HTTP calls."""
@@ -242,6 +262,60 @@ def main() -> None:
 
     chat_gateway = SimulatedChatGateway()
     app.dependency_overrides[get_chat_gateway] = lambda: chat_gateway
+
+    # Existing synthetic itinerary-stop identities are read-only test fixtures.
+    # Their fake provenance is explicitly marked and never enters the approved
+    # production projection. The private loopback control socket gates access.
+    with psycopg.connect(**database, connect_timeout=2, row_factory=dict_row) as connection:
+        published_count = connection.execute(
+            "SELECT COUNT(*) AS n FROM knowledge.production_destinations"
+        ).fetchone()["n"]
+        fixture_rows = connection.execute(
+            """SELECT DISTINCT destination_id FROM travel.itinerary_stops
+               WHERE is_synthetic=TRUE ORDER BY destination_id LIMIT 4"""
+        ).fetchall()
+    if published_count != 0 or len(fixture_rows) != 4:
+        raise RuntimeError("E2E test-only recommendation fixture precondition failed")
+    fixture_items = []
+    fixture_sources = {}
+    for index, row in enumerate(fixture_rows, start=1):
+        destination_id = str(row["destination_id"])
+        fixture_items.append(ProductionDestinationItem(
+            destination_id=destination_id,
+            destination_key=f"E2E-TEST-ONLY-{index}",
+            canonical_name=f"NONEXISTENT E2E TEST PLACE {index}",
+            localized_names={
+                "fa-IR": f"مقصد ساختگی آزمون {index}",
+                "en-US": f"Synthetic E2E test place {index}",
+                "ar": f"وجهة اختبار اصطناعية {index}",
+            },
+            aliases=[],
+            destination_type="heritage_site",
+            province_name="TEST ONLY",
+            city_name="TEST ONLY",
+        ))
+        fixture_sources[destination_id] = [EvidenceSource(
+            destination_id=int(destination_id),
+            source_id=98_000 + index,
+            source_name="FAKE EVIDENCE — TEST ONLY",
+            source_url=f"https://example.invalid/e2e-test-only/{index}",
+            source_role="synthetic_test_only",
+            evidence_note="Fabricated solely for guarded API and persistence verification.",
+        )]
+    fixture_bundle = (
+        fixture_items,
+        fixture_sources,
+        {str(item.destination_id): StructuredDestinationMetadata(tags=[]) for item in fixture_items},
+    )
+    original_bundle = traveler_api.production_catalogue_bundle
+    fixture_state = {"enabled": False}
+
+    def guarded_catalogue_bundle(settings):
+        if fixture_state["enabled"]:
+            return fixture_bundle
+        return original_bundle(settings)
+
+    traveler_api.production_catalogue_bundle = guarded_catalogue_bundle
     adapter = FakeSmsAdapter()
     app.state.sms_adapter = adapter
     app.dependency_overrides[config.get_settings] = lambda: settings
@@ -260,6 +334,10 @@ def main() -> None:
     control.adapter = adapter
     control.database = database
     control.chat_gateway = chat_gateway
+    control.itinerary_fixture_enabled = False
+    control.itinerary_fixture_ids = [str(row["destination_id"]) for row in fixture_rows]
+    # Keep the closure state shared with the private control handler.
+    control.fixture_state = fixture_state
     control.control_token = control_token
     control_thread = threading.Thread(target=control.serve_forever, daemon=True)
     control_thread.start()
