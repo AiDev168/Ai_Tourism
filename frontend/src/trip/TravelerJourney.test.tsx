@@ -358,6 +358,7 @@ describe('persisted traveler journey', () => {
     const itinerary = {
       itinerary_id: 'itinerary-1', trip_id: trip.trip_id, revision: 1, version: 1, day_count: 10,
       status: 'partial', unplanned_days: [2, 3, 4, 5, 6, 7, 8, 9, 10],
+      warning_codes: ['stop_location_unknown', 'no_hours_or_routes_inferred'],
       title_by_locale: { 'en-US': 'Editable day plan' },
       stops: [{ recommendation_id: 'recommendation-1', day_number: 1, stop_order: 1, notes_by_locale: {},
         destination_id: '7421', canonical_name: 'Shiraz Garden', localized_names: { 'en-US': 'Shiraz Garden' } }],
@@ -403,7 +404,20 @@ describe('persisted traveler journey', () => {
     expect(JSON.parse(String((createCall[1] as RequestInit).body)).day_count).toBe(10);
     expect(host.textContent).toContain(journeyMessages['en-US'].itineraryPartial);
     expect(host.textContent).toContain(journeyMessages['en-US'].unplannedDay);
+    expect(host.textContent).toContain(journeyMessages['en-US'].itineraryWarnings.stop_location_unknown);
+    expect(host.textContent).toContain(journeyMessages['en-US'].itineraryWarnings.no_hours_or_routes_inferred);
     expect(host.querySelectorAll('.itinerary-day')).toHaveLength(10);
     expect(host.querySelectorAll('.unplanned-day')).toHaveLength(9);
+  });
+
+  it('provides distinct itinerary location and routing caveats in all traveler locales', () => {
+    for (const locale of ['fa-IR', 'en-US', 'ar'] as const) {
+      const warnings = journeyMessages[locale].itineraryWarnings;
+      expect(warnings.stop_location_unknown.length).toBeGreaterThan(20);
+      expect(warnings.no_hours_or_routes_inferred.length).toBeGreaterThan(20);
+      expect(warnings.geodesic_grouping_heuristic_only.length).toBeGreaterThan(20);
+      expect(warnings.position_not_entrance.length).toBeGreaterThan(20);
+      expect(warnings.stop_location_unknown).not.toContain('stop_location_unknown');
+    }
   });
 });

@@ -142,6 +142,30 @@ def test_enriched_plan_shows_all_unplanned_days_after_partial_edit():
     assert result["status"] == "partial"
     assert result["unplanned_days"] == [5, 6, 7, 8, 9, 10]
     assert [stop["day_number"] for stop in result["stops"]] == [1, 2, 3, 4]
+    assert "stop_location_unknown" in result["warning_codes"]
+    assert "no_hours_or_routes_inferred" in result["warning_codes"]
+
+
+def test_enriched_plan_discloses_reference_point_and_geodesic_heuristic():
+    row = {
+        "day_count": 2,
+        "stops": [
+            {"destination_id": "1", "day_number": 1, "stop_order": 1,
+             "itinerary_stop_id": uuid4(), "recommendation_id": uuid4(), "notes_by_locale": {}},
+            {"destination_id": "2", "day_number": 2, "stop_order": 1,
+             "itinerary_stop_id": uuid4(), "recommendation_id": uuid4(), "notes_by_locale": {}},
+        ],
+    }
+    first = _published_item("1").model_copy(update={
+        "latitude": 29.935, "longitude": 52.891, "coordinate_role": "property_reference",
+    })
+    second = _published_item("2").model_copy(update={
+        "latitude": 29.940, "longitude": 52.900, "coordinate_role": "visitor_entrance",
+    })
+    result = _enrich_itinerary(row, {"1": first, "2": second})
+    assert "geodesic_grouping_heuristic_only" in result["warning_codes"]
+    assert "position_not_entrance" in result["warning_codes"]
+    assert "no_hours_or_routes_inferred" in result["warning_codes"]
 
 
 def test_normalized_confirmed_profile_persists_snake_case_duration_and_rejects_bool():

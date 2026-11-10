@@ -250,6 +250,7 @@ const localeCopy = {
     workspace: 'برنامه‌های سفر من',
     confirm: 'ذخیرهٔ تغییرات برداشت سفر',
     find: 'بررسی پیشنهادهای تأییدشده',
+    createPlan: 'ساخت پیش‌نویس برنامه',
     deleteTrip: 'حذف سفر',
     deleteConversation: 'حذف گفت‌وگو و همهٔ سفرهای آن',
     prompt: 'سفر ۱۵ روزه به شیراز با بودجهٔ ۲۰ میلیون تومان؛ به طبیعت و جاهای تاریخی علاقه دارم؛ ترجیح می‌دهم مسیرها سنگ‌فرش باشند؛ دسترسی ویلچر ضروری است؛ باید از مسیرهای ناهموار پرهیز شود.',
@@ -260,6 +261,7 @@ const localeCopy = {
     workspace: 'My travel plans',
     confirm: 'Save trip details',
     find: 'Check verified suggestions',
+    createPlan: 'Create plan draft',
     deleteTrip: 'Delete trip',
     deleteConversation: 'Delete conversation and all its trips',
     prompt: '10 day trip to Shiraz with a budget of 20 million IRR; I prefer paved paths; wheelchair access is essential; must avoid rough terrain.',
@@ -270,6 +272,7 @@ const localeCopy = {
     workspace: 'خطط رحلاتي',
     confirm: 'احفظ تفاصيل الرحلة',
     find: 'تحقق من الاقتراحات الموثقة',
+    createPlan: 'أنشئ مسودة خطة',
     deleteTrip: 'احذف الرحلة',
     deleteConversation: 'احذف المحادثة وكل رحلاتها',
     prompt: 'رحلة لمدة ١٠ أيام إلى شيراز بميزانية ٢٠ مليون درهم؛ أفضل المسارات المعبدة؛ إمكانية الوصول بالكراسي المتحركة ضرورية؛ يجب تجنب الطرق الوعرة.',
@@ -364,7 +367,7 @@ async function sanitizeAndCapture(page, path, locale, width, height) {
   }, hiddenSensitiveStyles);
 }
 
-async function requestBrowserJson(page, path, method, csrf, body) {
+async function requestBrowserJson(page, path, method, csrf, body, requestAudit = null) {
   const response = await page.request.fetch(`${webOrigin}${path}`, {
     method,
     headers: {
@@ -383,10 +386,66 @@ async function requestBrowserJson(page, path, method, csrf, body) {
   if (!response.headers()['cache-control']?.includes('no-store')) {
     throw new Error(`browser_api_response_cacheable_${method.toLowerCase()}`);
   }
+  if (requestAudit) {
+    requestAudit.push({
+      method,
+      path,
+      status: response.status(),
+      cacheControl: response.headers()['cache-control'],
+      transport: 'playwright-api-request-to-local-vite-origin',
+    });
+  }
   return payload;
 }
 
+function assertNoInventedSchedule(itinerary) {
+  const forbiddenInferredFields = [
+    'planned_start_time',
+    'duration_minutes',
+    'travel_to_next_estimate_minutes',
+    'opening_hours',
+    'estimated_arrival_time',
+    'estimated_travel_minutes',
+  ];
+  for (const stop of itinerary.stops ?? []) {
+    for (const field of forbiddenInferredFields) {
+      if (stop[field] != null) throw new Error(`itinerary_inferred_unsupported_${field}`);
+    }
+  }
+  if (!Array.isArray(itinerary.warning_codes)
+      || !itinerary.warning_codes.includes('no_hours_or_routes_inferred')) {
+    throw new Error('itinerary_missing_no_hours_or_routes_warning');
+  }
+  if (!itinerary.warning_codes.includes('stop_location_unknown')
+      || itinerary.warning_codes.includes('geodesic_grouping_heuristic_only')) {
+    throw new Error('coordinate_free_itinerary_location_warning_mismatch');
+  }
+}
+
+function fixtureRequirements(requestText, locale) {
+  const unknown = { value: null, status: 'unknown', evidence: null };
+  return {
+    requestText, locale,
+    destinations: { value: ['TEST ONLY'], status: 'extracted', evidence: 'test-only fixture identity' },
+    origin: unknown,
+    durationDays: { value: 15, status: 'extracted', evidence: '15 days' },
+    travelDates: unknown,
+    travelerCount: unknown,
+    accessibility: unknown,
+    budget: unknown,
+    interests: unknown,
+    softPreferences: unknown,
+    constraints: [],
+    extractionStatus: 'ready',
+    missingRequired: [],
+    ambiguousRequired: [],
+    confirmationRequired: [],
+    destinationVerification: 'user_input_unverified',
+  };
+}
+
 async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshotRoot, originalRequestText) {
+  const apiTrace = [];
   const enabled = await checkedControl(api.controlPort, api.controlToken, {
     action: 'enable_itinerary_fixture',
   });
@@ -399,9 +458,9 @@ async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshot
     const started = await requestBrowserJson(page, '/api/v1/conversations', 'POST', csrf, {
       locale,
       request_text: requestText,
-      extracted_requirements: { durationDays: { value: 15, status: 'extracted' } },
+      extracted_requirements: fixtureRequirements(requestText, locale),
       idempotency_key: randomUUID(),
-    });
+    }, apiTrace);
     const conversationId = started.conversation?.conversation_id;
     const trip = started.trip;
     if (!conversationId || !trip?.trip_id || trip.duration_days !== 15) {
@@ -414,25 +473,104 @@ async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshot
         destinations: ['TEST ONLY'], constraints: [],
       },
       destination_ids: destinationIds,
-    });
+    }, apiTrace);
     if (confirmed.duration_days !== 15
       || confirmed.confirmed_requirements?.duration_days !== 15) {
       throw new Error('real_browser_fifteen_day_confirmation_failed');
     }
+    // Continue this persisted test trip in the actual traveler UI. The private
+    // fixture only supplies isolated recommendation evidence; buttons below
+    // initiate both recommendation and itinerary requests through Vite/FastAPI.
+    const initialHistoryPending = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'GET');
+    await page.locator('.trip-history-heading button').click();
+    await initialHistoryPending;
+    await page.getByRole('button', { name: requestText, exact: true }).click();
+    await page.waitForFunction(expected => document.querySelector('#trip-prompt')?.value === expected, requestText);
+    await page.locator('#profile-duration').waitFor({ state: 'visible' });
+
+    const uiConfirmPath = `/api/v1/trips/${trip.trip_id}`;
+    const mandatoryChoices = page.locator('.requirement-consent-field input[value="must_have"]');
+    for (let choiceIndex = 0; choiceIndex < await mandatoryChoices.count(); choiceIndex += 1) {
+      await mandatoryChoices.nth(choiceIndex).check({ force: true });
+    }
+    const uiConfirmButton = page.getByRole('button', { name: localeCopy[locale].confirm, exact: true });
+    await uiConfirmButton.waitFor({ state: 'visible' });
+    const uiConfirmationPending = page.waitForResponse(response => new URL(response.url()).pathname === uiConfirmPath
+      && response.request().method() === 'PATCH', { timeout: 30_000 })
+      .then(response => ({ response }), error => ({ error }));
+    await uiConfirmButton.click();
+    const confirmationWaitResult = await uiConfirmationPending;
+    let uiConfirmationResponse = confirmationWaitResult.response;
+    if (!uiConfirmationResponse) {
+      const diagnostic = await page.evaluate(label => ({
+        confirmDisabled: [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === label)?.disabled ?? null,
+        invalidInputIds: [...document.querySelectorAll('[aria-invalid="true"]')].map(element => element.id),
+        consentFieldCount: document.querySelectorAll('.requirement-consent-field').length,
+        mandatoryChecked: [...document.querySelectorAll('.requirement-consent-field input[value="must_have"]')]
+          .filter(element => element.checked).length,
+        advisoryChecked: [...document.querySelectorAll('.requirement-consent-field input[value="advisory"]')]
+          .filter(element => element.checked).length,
+        consentAckMissing: [...document.querySelectorAll('.requirement-consent-field input[type="checkbox"]')]
+          .filter(element => !element.checked).length,
+      }), localeCopy[locale].confirm);
+      throw new Error(`traveler_ui_profile_confirmation_no_request_${JSON.stringify(diagnostic)}`);
+    }
+    if (uiConfirmationResponse.status() !== 200
+        || !uiConfirmationResponse.headers()['cache-control']?.includes('no-store')) {
+      throw new Error('traveler_ui_profile_confirmation_failed');
+    }
+    const uiConfirmedTrip = await uiConfirmationResponse.json();
+    const consent = uiConfirmedTrip.confirmed_requirements?.requirement_consent;
+    if (!consent || consent.contract_version !== 'recommendation-consent-v1') {
+      throw new Error('traveler_ui_profile_consent_snapshot_missing');
+    }
+    const fixtureProfile = { ...uiConfirmedTrip.confirmed_requirements };
+    delete fixtureProfile.requirement_consent;
+    const consentRequest = { ...consent };
+    delete consentRequest.profile_version;
+    const fixtureTrip = await requestBrowserJson(page, uiConfirmPath, 'PATCH', csrf, {
+      expected_version: uiConfirmedTrip.version,
+      confirmed_requirements: fixtureProfile,
+      destination_ids: destinationIds,
+      requirement_consent: consentRequest,
+    }, apiTrace);
+    if (fixtureTrip.destination_ids?.length !== 4
+        || fixtureTrip.confirmed_requirements?.requirement_consent?.profile_version !== fixtureTrip.version) {
+      throw new Error('isolated_test_fixture_identity_binding_failed');
+    }
+
     const ownerRagBefore = await checkedControl(api.controlPort, api.controlToken, {
       action: 'owner_rag_call_counts',
     });
-    const recommendation = await requestBrowserJson(
-      page, `/api/v1/trips/${trip.trip_id}/recommendations`, 'POST', csrf,
-      { selected_destination_ids: destinationIds },
-    );
+    const recommendationsPath = `/api/v1/trips/${trip.trip_id}/recommendations`;
+    const recommendationPending = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/recommendations')
+      && response.request().method() === 'POST');
+    await page.getByRole('button', { name: localeCopy[locale].find, exact: true }).click();
+    const recommendationResponse = await recommendationPending;
+    if (new URL(recommendationResponse.url()).pathname !== recommendationsPath) {
+      throw new Error(`traveler_ui_recommendation_trip_mismatch_${new URL(recommendationResponse.url()).pathname}`);
+    }
+    if (!recommendationResponse.headers()['cache-control']?.includes('no-store')) {
+      throw new Error('browser_api_response_cacheable_post_recommendations');
+    }
+    apiTrace.push({ method: 'POST', path: recommendationsPath, status: recommendationResponse.status(),
+      cacheControl: recommendationResponse.headers()['cache-control'], transport: 'traveler-ui-to-local-vite-origin' });
+    const recommendation = await recommendationResponse.json();
     if (recommendation.status !== 'available' || recommendation.items?.length !== 4
       || recommendation.items.some(item => !item.evidence?.some(source => source.source_url.includes('.invalid')))) {
-      throw new Error('real_browser_test_only_recommendations_failed');
+      throw new Error(`real_browser_test_only_recommendations_failed_${JSON.stringify({
+        status: recommendation.status, reason: recommendation.reason_code,
+        itemCount: recommendation.items?.length,
+        evidenceCounts: recommendation.items?.map(item => item.evidence?.length ?? 0),
+      })}`);
     }
     if (recommendation.items.some(item =>
       ['text', 'document_id', 'content_hash', 'claim_key', 'evidence_id'].some(key => key in item))) {
       throw new Error('owner_rag_evidence_fields_leaked_to_traveler_recommendation');
+    }
+    if (recommendation.items.some(item => item.retrieval_evidence?.length)) {
+      throw new Error('owner_rag_no_evidence_was_replaced_with_fallback_citation');
     }
     const ownerRagAfter = await checkedControl(api.controlPort, api.controlToken, {
       action: 'owner_rag_call_counts',
@@ -449,17 +587,35 @@ async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshot
     if (api.ownerRagEnabled && (ownerRagProbe.calls !== 1 || ownerRagProbe.outcomes.no_evidence !== 1)) {
       throw new Error('owner_rag_empty_index_http_probe_not_confirmed');
     }
-    const created = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}/itineraries`, 'POST', csrf, {
-      recommendation_request_id: recommendation.recommendation_request_id,
-      day_count: 15,
-      locale,
-    });
+    if (!api.ownerRagEnabled && ownerRagProbe.calls !== 0) {
+      throw new Error('disabled_owner_rag_made_retrieval_calls');
+    }
+    if (recommendation.items.some(item => item.retrieval_evidence_status
+      !== (api.ownerRagEnabled ? 'no_evidence' : 'disabled'))) {
+      throw new Error('owner_rag_status_mismatch_with_truthful_structured_recommendation');
+    }
+    await page.locator('#journey-day-count').waitFor({ state: 'visible' });
+    if (await page.locator('#journey-day-count').inputValue() !== '15') {
+      throw new Error('traveler_ui_did_not_default_confirmed_fifteen_days');
+    }
+    const itineraryCreatePath = `/api/v1/trips/${trip.trip_id}/itineraries`;
+    const itineraryCreatePending = page.waitForResponse(response => new URL(response.url()).pathname === itineraryCreatePath
+      && response.request().method() === 'POST');
+    await page.getByRole('button', { name: localeCopy[locale].createPlan, exact: true }).click();
+    const itineraryCreateResponse = await itineraryCreatePending;
+    if (!itineraryCreateResponse.headers()['cache-control']?.includes('no-store')) {
+      throw new Error('browser_api_response_cacheable_post_itinerary');
+    }
+    apiTrace.push({ method: 'POST', path: itineraryCreatePath, status: itineraryCreateResponse.status(),
+      cacheControl: itineraryCreateResponse.headers()['cache-control'], transport: 'traveler-ui-to-local-vite-origin' });
+    const created = await itineraryCreateResponse.json();
     const itineraryId = created.itinerary_id;
     if (!itineraryId || created.day_count !== 15 || created.status !== 'partial'
       || created.stops?.length !== 4 || created.unplanned_days?.length !== 11) {
       throw new Error('real_browser_fifteen_day_partial_itinerary_failed');
     }
-    const catalogue = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET');
+    assertNoInventedSchedule(created);
+    const catalogue = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET', undefined, undefined, apiTrace);
     if (catalogue.count !== 0) throw new Error('test_fixture_leaked_to_production_catalogue');
 
     await page.reload({ waitUntil: 'domcontentloaded' });
@@ -494,12 +650,25 @@ async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshot
     if (savedResponse.status() !== 200 || saved.revision !== 2 || saved.day_count !== 15 || saved.stops?.length !== 3) {
       throw new Error('real_browser_itinerary_edit_not_persisted');
     }
-    const reopened = await requestBrowserJson(page, `/api/v1/itineraries/${itineraryId}`, 'GET');
+    apiTrace.push({
+      method: 'PUT',
+      path: `/api/v1/itineraries/${itineraryId}`,
+      status: savedResponse.status(),
+      cacheControl: savedResponse.headers()['cache-control'],
+      transport: 'browser-page-request-to-local-vite-origin',
+    });
+    if (!savedResponse.headers()['cache-control']?.includes('no-store')) {
+      throw new Error('browser_api_response_cacheable_put');
+    }
+    const reopened = await requestBrowserJson(
+      page, `/api/v1/itineraries/${itineraryId}`, 'GET', undefined, undefined, apiTrace,
+    );
+    assertNoInventedSchedule(reopened);
     if (reopened.revision !== 2 || reopened.day_count !== 15 || reopened.stops?.length !== 3
       || reopened.unplanned_days?.length !== 12) {
       throw new Error('real_browser_itinerary_edit_reopen_mismatch');
     }
-    const catalogueAfter = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET');
+    const catalogueAfter = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET', undefined, undefined, apiTrace);
     if (catalogueAfter.count !== 0) throw new Error('test_fixture_leaked_after_itinerary_edit');
     const deletedFixture = await requestBrowserJson(
       page, `/api/v1/conversations/${conversationId}`, 'DELETE', csrf,
@@ -520,10 +689,25 @@ async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshot
     if (!originalRequestRestored) {
       throw new Error('original_journey_not_restored_after_positive_itinerary');
     }
+    const positiveApiPaths = [
+      ['POST', `/api/v1/trips/${trip.trip_id}/recommendations`],
+      ['POST', `/api/v1/trips/${trip.trip_id}/itineraries`],
+      ['PUT', `/api/v1/itineraries/${itineraryId}`],
+      ['GET', `/api/v1/itineraries/${itineraryId}`],
+    ];
+    for (const [method, path] of positiveApiPaths) {
+      if (!apiTrace.some(entry => entry.method === method && entry.path === path && entry.status >= 200 && entry.status < 300)) {
+        throw new Error(`positive_live_api_call_not_observed_${method.toLowerCase()}`);
+      }
+    }
     return {
       itineraryId, dayCount: 15, initialStops: 4, finalStops: 3,
       initialUnplannedDays: 11, finalUnplannedDays: 12,
       ownerRagProbe,
+      apiTrace: apiTrace.filter(entry => /recommendations|itineraries/.test(entry.path)),
+      noInventedScheduleFields: true,
+      geoGrouping: 'not exercised in browser: production projection is empty and synthetic fixture coordinates are intentionally rejected; response honestly reports stop_location_unknown',
+      warningCodes: reopened.warning_codes,
     };
   } finally {
     await checkedControl(api.controlPort, api.controlToken, { action: 'disable_itinerary_fixture' });
@@ -1184,6 +1368,13 @@ async function main() {
       status: 'passed',
       browser: `Chromium ${browser.version()}`,
       environment: 'live Vite proxy + FastAPI + guarded disposable PostgreSQL 17; fake SMS; simulated Chat gateway (no remote model)',
+      database: {
+        name: process.env.AUTH_TEST_DATABASE_NAME,
+        host: process.env.AUTH_TEST_DATABASE_HOST,
+        port: Number(process.env.AUTH_TEST_DATABASE_PORT),
+        majorVersion: 17,
+        markerValidated: true,
+      },
       integrations: {
         chat: { mode: 'simulated', liveProviderCalls: 0 },
         ownerRag: {

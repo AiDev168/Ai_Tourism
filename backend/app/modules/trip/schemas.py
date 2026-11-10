@@ -351,6 +351,7 @@ class ItineraryResponse(StrictModel):
     day_count: StrictInt = Field(ge=1, le=365)
     status: Literal["complete", "partial"]
     unplanned_days: list[StrictInt] = Field(max_length=365)
+    warning_codes: list[str] = Field(default_factory=list, max_length=16)
     title_by_locale: dict[str, str]
     stops: list[ItineraryStopResponse]
     updated_at: datetime

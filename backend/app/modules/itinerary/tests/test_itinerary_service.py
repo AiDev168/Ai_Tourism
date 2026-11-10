@@ -180,3 +180,153 @@ def test_ten_evidenced_recommendations_compose_into_an_editable_ten_day_itinerar
     assert len({stop.destination_id for stop in plan.stops}) == 10
     assert [stop.day_number for stop in plan.stops] == list(range(1, 11))
     assert all(stop.evidence for stop in plan.stops)
+
+
+def test_geographic_grouping_clusters_nearby_stops_and_separates_distant_stops():
+    source = [
+        {
+            "destination_id": "1",
+            "latitude": 29.60,
+            "longitude": 52.50,
+            "coordinate_role": "visitor_entrance",
+        },
+        {
+            "destination_id": "2",
+            "latitude": 29.61,
+            "longitude": 52.51,
+            "coordinate_role": "visitor_entrance",
+        },
+        {
+            "destination_id": "3",
+            "latitude": 30.20,
+            "longitude": 53.10,
+            "coordinate_role": "visitor_entrance",
+        },
+        {
+            "destination_id": "4",
+            "latitude": 30.21,
+            "longitude": 53.11,
+            "coordinate_role": "visitor_entrance",
+        },
+    ]
+    geography = {
+        item["destination_id"]: {
+            "latitude": item["latitude"],
+            "longitude": item["longitude"],
+            "coordinate_role": item["coordinate_role"],
+        }
+        for item in source
+    }
+
+    plan = generate_itinerary(
+        recommendation=recommendation(4),
+        day_count=2,
+        locale="fa-IR",
+        geography_by_destination=geography,
+    )
+
+    assert plan is not None
+    by_day = {
+        day: {stop.destination_id for stop in plan.stops if stop.day_number == day}
+        for day in (1, 2)
+    }
+    assert by_day == {1: {"1", "2"}, 2: {"3", "4"}}
+    assert "geodesic_grouping_heuristic_only" in plan.warning_codes
+    assert "no_hours_or_routes_inferred" in plan.warning_codes
+    assert all(stop.travel_to_next_estimate_minutes is None for stop in plan.stops)
+
+
+def test_property_reference_is_never_presented_as_an_entrance_or_route_point():
+    plan = generate_itinerary(
+        recommendation=recommendation(2),
+        day_count=2,
+        locale="en-US",
+        geography_by_destination={
+            "1": {
+                "latitude": 29.93444,
+                "longitude": 52.89028,
+                "coordinate_role": "property_reference",
+            },
+            "2": {
+                "latitude": 29.60,
+                "longitude": 52.50,
+                "coordinate_role": "representative_point",
+            },
+        },
+    )
+
+    assert plan is not None
+    assert "position_not_entrance" in plan.warning_codes
+    assert "geodesic_grouping_heuristic_only" in plan.warning_codes
+    assert all(stop.planned_start_time is None for stop in plan.stops)
+    assert all(stop.travel_to_next_estimate_minutes is None for stop in plan.stops)
+
+
+def test_missing_or_malformed_geography_stays_unknown_and_preserves_eligible_stops():
+    plan = generate_itinerary(
+        recommendation=recommendation(3),
+        day_count=5,
+        locale="ar",
+        geography_by_destination={
+            "1": {
+                "latitude": True,
+                "longitude": 52.5,
+                "coordinate_role": "visitor_entrance",
+            },
+            "2": {
+                "latitude": 29.61,
+                "longitude": 52.51,
+                "coordinate_role": "unrecognized_role",
+            },
+        },
+    )
+
+    assert plan is not None
+    assert len(plan.stops) == 3
+    assert "stop_location_unknown" in plan.warning_codes
+    assert plan.status == "partial"
+    assert plan.unplanned_days == [4, 5]
+
+
+def test_confirmed_origin_seeds_the_nearest_day_without_changing_eligibility():
+    plan = generate_itinerary(
+        recommendation=recommendation(3),
+        day_count=2,
+        locale="fa-IR",
+        geography_by_destination={
+            "1": {"latitude": 29.6, "longitude": 52.5, "coordinate_role": "visitor_entrance"},
+            "2": {"latitude": 29.7, "longitude": 52.6, "coordinate_role": "visitor_entrance"},
+            "3": {"latitude": 30.2, "longitude": 53.1, "coordinate_role": "visitor_entrance"},
+        },
+        origin={"latitude": 29.61, "longitude": 52.51, "coordinate_role": "representative_point"},
+    )
+
+    assert plan is not None
+    assert {stop.destination_id for stop in plan.stops if stop.day_number == 1} == {"1", "2"}
+    assert {stop.destination_id for stop in plan.stops if stop.day_number == 2} == {"3"}
+    assert {stop.destination_id for stop in plan.stops} == {"1", "2", "3"}
+
+
+def test_geographic_cluster_assignment_respects_fifty_stop_day_capacity():
+    # A dense cluster must still split across days within the API's hard bound.
+    geography = {
+        str(index): {
+            "latitude": 29.6 + index * 0.000001,
+            "longitude": 52.5 + index * 0.000001,
+            "coordinate_role": "visitor_entrance",
+        }
+        for index in range(1, 101)
+    }
+
+    plan = generate_itinerary(
+        recommendation=recommendation(100),
+        day_count=2,
+        locale="fa-IR",
+        geography_by_destination=geography,
+    )
+
+    assert plan is not None
+    counts = [sum(stop.day_number == day for stop in plan.stops) for day in (1, 2)]
+    assert counts == [50, 50]
+    assert max(stop.stop_order for stop in plan.stops) == 50
+    assert len({stop.destination_id for stop in plan.stops}) == 100

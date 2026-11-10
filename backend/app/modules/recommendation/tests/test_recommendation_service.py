@@ -76,6 +76,42 @@ def test_empty_catalogue_and_unavailable_selection_are_honest_clarification_outc
     )
 
 
+def test_pwa_profile_empty_accessibility_list_is_absent_not_malformed() -> None:
+    profile = {
+        "confirmation_source": "traveler_reviewed",
+        "destinations": ["TEST ONLY"],
+        "duration_days": 15,
+        "origin": None,
+        "travel_dates": None,
+        "traveler_count": None,
+        "accessibility": [],
+        "budget": None,
+        "soft_preferences": [],
+        "interests": [],
+        "constraints": [],
+        "destination_ids": ["1"],
+        "requirement_consent": {
+            "contract_version": "recommendation-consent-v1",
+            "profile_version": 2,
+            "field_decisions": {},
+            "advisory_acknowledged_fields": [],
+        },
+    }
+
+    result = recommend_trip(
+        requirements=profile,
+        selected_destination_ids=["1"],
+        catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]},
+        locale="fa-IR",
+        profile_version=2,
+    )
+
+    assert result.status == "available"
+    assert result.duration_days == 15
+    assert result.items[0].matched_requirements == ["destination:1"]
+
+
 def test_hard_constraints_do_not_get_overridden_by_a_match_score() -> None:
     result = recommend_trip(
         requirements=requirements(constraints={"value": ["wheelchair access"]}),

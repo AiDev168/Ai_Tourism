@@ -671,7 +671,21 @@ def create_itinerary(
         outcome, by_id, rec_ids, _persisted_scores = _current_recommendations(
             settings, repository, principal.user_id, trip_id, body.recommendation_request_id
         )
-        draft = generate_itinerary(recommendation=outcome, day_count=body.day_count, locale=body.locale)
+        geography = {
+            destination_id: {
+                "latitude": item.latitude,
+                "longitude": item.longitude,
+                "coordinate_role": item.coordinate_role,
+            }
+            for destination_id, item in by_id.items()
+            if item.latitude is not None and item.longitude is not None and item.coordinate_role is not None
+        }
+        draft = generate_itinerary(
+            recommendation=outcome,
+            day_count=body.day_count,
+            locale=body.locale,
+            geography_by_destination=geography,
+        )
         if draft is None or not draft.stops:
             return _error(409, "no_eligible_recommendations")
         itinerary_id = repository.create_itinerary(
@@ -685,7 +699,7 @@ def create_itinerary(
         result = repository.itinerary(principal.user_id, itinerary_id)
         if result is None:
             return _database_unavailable()
-        return _enrich_itinerary(result, by_id)
+        return _enrich_itinerary(result, by_id, draft.warning_codes)
     except CatalogueUnavailableError:
         return _error(503, "catalogue_unavailable")
     except TravelerNotFound:
@@ -698,7 +712,11 @@ def create_itinerary(
         return _database_unavailable()
 
 
-def _enrich_itinerary(row: dict[str, Any], by_id: dict[str, ProductionDestinationItem]) -> dict[str, Any]:
+def _enrich_itinerary(
+    row: dict[str, Any],
+    by_id: dict[str, ProductionDestinationItem],
+    warning_codes: list[str] | None = None,
+) -> dict[str, Any]:
     enriched_stops = []
     for stop in row["stops"]:
         destination = by_id.get(str(stop["destination_id"]))
@@ -712,11 +730,23 @@ def _enrich_itinerary(row: dict[str, Any], by_id: dict[str, ProductionDestinatio
         })
     planned_days = {stop["day_number"] for stop in enriched_stops}
     unplanned_days = [day for day in range(1, row["day_count"] + 1) if day not in planned_days]
+    warnings = set(warning_codes or [])
+    warnings.update({"approximate_order_only", "no_hours_or_routes_inferred"})
+    if any(by_id[str(stop["destination_id"])].latitude is None for stop in enriched_stops):
+        warnings.add("stop_location_unknown")
+    located = [by_id[str(stop["destination_id"])] for stop in enriched_stops if by_id[str(stop["destination_id"])].latitude is not None]
+    if len(located) > 1:
+        warnings.add("geodesic_grouping_heuristic_only")
+    if any(item.coordinate_role in {"property_reference", "representative_point"} for item in located):
+        warnings.add("position_not_entrance")
+    if unplanned_days:
+        warnings.add("some_days_unplanned_insufficient_candidates")
     return {
         **{key: value for key, value in row.items() if key != "user_id"},
         "stops": enriched_stops,
         "status": "partial" if unplanned_days else "complete",
         "unplanned_days": unplanned_days,
+        "warning_codes": sorted(warnings),
     }
 
 

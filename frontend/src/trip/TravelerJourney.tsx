@@ -1064,6 +1064,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
           {displayedItineraryStatus === 'complete' ? copy.itineraryComplete : copy.itineraryPartial}
         </p>
         <p>{copy.itineraryCoverageNote}</p>
+        {(itinerary.warning_codes ?? []).map(code => <p className="itinerary-warning" role="note" key={code}>{copy.itineraryWarnings[code as keyof typeof copy.itineraryWarnings] ?? copy.itinerarySuggestionWarning}</p>)}
         <div className="saved-itinerary-days">
           {dayNumbers.map(day => {
             const dayStops = editableStops.filter(stop => stop.day_number === day).sort((a, b) => a.stop_order - b.stop_order);

@@ -44,6 +44,9 @@ SELECT d.destination_id::text AS destination_id,
        d.destination_type,
        d.province_name,
        d.city_name,
+       d.latitude,
+       d.longitude,
+       d.coordinate_role,
        EXISTS (
            SELECT 1
            FROM knowledge.production_destination_sources AS s
@@ -265,6 +268,9 @@ def _to_item(
         destination_type=_bounded_text(row.get("destination_type"), 64),
         province_name=_bounded_text(row.get("province_name"), MAX_NAME_LENGTH),
         city_name=city_name,
+        latitude=row.get("latitude"),
+        longitude=row.get("longitude"),
+        coordinate_role=row.get("coordinate_role"),
     )
 
 

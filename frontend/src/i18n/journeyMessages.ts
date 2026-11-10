@@ -85,6 +85,14 @@ export const journeyMessages = {
     itineraryPartial: 'این پیش‌نویس ناقص است؛ بعضی روزها هنوز مقصد تأییدشده‌ای ندارند.',
     unplannedDay: 'هنوز مقصد تأییدشده‌ای برای این روز در دسترس نیست.',
     itineraryCoverageNote: 'کامل بودن فقط یعنی هر روز دست‌کم یک مقصد دارای منبع دارد؛ این برنامه زمان‌بندی یا مسیر بهینه نیست.',
+    itineraryWarnings: {
+      approximate_order_only: 'چیدمان توقف‌ها فقط یک پیشنهاد قابل ویرایش است و مسیر بهینه را نشان نمی‌دهد.',
+      no_hours_or_routes_inferred: 'ساعت بازدید، مسیر جاده‌ای یا زمان سفر از این چیدمان نتیجه‌گیری نشده است.',
+      geodesic_grouping_heuristic_only: 'گروه‌بندی بر پایه فاصله مستقیم تقریبی است؛ زمان یا امکان سفر را تأیید نمی‌کند.',
+      position_not_entrance: 'برخی مختصات، نقطه مرجع مکان هستند و ورودی بازدیدکنندگان را نشان نمی‌دهند.',
+      stop_location_unknown: 'برای برخی توقف‌ها موقعیت دقیق تأییدشده در دسترس نیست.',
+      some_days_unplanned_insufficient_candidates: 'برای برخی روزها محتوای تأییدشده کافی وجود ندارد؛ آن روزها برنامه‌ریزی‌نشده مانده‌اند.',
+    },
     noteLabel: 'یادداشت شخصی',
     saveItinerary: 'ذخیرهٔ برنامه',
     itinerarySaved: 'برنامه ذخیره شد.',
@@ -196,6 +204,14 @@ export const journeyMessages = {
     itineraryPartial: 'This draft is partial; some days do not have an approved destination yet.',
     unplannedDay: 'No approved destination is available for this day yet.',
     itineraryCoverageNote: 'Complete means only that each day has at least one sourced destination; this is not an optimized schedule or route.',
+    itineraryWarnings: {
+      approximate_order_only: 'Stop placement is an editable suggestion and does not represent an optimized route.',
+      no_hours_or_routes_inferred: 'Opening hours, road routes, and travel times have not been inferred.',
+      geodesic_grouping_heuristic_only: 'Grouping uses approximate straight-line distance; it does not confirm travel time or feasibility.',
+      position_not_entrance: 'Some coordinates are reference points and do not identify a visitor entrance.',
+      stop_location_unknown: 'A verified precise location is unavailable for some stops.',
+      some_days_unplanned_insufficient_candidates: 'There is not enough approved content for every day; uncovered days remain unplanned.',
+    },
     noteLabel: 'Personal note',
     saveItinerary: 'Save plan',
     itinerarySaved: 'The plan was saved.',
@@ -307,6 +323,14 @@ export const journeyMessages = {
     itineraryPartial: 'هذه المسودة جزئية؛ لا تتوفر وجهة معتمدة لبعض الأيام بعد.',
     unplannedDay: 'لا تتوفر وجهة معتمدة لهذا اليوم حتى الآن.',
     itineraryCoverageNote: 'تعني كلمة مكتملة أن لكل يوم وجهة موثقة واحدة على الأقل فقط؛ وليست جدولًا أو مسارًا محسّنًا.',
+    itineraryWarnings: {
+      approximate_order_only: 'ترتيب المحطات اقتراح قابل للتعديل ولا يمثل مسارًا محسّنًا.',
+      no_hours_or_routes_inferred: 'لم تُستنتج ساعات الزيارة أو الطرق أو أوقات السفر.',
+      geodesic_grouping_heuristic_only: 'يعتمد التجميع على المسافة المستقيمة التقريبية ولا يؤكد زمن السفر أو إمكانيته.',
+      position_not_entrance: 'بعض الإحداثيات نقاط مرجعية للموقع وليست مداخل للزوار.',
+      stop_location_unknown: 'لا يتوفر موقع دقيق موثق لبعض المحطات.',
+      some_days_unplanned_insufficient_candidates: 'المحتوى المعتمد غير كافٍ لجميع الأيام؛ لذلك تبقى بعض الأيام بلا تخطيط.',
+    },
     noteLabel: 'ملاحظة شخصية',
     saveItinerary: 'احفظ الخطة',
     itinerarySaved: 'تم حفظ الخطة.',
@@ -334,7 +358,7 @@ export const journeyMessages = {
     selectedByYou: 'اخترت هذا الخيار',
     noneOfThese: 'لا شيء منها؛ أريد تعديل الاسم',
   },
-} satisfies Record<Locale, Record<string, string>>;
+} satisfies Record<Locale, Record<string, string | Record<string, string>>>;
 
 export type JourneyMessageKey = keyof typeof journeyMessages['fa-IR'];
 

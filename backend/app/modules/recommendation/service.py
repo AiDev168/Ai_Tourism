@@ -225,9 +225,12 @@ def _explicit_strings(value: object) -> bool:
             raise _InvalidRequirements
         return True
     if isinstance(value, (list, tuple)):
-        if not value or any(not isinstance(item, str) or not item.strip() for item in value):
+        # The PWA serializes empty list-valued profile fields (for example,
+        # accessibility: []) when the traveler supplied no such requirement.
+        # Treat that as absent input while still rejecting malformed entries.
+        if any(not isinstance(item, str) or not item.strip() for item in value):
             raise _InvalidRequirements
-        return True
+        return bool(value)
     raise _InvalidRequirements
 
 

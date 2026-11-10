@@ -248,6 +248,7 @@ export type ItineraryRecord = {
   status: 'complete' | 'partial';
   /** Server-derived day numbers without any evidenced itinerary stop. */
   unplanned_days: number[];
+  warning_codes?: string[];
   title_by_locale: Partial<Record<Locale, string>>;
   stops: ItineraryStop[];
   recommendation_request_id: string;

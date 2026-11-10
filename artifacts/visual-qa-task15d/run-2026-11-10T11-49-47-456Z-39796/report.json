@@ -1,0 +1,399 @@
+{
+  "status": "passed",
+  "browser": "Chromium 156.0.8078.47",
+  "environment": "live Vite proxy + FastAPI + guarded disposable PostgreSQL 17; fake SMS; simulated Chat gateway (no remote model)",
+  "database": {
+    "name": "ai_tourism_auth_test_mvp_05e97a5501b3",
+    "host": "127.0.0.1",
+    "port": 57403,
+    "majorVersion": 17,
+    "markerValidated": true
+  },
+  "integrations": {
+    "chat": {
+      "mode": "simulated",
+      "liveProviderCalls": 0
+    },
+    "ownerRag": {
+      "mode": "disabled",
+      "enabled": false,
+      "calls": 0,
+      "outcomes": {
+        "ok": 0,
+        "no_evidence": 0,
+        "unavailable": 0,
+        "invalid_request": 0,
+        "authentication_failed": 0
+      },
+      "travelerEvidenceTextReturned": false
+    }
+  },
+  "locales": [
+    {
+      "locale": "fa-IR",
+      "productionCatalogueEmptyVerified": true,
+      "productionCatalogueCount": 0,
+      "recommendationOutcome": "needs_confirmation",
+      "recommendationReasonCode": "hard_constraints_unverifiable",
+      "unresolvedFields": [
+        "accessibility",
+        "hard_constraint",
+        "destination_resolution"
+      ],
+      "consentSnapshotVerified": true,
+      "requestedDurationDays": 15,
+      "persistedDurationDays": 15,
+      "correctedPersistedDurationDays": 15,
+      "persistedUserTurnCount": 13,
+      "simulatedAssistantIntegrationVerified": true,
+      "simulatedGatewayCalls": 2,
+      "partialFixtureDays": 15,
+      "partialFixtureInitialStops": 4,
+      "partialFixtureInitialUnplannedDays": 11,
+      "partialFixtureStops": 3,
+      "partialFixtureUnplannedDays": 12,
+      "positiveItinerary": {
+        "itineraryId": "01cb3649-1ec8-40dd-9be0-881c7f7d1929",
+        "dayCount": 15,
+        "initialStops": 4,
+        "finalStops": 3,
+        "initialUnplannedDays": 11,
+        "finalUnplannedDays": 12,
+        "ownerRagProbe": {
+          "enabled": false,
+          "calls": 0,
+          "outcomes": {
+            "ok": 0,
+            "no_evidence": 0,
+            "unavailable": 0,
+            "invalid_request": 0,
+            "authentication_failed": 0
+          },
+          "travelerEvidenceTextReturned": false
+        },
+        "apiTrace": [
+          {
+            "method": "POST",
+            "path": "/api/v1/trips/96f01a8e-feb4-47b1-8b7b-ed751ed62301/recommendations",
+            "status": 201,
+            "cacheControl": "no-store",
+            "transport": "traveler-ui-to-local-vite-origin"
+          },
+          {
+            "method": "POST",
+            "path": "/api/v1/trips/96f01a8e-feb4-47b1-8b7b-ed751ed62301/itineraries",
+            "status": 201,
+            "cacheControl": "no-store",
+            "transport": "traveler-ui-to-local-vite-origin"
+          },
+          {
+            "method": "PUT",
+            "path": "/api/v1/itineraries/01cb3649-1ec8-40dd-9be0-881c7f7d1929",
+            "status": 200,
+            "cacheControl": "no-store",
+            "transport": "browser-page-request-to-local-vite-origin"
+          },
+          {
+            "method": "GET",
+            "path": "/api/v1/itineraries/01cb3649-1ec8-40dd-9be0-881c7f7d1929",
+            "status": 200,
+            "cacheControl": "no-store",
+            "transport": "playwright-api-request-to-local-vite-origin"
+          }
+        ],
+        "noInventedScheduleFields": true,
+        "geoGrouping": "not exercised in browser: production projection is empty and synthetic fixture coordinates are intentionally rejected; response honestly reports stop_location_unknown",
+        "warningCodes": [
+          "approximate_order_only",
+          "no_hours_or_routes_inferred",
+          "some_days_unplanned_insufficient_candidates",
+          "stop_location_unknown"
+        ]
+      },
+      "historyReopenVerified": true,
+      "ownerAndCsrfVerified": true,
+      "deletionVerified": true,
+      "localeChecks": true,
+      "noStoreMe": true,
+      "noStoreVerify": true,
+      "externalRequestsBlocked": true
+    },
+    {
+      "locale": "en-US",
+      "productionCatalogueEmptyVerified": true,
+      "productionCatalogueCount": 0,
+      "recommendationOutcome": "needs_confirmation",
+      "recommendationReasonCode": "hard_constraints_unverifiable",
+      "unresolvedFields": [
+        "accessibility",
+        "hard_constraint",
+        "destination_resolution"
+      ],
+      "consentSnapshotVerified": true,
+      "requestedDurationDays": 10,
+      "persistedDurationDays": 10,
+      "correctedPersistedDurationDays": null,
+      "persistedUserTurnCount": 2,
+      "simulatedAssistantIntegrationVerified": true,
+      "simulatedGatewayCalls": 2,
+      "partialFixtureDays": 15,
+      "partialFixtureInitialStops": 4,
+      "partialFixtureInitialUnplannedDays": 11,
+      "partialFixtureStops": 3,
+      "partialFixtureUnplannedDays": 12,
+      "positiveItinerary": {
+        "itineraryId": "3fdf2b7d-689a-41a0-a80b-4e21c8558883",
+        "dayCount": 15,
+        "initialStops": 4,
+        "finalStops": 3,
+        "initialUnplannedDays": 11,
+        "finalUnplannedDays": 12,
+        "ownerRagProbe": {
+          "enabled": false,
+          "calls": 0,
+          "outcomes": {
+            "ok": 0,
+            "no_evidence": 0,
+            "unavailable": 0,
+            "invalid_request": 0,
+            "authentication_failed": 0
+          },
+          "travelerEvidenceTextReturned": false
+        },
+        "apiTrace": [
+          {
+            "method": "POST",
+            "path": "/api/v1/trips/942e3f9c-b8ee-451d-bbde-f7a8811a9827/recommendations",
+            "status": 201,
+            "cacheControl": "no-store",
+            "transport": "traveler-ui-to-local-vite-origin"
+          },
+          {
+            "method": "POST",
+            "path": "/api/v1/trips/942e3f9c-b8ee-451d-bbde-f7a8811a9827/itineraries",
+            "status": 201,
+            "cacheControl": "no-store",
+            "transport": "traveler-ui-to-local-vite-origin"
+          },
+          {
+            "method": "PUT",
+            "path": "/api/v1/itineraries/3fdf2b7d-689a-41a0-a80b-4e21c8558883",
+            "status": 200,
+            "cacheControl": "no-store",
+            "transport": "browser-page-request-to-local-vite-origin"
+          },
+          {
+            "method": "GET",
+            "path": "/api/v1/itineraries/3fdf2b7d-689a-41a0-a80b-4e21c8558883",
+            "status": 200,
+            "cacheControl": "no-store",
+            "transport": "playwright-api-request-to-local-vite-origin"
+          }
+        ],
+        "noInventedScheduleFields": true,
+        "geoGrouping": "not exercised in browser: production projection is empty and synthetic fixture coordinates are intentionally rejected; response honestly reports stop_location_unknown",
+        "warningCodes": [
+          "approximate_order_only",
+          "no_hours_or_routes_inferred",
+          "some_days_unplanned_insufficient_candidates",
+          "stop_location_unknown"
+        ]
+      },
+      "historyReopenVerified": true,
+      "ownerAndCsrfVerified": true,
+      "deletionVerified": true,
+      "localeChecks": true,
+      "noStoreMe": true,
+      "noStoreVerify": true,
+      "externalRequestsBlocked": true
+    },
+    {
+      "locale": "ar",
+      "productionCatalogueEmptyVerified": true,
+      "productionCatalogueCount": 0,
+      "recommendationOutcome": "needs_confirmation",
+      "recommendationReasonCode": "hard_constraints_unverifiable",
+      "unresolvedFields": [
+        "accessibility",
+        "hard_constraint",
+        "destination_resolution"
+      ],
+      "consentSnapshotVerified": true,
+      "requestedDurationDays": 10,
+      "persistedDurationDays": 10,
+      "correctedPersistedDurationDays": null,
+      "persistedUserTurnCount": 2,
+      "simulatedAssistantIntegrationVerified": true,
+      "simulatedGatewayCalls": 2,
+      "partialFixtureDays": 15,
+      "partialFixtureInitialStops": 4,
+      "partialFixtureInitialUnplannedDays": 11,
+      "partialFixtureStops": 3,
+      "partialFixtureUnplannedDays": 12,
+      "positiveItinerary": {
+        "itineraryId": "1360dde0-6abe-4ad7-8983-364234fc9f52",
+        "dayCount": 15,
+        "initialStops": 4,
+        "finalStops": 3,
+        "initialUnplannedDays": 11,
+        "finalUnplannedDays": 12,
+        "ownerRagProbe": {
+          "enabled": false,
+          "calls": 0,
+          "outcomes": {
+            "ok": 0,
+            "no_evidence": 0,
+            "unavailable": 0,
+            "invalid_request": 0,
+            "authentication_failed": 0
+          },
+          "travelerEvidenceTextReturned": false
+        },
+        "apiTrace": [
+          {
+            "method": "POST",
+            "path": "/api/v1/trips/eb8089e1-0d3b-4893-9000-eebfaf807239/recommendations",
+            "status": 201,
+            "cacheControl": "no-store",
+            "transport": "traveler-ui-to-local-vite-origin"
+          },
+          {
+            "method": "POST",
+            "path": "/api/v1/trips/eb8089e1-0d3b-4893-9000-eebfaf807239/itineraries",
+            "status": 201,
+            "cacheControl": "no-store",
+            "transport": "traveler-ui-to-local-vite-origin"
+          },
+          {
+            "method": "PUT",
+            "path": "/api/v1/itineraries/1360dde0-6abe-4ad7-8983-364234fc9f52",
+            "status": 200,
+            "cacheControl": "no-store",
+            "transport": "browser-page-request-to-local-vite-origin"
+          },
+          {
+            "method": "GET",
+            "path": "/api/v1/itineraries/1360dde0-6abe-4ad7-8983-364234fc9f52",
+            "status": 200,
+            "cacheControl": "no-store",
+            "transport": "playwright-api-request-to-local-vite-origin"
+          }
+        ],
+        "noInventedScheduleFields": true,
+        "geoGrouping": "not exercised in browser: production projection is empty and synthetic fixture coordinates are intentionally rejected; response honestly reports stop_location_unknown",
+        "warningCodes": [
+          "approximate_order_only",
+          "no_hours_or_routes_inferred",
+          "some_days_unplanned_insufficient_candidates",
+          "stop_location_unknown"
+        ]
+      },
+      "historyReopenVerified": true,
+      "ownerAndCsrfVerified": true,
+      "deletionVerified": true,
+      "localeChecks": true,
+      "noStoreMe": true,
+      "noStoreVerify": true,
+      "externalRequestsBlocked": true
+    }
+  ],
+  "screenshots": [
+    {
+      "locale": "fa-IR",
+      "width": 390,
+      "height": 844,
+      "kind": "live empty production catalogue",
+      "path": "fa-IR/empty-fa-IR-390.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 1440,
+      "height": 1000,
+      "kind": "live empty production catalogue",
+      "path": "fa-IR/empty-fa-IR-1440.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 390,
+      "height": 844,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "fa-IR/partial-fa-IR-390.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 1440,
+      "height": 1000,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "fa-IR/partial-fa-IR-1440.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 390,
+      "height": 844,
+      "kind": "live empty production catalogue",
+      "path": "en-US/empty-en-US-390.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 1440,
+      "height": 1000,
+      "kind": "live empty production catalogue",
+      "path": "en-US/empty-en-US-1440.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 390,
+      "height": 844,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "en-US/partial-en-US-390.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 1440,
+      "height": 1000,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "en-US/partial-en-US-1440.png"
+    },
+    {
+      "locale": "ar",
+      "width": 390,
+      "height": 844,
+      "kind": "live empty production catalogue",
+      "path": "ar/empty-ar-390.png"
+    },
+    {
+      "locale": "ar",
+      "width": 1440,
+      "height": 1000,
+      "kind": "live empty production catalogue",
+      "path": "ar/empty-ar-1440.png"
+    },
+    {
+      "locale": "ar",
+      "width": 390,
+      "height": 844,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "ar/partial-ar-390.png"
+    },
+    {
+      "locale": "ar",
+      "width": 1440,
+      "height": 1000,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "ar/partial-ar-1440.png"
+    }
+  ],
+  "audit": {
+    "externalRequestsBlocked": 0,
+    "successfulExternalResponses": 0,
+    "browserPageErrors": 0
+  },
+  "screenshotPolicy": "Traveler-authored text is replaced in screenshot-only DOM captures; no phone, OTP, cookie, token, or request text is recorded.",
+  "fixturePolicy": "The simulated Chat gateway makes no HTTP requests. Positive 15-day itinerary requests use real FastAPI and PostgreSQL with four existing synthetic-only identities exposed through a private loopback test control; no positive recommendation or itinerary API call is intercepted, and production catalogue views remain empty. When explicitly enabled, one real owner-RAG HTTP probe exercises the empty approved index; retrieved text is withheld from the response and report."
+}
