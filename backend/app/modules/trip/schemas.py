@@ -186,6 +186,8 @@ class MessageResponse(StrictModel):
     role: Literal["user", "assistant", "system", "tool"]
     content: str
     created_at: datetime
+    # A bounded advisory hint, never authoritative; never exposes raw metadata.
+    candidate_requirements: dict[str, str | int] = Field(default_factory=dict, max_length=8)
 
 
 class TripResponse(StrictModel):
@@ -252,6 +254,30 @@ class RecommendationEvidence(StrictModel):
     reliability_score: float | None = None
 
 
+class RetrievalCitationSourceResponse(StrictModel):
+    source_id: str
+    source_name: str
+    source_url: str
+    source_role: str
+    license: str | None
+    retrieved_at: datetime | None
+    valid_from: datetime | None
+    valid_until: datetime | None
+
+
+class RetrievalCitationResponse(StrictModel):
+    evidence_id: str
+    canonical_entity_key: str
+    destination_id: int
+    document_id: str
+    claim_key: str
+    content_hash: str
+    locale: Locale
+    corpus: Literal["spatial_destinations", "culinary_knowledge"]
+    text: str
+    sources: list[RetrievalCitationSourceResponse] = Field(min_length=1, max_length=32)
+
+
 class RecommendationItemResponse(StrictModel):
     recommendation_id: UUID
     destination_id: str
@@ -265,6 +291,10 @@ class RecommendationItemResponse(StrictModel):
     explanation_by_locale: dict[str, str]
     score_components: list["RecommendationScoreComponent"]
     evidence: list[RecommendationEvidence]
+    retrieval_evidence_status: Literal[
+        "disabled", "not_requested", "no_evidence", "unavailable", "invalid", "unmapped", "mapped"
+    ] = "disabled"
+    retrieval_evidence: list[RetrievalCitationResponse] = Field(default_factory=list, max_length=20)
     canonical_name: str
     localized_names: dict[str, str | None]
     city_name: str | None

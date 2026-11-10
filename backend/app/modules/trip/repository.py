@@ -1,6 +1,8 @@
 """PostgreSQL persistence for authenticated traveler conversations and trips."""
 
 import json
+import re
+from datetime import date
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
@@ -109,13 +111,72 @@ def _merge_extraction(previous: Any, latest: dict[str, Any]) -> dict[str, Any]:
     for key, new_value in latest.items():
         old_value = merged.get(key)
         if isinstance(old_value, Mapping) and isinstance(new_value, Mapping) and "value" in new_value:
-            if new_value.get("value") is None and old_value.get("value") is not None:
+            # An explicitly ambiguous correction must not silently restore
+            # an earlier value (e.g. "five or six days" after "three days").
+            # Only genuinely unknown/omitted fields retain prior evidence.
+            if (
+                new_value.get("value") is None
+                and old_value.get("value") is not None
+                and new_value.get("status") != "ambiguous"
+            ):
                 merged[key] = dict(old_value)
             else:
                 merged[key] = dict(new_value)
         else:
             merged[key] = new_value
     return merged
+
+
+def _public_conversation_message(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Expose only bounded, non-authoritative AI suggestions to the owner.
+
+    Raw message metadata may include internal flags. Never return it via the
+    conversation API, and never interpret a candidate as confirmed trip data.
+    """
+    message = dict(row)
+    metadata = message.pop("metadata", None)
+    candidate: dict[str, str | int] = {}
+    if message.get("role") == "assistant" and isinstance(metadata, Mapping):
+        raw = metadata.get("requirements_candidate")
+        if isinstance(raw, Mapping):
+            name = raw.get("destination")
+            if (isinstance(name, str) and 0 < len(name.strip()) <= 100
+                    and "\\" not in name
+                    and not any(ord(char) < 32 or ord(char) == 127 for char in name)):
+                candidate["destination"] = name.strip()
+            days = raw.get("duration_days")
+            if type(days) is int and 1 <= days <= 365:
+                candidate["duration_days"] = days
+            origin = raw.get("origin")
+            if (isinstance(origin, str) and 0 < len(origin.strip()) <= 100
+                    and "\\" not in origin
+                    and not any(ord(char) < 32 or ord(char) == 127 for char in origin)):
+                candidate["origin"] = origin.strip()
+            travelers = raw.get("traveler_count")
+            if type(travelers) is int and 1 <= travelers <= 50:
+                candidate["traveler_count"] = travelers
+            for key, limit in (("budget_text", 100), ("interest", 100)):
+                item = raw.get(key)
+                if (isinstance(item, str) and 0 < len(item.strip()) <= limit
+                        and "\\" not in item
+                        and not any(ord(char) < 32 or ord(char) == 127 for char in item)):
+                    if key != "budget_text" or (
+                        re.search(r"\d", item)
+                        and re.search(r"تومان|ریال|ريال|toman|rial|IRR|USD|دلار|دولار|AED|درهم", item, re.I)
+                    ):
+                        candidate[key] = item.strip()
+            start, end = raw.get("travel_start"), raw.get("travel_end")
+            if (isinstance(start, str) and isinstance(end, str)
+                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", start)
+                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", end)):
+                try:
+                    if date.fromisoformat(start) <= date.fromisoformat(end):
+                        candidate["travel_start"] = start
+                        candidate["travel_end"] = end
+                except ValueError:
+                    pass
+    message["candidate_requirements"] = candidate
+    return message
 
 
 class TravelerRepository:
@@ -477,7 +538,7 @@ class TravelerRepository:
         ).fetchall()
         trip_values = [self._trip_response(conn, trip) for trip in trips]
         messages = conn.execute(
-            """SELECT message_id,conversation_id,trip_id,role,content,created_at
+            """SELECT message_id,conversation_id,trip_id,role,content,created_at,metadata
                FROM conversation.messages WHERE conversation_id=%s
                ORDER BY created_at,message_id LIMIT %s""",
             (conversation_id, MAX_CONVERSATION_MESSAGES),
@@ -490,7 +551,7 @@ class TravelerRepository:
             "updated_at": row["updated_at"],
             "last_message_at": row["last_message_at"],
             "trips": trip_values,
-            "messages": messages,
+            "messages": [_public_conversation_message(message) for message in messages],
         }
 
     def list_conversations(
@@ -690,6 +751,8 @@ class TravelerRepository:
         expected_trip_version: int,
         outcome: Any,
         selected_destination_ids: list[str],
+        retrieval_evidence_by_destination: dict[str, list[dict[str, Any]]] | None = None,
+        retrieval_status_by_destination: dict[str, str] | None = None,
     ) -> tuple[UUID, int]:
         with self.connection() as conn, conn.transaction():
             trip = conn.execute(
@@ -717,6 +780,10 @@ class TravelerRepository:
                 "not_evaluated_fields": list(outcome.not_evaluated_fields),
                 "algorithm_version": outcome.algorithm_version,
                 "retrieval_version": outcome.retrieval_version,
+                # Mapped owner evidence is an immutable display snapshot. It
+                # never participates in eligibility, ranking or itinerary stops.
+                "retrieval_evidence_by_destination": retrieval_evidence_by_destination or {},
+                "retrieval_status_by_destination": retrieval_status_by_destination or {},
             }
             request_id = uuid4()
             conn.execute(

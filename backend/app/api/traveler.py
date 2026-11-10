@@ -1,6 +1,8 @@
 """Owner-scoped authenticated conversation, trip, recommendation and itinerary API."""
 
+import asyncio
 import logging
+from collections.abc import Callable, Sequence
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -22,6 +24,14 @@ from app.modules.recommendation.contracts import EvidenceSource
 from app.modules.recommendation.contracts import RecommendationOutcome
 from app.modules.recommendation.service import recommend_trip
 from app.modules.recommendation.retrieval import StructuredDestinationMetadata
+from app.modules.retrieval.contracts import RetrievalPort
+from app.modules.retrieval.owner_http import OwnerRagHttpAdapter
+from app.modules.retrieval.identity_mapping import PublishedClaimProjection
+from app.modules.retrieval.published_claims import (
+    PublishedClaimReadUnavailable,
+    load_published_claim_projections,
+)
+from app.modules.retrieval.traveler_evidence import retrieve_mapped_destination_evidence
 from app.modules.trip.repository import (
     TravelerConflict,
     TravelerInvalidState,
@@ -53,6 +63,24 @@ router = APIRouter(prefix="/api/v1", tags=["traveler"])
 
 def get_traveler_repository(settings: Annotated[Settings, Depends(get_settings)]) -> TravelerRepository:
     return TravelerRepository(settings)
+
+
+def get_owner_retrieval_port(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RetrievalPort:
+    """Return the optional owner-managed RAG transport; disabled by default."""
+    return OwnerRagHttpAdapter(settings)
+
+
+def get_published_claim_projection_loader(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> Callable[[Sequence[str], str], dict[str, list[PublishedClaimProjection]]]:
+    """Provide a read-only loader bound to the current approved claim view."""
+
+    def load(destination_keys: Sequence[str], locale: str):
+        return load_published_claim_projections(settings, destination_keys, locale)
+
+    return load
 
 
 def production_catalogue_bundle(
@@ -370,6 +398,8 @@ def _recommendation_response(
     trip_version: int,
     recommendation_ids: dict[str, UUID],
     persisted_scores: dict[str, list[dict[str, Any]]] | None = None,
+    retrieval_evidence_by_destination: dict[str, list[dict[str, Any]]] | None = None,
+    retrieval_status_by_destination: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     items = []
     for item in outcome.items:
@@ -377,8 +407,18 @@ def _recommendation_response(
         if destination is None:
             continue
         item_data = item.model_dump(mode="python")
+        item_data["evidence"] = [
+            source.model_dump(exclude={"destination_id"})
+            for source in item.evidence
+        ]
         if persisted_scores is not None:
             item_data["score_components"] = persisted_scores.get(item.destination_id, [])
+        item_data["retrieval_evidence"] = (retrieval_evidence_by_destination or {}).get(
+            item.destination_id, []
+        )
+        item_data["retrieval_evidence_status"] = (retrieval_status_by_destination or {}).get(
+            item.destination_id, "disabled"
+        )
         items.append({
             **item_data,
             "recommendation_id": recommendation_ids[item.destination_id],
@@ -413,6 +453,11 @@ def create_recommendations(
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
     repository: Annotated[TravelerRepository, Depends(get_traveler_repository)],
     settings: Annotated[Settings, Depends(get_settings)],
+    retrieval_port: Annotated[RetrievalPort, Depends(get_owner_retrieval_port)],
+    claim_projection_loader: Annotated[
+        Callable[[Sequence[str], str], dict[str, list[PublishedClaimProjection]]],
+        Depends(get_published_claim_projection_loader),
+    ],
 ):
     _mark_no_store(response)
     try:
@@ -423,12 +468,68 @@ def create_recommendations(
         if selected_ids != trip["destination_ids"]:
             return _error(409, "trip_profile_not_confirmed")
         outcome, by_id = _recommendation_outcome(settings, trip, selected_ids)
+        retrieval_evidence_by_destination: dict[str, list[dict[str, Any]]] = {}
+        retrieval_status_by_destination: dict[str, str] = {
+            item.destination_id: ("not_requested" if settings.tourism_rag_enabled else "disabled")
+            for item in outcome.items
+        }
+        if settings.tourism_rag_enabled and outcome.items:
+            # Bound owner service calls independently of catalogue size. Only
+            # already-eligible top-ranked destination identities are queried.
+            rag_items = outcome.items[:3]
+            selected_destinations = [by_id[item.destination_id] for item in rag_items
+                                     if item.destination_id in by_id]
+            keys = [destination.destination_key for destination in selected_destinations]
+            try:
+                projections_by_key = claim_projection_loader(keys, trip["locale"])
+            except PublishedClaimReadUnavailable:
+                projections_by_key = {}
+                for item in rag_items:
+                    retrieval_status_by_destination[item.destination_id] = "unavailable"
+            for item in rag_items:
+                if retrieval_status_by_destination[item.destination_id] == "unavailable":
+                    continue
+                destination = by_id.get(item.destination_id)
+                if destination is None:
+                    retrieval_status_by_destination[item.destination_id] = "unmapped"
+                    continue
+                display_name = (
+                    destination.localized_names.get(trip["locale"])
+                    or destination.canonical_name
+                )
+                rag_status, mapping = asyncio.run(
+                    retrieve_mapped_destination_evidence(
+                        retrieval_port,
+                        destination_key=destination.destination_key,
+                        canonical_display_name=display_name,
+                        locale=trip["locale"],
+                        published_claims=projections_by_key.get(destination.destination_key, []),
+                    )
+                )
+                retrieval_status_by_destination[item.destination_id] = rag_status
+                if mapping.status == "mapped":
+                    citations = []
+                    for mapped in mapping.mapped:
+                        payload = mapped.model_dump(mode="json")
+                        for source in payload["sources"]:
+                            source.pop("is_verified", None)
+                            source.pop("is_synthetic", None)
+                            source.pop("is_revoked", None)
+                        citations.append(payload)
+                    retrieval_evidence_by_destination[item.destination_id] = citations
+                logger.info(
+                    "traveler.owner_rag_mapping_completed",
+                    extra={"result": rag_status, "mapped_count": len(mapping.mapped),
+                           "withheld_count": mapping.withheld_count},
+                )
         request_id, version = repository.create_recommendation_run(
             user_id=principal.user_id,
             trip_id=trip_id,
             expected_trip_version=trip["version"],
             outcome=outcome,
             selected_destination_ids=selected_ids,
+            retrieval_evidence_by_destination=retrieval_evidence_by_destination,
+            retrieval_status_by_destination=retrieval_status_by_destination,
         )
         # Attach the database-assigned recommendation IDs to the response in rank order.
         context = repository.recommendation_context(principal.user_id, trip_id, request_id)
@@ -437,7 +538,10 @@ def create_recommendations(
             str(row["destination_id"]): row.get("score_components", [])
             for row in context["items"]
         } if context else {}
-        return _recommendation_response(outcome, by_id, request_id, version, rec_ids, stored_scores)
+        return _recommendation_response(
+            outcome, by_id, request_id, version, rec_ids, stored_scores,
+            retrieval_evidence_by_destination, retrieval_status_by_destination,
+        )
     except CatalogueUnavailableError:
         return _error(503, "catalogue_unavailable")
     except TravelerNotFound:
@@ -482,7 +586,9 @@ def get_latest_recommendations(
             settings, repository, principal.user_id, trip_id, request_id
         )
         return _recommendation_response(
-            outcome, by_id, request_id, trip["version"], recommendation_ids, persisted_scores
+            outcome, by_id, request_id, trip["version"], recommendation_ids, persisted_scores,
+            snapshot.get("retrieval_evidence_by_destination", {}),
+            snapshot.get("retrieval_status_by_destination", {}),
         )
     except CatalogueUnavailableError:
         return _error(503, "catalogue_unavailable")
@@ -607,7 +713,7 @@ def _enrich_itinerary(row: dict[str, Any], by_id: dict[str, ProductionDestinatio
     planned_days = {stop["day_number"] for stop in enriched_stops}
     unplanned_days = [day for day in range(1, row["day_count"] + 1) if day not in planned_days]
     return {
-        **row,
+        **{key: value for key, value in row.items() if key != "user_id"},
         "stops": enriched_stops,
         "status": "partial" if unplanned_days else "complete",
         "unplanned_days": unplanned_days,
