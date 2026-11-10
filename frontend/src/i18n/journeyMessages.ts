@@ -15,7 +15,7 @@ export const journeyMessages = {
     continueTitle: 'ادامهٔ همین گفت‌وگو',
     messagePlaceholder: 'پاسخ یا جزئیات دیگری دربارهٔ همین سفر بنویس…',
     sendMessage: 'افزودن به گفت‌وگو',
-    localSaveHelp: 'فقط در حساب رهگرد ذخیره می‌شود؛ برای این عمل هیچ درخواستی به مدل هوش مصنوعی ارسال نمی‌شود.'
+    localSaveHelp: 'فقط در حساب رهگرد ذخیره می‌شود؛ برای این عمل هیچ درخواستی به مدل هوش مصنوعی ارسال نمی‌شود.',
     historyTitle: 'سفرهای ذخیره‌شده',
     historyEmpty: 'هنوز سفری ذخیره نکرده‌اید.',
     openTrip: 'باز کردن',
@@ -123,7 +123,7 @@ export const journeyMessages = {
     continueTitle: 'Continue this conversation',
     messagePlaceholder: 'Add an answer or another detail about this trip…',
     sendMessage: 'Add to conversation',
-    localSaveHelp: 'Saves the message in your Rahgard trip history without calling the AI provider.'
+    localSaveHelp: 'Saves the message in your Rahgard trip history without calling the AI provider.',
     historyTitle: 'Saved trips',
     historyEmpty: 'You have no saved trips yet.',
     openTrip: 'Open',
@@ -231,7 +231,7 @@ export const journeyMessages = {
     continueTitle: 'تابع هذه المحادثة',
     messagePlaceholder: 'أضف إجابة أو تفاصيل أخرى عن هذه الرحلة…',
     sendMessage: 'أضف إلى المحادثة',
-    localSaveHelp: 'يحفظ الرسالة في سجل رحلتك داخل رهگرد دون إرسالها إلى خدمة الذكاء الاصطناعي.'
+    localSaveHelp: 'يحفظ الرسالة في سجل رحلتك داخل رهگرد دون إرسالها إلى خدمة الذكاء الاصطناعي.',
     historyTitle: 'الرحلات المحفوظة',
     historyEmpty: 'لم تحفظ أي رحلة بعد.',
     openTrip: 'افتح',

@@ -21,7 +21,8 @@ const assistantCopy: Record<Locale, {
   consent: string; send: string; review: string; initial: string; unavailable: string;
   destination: string; duration: string; apply: string; dismiss: string; unsaved: string; reviewSaved: string;
   speaker: string; promptsTitle: string; prompts: readonly string[];
-  promptForAi: string; advisorActionHelp: string;
+  promptForAi: string; advisorActionHelp: string; promptHelp: string;
+  saveWithoutAI: string; currentDuration: string;
   origin: string; travelerCount: string; budget: string; dates: string; interest: string;
 }> = {
   'fa-IR': { consent: 'با ارسال این پیام و تاریخچهٔ گفت‌وگوی سفر به سرویس هوش مصنوعی موافقم.',
@@ -36,6 +37,9 @@ const assistantCopy: Record<Locale, {
     speaker: 'مشاور هوش مصنوعی', promptsTitle: 'برای ادامه می‌توانید از مشاور بخواهید:',
     promptForAi: 'این عبارت یک درخواست از مشاور هوش مصنوعی است؛ برای ارسال، رضایت پردازش بیرونی را فعال و «پرسش از دستیار سفر» را انتخاب کنید.',
     advisorActionHelp: 'پرسش از دستیار: فقط با رضایت شما، پیام و سابقهٔ مرتبط سفر به سرویس هوش مصنوعی ارسال می‌شود.',
+    promptHelp: 'انتخاب پرسش فقط پیش‌نویس را پر می‌کند؛ تا انتخاب یکی از اقدام‌های زیر چیزی ذخیره یا ارسال نمی‌شود.',
+    saveWithoutAI: 'ثبت پاسخ بدون هوش مصنوعی',
+    currentDuration: 'مدت ثبت‌شدهٔ این سفر: {days} روز.',
     prompts: ['دربارهٔ علایق و سبک سفرم یک سؤال تکمیلی بپرس.', 'برای روشن شدن بودجه و تعداد همراهانم سؤال بپرس.', 'محدودیت‌های ضروری سفرم را مرور کن و موارد مبهم را بپرس.'] },
   'en-US': { consent: 'I consent to sending this message and prior trip conversation to the AI service.',
     send: 'Ask travel assistant', review: 'AI suggestions — review before confirming:',
@@ -49,6 +53,9 @@ const assistantCopy: Record<Locale, {
     speaker: 'AI travel advisor', promptsTitle: 'Suggested follow-up questions:',
     promptForAi: 'This prompt is intended for the AI advisor. Consent to external processing and select “Ask travel assistant” to send it.',
     advisorActionHelp: 'Ask travel assistant sends the message and relevant trip history to the configured AI provider only with your consent.',
+    promptHelp: 'Choosing a prompt only fills the draft. Nothing is saved or sent until you choose one of the actions below.',
+    saveWithoutAI: 'Save reply without AI',
+    currentDuration: 'Recorded trip length: {days} days.',
     prompts: ['Ask me about my interests and travel style.', 'Clarify my budget and number of travelers.', 'Review my essential constraints and ask what is unclear.'] },
   ar: { consent: 'أوافق على إرسال هذه الرسالة وسجل محادثة الرحلة إلى خدمة الذكاء الاصطناعي.',
     send: 'اسأل مساعد السفر', review: 'اقتراحات النموذج — راجعها قبل التأكيد:',
@@ -62,6 +69,9 @@ const assistantCopy: Record<Locale, {
     speaker: 'مستشار السفر بالذكاء الاصطناعي', promptsTitle: 'يمكنك متابعة المحادثة عبر:',
     promptForAi: 'هذا طلب موجه إلى مستشار الذكاء الاصطناعي. وافق على المعالجة الخارجية ثم اختر «اسأل مساعد السفر».',
     advisorActionHelp: 'عند اختيار مستشار السفر وبموافقتك، تُرسل الرسالة وسجل الرحلة المرتبط إلى خدمة الذكاء الاصطناعي.',
+    promptHelp: 'اختيار السؤال يملأ المسودة فقط؛ لا يُحفظ شيء ولا يُرسل حتى تختار أحد الإجراءين أدناه.',
+    saveWithoutAI: 'احفظ الرد دون ذكاء اصطناعي',
+    currentDuration: 'مدة الرحلة المسجلة: {days} يومًا.',
     prompts: ['اسألني عن اهتماماتي وطريقة سفري.', 'اسألني عن الميزانية وعدد المسافرين.', 'راجع الشروط الأساسية واسأل عن الأمور غير الواضحة.'] },
 };
 
@@ -795,6 +805,9 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       {activeTrip && activeConversation && <div className="journey-columns">
         <article className="conversation-panel journey-panel">
           <div className="panel-title"><span className="mini-icon" aria-hidden="true">✳</span><span>{copy.continueTitle}</span></div>
+          {requestedTripDays !== null && <p className="conversation-trip-duration" role="status">
+            {assistantCopy[locale].currentDuration.replace('{days}', formatNumber(locale, requestedTripDays))}
+          </p>}
           <div className="conversation-transcript" aria-live="polite">
             {currentMessages.map(message => <div className={`saved-message saved-message-${message.role}`} key={message.message_id}>
               <small>{message.role === 'user' ? activeTrip.locale : assistantCopy[locale].speaker}</small>
@@ -817,6 +830,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
           </div>}
           <div className="assistant-prompt-suggestions" aria-label={assistantCopy[locale].promptsTitle}>
             <p>{assistantCopy[locale].promptsTitle}</p>
+            <p>{assistantCopy[locale].promptHelp}</p>
             <div>{assistantCopy[locale].prompts.map(prompt => <button key={prompt} type="button"
               disabled={busy || !online} onClick={() => {
                 setMessageText(prompt);
@@ -831,7 +845,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
           {assistantPromptSelected && <p className="assistant-prompt-warning" role="status">{assistantCopy[locale].promptForAi}</p>}
           <div className="conversation-local-action">
             <button type="button" onClick={() => void sendMessage()}
-              disabled={busy || !messageText.trim() || !online || assistantPromptSelected}>{copy.sendMessage}</button>
+              disabled={busy || !messageText.trim() || !online || assistantPromptSelected}>{assistantCopy[locale].saveWithoutAI}</button>
             <small>{copy.localSaveHelp}</small>
           </div>
           <div className="assistant-controls">

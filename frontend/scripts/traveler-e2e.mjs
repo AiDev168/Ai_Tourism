@@ -24,6 +24,26 @@ function requireEnv(name) {
   return value;
 }
 
+function ownerRagConfiguration() {
+  const flag = process.env.TOURISM_RAG_ENABLED?.trim().toLowerCase() || '';
+  if (!flag || ['0', 'false', 'no', 'off'].includes(flag)) return { enabled: false };
+  if (!['1', 'true', 'yes', 'on'].includes(flag)) throw new Error('invalid_owner_rag_opt_in_flag');
+
+  const url = process.env.TOURISM_RAG_API_URL || '';
+  const token = process.env.TOURISM_RAG_API_TOKEN || '';
+  if (!url || !token || token.trim() !== token || /[\r\n]/.test(token)) {
+    throw new Error('owner_rag_opt_in_requires_server_configuration');
+  }
+  let parsed;
+  try { parsed = new URL(url); } catch { throw new Error('owner_rag_url_must_be_fixed_loopback'); }
+  if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1' || parsed.port !== '8765'
+      || !['', '/'].includes(parsed.pathname) || parsed.search || parsed.hash
+      || parsed.username || parsed.password) {
+    throw new Error('owner_rag_url_must_be_fixed_loopback');
+  }
+  return { enabled: true, url, token };
+}
+
 function runtimeEnv(extra = {}) {
   const env = {};
   for (const key of ['PATH', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP']) {
@@ -107,6 +127,7 @@ async function startApi() {
   if (!existsSync(chrome)) throw new Error('configured_chrome_executable_missing');
   const controlPort = await reserveLoopbackPort();
   const controlToken = randomBytes(32).toString('hex');
+  const ownerRag = ownerRagConfiguration();
 
   const childEnv = runtimeEnv({
     AUTH_INTEGRATION_TESTS: '1',
@@ -121,6 +142,11 @@ async function startApi() {
     E2E_CONTROL_PORT: String(controlPort),
     E2E_CONTROL_TOKEN: controlToken,
     PYTHONIOENCODING: 'utf-8',
+    TOURISM_RAG_ENABLED: ownerRag.enabled ? 'true' : 'false',
+    ...(ownerRag.enabled ? {
+      TOURISM_RAG_API_URL: ownerRag.url,
+      TOURISM_RAG_API_TOKEN: ownerRag.token,
+    } : {}),
   });
   const child = spawn(python, ['tests/traveler_e2e_server.py'], {
     cwd: backendRoot,
@@ -134,7 +160,7 @@ async function startApi() {
     child.kill();
     throw new Error('guarded_api_start_failed');
   }
-  return { child, pipe, controlPort, controlToken };
+  return { child, pipe, controlPort, controlToken, ownerRagEnabled: ownerRag.enabled };
 }
 
 async function startWeb() {
@@ -226,10 +252,9 @@ const localeCopy = {
     find: 'بررسی پیشنهادهای تأییدشده',
     deleteTrip: 'حذف سفر',
     deleteConversation: 'حذف گفت‌وگو و همهٔ سفرهای آن',
-    prompt: 'سفر ۱۰ روزه به شیراز با بودجهٔ ۲۰ میلیون تومان؛ ترجیح می‌دهم مسیرهای سنگ‌فرش باشد؛ دسترسی ویلچر ضروری است؛ باید از مسیرهای ناهموار پرهیز شود.',
+    prompt: 'سفر ۱۵ روزه به شیراز با بودجهٔ ۲۰ میلیون تومان؛ به طبیعت و جاهای تاریخی علاقه دارم؛ ترجیح می‌دهم مسیرها سنگ‌فرش باشند؛ دسترسی ویلچر ضروری است؛ باید از مسیرهای ناهموار پرهیز شود.',
     accessLabel: 'دسترس‌پذیری',
     softPreference: 'مسیرهای سنگ‌فرش باشد',
-    fixtureName: 'نمونهٔ آزمایشی',
   },
   'en-US': {
     workspace: 'My travel plans',
@@ -240,7 +265,6 @@ const localeCopy = {
     prompt: '10 day trip to Shiraz with a budget of 20 million IRR; I prefer paved paths; wheelchair access is essential; must avoid rough terrain.',
     accessLabel: 'Accessibility',
     softPreference: 'paved paths',
-    fixtureName: 'Test fixture',
   },
   ar: {
     workspace: 'خطط رحلاتي',
@@ -251,7 +275,6 @@ const localeCopy = {
     prompt: 'رحلة لمدة ١٠ أيام إلى شيراز بميزانية ٢٠ مليون درهم؛ أفضل المسارات المعبدة؛ إمكانية الوصول بالكراسي المتحركة ضرورية؛ يجب تجنب الطرق الوعرة.',
     accessLabel: 'إمكانية الوصول',
     softPreference: 'المسارات المعبدة',
-    fixtureName: 'نموذج اختباري',
   },
 };
 
@@ -341,175 +364,192 @@ async function sanitizeAndCapture(page, path, locale, width, height) {
   }, hiddenSensitiveStyles);
 }
 
-function fixtureRecommendation(tripId, tripVersion, locale) {
-  const requestId = randomUUID();
-  const items = Array.from({ length: 4 }, (_, index) => {
-    const destinationId = String(9_100_001 + index);
-    const sourceId = 99_001 + index;
-    const name = `${localeCopy[locale].fixtureName} ${index + 1}`;
-    return {
-      recommendation_id: randomUUID(),
-      destination_id: destinationId,
-      rank: index + 1,
-      final_score: 0,
-      matched_requirements: [],
-      unknown_fields: ['opening_hours', 'price', 'accessibility'],
-      warnings: ['test_fixture_only', 'ranking_is_structured_match_not_quality_score'],
-      explanation_key: 'published_area_candidate',
-      explanation_by_locale: {
-        'fa-IR': 'نمونهٔ صرفاً آزمایشی؛ دادهٔ واقعی یا منتشرشده نیست.',
-        'en-US': 'Test-only fixture; not real or published content.',
-        ar: 'نموذج للاختبار فقط؛ ليس محتوى حقيقيًا أو منشورًا.',
+async function requestBrowserJson(page, path, method, csrf, body) {
+  const response = await page.request.fetch(`${webOrigin}${path}`, {
+    method,
+    headers: {
+      Origin: webOrigin,
+      ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { data: body }),
+    timeout: 15_000,
+  });
+  let payload = null;
+  try { payload = await response.json(); } catch { /* Keep failure details to safe response codes only. */ }
+  if (!response.ok()) {
+    throw new Error(`browser_api_${method.toLowerCase()}_${response.status()}_${payload?.error?.code ?? 'failed'}`);
+  }
+  if (!response.headers()['cache-control']?.includes('no-store')) {
+    throw new Error(`browser_api_response_cacheable_${method.toLowerCase()}`);
+  }
+  return payload;
+}
+
+async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshotRoot, originalRequestText) {
+  const enabled = await checkedControl(api.controlPort, api.controlToken, {
+    action: 'enable_itinerary_fixture',
+  });
+  const destinationIds = enabled.destination_ids;
+  if (!Array.isArray(destinationIds) || destinationIds.length !== 4) {
+    throw new Error('isolated_four_destination_fixture_missing');
+  }
+  try {
+    const requestText = 'درخواست آزمایشی برای برنامه پانزده روزه';
+    const started = await requestBrowserJson(page, '/api/v1/conversations', 'POST', csrf, {
+      locale,
+      request_text: requestText,
+      extracted_requirements: { durationDays: { value: 15, status: 'extracted' } },
+      idempotency_key: randomUUID(),
+    });
+    const conversationId = started.conversation?.conversation_id;
+    const trip = started.trip;
+    if (!conversationId || !trip?.trip_id || trip.duration_days !== 15) {
+      throw new Error('real_browser_test_trip_not_persisted');
+    }
+    const confirmed = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}`, 'PATCH', csrf, {
+      expected_version: trip.version,
+      confirmed_requirements: {
+        confirmation_source: 'traveler_reviewed', duration_days: 15,
+        destinations: ['TEST ONLY'], constraints: [],
       },
-      score_components: [],
-      evidence: [{
-        source_id: sourceId,
-        source_name: 'TEST FIXTURE SOURCE — NOT A REAL SOURCE',
-        source_url: `https://example.test/task32/${sourceId}`,
-        source_role: 'test_fixture_only',
-        evidence_note: 'Synthetic test fixture; excluded from production views.',
-        retrieved_at: null,
-        valid_from: null,
-        valid_until: null,
-        reliability_score: null,
-      }],
-      canonical_name: name,
-      localized_names: { 'fa-IR': name, 'en-US': name, ar: name },
-      city_name: null,
-      province_name: 'TEST FIXTURE ONLY',
-      destination_type: 'synthetic_fixture',
+      destination_ids: destinationIds,
+    });
+    if (confirmed.duration_days !== 15
+      || confirmed.confirmed_requirements?.duration_days !== 15) {
+      throw new Error('real_browser_fifteen_day_confirmation_failed');
+    }
+    const ownerRagBefore = await checkedControl(api.controlPort, api.controlToken, {
+      action: 'owner_rag_call_counts',
+    });
+    const recommendation = await requestBrowserJson(
+      page, `/api/v1/trips/${trip.trip_id}/recommendations`, 'POST', csrf,
+      { selected_destination_ids: destinationIds },
+    );
+    if (recommendation.status !== 'available' || recommendation.items?.length !== 4
+      || recommendation.items.some(item => !item.evidence?.some(source => source.source_url.includes('.invalid')))) {
+      throw new Error('real_browser_test_only_recommendations_failed');
+    }
+    if (recommendation.items.some(item =>
+      ['text', 'document_id', 'content_hash', 'claim_key', 'evidence_id'].some(key => key in item))) {
+      throw new Error('owner_rag_evidence_fields_leaked_to_traveler_recommendation');
+    }
+    const ownerRagAfter = await checkedControl(api.controlPort, api.controlToken, {
+      action: 'owner_rag_call_counts',
+    });
+    if (ownerRagAfter.enabled !== api.ownerRagEnabled) throw new Error('owner_rag_mode_report_mismatch');
+    const ownerRagProbe = {
+      enabled: ownerRagAfter.enabled,
+      calls: ownerRagAfter.calls - ownerRagBefore.calls,
+      outcomes: Object.fromEntries(Object.keys(ownerRagAfter.outcomes).map(key => [
+        key, ownerRagAfter.outcomes[key] - ownerRagBefore.outcomes[key],
+      ])),
+      travelerEvidenceTextReturned: false,
     };
-  });
-  return {
-    recommendation_request_id: requestId,
-    status: 'available',
-    reason_code: null,
-    algorithm_version: 'task32-test-fixture-only-v1',
-    retrieval_version: 'isolated-test-fixture-only-v1',
-    trip_version: tripVersion,
-    unresolved_fields: [],
-    requirement_assessments: [{ field: 'budget', decision: 'advisory', status: 'not_evaluated', reason_code: 'budget_unverifiable' }],
-    waived_fields: ['budget'],
-    not_evaluated_fields: ['budget'],
-    items,
-    test_fixture_only: true,
-    trip_id: tripId,
-  };
-}
+    if (api.ownerRagEnabled && (ownerRagProbe.calls !== 1 || ownerRagProbe.outcomes.no_evidence !== 1)) {
+      throw new Error('owner_rag_empty_index_http_probe_not_confirmed');
+    }
+    const created = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}/itineraries`, 'POST', csrf, {
+      recommendation_request_id: recommendation.recommendation_request_id,
+      day_count: 15,
+      locale,
+    });
+    const itineraryId = created.itinerary_id;
+    if (!itineraryId || created.day_count !== 15 || created.status !== 'partial'
+      || created.stops?.length !== 4 || created.unplanned_days?.length !== 11) {
+      throw new Error('real_browser_fifteen_day_partial_itinerary_failed');
+    }
+    const catalogue = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET');
+    if (catalogue.count !== 0) throw new Error('test_fixture_leaked_to_production_catalogue');
 
-function fixtureItinerary(tripId, recommendation, itineraryId = randomUUID()) {
-  const stops = recommendation.items.map((item, index) => ({
-    itinerary_stop_id: randomUUID(),
-    recommendation_id: item.recommendation_id,
-    destination_id: item.destination_id,
-    day_number: index + 1,
-    stop_order: 1,
-    notes_by_locale: {},
-    canonical_name: item.canonical_name,
-    localized_names: item.localized_names,
-  }));
-  return {
-    itinerary_id: itineraryId,
-    trip_id: tripId,
-    recommendation_request_id: recommendation.recommendation_request_id,
-    version: 1,
-    revision: 1,
-    day_count: 10,
-    status: 'partial',
-    unplanned_days: [5, 6, 7, 8, 9, 10],
-    title_by_locale: { 'fa-IR': 'نمونهٔ برنامه', 'en-US': 'Test fixture itinerary', ar: 'خطة اختبارية' },
-    stops,
-    updated_at: new Date().toISOString(),
-    test_fixture_only: true,
-  };
-}
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const historyPending = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'GET');
+    await page.locator('.trip-history-heading button').click();
+    await historyPending;
+    const requestButton = page.getByRole('button', { name: requestText, exact: true });
+    await requestButton.waitFor({ state: 'visible' });
+    await requestButton.click();
+    await page.locator('#itinerary-day-15').waitFor({ state: 'visible' });
+    if (await page.locator('.saved-itinerary-days .itinerary-day').count() !== 15
+      || await page.locator('.saved-stop').count() !== 4
+      || await page.locator('.unplanned-day').count() !== 11) {
+      throw new Error('real_persisted_fifteen_day_itinerary_not_restored_in_ui');
+    }
+    const lastDay = await page.locator('#itinerary-day-15').textContent();
+    const localizedDay = await page.evaluate(({ localeValue }) => new Intl.NumberFormat(localeValue, {
+      numberingSystem: localeValue === 'ar' ? 'arab' : localeValue === 'fa-IR' ? 'arabext' : 'latn',
+    }).format(15), { localeValue: locale });
+    if (!lastDay?.includes(localizedDay)) throw new Error(`fifteen_day_label_not_localized_${locale}`);
 
-async function runPartialFixture(page, locale, tripId, tripVersion, screenshotRoot) {
-  const recommendation = fixtureRecommendation(tripId, tripVersion, locale);
-  const itineraryId = randomUUID();
-  let current = fixtureItinerary(tripId, recommendation, itineraryId);
-  let updateBody = null;
-  await page.route(`${webOrigin}/api/v1/trips/${tripId}/recommendations`, async route => {
-    if (route.request().method() === 'POST') {
-      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(recommendation) });
-    } else await route.continue();
-  });
-  await page.route(`${webOrigin}/api/v1/trips/${tripId}/itineraries`, async route => {
-    if (route.request().method() === 'POST') {
-      const request = route.request().postDataJSON();
-      if (request.day_count !== 10) throw new Error('fixture_itinerary_did_not_request_ten_days');
-      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(current) });
-    } else await route.continue();
-  });
-  await page.route(`${webOrigin}/api/v1/itineraries/${itineraryId}`, async route => {
-    const method = route.request().method();
-    if (method === 'GET') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) });
-    } else if (method === 'PUT') {
-      updateBody = route.request().postDataJSON();
-      if (updateBody.expected_revision !== 1 || updateBody.stops.length !== 3) {
-        throw new Error('fixture_edit_revision_or_stop_count_invalid');
-      }
-      const byId = new Map(current.stops.map(stop => [stop.recommendation_id, stop]));
-      current = {
-        ...current,
-        revision: 2,
-        stops: updateBody.stops.map((stop, index) => ({
-          ...byId.get(stop.recommendation_id),
-          day_number: stop.day_number,
-          stop_order: stop.stop_order,
-          notes_by_locale: stop.notes_by_locale,
-          itinerary_stop_id: randomUUID(),
-        })),
-      };
-      const planned = new Set(current.stops.map(stop => stop.day_number));
-      current.unplanned_days = Array.from({ length: 10 }, (_, index) => index + 1).filter(day => !planned.has(day));
-      current.status = current.unplanned_days.length ? 'partial' : 'complete';
-      current.updated_at = new Date().toISOString();
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) });
-    } else await route.continue();
-  });
-
-  await page.getByRole('button', { name: localeCopy[locale].find }).click();
-  await page.locator('.itinerary-start').waitFor({ state: 'visible' });
-  await page.locator('#journey-day-count').fill('10');
-  await page.locator('.itinerary-start button').click();
-  await page.locator('.saved-itinerary-days .itinerary-day').nth(9).waitFor({ state: 'visible' });
-  if (await page.locator('.saved-itinerary-days .itinerary-day').count() !== 10) throw new Error('fixture_ten_days_not_rendered');
-  const localizedTen = await page.locator('#itinerary-day-10').textContent();
-  const formattedTen = await page.evaluate(localeValue => new Intl.NumberFormat(localeValue, {
-    numberingSystem: localeValue === 'ar' ? 'arab' : localeValue === 'fa-IR' ? 'arabext' : 'latn',
-  }).format(10), locale);
-  if (!localizedTen?.includes(formattedTen)) throw new Error(`itinerary_day_number_not_localized_${locale}`);
-  if (await page.locator('.saved-stop').count() !== 4 || await page.locator('.unplanned-day').count() !== 6) {
-    throw new Error('fixture_four_stops_six_unplanned_days_mismatch');
-  }
-  if ((await page.locator('.itinerary-coverage').textContent())?.trim() === '') throw new Error('fixture_partial_status_missing');
-
-  const firstStop = current.stops[0];
-  await page.locator(`#stop-day-${firstStop.recommendation_id}`).selectOption('5');
-  await page.locator('.saved-stop').nth(1).locator('.stop-actions button').last().click();
-  await sanitizeAndCapture(page, resolve(screenshotRoot, `partial-${locale}-390.png`), locale, 390, 844);
-  await sanitizeAndCapture(page, resolve(screenshotRoot, `partial-${locale}-1440.png`), locale, 1440, 1000);
-  const savedEditResponse = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/itineraries/${itineraryId}`
-    && response.request().method() === 'PUT');
-  await page.locator('.saved-itinerary > button').last().click();
-  const savedEdit = await savedEditResponse;
-  const savedEditBody = await savedEdit.json();
-  if (savedEdit.status() !== 200 || savedEditBody.revision !== 2 || savedEditBody.day_count !== 10) {
-    throw new Error('fixture_edit_response_revision_or_duration_failed');
-  }
-  if (!updateBody || updateBody.expected_revision !== 1 || updateBody.stops.length !== 3
-    || !updateBody.stops.some(stop => stop.recommendation_id === firstStop.recommendation_id && stop.day_number === 5)
-    || current.day_count !== 10 || current.revision !== 2 || current.status !== 'partial') {
-    throw new Error('fixture_edit_save_revision_or_duration_failed');
+    await page.locator(`#stop-day-${created.stops[0].recommendation_id}`).selectOption('5');
+    await page.locator('.saved-stop').nth(1).locator('.stop-actions button').last().click();
+    await sanitizeAndCapture(page, resolve(screenshotRoot, `partial-${locale}-390.png`), locale, 390, 844);
+    await sanitizeAndCapture(page, resolve(screenshotRoot, `partial-${locale}-1440.png`), locale, 1440, 1000);
+    const savePending = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/itineraries/${itineraryId}`
+      && response.request().method() === 'PUT');
+    await page.locator('.saved-itinerary > button').last().click();
+    const savedResponse = await savePending;
+    const saved = await savedResponse.json();
+    if (savedResponse.status() !== 200 || saved.revision !== 2 || saved.day_count !== 15 || saved.stops?.length !== 3) {
+      throw new Error('real_browser_itinerary_edit_not_persisted');
+    }
+    const reopened = await requestBrowserJson(page, `/api/v1/itineraries/${itineraryId}`, 'GET');
+    if (reopened.revision !== 2 || reopened.day_count !== 15 || reopened.stops?.length !== 3
+      || reopened.unplanned_days?.length !== 12) {
+      throw new Error('real_browser_itinerary_edit_reopen_mismatch');
+    }
+    const catalogueAfter = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET');
+    if (catalogueAfter.count !== 0) throw new Error('test_fixture_leaked_after_itinerary_edit');
+    const deletedFixture = await requestBrowserJson(
+      page, `/api/v1/conversations/${conversationId}`, 'DELETE', csrf,
+    );
+    if (!deletedFixture.deleted) throw new Error('positive_fixture_conversation_cleanup_failed');
+    const refreshedHistory = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'GET');
+    await page.locator('.trip-history-heading button').click();
+    await refreshedHistory;
+    const originalTrip = page.getByRole('button', { name: originalRequestText, exact: true });
+    await originalTrip.waitFor({ state: 'visible' });
+    await originalTrip.click();
+    const originalRequestRestored = await page.waitForFunction(
+      expected => document.querySelector('#trip-prompt')?.value === expected,
+      originalRequestText,
+      { timeout: 15_000 },
+    );
+    if (!originalRequestRestored) {
+      throw new Error('original_journey_not_restored_after_positive_itinerary');
+    }
+    return {
+      itineraryId, dayCount: 15, initialStops: 4, finalStops: 3,
+      initialUnplannedDays: 11, finalUnplannedDays: 12,
+      ownerRagProbe,
+    };
+  } finally {
+    await checkedControl(api.controlPort, api.controlToken, { action: 'disable_itinerary_fixture' });
   }
 }
 
 // Browser -> real authenticated assistant endpoint -> durable PostgreSQL rows.
 // Only the external LLM is simulated by the guarded API server dependency.
 // The candidate is deliberately unverified and MUST NOT change the trip.
-async function verifySimulatedAssistant(page, api, locale, conversationId, tripId, csrf, initialTripVersion) {
+async function appendPersianFollowUp(page, conversationId, tripId, content) {
+  await page.locator('#trip-follow-up').fill(content);
+  const path = `/api/v1/conversations/${conversationId}/messages`;
+  const responsePending = page.waitForResponse(response =>
+    new URL(response.url()).pathname === path && response.request().method() === 'POST');
+  await page.locator('.conversation-local-action button').click();
+  const response = await responsePending;
+  const body = await response.json();
+  if (response.status() !== 201 || !response.headers()['cache-control']?.includes('no-store')
+      || body.trip?.original_request !== localeCopy['fa-IR'].prompt
+      || body.message?.content !== content) {
+    throw new Error('persian_follow_up_not_persisted_or_original_request_changed');
+  }
+  return body;
+}
+
+async function verifySimulatedAssistant(page, api, locale, conversationId, tripId, csrf, expectedTripVersion, expectedConversationVersion, expectedDuration) {
   const before = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
   const assistantButton = page.locator('.assistant-controls > button');
   if (await assistantButton.isEnabled()) throw new Error('assistant_without_remote_consent_enabled');
@@ -517,10 +557,12 @@ async function verifySimulatedAssistant(page, api, locale, conversationId, tripI
     '/api/v1/conversations/' + conversationId + '/assistant-turns', 'POST',
     { 'X-CSRF-Token': csrf }, {
       trip_id: tripId, content: 'Unauthorized provider processing',
-      idempotency_key: randomUUID(), expected_version: 1,
+      idempotency_key: randomUUID(), expected_version: expectedConversationVersion,
       remote_processing_consent: false,
     });
   if (noConsentStatus !== 422) throw new Error('assistant_without_consent_api_not_rejected');
+  const afterNoConsent = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
+  if (afterNoConsent.count !== before.count) throw new Error('assistant_gateway_called_without_consent');
   const prompt = {
     'fa-IR': 'برای این سفر یک پیشنهاد آزمایشی بده.',
     'en-US': 'Give an example suggestion for this trip.',
@@ -537,13 +579,13 @@ async function verifySimulatedAssistant(page, api, locale, conversationId, tripI
   if (response.status() !== 200 || !response.headers()['cache-control']?.includes('no-store')
       || body.replayed || body.candidate_requirements?.destination !== 'Kashan'
       || body.candidate_requirements?.duration_days !== 2
-      || body.trip?.version !== initialTripVersion
+      || body.trip?.version !== expectedTripVersion
       || Object.keys(body.trip?.confirmed_requirements ?? {}).length !== 0) {
     throw new Error('simulated_assistant_endpoint_or_trip_invariant_failed_' + locale);
   }
   await page.locator('.saved-message-assistant p').waitFor({ state: 'visible' });
   await page.locator('.assistant-candidate').waitFor({ state: 'visible' });
-  if (await page.locator('#profile-duration').inputValue() !== '10') {
+  if (await page.locator('#profile-duration').inputValue() !== String(expectedDuration)) {
     throw new Error('assistant_changed_profile_without_confirmation_' + locale);
   }
   const stored = await page.request.get(webOrigin + '/api/v1/conversations/' + conversationId);
@@ -569,11 +611,55 @@ async function verifySimulatedAssistant(page, api, locale, conversationId, tripI
       tripVersion: data.trip?.version, messageId: data.message?.message_id };
   }, { path, payload: originalRequest, csrfToken: csrf });
   const after = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
-  if (replay.status !== 200 || !replay.replayed || replay.tripVersion !== initialTripVersion
+  if (replay.status !== 200 || !replay.replayed || replay.tripVersion !== expectedTripVersion
       || replay.messageId !== body.message?.message_id || after.count !== before.count + 1) {
     throw new Error('simulated_assistant_idempotency_or_call_budget_failed_' + locale);
   }
+  const profileBeforeDismissal = await page.locator('#profile-duration').inputValue();
   await page.locator('.assistant-candidate button').last().click(); // Reject suggestion.
+  if (await page.locator('.assistant-candidate').count() !== 0
+      || await page.locator('#profile-duration').inputValue() !== profileBeforeDismissal) {
+    throw new Error('assistant_suggestion_dismissal_mutated_profile_' + locale);
+  }
+
+  // A second explicitly consented simulated turn provides a bounded candidate
+  // that the traveler applies only to the editable draft; confirmation remains
+  // gated until the profile and requirement decisions are reviewed.
+  const secondPrompt = locale === 'fa-IR'
+    ? 'این پیشنهاد را فقط برای بررسی نشان بده و اطلاعات قطعی سفر را تغییر نده.'
+    : 'Show another suggestion for review without changing confirmed trip details.';
+  await page.locator('#trip-follow-up').fill(secondPrompt);
+  const secondPending = page.waitForResponse(response =>
+    new URL(response.url()).pathname === path && response.request().method() === 'POST');
+  await assistantButton.click();
+  const secondResponse = await secondPending;
+  const secondBody = await secondResponse.json();
+  if (secondResponse.status() !== 200 || secondBody.trip?.version !== expectedTripVersion
+      || secondBody.candidate_requirements?.duration_days !== 2) {
+    throw new Error('second_simulated_assistant_turn_invalid_' + locale);
+  }
+  await page.locator('.assistant-candidate button').first().click(); // Apply only as an editable suggestion.
+  const confirmButton = page.getByRole('button', { name: localeCopy[locale].confirm });
+  if (await page.locator('#profile-duration').inputValue() !== '2' || await confirmButton.isEnabled()) {
+    throw new Error('applied_ai_suggestion_bypassed_profile_review_' + locale);
+  }
+  await page.locator('#profile-duration').fill(String(expectedDuration));
+  const destinationByLocale = { 'fa-IR': 'شیراز', 'en-US': 'Shiraz', ar: 'شيراز' };
+  await page.locator('#profile-destination-0').fill(destinationByLocale[locale]);
+  if (locale === 'fa-IR') {
+    if (await page.locator('#profile-duration').inputValue() !== '15'
+        || await page.locator('#profile-travelers').inputValue() !== '4'
+        || !((await page.locator('#profile-budget').inputValue()).includes('45'))
+        || !(await page.locator('#profile-budget').inputValue()).includes('تومان')
+        || await confirmButton.isEnabled()) {
+      throw new Error('traveler_correction_or_confirmation_gate_failed_fa-IR');
+    }
+  } else if (await page.locator('#profile-duration').inputValue() !== String(expectedDuration)
+      || await confirmButton.isEnabled()) {
+    throw new Error(`traveler_duration_restore_or_confirmation_gate_failed_${locale}`);
+  }
+  const finalCallCount = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
+  if (finalCallCount.count !== before.count + 2) throw new Error('simulated_gateway_call_budget_not_two_' + locale);
   return true;
 }
 
@@ -598,6 +684,11 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
   let localeChecks = false;
   let consentSnapshotVerified = false;
   let emptyResultVerified = false;
+  let productionCatalogueCount = null;
+  let recommendationOutcome = null;
+  let recommendationReasonCode = null;
+  let unresolvedFields = [];
+  let correctedPersistedDurationDays = null;
   let ownerAndCsrfVerified = false;
   let deletionVerified = false;
 
@@ -619,6 +710,7 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     if (destinations.status() !== 200 || emptyCatalogue.count !== 0 || emptyCatalogue.status !== 'available') {
       throw new Error(`production_catalogue_not_honestly_empty_${locale}`);
     }
+    productionCatalogueCount = emptyCatalogue.count;
     const culinaryResponse = await pageA.request.get(
       `${webOrigin}/api/v1/catalog/culinary?locale=${encodeURIComponent(locale)}`,
       { timeout: 10_000 },
@@ -659,9 +751,61 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       || firstTripResponseBody.trip.original_request !== copy.prompt) {
       throw new Error(`conversation_trip_persistence_failed_${locale}_${persisted.status()}`);
     }
+    const initialDuration = locale === 'fa-IR' ? 15 : 10;
+    let assistantTripVersion = firstTripResponseBody.trip.version;
+    let assistantConversationVersion = firstTripResponseBody.conversation.version;
+    const initialTripRead = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
+    const initialTripRecord = await initialTripRead.json();
+    if (initialTripRead.status() !== 200
+        || initialTripRecord.extracted_requirements?.durationDays?.value !== initialDuration
+        || await pageA.locator('#profile-duration').inputValue() !== String(initialDuration)) {
+      throw new Error(`persisted_initial_duration_mismatch_${locale}_${initialDuration}`);
+    }
+    if (locale === 'fa-IR') {
+      const corrections = [
+        'مدت سفر را دوازده روز کنید؛ چهار نفر هستیم و بودجه ۳۰ میلیون تومان است.',
+        'اصلاح نهایی: مدت سفر پانزده روز است و بودجه ۴۵ میلیون تومان؛ ما چهار نفر هستیم.',
+        ...Array.from({ length: 10 }, (_, index) =>
+          `برای همان سفر پانزده‌روزه به شیراز، اطلاعات پیشین را نگه دارید؛ ادامهٔ گفت‌وگو ${index + 1}.`),
+      ];
+      let latest;
+      for (const turn of corrections) {
+        latest = await appendPersianFollowUp(pageA, conversationId, tripId, turn);
+      }
+      const correctedTripRead = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
+      const correctedTrip = await correctedTripRead.json();
+      const extracted = correctedTrip.extracted_requirements;
+      const budget = extracted?.budget?.value;
+      const accessibility = extracted?.accessibility?.value ?? [];
+      const constraints = extracted?.constraints?.value ?? [];
+      const persistedConversation = await pageA.request.get(`${webOrigin}/api/v1/conversations/${conversationId}`);
+      const persistedMessages = await persistedConversation.json();
+      if (correctedTripRead.status() !== 200 || correctedTrip.original_request !== copy.prompt
+          || extracted?.durationDays?.value !== 15 || extracted?.travelerCount?.value !== 4
+          || !budget?.raw?.includes('45') || !budget.raw.includes('تومان')
+          || !budget.unit?.includes('تومان') || budget.currency !== null
+          || !accessibility.includes('wheelchair_access')
+          || !constraints.some(value => /rough|terrain|ناهموار/iu.test(value))
+          || persistedConversation.status() !== 200
+          || persistedMessages.messages?.filter(message => message.role === 'user').length < 13
+          || latest?.trip?.extracted_requirements?.durationDays?.value !== 15) {
+        throw new Error('persian_15_day_corrections_or_long_history_not_persisted');
+      }
+      correctedPersistedDurationDays = extracted.durationDays.value;
+      if (await pageA.locator('#profile-duration').inputValue() !== '15'
+          || await pageA.locator('#profile-travelers').inputValue() !== '4'
+          || !(await pageA.locator('#profile-budget').inputValue()).includes('45')
+          || !(await pageA.locator('#profile-budget').inputValue()).includes('تومان')) {
+        throw new Error('persian_corrected_profile_not_visible');
+      }
+      assistantTripVersion = correctedTrip.version;
+      assistantConversationVersion = persistedMessages.version;
+      conversationVersion = assistantConversationVersion;
+    }
     await pageA.locator('.history-trip > button').first().waitFor({ state: 'visible' });
     const assistantIntegrationVerified = await verifySimulatedAssistant(
-      pageA, api, locale, conversationId, tripId, csrfA, firstTripResponseBody.trip.version,
+      pageA, api, locale, conversationId, tripId, csrfA,
+      assistantTripVersion, assistantConversationVersion, initialDuration,
     );
     await pageA.locator('#requirement-consent-budget-advisory').waitFor({ state: 'visible' });
     await pageA.locator('.requirement-accessibility-mandatory').waitFor({ state: 'visible' });
@@ -677,6 +821,18 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     await advisoryAcknowledgement.check();
     await pageA.locator('#requirement-consent-soft_preference-advisory').check();
     await pageA.locator('#requirement-consent-soft_preference-ack').check();
+    // The confirmed profile may also contain explicit dates, party size, or
+    // origin. Each is a separate user decision; exercise any rendered choice
+    // individually instead of treating the first acknowledgement as a blanket
+    // waiver. Safety/access fields are intentionally absent from this list.
+    for (const field of ['travel_dates', 'traveler_count', 'origin']) {
+      const advisoryChoice = pageA.locator(`#requirement-consent-${field}-advisory`);
+      if (await advisoryChoice.count()) {
+        if (await advisoryChoice.isChecked()) throw new Error(`advisory_consent_was_preselected_${field}_${locale}`);
+        await advisoryChoice.check();
+        await pageA.locator(`#requirement-consent-${field}-ack`).check();
+      }
+    }
     if (await confirmButton.isDisabled()) throw new Error(`explicit_advisory_choice_not_accepted_${locale}`);
 
     const confirmResponsePromise = pageA.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/trips/${tripId}`
@@ -686,6 +842,11 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     if (confirmResponse.status() !== 200) throw new Error(`profile_confirmation_failed_${locale}`);
     const confirmedProfileResponse = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
     const confirmedProfile = (await confirmedProfileResponse.json()).confirmed_requirements;
+    if (locale === 'fa-IR' && (confirmedProfileResponse.status() !== 200
+        || confirmedProfile?.duration_days !== 15 || confirmedProfile?.traveler_count !== 4
+        || confirmedProfile?.confirmation_source !== 'traveler_reviewed')) {
+      throw new Error('get_trip_did_not_return_confirmed_persian_15_day_profile');
+    }
     const confirmedProfileShape = Object.fromEntries(Object.entries(confirmedProfile ?? {}).map(([key, value]) => [
       key,
       key === 'budget' && value && typeof value === 'object'
@@ -696,12 +857,25 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     ]));
     const confirmedTrip = await confirmResponse.json();
     firstTripVersion = confirmedTrip.version;
+    if (locale === 'fa-IR') {
+      const reviewed = confirmedTrip.confirmed_requirements ?? {};
+      const reviewedBudget = reviewed.budget;
+      if (reviewed.duration_days !== 15 || reviewed.traveler_count !== 4
+          || reviewed.confirmation_source !== 'traveler_reviewed'
+          || !reviewedBudget?.raw?.includes('45') || !reviewedBudget.raw.includes('تومان')
+          || !reviewedBudget.unit?.includes('تومان') || reviewedBudget.currency !== null) {
+        throw new Error('confirmed_persian_15_day_profile_or_budget_denomination_changed');
+      }
+    }
     const persistedConsent = confirmedTrip.confirmed_requirements?.requirement_consent;
+    const consentDecisionFields = Object.keys(persistedConsent?.field_decisions ?? {}).sort();
+    const acknowledgedConsentFields = [...(persistedConsent?.advisory_acknowledged_fields ?? [])].sort();
     if (persistedConsent?.contract_version !== 'recommendation-consent-v1'
       || persistedConsent?.profile_version !== confirmedTrip.version
       || persistedConsent?.field_decisions?.budget !== 'advisory'
       || persistedConsent?.field_decisions?.soft_preference !== 'advisory'
-      || Object.keys(persistedConsent?.field_decisions ?? {}).sort().join(',') !== 'budget,soft_preference'
+      || Object.values(persistedConsent?.field_decisions ?? {}).some(decision => decision !== 'advisory')
+      || consentDecisionFields.join(',') !== acknowledgedConsentFields.join(',')
       || !persistedConsent?.advisory_acknowledged_fields?.includes('budget')
       || !persistedConsent?.advisory_acknowledged_fields?.includes('soft_preference')) {
       throw new Error(`server_bound_consent_snapshot_missing_${locale}`);
@@ -727,7 +901,10 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       || recommendation.status !== 'needs_confirmation' || recommendation.reason_code !== 'hard_constraints_unverifiable'
       || !recommendation.waived_fields?.includes('budget') || !recommendation.not_evaluated_fields?.includes('budget')
       || !recommendation.waived_fields?.includes('soft_preference') || !recommendation.not_evaluated_fields?.includes('soft_preference')
-      || recommendation.waived_fields?.length !== 2 || recommendation.not_evaluated_fields?.length !== 2
+      || [...recommendation.waived_fields].sort().join(',') !== consentDecisionFields.join(',')
+      || [...recommendation.not_evaluated_fields].sort().join(',') !== consentDecisionFields.join(',')
+      || recommendation.requirement_assessments?.some(item => consentDecisionFields.includes(item.field)
+        && (item.decision !== 'advisory' || item.status !== 'not_evaluated'))
       || budgetAssessment?.decision !== 'advisory' || budgetAssessment.status !== 'not_evaluated'
       || preferenceAssessment?.decision !== 'advisory' || preferenceAssessment.status !== 'not_evaluated'
       || preferenceAssessment.reason_code !== 'preference_unverifiable'
@@ -744,6 +921,13 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
         profileShape: confirmedProfileShape,
       })}`);
     }
+    // This is a needs_confirmation result because mandatory fields remain
+    // unresolved. It is not an empty/no_evidence recommendation response;
+    // the independent catalogue read above is what proves the production
+    // catalogue has zero approved destinations for this disposable DB.
+    recommendationOutcome = recommendation.status;
+    recommendationReasonCode = recommendation.reason_code;
+    unresolvedFields = [...recommendation.unresolved_fields];
     if (await pageA.locator('.itinerary-start').count()) throw new Error(`itinerary_offered_without_eligible_candidate_${locale}`);
     const notEvaluated = pageA.locator('.not-evaluated-warning');
     await notEvaluated.waitFor({ state: 'visible' });
@@ -769,7 +953,7 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     // multi-element locator (Playwright strict mode).
     const savedUserMessages = pageA.locator('.saved-message-user p');
     await savedUserMessages.nth(1).waitFor({ state: 'visible' });
-    if (await savedUserMessages.count() !== 2
+    if (await savedUserMessages.count() < (locale === 'fa-IR' ? 13 : 2)
       || !(await savedUserMessages.first().textContent())?.includes(copy.prompt)) {
       throw new Error(`history_request_not_restored_${locale}`);
     }
@@ -842,14 +1026,13 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     }
     ownerAndCsrfVerified = true;
 
-    // A separate, explicitly labeled browser fixture exercises the partial
-    // ten-day editor. Its API routes are intercepted in this test process and
-    // never write fixture identities or facts into PostgreSQL production views.
-    await runPartialFixture(pageA, locale, tripId, firstTripVersion, artifactLocale);
+    // A separate test-only 15-day journey goes through real FastAPI and
+    // PostgreSQL. Its four synthetic identities exist only in the isolated
+    // traveler dependency; no positive API calls are intercepted.
+    const positiveItinerary = await runPersistedFifteenDayFixture(
+      pageA, api, csrfA, locale, artifactLocale, copy.prompt,
+    );
     localeChecks = true;
-    await pageA.unroute(`${webOrigin}/api/v1/trips/${tripId}/recommendations`);
-    await pageA.unroute(`${webOrigin}/api/v1/trips/${tripId}/itineraries`);
-    await pageA.unroute(`${webOrigin}/api/v1/itineraries/**`);
     const productionAgain = await pageA.request.get(`${webOrigin}/api/v1/catalog/destinations`);
     const productionAgainBody = await productionAgain.json();
     if (productionAgain.status() !== 200 || productionAgainBody.count !== 0) {
@@ -935,8 +1118,22 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     deletionVerified = true;
 
     return {
-      locale, emptyProductionCatalogue: emptyResultVerified, consentSnapshotVerified,
+      locale, productionCatalogueEmptyVerified: emptyResultVerified,
+      productionCatalogueCount,
+      recommendationOutcome, recommendationReasonCode, unresolvedFields,
+      consentSnapshotVerified,
+      requestedDurationDays: initialDuration,
+      persistedDurationDays: initialTripRecord.extracted_requirements?.durationDays?.value,
+      correctedPersistedDurationDays,
+      persistedUserTurnCount: locale === 'fa-IR' ? 13 : 2,
       simulatedAssistantIntegrationVerified: assistantIntegrationVerified,
+      simulatedGatewayCalls: 2,
+      partialFixtureDays: positiveItinerary.dayCount,
+      partialFixtureInitialStops: positiveItinerary.initialStops,
+      partialFixtureInitialUnplannedDays: positiveItinerary.initialUnplannedDays,
+      partialFixtureStops: positiveItinerary.finalStops,
+      partialFixtureUnplannedDays: positiveItinerary.finalUnplannedDays,
+      positiveItinerary,
       historyReopenVerified: true, ownerAndCsrfVerified, deletionVerified, localeChecks,
       noStoreMe, noStoreVerify: true, externalRequestsBlocked: true,
     };
@@ -958,8 +1155,8 @@ async function main() {
     throw new Error('invalid_or_forbidden_test_ports');
   }
   const runName = `run-${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}`;
-  const artifactRoot = resolve(root, 'artifacts/visual-qa-task32', runName);
-  if (existsSync(artifactRoot)) throw new Error('task32_artifact_path_collision');
+  const artifactRoot = resolve(root, 'artifacts/visual-qa-task15d', runName);
+  if (existsSync(artifactRoot)) throw new Error('task15d_artifact_path_collision');
   mkdirSync(artifactRoot, { recursive: true });
   const audit = { externalRequests: 0, successfulExternalResponses: 0, pageErrors: 0 };
   let api;
@@ -980,22 +1177,35 @@ async function main() {
       results.push(await runLocaleJourney(browser, api, locale, audit, artifactRoot));
     }
     if (audit.successfulExternalResponses || audit.pageErrors) throw new Error('external_response_or_browser_runtime_error');
+    const ownerRagCounts = await checkedControl(api.controlPort, api.controlToken, {
+      action: 'owner_rag_call_counts',
+    });
     const report = {
       status: 'passed',
       browser: `Chromium ${browser.version()}`,
-      environment: 'live Vite proxy + FastAPI + guarded disposable PostgreSQL 17; fake SMS and simulated Chat gateway (no remote model)',
+      environment: 'live Vite proxy + FastAPI + guarded disposable PostgreSQL 17; fake SMS; simulated Chat gateway (no remote model)',
+      integrations: {
+        chat: { mode: 'simulated', liveProviderCalls: 0 },
+        ownerRag: {
+          mode: api.ownerRagEnabled ? 'real_owner_http' : 'disabled',
+          enabled: ownerRagCounts.enabled,
+          calls: ownerRagCounts.calls,
+          outcomes: ownerRagCounts.outcomes,
+          travelerEvidenceTextReturned: false,
+        },
+      },
       locales: results,
       screenshots: [
         ...['fa-IR', 'en-US', 'ar'].flatMap(locale => [
           { locale, width: 390, height: 844, kind: 'live empty production catalogue', path: `${locale}/empty-${locale}-390.png` },
           { locale, width: 1440, height: 1000, kind: 'live empty production catalogue', path: `${locale}/empty-${locale}-1440.png` },
-          { locale, width: 390, height: 844, kind: 'test-only four-stop partial ten-day fixture', path: `${locale}/partial-${locale}-390.png` },
-          { locale, width: 1440, height: 1000, kind: 'test-only four-stop partial ten-day fixture', path: `${locale}/partial-${locale}-1440.png` },
+          { locale, width: 390, height: 844, dayCount: 15, kind: 'real API/DB edited test-only three-stop partial itinerary', path: `${locale}/partial-${locale}-390.png` },
+          { locale, width: 1440, height: 1000, dayCount: 15, kind: 'real API/DB edited test-only three-stop partial itinerary', path: `${locale}/partial-${locale}-1440.png` },
         ]),
       ],
       audit: { externalRequestsBlocked: audit.externalRequests, successfulExternalResponses: 0, browserPageErrors: 0 },
       screenshotPolicy: 'Traveler-authored text is replaced in screenshot-only DOM captures; no phone, OTP, cookie, token, or request text is recorded.',
-      fixturePolicy: 'Simulated Chat gateway makes no HTTP requests. Partial ten-day fixture is Playwright-intercepted and never written to production views.',
+      fixturePolicy: 'The simulated Chat gateway makes no HTTP requests. Positive 15-day itinerary requests use real FastAPI and PostgreSQL with four existing synthetic-only identities exposed through a private loopback test control; no positive recommendation or itinerary API call is intercepted, and production catalogue views remain empty. When explicitly enabled, one real owner-RAG HTTP probe exercises the empty approved index; retrieved text is withheld from the response and report.',
     };
     writeFileSync(resolve(artifactRoot, 'report.json'), `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
     console.log(JSON.stringify({ status: report.status, browser: report.browser, locales: results.map(result => result.locale), screenshots: report.screenshots.length, artifactRoot: artifactRoot.replaceAll('\\', '/') }));

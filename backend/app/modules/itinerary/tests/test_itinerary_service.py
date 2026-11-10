@@ -85,6 +85,16 @@ def test_partial_long_itinerary_marks_every_unplanned_day_and_never_fabricates_s
     assert all(stop.evidence for stop in plan.stops)
 
 
+def test_partial_fifteen_day_itinerary_keeps_four_evidenced_stops_and_eleven_unplanned_days() -> None:
+    plan = generate_itinerary(recommendation=recommendation(4), day_count=15, locale="fa-IR")
+    assert plan is not None
+    assert plan.day_count == 15
+    assert [stop.day_number for stop in plan.stops] == [1, 2, 3, 4]
+    assert plan.unplanned_days == list(range(5, 16))
+    assert plan.status == "partial"
+    assert all(stop.evidence for stop in plan.stops)
+
+
 def test_itinerary_allows_at_most_fifty_stops_per_day_and_one_thousand_total() -> None:
     plan = generate_itinerary(recommendation=recommendation(1_000), day_count=20, locale="ar")
     assert plan is not None

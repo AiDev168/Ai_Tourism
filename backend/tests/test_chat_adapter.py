@@ -119,6 +119,24 @@ def test_travel_origin_and_party_size_remain_bounded_unconfirmed_hints():
     assert "never exposed" not in str(result)
 
 
+@pytest.mark.parametrize("duration_days", [15, 30])
+def test_fifteen_and_thirty_day_durations_remain_unconfirmed_chat_hints(duration_days):
+    def handler(request):
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop",
+            "message": {"content": json.dumps({
+                "reply": "Please review this duration.",
+                "requirements": {"duration_days": duration_days},
+                "clarification": "Is this duration correct?",
+            })},
+        }]})
+
+    reply = asyncio.run(adapter(handler).invoke(
+        ChatRequest(locale="fa-IR", text="The requested trip duration is stated explicitly."),
+    ))
+    assert reply.requirements == {"duration_days": duration_days}
+
+
 def test_untrusted_out_of_range_profile_hints_are_discarded():
     def handler(request):
         return httpx.Response(200, json={"choices": [{

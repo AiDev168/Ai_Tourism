@@ -52,7 +52,10 @@ class FakeChatRepo:
         return {'message_id': ASSISTANT_MSG, 'conversation_id': CONV, 'trip_id': TRIP,
                 'role': 'assistant', 'content': 'کدام شهر را ترجیح می‌دهید؟',
                 'created_at': datetime.now(UTC),
-                'metadata': {'requirements_candidate': {'duration_days': 3},
+                'metadata': {'requirements_candidate': (
+                    self.finished.get('requirements', {}) if self.finished
+                    else {'duration_days': 3}
+                ),
                              'clarification': 'مقصد؟'}}
 
 
@@ -164,6 +167,57 @@ def test_foreign_user_and_pending_turn_are_safe():
         result = c.post(f'/api/v1/conversations/{CONV}/assistant-turns', json=body())
         assert result.status_code == 404
         assert not gateway.calls
+    finally:
+        c.app.dependency_overrides.clear()
+
+
+def test_long_history_keeps_original_trip_and_latest_correction_without_confirming_candidate():
+    c, repo, gateway = client()
+    history = [
+        {'role': 'assistant' if index % 2 else 'user', 'content': f'older_turn_{index}'}
+        for index in range(12)
+    ]
+    history[-1] = {
+        'role': 'user',
+        'content': 'Latest correction: keep 15 days and wheelchair access mandatory.',
+    }
+    repo.history = lambda **kwargs: history
+    traveler = c.app.dependency_overrides[get_traveler_repository]()
+    original_trip = traveler.trip
+    traveler.trip = lambda user_id, trip_id: {
+        **original_trip(user_id, trip_id),
+        'original_request': 'PERSIAN_15_DAY_ORIGINAL_REQUEST',
+        'duration_days': 15,
+        'confirmed_requirements': {
+            'duration_days': 15,
+            'constraints': ['wheelchair access is mandatory'],
+        },
+    }
+
+    async def respond(request):
+        gateway.calls.append(request)
+        return ChatReply(
+            reply='A 30-day option is only a suggestion.',
+            requirements={'duration_days': 30, 'traveler_count': 5},
+            clarification='Should the 15-day duration remain confirmed?',
+        )
+
+    gateway.invoke = respond
+    try:
+        result = c.post(f'/api/v1/conversations/{CONV}/assistant-turns', json=body())
+        assert result.status_code == 200, result.text
+        sent_history = gateway.calls[0].history
+        sent_content = [message.content for message in sent_history]
+        assert sent_content[0] == 'PERSIAN_15_DAY_ORIGINAL_REQUEST'
+        assert sent_content.count('PERSIAN_15_DAY_ORIGINAL_REQUEST') == 1
+        assert sent_content[-1] == 'Latest correction: keep 15 days and wheelchair access mandatory.'
+        assert len(sent_history) == 12
+        assert result.json()['candidate_requirements'] == {'duration_days': 30, 'traveler_count': 5}
+        assert result.json()['trip']['duration_days'] == 15
+        assert result.json()['trip']['confirmed_requirements'] == {
+            'duration_days': 15,
+            'constraints': ['wheelchair access is mandatory'],
+        }
     finally:
         c.app.dependency_overrides.clear()
     c, repo, gateway = client()

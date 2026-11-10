@@ -103,7 +103,7 @@ describe('visible traveler-only clarification flow', () => {
     });
     await settle();
     const appendButton = [...host.querySelectorAll('button')].find(
-      element => element.textContent?.trim() === 'Add to conversation',
+      element => element.textContent?.trim() === 'Save reply without AI',
     );
     expect(appendButton).toBeDefined();
     await act(async () => appendButton!.click());

@@ -1,5 +1,6 @@
 """Owner-scoped authenticated conversation, trip, recommendation and itinerary API."""
 
+import asyncio
 import logging
 from typing import Annotated, Any
 from uuid import UUID
@@ -22,6 +23,9 @@ from app.modules.recommendation.contracts import EvidenceSource
 from app.modules.recommendation.contracts import RecommendationOutcome
 from app.modules.recommendation.service import recommend_trip
 from app.modules.recommendation.retrieval import StructuredDestinationMetadata
+from app.modules.retrieval.contracts import RetrievalPort
+from app.modules.retrieval.owner_http import OwnerRagHttpAdapter
+from app.modules.retrieval.traveler_probe import probe_selected_destination
 from app.modules.trip.repository import (
     TravelerConflict,
     TravelerInvalidState,
@@ -53,6 +57,13 @@ router = APIRouter(prefix="/api/v1", tags=["traveler"])
 
 def get_traveler_repository(settings: Annotated[Settings, Depends(get_settings)]) -> TravelerRepository:
     return TravelerRepository(settings)
+
+
+def get_owner_retrieval_port(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RetrievalPort:
+    """Return the optional owner-managed RAG transport; disabled by default."""
+    return OwnerRagHttpAdapter(settings)
 
 
 def production_catalogue_bundle(
@@ -377,6 +388,10 @@ def _recommendation_response(
         if destination is None:
             continue
         item_data = item.model_dump(mode="python")
+        item_data["evidence"] = [
+            source.model_dump(exclude={"destination_id"})
+            for source in item.evidence
+        ]
         if persisted_scores is not None:
             item_data["score_components"] = persisted_scores.get(item.destination_id, [])
         items.append({
@@ -413,6 +428,7 @@ def create_recommendations(
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
     repository: Annotated[TravelerRepository, Depends(get_traveler_repository)],
     settings: Annotated[Settings, Depends(get_settings)],
+    retrieval_port: Annotated[RetrievalPort, Depends(get_owner_retrieval_port)],
 ):
     _mark_no_store(response)
     try:
@@ -423,6 +439,36 @@ def create_recommendations(
         if selected_ids != trip["destination_ids"]:
             return _error(409, "trip_profile_not_confirmed")
         outcome, by_id = _recommendation_outcome(settings, trip, selected_ids)
+        # Probe the real owner RAG only after the deterministic approved
+        # catalogue has produced an eligible result. The probe uses the
+        # selected canonical destination label, never conversation text. Its
+        # current document/claim/hash mapping is incomplete, so the helper
+        # deliberately withholds all retrieved text and cannot affect ranking.
+        if settings.tourism_rag_enabled and outcome.items:
+            first = outcome.items[0]
+            destination = by_id.get(first.destination_id)
+            if destination is not None:
+                probe = asyncio.run(
+                    probe_selected_destination(
+                        retrieval_port,
+                        destination_key=destination.destination_key,
+                        canonical_display_name=(
+                            destination.localized_names.get(trip["locale"])
+                            or destination.canonical_name
+                        ),
+                        locale=trip["locale"],
+                        approved_sources=tuple(first.evidence),
+                    )
+                )
+                logger.info(
+                    "traveler.owner_rag_probe_completed",
+                    extra={
+                        "result": probe.status,
+                        "evidence_count": probe.evidence_count,
+                        "source_validated_count": probe.source_validated_count,
+                        "withheld_evidence_count": probe.withheld_evidence_count,
+                    },
+                )
         request_id, version = repository.create_recommendation_run(
             user_id=principal.user_id,
             trip_id=trip_id,
@@ -607,7 +653,7 @@ def _enrich_itinerary(row: dict[str, Any], by_id: dict[str, ProductionDestinatio
     planned_days = {stop["day_number"] for stop in enriched_stops}
     unplanned_days = [day for day in range(1, row["day_count"] + 1) if day not in planned_days]
     return {
-        **row,
+        **{key: value for key, value in row.items() if key != "user_id"},
         "stops": enriched_stops,
         "status": "partial" if unplanned_days else "complete",
         "unplanned_days": unplanned_days,
