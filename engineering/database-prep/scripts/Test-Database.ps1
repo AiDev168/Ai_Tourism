@@ -68,7 +68,8 @@ try {
         @{ Id = '0008_authentication_foundation'; Path = (Join-Path $PackageRoot 'sql\008_authentication_foundation.sql') },
         @{ Id = '0009_traveler_core'; Path = (Join-Path $PackageRoot 'sql\009_traveler_core.sql') },
         @{ Id = '0010_task31_content_privacy_full_itinerary'; Path = (Join-Path $PackageRoot 'sql\010_task31_content_privacy_full_itinerary.sql') },
-        @{ Id = '0011_internal_chat_turns'; Path = (Join-Path $PackageRoot 'sql\011_internal_chat_turns.sql') }
+        @{ Id = '0011_internal_chat_turns'; Path = (Join-Path $PackageRoot 'sql\011_internal_chat_turns.sql') },
+        @{ Id = '0012_task5_published_claim_evidence'; Path = (Join-Path $PackageRoot 'sql\012_task5_published_claim_evidence.sql') }
     ) | Where-Object { $_.Id -in $expectedMigrations }
     foreach ($migration in $migrationSet) {
         $localHash = (Get-FileHash -LiteralPath $migration.Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -131,6 +132,11 @@ try {
     if ($state.IncludesTask31) {
         Write-Host "`n========== TASK 3.1 CONTENT / OTP RETENTION / FULL ITINERARY CONTRACT ==========" -ForegroundColor Cyan
         Invoke-PsqlFile '/opt/ai-tourism/sql/tests/012_task31_contract.sql'
+    }
+
+    if ($state.IncludesClaimEvidence) {
+        Write-Host "`n========== TRUSTED OWNER-RAG CLAIM / SOURCE MAPPING CONTRACT ==========" -ForegroundColor Cyan
+        Invoke-PsqlFile '/opt/ai-tourism/sql/tests/014_task5_claim_evidence.sql'
     }
 
     Write-Host "`n========== COMPLETE EXPECTED VS ACTUAL ROW COUNTS ==========" -ForegroundColor Cyan

@@ -16,6 +16,8 @@ $task31Baseline = $travelerBaseline + '0010_task31_content_privacy_full_itinerar
 $task31Integrated = $travelerIntegrated + '0010_task31_content_privacy_full_itinerary'
 $chatBaseline = $task31Baseline + '0011_internal_chat_turns'
 $chatIntegrated = $task31Integrated + '0011_internal_chat_turns'
+$claimEvidenceBaseline = $chatBaseline + '0012_task5_published_claim_evidence'
+$claimEvidenceIntegrated = $chatIntegrated + '0012_task5_published_claim_evidence'
 $cases = @(
     @{ Name = 'exact 0006 ledger'; Ids = $baseline; Expected = '0006'; Error = $false },
     @{ Name = 'exact 0007 ledger'; Ids = $integrated; Expected = '0007'; Error = $false },
@@ -27,6 +29,8 @@ $cases = @(
     @{ Name = '0007 plus Task 3.1 migration'; Ids = $task31Integrated; Expected = '0007-auth-0009-0010'; Error = $false },
     @{ Name = '0006 plus Chat migration'; Ids = $chatBaseline; Expected = '0006-auth-0009-0010-0011'; Error = $false },
     @{ Name = '0007 plus Chat migration'; Ids = $chatIntegrated; Expected = '0007-auth-0009-0010-0011'; Error = $false },
+    @{ Name = '0006 plus claim evidence migration'; Ids = $claimEvidenceBaseline; Expected = '0006-auth-0009-0010-0011-0012'; Error = $false },
+    @{ Name = '0007 plus claim evidence migration'; Ids = $claimEvidenceIntegrated; Expected = '0007-auth-0009-0010-0011-0012'; Error = $false },
     @{ Name = 'empty ledger'; Ids = @(); Expected = ''; Error = $true },
     @{ Name = 'partial 0006 ledger'; Ids = $baseline[0..5]; Expected = ''; Error = $true },
     @{ Name = '0008 with missing 0006 predecessor'; Ids = @($baseline[0..5] + '0008_authentication_foundation'); Expected = ''; Error = $true },
@@ -56,7 +60,9 @@ foreach ($case in $cases) {
             ($state.Name -eq '0006-auth-0009-0010' -and $state.ExpectedRows -ne 422) -or
             ($state.Name -eq '0007-auth-0009-0010' -and $state.ExpectedRows -ne 698) -or
             ($state.Name -eq '0006-auth-0009-0010-0011' -and $state.ExpectedRows -ne 423) -or
-            ($state.Name -eq '0007-auth-0009-0010-0011' -and $state.ExpectedRows -ne 699)) {
+            ($state.Name -eq '0007-auth-0009-0010-0011' -and $state.ExpectedRows -ne 699) -or
+            ($state.Name -eq '0006-auth-0009-0010-0011-0012' -and $state.ExpectedRows -ne 424) -or
+            ($state.Name -eq '0007-auth-0009-0010-0011-0012' -and $state.ExpectedRows -ne 700)) {
             throw "Incorrect exact row manifest selected for '$($case.Name)'"
         }
     }
@@ -88,6 +94,10 @@ $actionCases = @(
     @{ Name = '0007 plus 0010 explicit Chat opt-in'; State = '0007-auth-0009-0010'; ChatOptIn = $true; Expected = 'apply-chat-0011-from-0007'; Error = $false },
     @{ Name = '0006 plus 0011 no-op'; State = '0006-auth-0009-0010-0011'; Expected = 'already-chat'; Error = $false },
     @{ Name = '0007 plus 0011 no-op'; State = '0007-auth-0009-0010-0011'; Expected = 'already-chat'; Error = $false },
+    @{ Name = '0006 plus 0011 claim migration opt-in'; State = '0006-auth-0009-0010-0011'; ClaimEvidenceOptIn = $true; Expected = 'apply-claim-evidence-0012-from-0006'; Error = $false },
+    @{ Name = '0007 plus 0011 claim migration opt-in'; State = '0007-auth-0009-0010-0011'; ClaimEvidenceOptIn = $true; Expected = 'apply-claim-evidence-0012-from-0007'; Error = $false },
+    @{ Name = '0006 claim evidence no-op'; State = '0006-auth-0009-0010-0011-0012'; Expected = 'already-claim-evidence'; Error = $false },
+    @{ Name = '0007 claim evidence no-op'; State = '0007-auth-0009-0010-0011-0012'; Expected = 'already-claim-evidence'; Error = $false },
     @{ Name = '0007 is a read-only no-op'; State = '0007'; OptIn = $false; Expected = 'already-integrated'; Error = $false }
 )
 foreach ($case in $actionCases) {
@@ -104,6 +114,9 @@ foreach ($case in $actionCases) {
         }
         elseif ($case.ChatOptIn) {
             $action = Resolve-DatabaseInitializationAction -State $case.State -ApplyChatMigrationToExistingDatabase
+        }
+        elseif ($case.ClaimEvidenceOptIn) {
+            $action = Resolve-DatabaseInitializationAction -State $case.State -ApplyClaimEvidenceMigrationToExistingDatabase
         }
         elseif ($case.OptIn) {
             $action = Resolve-DatabaseInitializationAction -State $case.State -ApplyPendingMigrationsToExistingDatabase

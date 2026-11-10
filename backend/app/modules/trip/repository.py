@@ -751,6 +751,8 @@ class TravelerRepository:
         expected_trip_version: int,
         outcome: Any,
         selected_destination_ids: list[str],
+        retrieval_evidence_by_destination: dict[str, list[dict[str, Any]]] | None = None,
+        retrieval_status_by_destination: dict[str, str] | None = None,
     ) -> tuple[UUID, int]:
         with self.connection() as conn, conn.transaction():
             trip = conn.execute(
@@ -778,6 +780,10 @@ class TravelerRepository:
                 "not_evaluated_fields": list(outcome.not_evaluated_fields),
                 "algorithm_version": outcome.algorithm_version,
                 "retrieval_version": outcome.retrieval_version,
+                # Mapped owner evidence is an immutable display snapshot. It
+                # never participates in eligibility, ranking or itinerary stops.
+                "retrieval_evidence_by_destination": retrieval_evidence_by_destination or {},
+                "retrieval_status_by_destination": retrieval_status_by_destination or {},
             }
             request_id = uuid4()
             conn.execute(

@@ -339,7 +339,21 @@ describe('persisted traveler journey', () => {
         source_id: 1, source_name: 'Approved source', source_url: 'https://example.test/source', source_role: 'official',
         evidence_note: null, retrieved_at: null, valid_from: null, valid_until: null, reliability_score: null,
       }], canonical_name: 'Shiraz Garden', localized_names: { 'en-US': 'Shiraz Garden' },
+      retrieval_evidence: [{
+        evidence_id: 'owner-evidence-1', canonical_entity_key: 'shiraz-eram-garden-v1', destination_id: 7421,
+        document_id: 'published-document-1', claim_key: 'garden_identity', content_hash: 'a'.repeat(64),
+        locale: 'en-US', corpus: 'spatial_destinations', text: 'The cited source identifies this garden by name.',
+        sources: [{ source_id: '42', source_name: 'Reviewed heritage source', source_url: 'https://example.test/eram',
+          source_role: 'site_identity', license: null, retrieved_at: '2026-11-09T00:00:00Z',
+          valid_from: null, valid_until: null }],
+      }],
       city_name: 'Shiraz', province_name: 'Fars', destination_type: 'attraction',
+    };
+    const noCitationRecommendation = {
+      ...recommendation,
+      recommendation_id: 'recommendation-2', destination_id: '7422',
+      canonical_name: 'No Citation Destination', localized_names: { 'en-US': 'No Citation Destination' },
+      retrieval_evidence: [],
     };
     const itinerary = {
       itinerary_id: 'itinerary-1', trip_id: trip.trip_id, revision: 1, version: 1, day_count: 10,
@@ -357,7 +371,8 @@ describe('persisted traveler journey', () => {
       if (url === `/api/v1/trips/${trip.trip_id}` && method === 'PATCH') return response({ ...trip, version: 2, confirmed_requirements: { duration_days: 10 } });
       if (url === `/api/v1/trips/${trip.trip_id}/recommendations` && method === 'POST') return response({
         recommendation_request_id: 'recommendation-request-1', status: 'available', reason_code: 'available',
-        unresolved_fields: [], algorithm_version: 'structured-catalogue-ranking-v2', trip_version: 2, items: [recommendation],
+        unresolved_fields: [], algorithm_version: 'structured-catalogue-ranking-v2', trip_version: 2,
+        items: [recommendation, noCitationRecommendation],
       });
       if (url === `/api/v1/trips/${trip.trip_id}` && method === 'GET') return response({ ...trip, version: 2, latest_itinerary_id: itinerary.itinerary_id });
       if (url === `/api/v1/trips/${trip.trip_id}/itineraries` && method === 'POST') return response(itinerary, 201);
@@ -372,6 +387,13 @@ describe('persisted traveler journey', () => {
     await act(async () => { confirm.click(); }); await settle();
     const recommendations = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].findRecommendations)!;
     await act(async () => { recommendations.click(); }); await settle();
+
+    const retrievalCitations = host.querySelector('.retrieval-citations-list')!;
+    expect(retrievalCitations.textContent).toContain('The cited source identifies this garden by name.');
+    expect(retrievalCitations.textContent).toContain(journeyMessages['en-US'].retrievalEvidenceBoundary);
+    expect(retrievalCitations.querySelector('a')?.href).toBe('https://example.test/eram');
+    expect(retrievalCitations.querySelectorAll('.retrieval-citation')).toHaveLength(1);
+    expect(retrievalCitations.textContent).not.toContain('No Citation Destination');
 
     const daysInput = host.querySelector<HTMLInputElement>('#journey-day-count')!;
     expect(daysInput.value).toBe('10');

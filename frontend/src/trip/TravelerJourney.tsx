@@ -10,7 +10,7 @@ import { reviewableAssistantCandidate } from './assistantCandidate';
 import { TravelerGuidance } from './TravelerGuidance';
 import { nextTripQuestion } from './clarificationGuide';
 import {
-  travelerApi, TravelerApiError, type ConversationRecord, type ConversationSummary,
+  travelerApi, TravelerApiError, parseRetrievalEvidence, type ConversationRecord, type ConversationSummary,
   type ItineraryRecord, type ItineraryStop, type RecommendationResult, type RequirementConsentDecision,
   type RequirementFieldCode, type TripRecord,
 } from './travelerApi';
@@ -1022,6 +1022,24 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
                 <a href={source.source_url} target="_blank" rel="noreferrer">{source.source_name}</a>{source.retrieved_at ? ` · ${copy.sourceRetrieved}: ${new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(source.retrieved_at))}` : ''}
               </p>) : <p>{copy.noEvidence}</p>}</details>
             </article>)}
+            {recommendations?.status === 'available' && (() => {
+              const citationCards = recommendations.items.flatMap(item =>
+                parseRetrievalEvidence(item.retrieval_evidence, item.destination_id, locale)
+                  .map(citation => ({ item, citation })),
+              );
+              return citationCards.length > 0 ? <section className="retrieval-citations-list" aria-label={copy.retrievalEvidenceTitle}>
+                {citationCards.map(({ item, citation }) => <article className="retrieval-citation" key={citation.evidence_id}>
+                  <h4 dir="auto">{item.localized_names[locale] ?? item.canonical_name}</h4>
+                  <p className="retrieval-citation-boundary">{copy.retrievalEvidenceBoundary}</p>
+                  <strong>{copy.retrievalClaimLabel}</strong>
+                  <blockquote dir="auto">{citation.text}</blockquote>
+                  <ul>{citation.sources.map(source => <li key={source.source_id}>
+                    <a href={source.source_url} target="_blank" rel="noreferrer">{source.source_name}</a>
+                    {source.retrieved_at ? ` · ${copy.sourceRetrieved}: ${new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(source.retrieved_at))}` : ''}
+                  </li>)}</ul>
+                </article>)}
+              </section> : null;
+            })()}
             {recommendations?.status === 'available' && <div className="itinerary-start">
               <h3>{copy.itineraryTitle}</h3>
               <p>{copy.itinerarySuggestionWarning}</p>

@@ -87,7 +87,8 @@ try {
         '0008_authentication_foundation|008_authentication_foundation.sql',
         '0009_traveler_core|009_traveler_core.sql',
         '0010_task31_content_privacy_full_itinerary|010_task31_content_privacy_full_itinerary.sql',
-        '0011_internal_chat_turns|011_internal_chat_turns.sql'
+        '0011_internal_chat_turns|011_internal_chat_turns.sql',
+        '0012_task5_published_claim_evidence|012_task5_published_claim_evidence.sql'
     )
     foreach ($entry in $Migrations) {
         $parts = $entry.Split('|')
@@ -110,7 +111,7 @@ try {
     Sql -Options @('-X','-v','ON_ERROR_STOP=1','-U',$Owner,'-d','postgres','-c',"ALTER DATABASE ai_tourism_dev RENAME TO $TestDb;")
     # Validate the same application role and marker the E2E harness will use.
     # Do not publish AUTH_TEST_DATABASE_* until the disposable target is proven.
-    $MarkerCheckSql = "SELECT CASE WHEN current_database()='$TestDb' AND current_user='$AppUser' AND (SELECT COUNT(*) FROM public.ai_tourism_auth_test_marker)=1 AND (SELECT marker_value FROM public.ai_tourism_auth_test_marker LIMIT 1)='$Marker' AND (SELECT COUNT(*) FROM system.schema_migrations)=12 THEN 'ok' ELSE 'bad' END;"
+    $MarkerCheckSql = "SELECT CASE WHEN current_database()='$TestDb' AND current_user='$AppUser' AND (SELECT COUNT(*) FROM public.ai_tourism_auth_test_marker)=1 AND (SELECT marker_value FROM public.ai_tourism_auth_test_marker LIMIT 1)='$Marker' AND (SELECT COUNT(*) FROM system.schema_migrations)=13 THEN 'ok' ELSE 'bad' END;"
     $MarkerCheck = & docker exec -e ("PGPASSWORD=" + $AppPassword) $Name psql -h 127.0.0.1 -X -A -t -v ON_ERROR_STOP=1 -U $AppUser -d $TestDb -c $MarkerCheckSql
     if ($LASTEXITCODE -ne 0 -or (($MarkerCheck | Out-String).Trim()) -ne 'ok') {
         throw 'Disposable application-role/marker/migration verification failed.'
@@ -121,9 +122,12 @@ try {
     $env:AUTH_TEST_DATABASE_NAME = $TestDb
     $env:AUTH_TEST_DATABASE_USER = $AppUser
     $env:AUTH_TEST_DATABASE_PASSWORD = $AppPassword
+    # Exposed only to the calling acceptance process for owner-only SQL
+    # contract tests against this ephemeral container; never printed.
+    $env:AUTH_TEST_DATABASE_OWNER_PASSWORD = $OwnerPassword
     $env:AUTH_TEST_DATABASE_MARKER = $Marker
     $env:AI_TOURISM_MVP_E2E_CONTAINER = $Name
-    Write-Host ("READY: isolated PostgreSQL 17 on 127.0.0.1:" + $Port + " with migrations 0000-0011.") -ForegroundColor Green
+    Write-Host ("READY: isolated PostgreSQL 17 on 127.0.0.1:" + $Port + " with migrations 0000-0012.") -ForegroundColor Green
     Write-Host 'AUTH_TEST_DATABASE_* and AUTH_INTEGRATION_TESTS set in current PowerShell.'
     Write-Host 'Run: node frontend/scripts/traveler-e2e.mjs'
     Write-Host 'After tests: docker stop $env:AI_TOURISM_MVP_E2E_CONTAINER'

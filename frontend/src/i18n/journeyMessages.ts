@@ -2,6 +2,9 @@ import type { Locale } from './messages';
 
 export const journeyMessages = {
   'fa-IR': {
+    retrievalEvidenceTitle: 'شواهدِ ادعای تأییدشده',
+    retrievalClaimLabel: 'ادعای مستند',
+    retrievalEvidenceBoundary: 'این ارجاع به یک ادعای منتشرشده و تطبیق‌یافته پیوند دارد؛ به‌تنهایی ساعت بازدید، مسیر، دسترسی یا شرایط ایمنی را تأیید نمی‌کند.',
     workspaceTitle: 'برنامه‌های سفر من',
     privacyNotice: 'با ذخیره‌سازی، گفت‌وگو و برنامهٔ سفر برای ادامه و مشاهدهٔ تاریخچه در حساب شما نگه‌داری می‌شود و فقط خودتان به آن دسترسی دارید. هر زمان می‌توانید سفر یا حساب را حذف کنید. پیام‌های شما فقط پس از انتخاب رضایت صریح و فشردن دکمهٔ دستیار، برای پردازش به سرویس هوش مصنوعی پیکربندی‌شده ارسال می‌شوند؛ در غیر این صورت ارسال بیرونی نداریم.',
     signInToSave: 'برای ذخیره و ادامهٔ سفر در دستگاه‌های دیگر، ابتدا وارد حساب شوید. پیش‌نویس فعلی تا وقتی این صفحه باز است در همین‌جا می‌ماند.',
@@ -110,6 +113,9 @@ export const journeyMessages = {
     noneOfThese: 'هیچ‌کدام؛ می‌خواهم نام را اصلاح کنم',
   },
   'en-US': {
+    retrievalEvidenceTitle: 'Verified claim citations',
+    retrievalClaimLabel: 'Supported claim',
+    retrievalEvidenceBoundary: 'This citation is mapped to a published claim. It does not by itself verify opening hours, routes, access, or safety conditions.',
     workspaceTitle: 'My travel plans',
     privacyNotice: 'When you save, your conversation and trip are stored in your account so you can continue later and view history. Only you can access them. You can delete a trip or your account at any time. Messages are sent to the configured external AI service only when you explicitly consent and ask the advisor; otherwise they stay within Rahgard.',
     signInToSave: 'Sign in to save this trip and continue on another device. Your current draft stays on this page while it remains open.',
@@ -218,6 +224,9 @@ export const journeyMessages = {
     noneOfThese: 'None of these; I want to revise the name',
   },
   ar: {
+    retrievalEvidenceTitle: 'مراجع الادعاءات الموثقة',
+    retrievalClaimLabel: 'الادعاء المدعوم',
+    retrievalEvidenceBoundary: 'يرتبط هذا المرجع بادعاء منشور ومطابق للمصدر. ولا يثبت بمفرده ساعات الزيارة أو المسارات أو إمكانية الوصول أو شروط السلامة.',
     workspaceTitle: 'خطط رحلاتي',
     privacyNotice: 'عند الحفظ، تُخزَّن المحادثة والرحلة في حسابك كي تتابع لاحقًا وتراجع السجل، ولا يمكن لأحد سواك الوصول إليهما. يمكنك حذف الرحلة أو الحساب في أي وقت. لا تُرسل رسائلك إلى خدمة الذكاء الاصطناعي الخارجية إلا بموافقتك الصريحة وعند طلب المساعدة؛ وإلا تبقى داخل التطبيق.',
     signInToSave: 'سجّل الدخول لحفظ الرحلة ومتابعتها من جهاز آخر. تبقى المسودة الحالية على هذه الصفحة ما دامت مفتوحة.',
