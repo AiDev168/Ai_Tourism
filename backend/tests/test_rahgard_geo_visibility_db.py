@@ -13,6 +13,12 @@ from datetime import UTC, datetime
 import psycopg
 import pytest
 from psycopg.rows import dict_row
+from pydantic import SecretStr
+
+from app.api.traveler import production_catalogue_bundle
+from app.core.config import Settings
+from app.modules.itinerary.service import generate_itinerary
+from app.modules.recommendation.service import recommend_trip
 
 from scripts.rahgard_geo_visibility import (
     APPROVE,
@@ -82,3 +88,49 @@ def test_four_real_canonical_geo_identities_flow_into_app_read_view():
         assert row["city_name"] == expected["city_name"]
     assert len(sources) == 4
     assert all(row["source_count"] >= 1 for row in sources)
+
+    # Use the ordinary app catalogue/recommendation services and real stored
+    # canonical keys: this is NOT synthetic identity substitution.
+    settings = Settings(
+        _env_file=None, app_env="test",
+        database_host=os.environ["AUTH_TEST_DATABASE_HOST"],
+        database_port=int(os.environ["AUTH_TEST_DATABASE_PORT"]),
+        database_name=os.environ["AUTH_TEST_DATABASE_NAME"],
+        database_user="ai_tourism_app",
+        database_password=SecretStr(os.environ["AUTH_TEST_DATABASE_PASSWORD"]),
+        auth_enabled=False, internal_chat_enabled=False, tourism_rag_enabled=False,
+    )
+    catalogue, provenance, metadata = production_catalogue_bundle(settings)
+    by_key = {item.destination_key: item for item in catalogue}
+    assert set(POINTS) <= set(by_key)
+    selected_ids = [by_key[key].destination_id for key in POINTS]
+    recommendations = recommend_trip(
+        requirements={"duration_days": 15, "destination_ids": selected_ids},
+        selected_destination_ids=selected_ids,
+        catalogue=catalogue,
+        evidence_by_destination=provenance,
+        metadata_by_destination=metadata,
+        locale="fa-IR",
+    )
+    assert recommendations.status == "available"
+    assert len(recommendations.items) == 4
+    geography = {
+        item.destination_id: {
+            "latitude": item.latitude,
+            "longitude": item.longitude,
+            "coordinate_role": item.coordinate_role,
+        }
+        for item in catalogue if item.destination_key in POINTS
+    }
+    itinerary = generate_itinerary(
+        recommendation=recommendations,
+        day_count=15,
+        locale="fa-IR",
+        geography_by_destination=geography,
+    )
+    assert itinerary is not None
+    assert itinerary.status == "partial"
+    assert itinerary.unplanned_days == list(range(3, 16))
+    assert sorted([sum(stop.day_number == day for stop in itinerary.stops) for day in (1, 2)]) == [1, 3]
+    assert "position_not_entrance" in itinerary.warning_codes
+    assert "geodesic_grouping_heuristic_only" in itinerary.warning_codes
