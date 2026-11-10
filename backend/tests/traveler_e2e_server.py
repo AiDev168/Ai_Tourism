@@ -220,6 +220,9 @@ def main() -> None:
         raise RuntimeError("E2E precondition failed: owner RAG enable flag is invalid")
     rag_url = os.environ.get("TOURISM_RAG_API_URL", "http://127.0.0.1:8765")
     rag_token = os.environ.get("TOURISM_RAG_API_TOKEN", "")
+    geo_qa_mode = os.environ.get("RAHGARD_REAL_GEO_E2E", "") == "1"
+    if geo_qa_mode and (os.environ.get("RAHGARD_RUN_GEO_QA") != "1" or rag_enabled):
+        raise RuntimeError("E2E real geographic QA mode requires explicit opt-in and no RAG")
     if rag_enabled:
         from urllib.parse import urlsplit
 
@@ -366,8 +369,23 @@ def main() -> None:
             """SELECT DISTINCT destination_id FROM travel.itinerary_stops
                WHERE is_synthetic=TRUE ORDER BY destination_id LIMIT 4"""
         ).fetchall()
-    if published_count != 0 or len(fixture_rows) != 4:
-        raise RuntimeError("E2E test-only recommendation fixture precondition failed")
+        geo_rows = connection.execute(
+            """SELECT destination_key, coordinate_role FROM knowledge.production_destinations"""
+        ).fetchall() if geo_qa_mode else []
+    if len(fixture_rows) != 4:
+        raise RuntimeError("E2E seeded QA fixture prerequisite failed")
+    if geo_qa_mode:
+        expected_geo = {
+            "shiraz-hafezieh-v1": "representative_point",
+            "shiraz-eram-garden-v1": "representative_point",
+            "shiraz-vakil-bazaar-v1": "representative_point",
+            "unesco-persepolis-v1": "property_reference",
+        }
+        actual_geo = {row["destination_key"]: row["coordinate_role"] for row in geo_rows}
+        if published_count != 4 or actual_geo != expected_geo:
+            raise RuntimeError("E2E geo QA expects exactly four real canonical published map points")
+    elif published_count != 0:
+        raise RuntimeError("E2E historical fixture mode requires an empty production catalogue")
     # Pending content-pack geometry is borrowed only to exercise the coordinate
     # grouping path with synthetic destination identities. It is not canonical,
     # independently verified, returned as a traveler coordinate, or written to
@@ -422,7 +440,9 @@ def main() -> None:
             return fixture_bundle
         return original_bundle(settings)
 
-    traveler_api.production_catalogue_bundle = guarded_catalogue_bundle
+    # Never inject synthetic recommendation identities in real-catalogue mode.
+    if not geo_qa_mode:
+        traveler_api.production_catalogue_bundle = guarded_catalogue_bundle
     adapter = FakeSmsAdapter()
     app.state.sms_adapter = adapter
     app.dependency_overrides[config.get_settings] = lambda: settings
