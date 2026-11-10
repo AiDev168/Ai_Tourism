@@ -368,10 +368,22 @@ def main() -> None:
         ).fetchall()
     if published_count != 0 or len(fixture_rows) != 4:
         raise RuntimeError("E2E test-only recommendation fixture precondition failed")
+    # Pending content-pack geometry is borrowed only to exercise the coordinate
+    # grouping path with synthetic destination identities. It is not canonical,
+    # independently verified, returned as a traveler coordinate, or written to
+    # PostgreSQL. The first three points are a compact Shiraz cluster; the last
+    # is the regional Persepolis reference point in Marvdasht.
+    pending_review_test_geometry = (
+        (29.6254028, 52.5583194, "representative_point"),
+        (29.63583, 52.52528, "representative_point"),
+        (29.6149806, 52.5467972, "representative_point"),
+        (29.93444, 52.89028, "property_reference"),
+    )
     fixture_items = []
     fixture_sources = {}
     for index, row in enumerate(fixture_rows, start=1):
         destination_id = str(row["destination_id"])
+        latitude, longitude, coordinate_role = pending_review_test_geometry[index - 1]
         fixture_items.append(ProductionDestinationItem(
             destination_id=destination_id,
             destination_key=f"E2E-TEST-ONLY-{index}",
@@ -385,6 +397,9 @@ def main() -> None:
             destination_type="heritage_site",
             province_name="TEST ONLY",
             city_name="TEST ONLY",
+            latitude=latitude,
+            longitude=longitude,
+            coordinate_role=coordinate_role,
         ))
         fixture_sources[destination_id] = [EvidenceSource(
             destination_id=int(destination_id),

@@ -398,7 +398,7 @@ async function requestBrowserJson(page, path, method, csrf, body, requestAudit =
   return payload;
 }
 
-function assertNoInventedSchedule(itinerary) {
+function assertNoInventedSchedule(itinerary, { coordinateAware = false } = {}) {
   const forbiddenInferredFields = [
     'planned_start_time',
     'duration_minutes',
@@ -416,7 +416,13 @@ function assertNoInventedSchedule(itinerary) {
       || !itinerary.warning_codes.includes('no_hours_or_routes_inferred')) {
     throw new Error('itinerary_missing_no_hours_or_routes_warning');
   }
-  if (!itinerary.warning_codes.includes('stop_location_unknown')
+  if (coordinateAware) {
+    if (!itinerary.warning_codes.includes('geodesic_grouping_heuristic_only')
+        || !itinerary.warning_codes.includes('position_not_entrance')
+        || itinerary.warning_codes.includes('stop_location_unknown')) {
+      throw new Error('coordinate_aware_itinerary_warning_mismatch');
+    }
+  } else if (!itinerary.warning_codes.includes('stop_location_unknown')
       || itinerary.warning_codes.includes('geodesic_grouping_heuristic_only')) {
     throw new Error('coordinate_free_itinerary_location_warning_mismatch');
   }
@@ -610,11 +616,23 @@ async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshot
       cacheControl: itineraryCreateResponse.headers()['cache-control'], transport: 'traveler-ui-to-local-vite-origin' });
     const created = await itineraryCreateResponse.json();
     const itineraryId = created.itinerary_id;
+    const initialDayCounts = Object.values((created.stops ?? []).reduce((counts, stop) => {
+      counts[stop.day_number] = (counts[stop.day_number] ?? 0) + 1;
+      return counts;
+    }, {})).sort((left, right) => left - right);
+    const cityFixtureIds = new Set(destinationIds.slice(0, 3).map(String));
+    const regionalFixtureId = String(destinationIds[3]);
+    const dayForFixture = new Map((created.stops ?? []).map(stop => [String(stop.destination_id), stop.day_number]));
+    const cityDays = new Set([...cityFixtureIds].map(id => dayForFixture.get(id)));
+    const cityDay = cityDays.size === 1 ? [...cityDays][0] : null;
+    const regionalDay = dayForFixture.get(regionalFixtureId);
     if (!itineraryId || created.day_count !== 15 || created.status !== 'partial'
-      || created.stops?.length !== 4 || created.unplanned_days?.length !== 11) {
+      || created.stops?.length !== 4 || created.unplanned_days?.length !== 13
+      || JSON.stringify(initialDayCounts) !== JSON.stringify([1, 3])
+      || cityDay == null || regionalDay == null || cityDay === regionalDay) {
       throw new Error('real_browser_fifteen_day_partial_itinerary_failed');
     }
-    assertNoInventedSchedule(created);
+    assertNoInventedSchedule(created, { coordinateAware: true });
     const catalogue = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET', undefined, undefined, apiTrace);
     if (catalogue.count !== 0) throw new Error('test_fixture_leaked_to_production_catalogue');
 
@@ -629,7 +647,7 @@ async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshot
     await page.locator('#itinerary-day-15').waitFor({ state: 'visible' });
     if (await page.locator('.saved-itinerary-days .itinerary-day').count() !== 15
       || await page.locator('.saved-stop').count() !== 4
-      || await page.locator('.unplanned-day').count() !== 11) {
+      || await page.locator('.unplanned-day').count() !== 13) {
       throw new Error('real_persisted_fifteen_day_itinerary_not_restored_in_ui');
     }
     const lastDay = await page.locator('#itinerary-day-15').textContent();
@@ -663,7 +681,7 @@ async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshot
     const reopened = await requestBrowserJson(
       page, `/api/v1/itineraries/${itineraryId}`, 'GET', undefined, undefined, apiTrace,
     );
-    assertNoInventedSchedule(reopened);
+    assertNoInventedSchedule(reopened, { coordinateAware: true });
     if (reopened.revision !== 2 || reopened.day_count !== 15 || reopened.stops?.length !== 3
       || reopened.unplanned_days?.length !== 12) {
       throw new Error('real_browser_itinerary_edit_reopen_mismatch');
@@ -701,12 +719,13 @@ async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshot
       }
     }
     return {
-      itineraryId, dayCount: 15, initialStops: 4, finalStops: 3,
-      initialUnplannedDays: 11, finalUnplannedDays: 12,
+      itineraryId, dayCount: 15, initialStops: 4, initialDayGroupSizes: initialDayCounts, finalStops: 3,
+      initialUnplannedDays: 13, finalUnplannedDays: 12,
+      geographicDayAssignments: { cityClusterDay: cityDay, regionalDay, cityClusterStops: cityFixtureIds.size, regionalStops: 1 },
       ownerRagProbe,
       apiTrace: apiTrace.filter(entry => /recommendations|itineraries/.test(entry.path)),
       noInventedScheduleFields: true,
-      geoGrouping: 'not exercised in browser: production projection is empty and synthetic fixture coordinates are intentionally rejected; response honestly reports stop_location_unknown',
+      geoGrouping: 'three pending Shiraz proposal points grouped together and one pending Marvdasht property-reference point grouped separately; coordinates were used only by synthetic in-memory test identities and were not published or returned to travelers',
       warningCodes: reopened.warning_codes,
     };
   } finally {
@@ -1396,7 +1415,7 @@ async function main() {
       ],
       audit: { externalRequestsBlocked: audit.externalRequests, successfulExternalResponses: 0, browserPageErrors: 0 },
       screenshotPolicy: 'Traveler-authored text is replaced in screenshot-only DOM captures; no phone, OTP, cookie, token, or request text is recorded.',
-      fixturePolicy: 'The simulated Chat gateway makes no HTTP requests. Positive 15-day itinerary requests use real FastAPI and PostgreSQL with four existing synthetic-only identities exposed through a private loopback test control; no positive recommendation or itinerary API call is intercepted, and production catalogue views remain empty. When explicitly enabled, one real owner-RAG HTTP probe exercises the empty approved index; retrieved text is withheld from the response and report.',
+      fixturePolicy: 'The simulated Chat gateway makes no HTTP requests. Positive 15-day itinerary requests use real FastAPI and PostgreSQL with four existing synthetic-only identities exposed through a private loopback test control. Pending Shiraz/Fars proposal points are attached only in memory to these synthetic identities to exercise grouping; they are not canonical, approved, stored, or returned as traveler coordinates. No positive recommendation or itinerary API call is intercepted, and production catalogue views remain empty. When explicitly enabled, one real owner-RAG HTTP probe exercises the empty approved index; retrieved text is withheld from the response and report.',
     };
     writeFileSync(resolve(artifactRoot, 'report.json'), `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
     console.log(JSON.stringify({ status: report.status, browser: report.browser, locales: results.map(result => result.locale), screenshots: report.screenshots.length, artifactRoot: artifactRoot.replaceAll('\\', '/') }));

@@ -24,6 +24,12 @@ _VALID_POINT_ROLES = frozenset(
 _NON_ARRIVAL_ROLES = frozenset({"property_reference", "representative_point"})
 _EARTH_RADIUS_KM = 6_371.0088
 _MAX_STOPS_PER_DAY = 50
+# Split a point set only at a conspicuous relative break in its minimum
+# spanning-tree edge lengths. This is a geographic grouping heuristic, not a
+# travel-feasibility threshold: a >=4x jump distinguishes a local cluster from
+# a regional outlier without choosing a fixed kilometer radius or daily quota.
+_NATURAL_GAP_RATIO = 4.0
+_DISTANCE_NOISE_FLOOR_KM = 0.01
 
 
 def _point(value: object) -> tuple[float, float, str] | None:
@@ -58,6 +64,91 @@ def _distance_km(left: tuple[float, float, str], right: tuple[float, float, str]
     return 2 * _EARTH_RADIUS_KM * asin(sqrt(min(1.0, haversine)))
 
 
+def _minimum_spanning_edges(
+    indices: Sequence[int],
+    points: Mapping[int, tuple[float, float, str] | None],
+    origin: tuple[float, float, str] | None,
+) -> list[tuple[float, int, int]]:
+    """Return deterministic point-to-point edges for the located candidates."""
+    if len(indices) < 2:
+        return []
+    first = min(
+        indices,
+        key=lambda index: (_distance_km(origin, points[index]), index),
+    ) if origin is not None else min(indices)
+    visited = {first}
+    edges: list[tuple[float, int, int]] = []
+    while len(visited) < len(indices):
+        distance, parent, child = min(
+            (
+                _distance_km(points[parent], points[child]), parent, child
+            )
+            for parent in visited
+            for child in indices
+            if child not in visited
+        )
+        edges.append((distance, parent, child))
+        visited.add(child)
+    return edges
+
+
+def _natural_geographic_clusters(
+    indices: Sequence[int],
+    points: Mapping[int, tuple[float, float, str] | None],
+    origin: tuple[float, float, str] | None,
+) -> list[list[int]]:
+    """Cut only conspicuous relative gaps; compact city points stay together.
+
+    With fewer than three points there is no scale comparison from which to
+    infer distinct geographic groups, so those points remain one group. For a
+    larger set, relative gaps in the MST are used instead of trip-day count as
+    the number of groups. Thus four nearby places in a 15-day trip do not
+    automatically consume four days, while a clearly separated regional
+    point can occupy its own day. This remains a straight-line heuristic.
+    """
+    if not indices:
+        return []
+    ordered_indices = sorted(indices)
+    edges = _minimum_spanning_edges(ordered_indices, points, origin)
+    cut_edges: set[tuple[int, int]] = set()
+    if len(ordered_indices) >= 3 and len(edges) > 1:
+        sorted_edges = sorted(edges, key=lambda edge: (edge[0], min(edge[1:]), max(edge[1:])))
+        for (lower, _, _), (upper, parent, child) in zip(sorted_edges, sorted_edges[1:]):
+            baseline = max(lower, _DISTANCE_NOISE_FLOOR_KM)
+            if upper / baseline >= _NATURAL_GAP_RATIO:
+                cut_edges.add((min(parent, child), max(parent, child)))
+
+    adjacency = {index: set() for index in ordered_indices}
+    for _, parent, child in edges:
+        edge_id = (min(parent, child), max(parent, child))
+        if edge_id not in cut_edges:
+            adjacency[parent].add(child)
+            adjacency[child].add(parent)
+
+    groups: list[list[int]] = []
+    remaining = set(ordered_indices)
+    while remaining:
+        start = min(remaining)
+        stack = [start]
+        component: list[int] = []
+        remaining.remove(start)
+        while stack:
+            current = stack.pop()
+            component.append(current)
+            for neighbor in sorted(adjacency[current]):
+                if neighbor in remaining:
+                    remaining.remove(neighbor)
+                    stack.append(neighbor)
+        groups.append(sorted(component))
+
+    if origin is not None:
+        groups.sort(key=lambda group: (
+            min(_distance_km(origin, points[index]) for index in group),
+            group[0],
+        ))
+    return groups
+
+
 def _geographic_days(
     *,
     items: Sequence[RecommendedDestination],
@@ -65,7 +156,7 @@ def _geographic_days(
     geography_by_destination: Mapping[str, DestinationGeography] | None,
     origin: DestinationGeography | None,
 ) -> tuple[dict[int, list[int]], list[str]]:
-    """Cluster nearby eligible points into days with deterministic farthest seeds.
+    """Cluster eligible points into days using visible relative geographic gaps.
 
     This only arranges an editable suggestion. There is deliberately no
     arbitrary distance cutoff, route feasibility decision, or travel-time
@@ -97,45 +188,39 @@ def _geographic_days(
         return groups, warnings
 
     origin_point = _point(origin)
-    if origin_point is not None:
-        first_seed = min(
-            valid_indices,
-            key=lambda index: (_distance_km(origin_point, points[index]), index),
-        )
-    else:
-        first_seed = valid_indices[0]
-    seeds = [first_seed]
-    seed_limit = min(day_count, len(valid_indices))
-    while len(seeds) < seed_limit:
-        remaining = [index for index in valid_indices if index not in seeds]
-        # Farthest-first seeding keeps geographically distant candidates on
-        # separate days when the confirmed trip has enough days.
-        next_seed = max(
-            remaining,
-            key=lambda index: (
-                min(_distance_km(points[index], points[seed]) for seed in seeds),
-                -index,
-            ),
-        )
-        seeds.append(next_seed)
-
-    assigned: dict[int, list[int]] = {
-        day: [seed] for day, seed in enumerate(seeds, start=1)
-    }
-    for index in valid_indices:
-        if index in seeds:
-            continue
-        day = min(
-            (candidate_day for candidate_day in assigned if len(assigned[candidate_day]) < _MAX_STOPS_PER_DAY),
-            key=lambda candidate_day: (
-                min(
-                    _distance_km(points[index], points[member])
-                    for member in assigned[candidate_day]
-                ),
-                candidate_day,
-            ),
-        )
-        assigned[day].append(index)
+    clusters = _natural_geographic_clusters(valid_indices, points, origin_point)
+    assigned: dict[int, list[int]] = {}
+    for cluster in clusters:
+        remaining_cluster = list(cluster)
+        while remaining_cluster:
+            unused_days = [day for day in range(1, day_count + 1) if day not in assigned]
+            available_days = [
+                day for day in range(1, day_count + 1)
+                if len(assigned.get(day, [])) < _MAX_STOPS_PER_DAY
+            ]
+            if not available_days:
+                raise ValueError("itinerary stop capacity exceeded")
+            if unused_days:
+                day = unused_days[0]
+            else:
+                # If several distinct regions must fit into fewer days, attach
+                # the next region to the geographically nearest day with room.
+                day = min(
+                    available_days,
+                    key=lambda candidate_day: (
+                        min(
+                            _distance_km(points[index], points[member])
+                            for index in remaining_cluster
+                            for member in assigned[candidate_day]
+                        ),
+                        len(assigned[candidate_day]),
+                        candidate_day,
+                    ),
+                )
+            capacity = _MAX_STOPS_PER_DAY - len(assigned.get(day, []))
+            take = remaining_cluster[:capacity]
+            assigned.setdefault(day, []).extend(take)
+            del remaining_cluster[:capacity]
 
     # Unknown-location stops use unoccupied days first where available; if
     # every day is already represented, place them on the least-filled day.
@@ -165,7 +250,7 @@ def _geographic_days(
         if not point_indices:
             result[day] = pending
             continue
-        if origin_point is not None and len(seeds) == 1:
+        if origin_point is not None and day == 1:
             current = min(point_indices, key=lambda index: (_distance_km(origin_point, points[index]), index))
         else:
             current = min(point_indices)

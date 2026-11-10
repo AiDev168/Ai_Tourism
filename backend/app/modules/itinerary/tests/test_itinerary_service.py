@@ -236,6 +236,35 @@ def test_geographic_grouping_clusters_nearby_stops_and_separates_distant_stops()
     assert all(stop.travel_to_next_estimate_minutes is None for stop in plan.stops)
 
 
+def test_fifteen_day_shiraz_cluster_and_persepolis_plan_leaves_thirteen_days_unplanned():
+    # Test-only coordinates mirror the candidate review geometry: three compact
+    # Shiraz points and a distant Marvdasht property reference. These fixtures
+    # are never loaded into a production catalogue.
+    geography = {
+        "1": {"latitude": 29.6254028, "longitude": 52.5583194, "coordinate_role": "representative_point"},
+        "2": {"latitude": 29.63583, "longitude": 52.52528, "coordinate_role": "representative_point"},
+        "3": {"latitude": 29.6149806, "longitude": 52.5467972, "coordinate_role": "representative_point"},
+        "4": {"latitude": 29.93444, "longitude": 52.89028, "coordinate_role": "property_reference"},
+    }
+
+    plan = generate_itinerary(
+        recommendation=recommendation(4),
+        day_count=15,
+        locale="fa-IR",
+        geography_by_destination=geography,
+    )
+
+    assert plan is not None
+    assert plan.day_count == 15
+    assert {stop.destination_id for stop in plan.stops if stop.day_number == 1} == {"1", "2", "3"}
+    assert {stop.destination_id for stop in plan.stops if stop.day_number == 2} == {"4"}
+    assert plan.unplanned_days == list(range(3, 16))
+    assert plan.status == "partial"
+    assert "geodesic_grouping_heuristic_only" in plan.warning_codes
+    assert "position_not_entrance" in plan.warning_codes
+    assert all(stop.travel_to_next_estimate_minutes is None for stop in plan.stops)
+
+
 def test_property_reference_is_never_presented_as_an_entrance_or_route_point():
     plan = generate_itinerary(
         recommendation=recommendation(2),
