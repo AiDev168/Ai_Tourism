@@ -220,7 +220,9 @@ def test_real_assistant_chat_preserves_confirmed_trip_and_version(assistant_db, 
     traveler.confirm_trip_profile(
         user_id=owner, trip_id=trip, expected_version=original["version"],
         confirmed_requirements={
-            "duration_days": 3, "confirmation_source": "traveler_reviewed",
+            "duration_days": 15,
+            "constraints": ["wheelchair access is mandatory"],
+            "confirmation_source": "traveler_reviewed",
         },
         destination_ids=[],
         requirement_consent={
@@ -230,6 +232,7 @@ def test_real_assistant_chat_preserves_confirmed_trip_and_version(assistant_db, 
         },
     )
     before = traveler.trip(owner, trip)
+    assert before["duration_days"] == 15
     assert before["confirmed_requirements"]["requirement_consent"]["profile_version"] == before["version"]
     conversation_version = traveler.conversation(owner, conversation)["version"]
 
@@ -251,7 +254,7 @@ def test_real_assistant_chat_preserves_confirmed_trip_and_version(assistant_db, 
     assert after["version"] == before["version"]
     assert after["confirmed_requirements"] == before["confirmed_requirements"]
     assert after["extracted_requirements"] == before["extracted_requirements"]
-    assert after["duration_days"] == before["duration_days"]
+    assert after["duration_days"] == before["duration_days"] == 15
     assert traveler.conversation(owner, conversation)["version"] == conversation_version + 2
 
 

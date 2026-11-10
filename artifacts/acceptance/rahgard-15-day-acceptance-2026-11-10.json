@@ -1,0 +1,108 @@
+{
+  "task": "RAHGARD_CODEX_15_DAY_TRAVELER_VERTICAL_ACCEPTANCE_2026-11-09",
+  "run_date": "2026-11-10",
+  "decision": "NO_GO",
+  "gate_a_integrated_engineering": {
+    "status": "FAIL",
+    "reason": "Live browser flow passed through persisted conversation, assistant, reviewed profile and truthful needs_confirmation, but the positive partial itinerary UI fixture intercepted recommendation/itinerary API calls and did not prove PostgreSQL itinerary persistence."
+  },
+  "gate_b_real_traveler_mvp": {
+    "status": "BLOCKED",
+    "missing": [
+      "Authorized live provider configuration and approval for a bounded live request",
+      "Owner-approved published destination content with valid evidence"
+    ]
+  },
+  "git": {
+    "branch": "feat/rahgard-15day-journey-acceptance",
+    "base_sha": "f627702472272dc01f16141f324033b989522081",
+    "final_sha": "f627702472272dc01f16141f324033b989522081",
+    "task_expected_start_sha": "d55dcda32d7465904ba60687d4d1d5875e2ce57d",
+    "task_expected_start_sha_matched": false,
+    "base_upstream_sync": "0 ahead / 0 behind",
+    "task_branch_upstream": null,
+    "committed": false,
+    "pushed": false
+  },
+  "browser": {
+    "status": "passed",
+    "browser": "Chromium 156.0.8078.47",
+    "environment": "Vite + FastAPI + guarded disposable PostgreSQL 17; fake SMS; in-process simulated Chat gateway",
+    "db_loopback_port": 59584,
+    "db_container_cleanup_exit_code": 0,
+    "locale_journeys": [
+      {
+        "locale": "fa-IR",
+        "production_catalogue_count": 0,
+        "recommendation_outcome": "needs_confirmation",
+        "unresolved_fields": ["accessibility", "hard_constraint", "destination_resolution"],
+        "requested_and_persisted_duration_days": 15,
+        "persisted_user_turns": 13,
+        "simulated_gateway_calls": 2,
+        "history_reopen_owner_csrf_delete_no_store_locale_smoke": "passed",
+        "test_only_partial_fixture": {"days": 15, "stops": 4, "unplanned_days": 11, "api_intercepted": true}
+      },
+      {
+        "locale": "en-US",
+        "production_catalogue_count": 0,
+        "recommendation_outcome": "needs_confirmation",
+        "unresolved_fields": ["accessibility", "hard_constraint", "destination_resolution"],
+        "requested_and_persisted_duration_days": 10,
+        "persisted_user_turns": 2,
+        "simulated_gateway_calls": 2,
+        "history_reopen_owner_csrf_delete_no_store_locale_smoke": "passed",
+        "test_only_partial_fixture": {"days": 10, "stops": 4, "unplanned_days": 6, "api_intercepted": true}
+      },
+      {
+        "locale": "ar",
+        "production_catalogue_count": 0,
+        "recommendation_outcome": "needs_confirmation",
+        "unresolved_fields": ["accessibility", "hard_constraint", "destination_resolution"],
+        "requested_and_persisted_duration_days": 10,
+        "persisted_user_turns": 2,
+        "simulated_gateway_calls": 2,
+        "history_reopen_owner_csrf_delete_no_store_locale_smoke": "passed",
+        "test_only_partial_fixture": {"days": 10, "stops": 4, "unplanned_days": 6, "api_intercepted": true}
+      }
+    ],
+    "screenshots": {
+      "count": 12,
+      "run_directory": "artifacts/visual-qa-task15d/run-2026-11-10T04-28-10-931Z-31776",
+      "report": "artifacts/visual-qa-task15d/run-2026-11-10T04-28-10-931Z-31776/report.json",
+      "viewports": ["390x844", "1440x1000"],
+      "content_sanitized": true,
+      "manual_review": "checked Persian and Arabic/English mobile and desktop samples; no private request text, phone, OTP, cookie, or token observed"
+    },
+    "external_requests_blocked": 0,
+    "successful_external_responses": 0,
+    "browser_page_errors": 0
+  },
+  "tests": [
+    {"command": "frontend: vitest run TravelerJourney.assistant.test.tsx TravelerJourney.test.tsx TravelerJourney.clarification.test.tsx", "result": "11 passed / 3 files", "exit_code": 0},
+    {"command": "frontend: npm.cmd test", "result": "109 passed / 13 files", "exit_code": 0},
+    {"command": "frontend: npm.cmd run build", "result": "TypeScript, Vite and PWA build passed", "exit_code": 0},
+    {"command": "backend: uv run pytest -p no:cacheprovider -q --basetemp .venv/pytest-task15d-full-20261110-b", "result": "261 passed, 12 skipped, 1 deprecation warning", "exit_code": 0},
+    {"command": "backend: focused assistant/recommendation set", "result": "49 passed, 8 skipped before disposable PostgreSQL setup", "exit_code": 0},
+    {"command": "backend: guarded tests/test_assistant_postgres.py", "result": "8 passed", "exit_code": 0},
+    {"command": "backend: itinerary service + itinerary API contract + recommendation service focused set", "result": "31 passed", "exit_code": 0},
+    {"command": "backend: Ruff changed backend files", "result": "all checks passed", "exit_code": 0},
+    {"command": "node --check frontend/scripts/traveler-e2e.mjs", "result": "passed", "exit_code": 0},
+    {"command": "git diff --check", "result": "passed", "exit_code": 0}
+  ],
+  "known_non_passes": [
+    "An initial full backend run had 7 pytest setup errors because the user-level temporary directory could not be enumerated; rerunning with a fresh backend-local basetemp passed.",
+    "Two initial browser harness runs failed because the test assumed only budget and soft-preference consent; it was corrected to require independent choices for any rendered advisory fields, then the final three-locale run passed.",
+    "The full SQL contracts 000-013 and a positive backend-persisted 15-day itinerary browser path were not verified."
+  ],
+  "safety": {
+    "shared_database_accessed": false,
+    "shared_port_55433_accessed": false,
+    "root_env_read": false,
+    "production_content_changed": false,
+    "production_catalogue_count": 0,
+    "live_provider_called": false,
+    "real_sms_used": false,
+    "rag_or_provider_architecture_changed": false,
+    "deployment_or_git_remote_action": false
+  }
+}

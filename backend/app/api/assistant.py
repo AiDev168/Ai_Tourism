@@ -123,6 +123,23 @@ async def assistant_turn(
                 conversation_id=conversation_id, trip_id=body.trip_id,
                 exclude_message_id=reservation.user_message_id,
             )
+            trip_context = await run_in_threadpool(
+                traveler.trip, principal.user_id, body.trip_id,
+            )
+            original_request = trip_context.get('original_request') if trip_context else None
+            if (isinstance(original_request, str) and original_request.strip()
+                    and not any(
+                        item.get('role') == 'user' and item.get('content') == original_request
+                        for item in history if isinstance(item, dict)
+                    )):
+                # Keep the initial request in scope after the bounded recent
+                # history window rolls forward. The current turn's explicit
+                # processing consent covers this same-trip context; the latest
+                # correction remains the newest message in the retained tail.
+                history = [
+                    {'role': 'user', 'content': original_request[:1200]},
+                    *history[-11:],
+                ]
             locale = {'fa': 'fa-IR', 'en': 'en-US', 'ar': 'ar'}.get(
                 reservation.locale, reservation.locale,
             )

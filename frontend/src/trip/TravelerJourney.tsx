@@ -18,13 +18,21 @@ import {
 const catalog = new ApiDestinationCatalogPort();
 
 const assistantCopy: Record<Locale, {
-  consent: string; send: string; review: string; initial: string; unavailable: string;
+  consent: string; send: string; saveWithoutAI: string; review: string; initial: string; unavailable: string;
   destination: string; duration: string; apply: string; dismiss: string; unsaved: string; reviewSaved: string;
   speaker: string; promptsTitle: string; prompts: readonly string[];
+  localTitle: string; localHelp: string; remoteTitle: string; remoteHelp: string; promptHelp: string; currentDuration: string;
   origin: string; travelerCount: string; budget: string; dates: string; interest: string;
 }> = {
-  'fa-IR': { consent: 'با ارسال این پیام و تاریخچهٔ گفت‌وگوی سفر به سرویس هوش مصنوعی موافقم.',
+  'fa-IR': { consent: 'با ارسال این پیام و تاریخچهٔ گفت‌وگوی سفر به سرویس هوش مصنوعی راه‌دور موافقم.',
     send: 'پرسش از دستیار سفر', review: 'پیشنهاد مدل؛ پیش از تأیید سفر بررسی کنید:',
+    saveWithoutAI: 'ثبت پاسخ بدون هوش مصنوعی',
+    localTitle: 'ثبت پاسخ یا اصلاح در گفت‌وگوی سفر',
+    localHelp: 'این متن در پروندهٔ همین سفر ذخیره می‌شود و برای دریافت پاسخ هوش مصنوعی ارسال نمی‌شود.',
+    remoteTitle: 'دریافت پاسخ از دستیار هوش مصنوعی راه‌دور',
+    remoteHelp: 'با انتخاب رضایت و زدن دکمهٔ پرسش، پیام فعلی و سابقهٔ گفت‌وگوی همین سفر برای پردازش ارسال می‌شود. پاسخ فقط پیشنهاد است و اطلاعات سفر را خودکار تغییر نمی‌دهد.',
+    promptHelp: 'انتخاب هر پرسش فقط متن پیش‌نویس را پر می‌کند؛ تا زمانی که یکی از دکمه‌های ثبت یا ارسال را نزنید، چیزی ذخیره یا ارسال نمی‌شود.',
+    currentDuration: 'مدت ثبت‌شدهٔ این سفر: {days} روز.',
     initial: 'لطفاً برای سفر شرح‌داده‌شده سؤال تکمیلی مناسب بپرس.',
     unavailable: 'دستیار در حال حاضر در دسترس نیست؛ همچنان می‌توانید سفر را بدون آن ثبت کنید.',
     destination: 'مقصد پیشنهادی', duration: 'تعداد روز پیشنهادی',
@@ -34,8 +42,15 @@ const assistantCopy: Record<Locale, {
     budget: 'بودجهٔ پیشنهادی', dates: 'تاریخ‌های پیشنهادی (میلادی)', interest: 'علاقهٔ پیشنهادی',
     speaker: 'مشاور هوش مصنوعی', promptsTitle: 'برای ادامه می‌توانید از مشاور بخواهید:',
     prompts: ['دربارهٔ علایق و سبک سفرم یک سؤال تکمیلی بپرس.', 'برای روشن شدن بودجه و تعداد همراهانم سؤال بپرس.', 'محدودیت‌های ضروری سفرم را مرور کن و موارد مبهم را بپرس.'] },
-  'en-US': { consent: 'I consent to sending this message and prior trip conversation to the AI service.',
+  'en-US': { consent: 'I consent to sending this message and this trip’s conversation history to the remote AI service.',
     send: 'Ask travel assistant', review: 'AI suggestions — review before confirming:',
+    saveWithoutAI: 'Save reply without AI',
+    localTitle: 'Save a reply or correction to this trip',
+    localHelp: 'This is saved in this trip’s conversation and is not sent for an AI response.',
+    remoteTitle: 'Ask the remote AI travel assistant',
+    remoteHelp: 'After you give consent and choose Ask, the current message and this trip’s conversation history are sent for processing. The reply is only a suggestion and will not change trip details automatically.',
+    promptHelp: 'Choosing a question only fills the draft. Nothing is saved or sent until you choose one of the actions below.',
+    currentDuration: 'Recorded trip length: {days} days.',
     initial: 'Please ask a useful clarification about the trip described above.',
     unavailable: 'The assistant is unavailable. You can still save your trip.',
     destination: 'Suggested destination', duration: 'Suggested days',
@@ -45,8 +60,15 @@ const assistantCopy: Record<Locale, {
     budget: 'Suggested budget', dates: 'Suggested dates (Gregorian)', interest: 'Suggested interest',
     speaker: 'AI travel advisor', promptsTitle: 'Suggested follow-up questions:',
     prompts: ['Ask me about my interests and travel style.', 'Clarify my budget and number of travelers.', 'Review my essential constraints and ask what is unclear.'] },
-  ar: { consent: 'أوافق على إرسال هذه الرسالة وسجل محادثة الرحلة إلى خدمة الذكاء الاصطناعي.',
+  ar: { consent: 'أوافق على إرسال هذه الرسالة وسجل محادثة هذه الرحلة إلى خدمة الذكاء الاصطناعي البعيد.',
     send: 'اسأل مساعد السفر', review: 'اقتراحات النموذج — راجعها قبل التأكيد:',
+    saveWithoutAI: 'احفظ الرد دون ذكاء اصطناعي',
+    localTitle: 'حفظ رد أو تصحيح في هذه الرحلة',
+    localHelp: 'يُحفظ النص في محادثة هذه الرحلة ولا يُرسل لطلب رد من الذكاء الاصطناعي.',
+    remoteTitle: 'اسأل مساعد السفر بالذكاء الاصطناعي البعيد',
+    remoteHelp: 'بعد الموافقة والضغط على زر السؤال، تُرسل الرسالة الحالية وسجل محادثة هذه الرحلة للمعالجة. الرد اقتراح فقط ولا يغيّر تفاصيل الرحلة تلقائيًا.',
+    promptHelp: 'اختيار سؤال يملأ المسودة فقط؛ لا يُحفظ شيء ولا يُرسل حتى تختار أحد الإجراءين أدناه.',
+    currentDuration: 'مدة الرحلة المسجلة: {days} يومًا.',
     initial: 'يرجى طرح سؤال توضيحي مناسب عن الرحلة المذكورة أعلاه.',
     unavailable: 'المساعد غير متاح حاليًا. يمكنك حفظ الرحلة بدونه.',
     destination: 'الوجهة المقترحة', duration: 'الأيام المقترحة',
@@ -785,6 +807,9 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       {activeTrip && activeConversation && <div className="journey-columns">
         <article className="conversation-panel journey-panel">
           <div className="panel-title"><span className="mini-icon" aria-hidden="true">✳</span><span>{copy.continueTitle}</span></div>
+          {requestedTripDays !== null && <p className="conversation-trip-duration" role="status">
+            {assistantCopy[locale].currentDuration.replace('{days}', formatNumber(locale, requestedTripDays))}
+          </p>}
           <div className="conversation-transcript" aria-live="polite">
             {currentMessages.map(message => <div className={`saved-message saved-message-${message.role}`} key={message.message_id}>
               <small>{message.role === 'user' ? activeTrip.locale : assistantCopy[locale].speaker}</small>
@@ -807,16 +832,23 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
           </div>}
           <div className="assistant-prompt-suggestions" aria-label={assistantCopy[locale].promptsTitle}>
             <p>{assistantCopy[locale].promptsTitle}</p>
+            <p>{assistantCopy[locale].promptHelp}</p>
             <div>{assistantCopy[locale].prompts.map(prompt => <button key={prompt} type="button"
               disabled={busy || !online} onClick={() => {
                 setMessageText(prompt);
                 document.getElementById('trip-follow-up')?.focus();
               }}>{prompt}</button>)}</div>
           </div>
-          <label htmlFor="trip-follow-up">{copy.messagePlaceholder}</label>
-          <textarea id="trip-follow-up" value={messageText} onChange={event => setMessageText(event.target.value)} maxLength={1200} rows={3} dir="auto" />
-          <button type="button" onClick={() => void sendMessage()} disabled={busy || !messageText.trim() || !online}>{copy.sendMessage}</button>
-          <div className="assistant-controls">
+          <fieldset className="assistant-local-note">
+            <legend>{assistantCopy[locale].localTitle}</legend>
+            <p>{assistantCopy[locale].localHelp}</p>
+            <label htmlFor="trip-follow-up">{copy.messagePlaceholder}</label>
+            <textarea id="trip-follow-up" value={messageText} onChange={event => setMessageText(event.target.value)} maxLength={1200} rows={3} dir="auto" />
+            <button type="button" onClick={() => void sendMessage()} disabled={busy || !messageText.trim() || !online}>{assistantCopy[locale].saveWithoutAI}</button>
+          </fieldset>
+          <fieldset className="assistant-controls">
+            <legend>{assistantCopy[locale].remoteTitle}</legend>
+            <p>{assistantCopy[locale].remoteHelp}</p>
             <label htmlFor="assistant-remote-consent">
               <input id="assistant-remote-consent" type="checkbox" checked={remoteConsent}
                 onChange={event => setRemoteConsent(event.currentTarget.checked)} />
@@ -863,7 +895,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
                 <button type="button" onClick={applyAssistantCandidate} disabled={busy}>{assistantCopy[locale].apply}</button>
                 <button type="button" onClick={() => setAssistantCandidate(null)} disabled={busy}>{assistantCopy[locale].dismiss}</button>
               </div>}
-          </div>
+          </fieldset>
         </article>
 
         <article className="recommend-panel journey-panel" id="journey-recommendations">
