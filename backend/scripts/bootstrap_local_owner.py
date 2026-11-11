@@ -138,11 +138,17 @@ def reset_owner(login_name: str, password: str) -> None:
     try:
         with connection.transaction():
             row = connection.execute(
-                "SELECT owner_id FROM identity.local_owner_credentials WHERE login_name=%s FOR UPDATE",
+                "SELECT owner_id FROM identity.local_owner_credentials WHERE login_name=%s",
                 (login_name,),
             ).fetchone()
             if row is None:
                 raise BootstrapBlocked("local owner credential does not exist")
+            # Match the application session issuer's advisory lock. A reset
+            # cannot race a login using the previous password verifier.
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                ("rahgard:local-owner-credential:" + str(row["owner_id"]),),
+            )
             salt, verifier, iterations = _credential(password, row["owner_id"])
             connection.execute(
                 """UPDATE identity.local_owner_credentials
