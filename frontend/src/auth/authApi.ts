@@ -5,7 +5,10 @@ export type AuthUser = {
   auth_method?: 'otp' | 'local_owner';
 };
 export type AuthSession = { user: AuthUser; csrf_token: string };
-export type AuthMethod = 'disabled' | 'otp' | 'local_owner';
+export type AuthCapabilities = {
+  methods: Array<'otp' | 'local_owner'>;
+  otp_delivery: 'available' | 'unavailable';
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/v1/auth${path}`, {
@@ -26,7 +29,7 @@ export class AuthApiError extends Error {
 }
 
 export const authApi = {
-  method: () => request<{ method: AuthMethod }>('/method'),
+  method: () => request<AuthCapabilities>('/method'),
   me: () => request<AuthSession>('/me'),
   loginLocalOwner: (login_name: string, password: string) => request<AuthSession>(
     '/local-owner/login', { method: 'POST', body: JSON.stringify({ login_name, password }) },

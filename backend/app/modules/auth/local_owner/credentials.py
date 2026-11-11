@@ -27,6 +27,10 @@ _ITERATIONS = 600_000
 _SALT_BYTES = 32
 _VERIFIER_BYTES = 32
 _MAX_PASSWORD_CHARS = 256
+# UTF-8 uses at most four bytes per Unicode scalar value.  Keep a byte bound
+# explicit as well as the user-facing character bound; never truncate a
+# password before deriving or verifying its PBKDF2 verifier.
+_MAX_PASSWORD_BYTES = _MAX_PASSWORD_CHARS * 4
 _DUMMY_SALT = bytes.fromhex("a6" * _SALT_BYTES)
 _DUMMY_VERIFIER = bytes.fromhex("59" * _VERIFIER_BYTES)
 _OWNER_ID = TypeVar("_OWNER_ID")
@@ -160,8 +164,14 @@ def create_credential(owner_id: UUID, password: str) -> LocalOwnerCredential:
             or password != password.strip() or len(set(password)) < 8
             or any(ord(char) < 32 for char in password)):
         raise LocalOwnerCredentialError("owner password does not meet local pilot requirements")
+    try:
+        password_bytes = password.encode("utf-8", errors="strict")
+    except UnicodeEncodeError:
+        raise LocalOwnerCredentialError("owner password does not meet local pilot requirements") from None
+    if len(password_bytes) > _MAX_PASSWORD_BYTES:
+        raise LocalOwnerCredentialError("owner password does not meet local pilot requirements")
     salt = secrets.token_bytes(_SALT_BYTES)
-    verifier = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _ITERATIONS, _VERIFIER_BYTES)
+    verifier = hashlib.pbkdf2_hmac("sha256", password_bytes, salt, _ITERATIONS, _VERIFIER_BYTES)
     return LocalOwnerCredential(
         owner_id=owner_id,
         salt_b64=base64.urlsafe_b64encode(salt).decode().rstrip("="),
@@ -238,14 +248,20 @@ def verify_and_issue(
             valid_credential = False
             salt = _DUMMY_SALT
             expected = _DUMMY_VERIFIER
-    candidate = hashlib.pbkdf2_hmac(
-        "sha256", password.encode("utf-8", errors="replace")[:_MAX_PASSWORD_CHARS], salt,
-        _ITERATIONS, _VERIFIER_BYTES,
-    ) if isinstance(password, str) else hashlib.pbkdf2_hmac(
-        "sha256", b"invalid-password-input", salt, _ITERATIONS, _VERIFIER_BYTES,
-    )
+    password_valid = isinstance(password, str) and 16 <= len(password) <= _MAX_PASSWORD_CHARS
+    try:
+        candidate_bytes = password.encode("utf-8", errors="strict") if password_valid else b"invalid-password-input"
+    except UnicodeEncodeError:
+        candidate_bytes = b"invalid-password-input"
+        password_valid = False
+    # The character bound implies this byte bound for valid UTF-8.  Retain the
+    # explicit check so future changes cannot silently create truncation.
+    if len(candidate_bytes) > _MAX_PASSWORD_BYTES:
+        candidate_bytes = b"invalid-password-input"
+        password_valid = False
+    candidate = hashlib.pbkdf2_hmac("sha256", candidate_bytes, salt, _ITERATIONS, _VERIFIER_BYTES)
     matched = hmac.compare_digest(candidate, expected)
-    if not allowed or not valid_credential or not matched:
+    if not allowed or not valid_credential or not password_valid or not matched:
         limiter.failed(limit_key)
         return None
     limiter.succeeded(limit_key)

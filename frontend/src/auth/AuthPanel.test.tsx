@@ -37,7 +37,7 @@ describe('localized OTP panel', () => {
     const storageWrite = vi.fn();
     vi.stubGlobal('localStorage', { setItem: storageWrite });
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(response({ method: 'otp' }))
+      .mockResolvedValueOnce(response({ methods: ['otp'], otp_delivery: 'available' }))
       .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401))
       .mockResolvedValueOnce(response({ challenge_id: 'challenge-1', status: 'accepted' }, 202))
       .mockResolvedValueOnce(response(session))
@@ -68,7 +68,7 @@ describe('localized OTP panel', () => {
 
   it('restores an existing cookie session', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(response({ method: 'otp' }))
+      .mockResolvedValueOnce(response({ methods: ['otp'], otp_delivery: 'available' }))
       .mockResolvedValueOnce(response(session));
     vi.stubGlobal('fetch', fetchMock);
     await act(async () => { root.render(<AuthPanel locale="ar" />); }); await settle();
@@ -77,7 +77,7 @@ describe('localized OTP panel', () => {
 
   it('renders a localized invalid or expired OTP error', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(response({ method: 'otp' }))
+      .mockResolvedValueOnce(response({ methods: ['otp'], otp_delivery: 'available' }))
       .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401))
       .mockResolvedValueOnce(response({ challenge_id: 'c-1', status: 'accepted' }, 202))
       .mockResolvedValueOnce(response({ error: { code: 'invalid_or_expired_code' } }, 401));
@@ -100,7 +100,7 @@ describe('localized OTP panel', () => {
   it('uses local owner login without persisting the password and clears it after success', async () => {
     const localSession = { user: { user_id: 'owner-1', phone_e164: null, phone_verified: null, auth_method: 'local_owner' }, csrf_token: 'csrf-local' };
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(response({ method: 'local_owner' }))
+      .mockResolvedValueOnce(response({ methods: ['otp', 'local_owner'], otp_delivery: 'unavailable' }))
       .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401))
       .mockResolvedValueOnce(response(localSession));
     const storageWrite = vi.fn();
@@ -108,6 +108,9 @@ describe('localized OTP panel', () => {
     vi.stubGlobal('fetch', fetchMock);
     await act(async () => { root.render(<AuthPanel locale="en-US" />); }); await settle();
     await act(async () => { (host.querySelector('button') as HTMLButtonElement).click(); });
+    expect(host.querySelector('#auth-phone')).not.toBeNull();
+    const ownerChoice = [...host.querySelectorAll('button')].find(button => button.textContent === 'Local owner sign in')!;
+    await act(async () => { ownerChoice.click(); });
     const login = host.querySelector<HTMLInputElement>('#auth-local-login')!;
     const password = host.querySelector<HTMLInputElement>('#auth-local-password')!;
     await act(async () => {
@@ -119,5 +122,19 @@ describe('localized OTP panel', () => {
     const loginCall = fetchMock.mock.calls.find(call => String(call[0]).endsWith('/local-owner/login'))!;
     expect(JSON.parse(String(loginCall[1]?.body))).toEqual({ login_name: 'owner', password: 'test-only strong password 123!' });
     expect(storageWrite).not.toHaveBeenCalled();
+  });
+
+  it('keeps traveler OTP visible but unavailable without SMS delivery, without requesting or fabricating a code', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ methods: ['otp', 'local_owner'], otp_delivery: 'unavailable' }))
+      .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401));
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => { root.render(<AuthPanel locale="en-US" />); }); await settle();
+    await act(async () => { (host.querySelector('button') as HTMLButtonElement).click(); });
+    expect(host.querySelector('#auth-phone')).not.toBeNull();
+    expect(host.textContent).toContain('SMS delivery is unavailable');
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+    expect(host.querySelector('#auth-code')).toBeNull();
+    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/otp/challenges'))).toBe(false);
   });
 });

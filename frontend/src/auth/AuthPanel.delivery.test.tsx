@@ -33,7 +33,7 @@ afterEach(() => {
 describe('OTP delivery failure UX', () => {
   it('shows a generic retry state without opening code entry when no usable challenge is returned', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(response({ method: 'otp' }))
+      .mockResolvedValueOnce(response({ methods: ['otp'], otp_delivery: 'available' }))
       .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401))
       .mockResolvedValueOnce(response({ challenge_id: null, status: 'unavailable' }, 202));
     vi.stubGlobal('fetch', fetchMock);
@@ -48,7 +48,7 @@ describe('OTP delivery failure UX', () => {
       host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
     await settle();
-    expect(host.textContent).toContain(authMessages['en-US'].requestUnavailable);
+    expect(host.textContent).toContain(authMessages['en-US'].smsUnavailable);
     expect(host.querySelector('#auth-code')).toBeNull();
     expect(host.textContent).not.toMatch(/rate limit|too many requests/i);
   });

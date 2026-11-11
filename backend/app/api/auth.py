@@ -50,7 +50,8 @@ class ChallengeResponse(BaseModel):
 
 
 class AuthMethodResponse(BaseModel):
-    method: Literal["disabled", "otp", "local_owner"]
+    methods: list[Literal["otp", "local_owner"]]
+    otp_delivery: Literal["available", "unavailable"]
 
 
 class LocalOwnerLoginRequest(BaseModel):
@@ -135,12 +136,17 @@ class _PersistentLocalOwnerLimiter:
 @router.get("/method", response_model=AuthMethodResponse)
 def authentication_method(settings: Annotated[Settings, Depends(get_settings)]):
     if not settings.auth_enabled:
-        return AuthMethodResponse(method="disabled")
+        return AuthMethodResponse(methods=[], otp_delivery="unavailable")
+    # OTP remains the ordinary traveler capability even when this local pilot
+    # has no delivery provider. The client can explain that delivery is
+    # unavailable without inventing or exposing a verification code.
+    methods: list[Literal["otp", "local_owner"]] = ["otp"]
     if settings.auth_local_owner_enabled:
-        return AuthMethodResponse(method="local_owner")
-    if settings.auth_sms_adapter != "disabled":
-        return AuthMethodResponse(method="otp")
-    return AuthMethodResponse(method="disabled")
+        methods.append("local_owner")
+    return AuthMethodResponse(
+        methods=methods,
+        otp_delivery="available" if settings.auth_sms_adapter != "disabled" else "unavailable",
+    )
 
 
 @router.post("/local-owner/login", response_model=SessionResponse)
@@ -206,7 +212,7 @@ def request_challenge(
     settings: Annotated[Settings, Depends(get_settings)],
     service: Annotated[AuthenticationService, Depends(get_auth_service)],
 ):
-    if not settings.auth_enabled or settings.auth_local_owner_enabled:
+    if not settings.auth_enabled or settings.auth_sms_adapter == "disabled":
         return _unavailable()
     try:
         result = service.issue(
@@ -233,7 +239,7 @@ def verify_challenge(
     settings: Annotated[Settings, Depends(get_settings)],
     service: Annotated[AuthenticationService, Depends(get_auth_service)],
 ):
-    if not settings.auth_enabled or settings.auth_local_owner_enabled:
+    if not settings.auth_enabled or settings.auth_sms_adapter == "disabled":
         return _unavailable()
     try:
         result = service.verify(

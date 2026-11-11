@@ -46,6 +46,18 @@ def test_bootstrap_stores_only_pbkdf2_verifier_and_parses_round_trip():
     assert login(credential) == (owner_id, "session-issued")
 
 
+def test_long_persian_password_round_trips_without_utf8_byte_truncation():
+    # 145 Persian letters occupy more than 256 UTF-8 bytes while remaining
+    # within the documented 256-character input limit.
+    password = "متنپسوردفارسیطولانیبرایآزمایش" * 5
+    assert len(password) == 145
+    assert len(password.encode("utf-8")) > 256
+    credential = create_credential(uuid4(), password)
+
+    assert login(credential, password) is not None
+    assert login(credential, password[:-1] + "ی") is None
+
+
 @pytest.mark.parametrize("password", ["short", " leading and trailing ", "\x00" + "a" * 20, "x" * 30, "x" * 257])
 def test_bootstrap_rejects_weak_or_unsafe_passwords(password):
     with pytest.raises(LocalOwnerCredentialError):

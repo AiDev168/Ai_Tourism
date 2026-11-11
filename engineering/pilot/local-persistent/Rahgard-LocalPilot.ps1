@@ -1364,7 +1364,14 @@ function Invoke-LocalOwnerBootstrap([bool]$Reset) {
         }
     }
     if ($exitCode -ne 0) { throw 'Local owner bootstrap/recovery failed; no password content is logged.' }
-    [pscustomobject]@{ status=if ($Reset) { 'password_reset_completed' } else { 'owner_created' }; login_name='owner'; password_captured=$false }
+    [pscustomobject]@{
+        status=if ($Reset) { 'password_reset_completed' } else { 'owner_created' }
+        login_name='owner'
+        database=$Paths.Database
+        database_port=$state.database_port
+        data_root=$Paths.Root
+        password_captured=$false
+    }
 }
 
 try {

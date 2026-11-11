@@ -1,3 +1,4 @@
+import base64
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -7,6 +8,7 @@ from app.api import auth
 from app.core.config import Settings, get_settings
 from app.main import app
 from app.modules.identity.auth_service import AuthenticatedUser
+from app.modules.auth.local_owner import create_credential
 
 
 def local_settings() -> Settings:
@@ -67,6 +69,53 @@ def test_local_owner_login_returns_only_normal_secure_session(monkeypatch):
         app.dependency_overrides.clear()
 
 
+def test_local_owner_http_login_accepts_long_persian_password_and_issues_secure_session():
+    settings = local_settings()
+    owner_id = uuid4()
+    password = "متنپسوردفارسیطولانیبرایآزمایش" * 5
+    credential = create_credential(owner_id, password)
+
+    class CredentialRepository:
+        def load_local_owner_credential(self, login_name):
+            assert login_name == "owner"
+            return {
+                "owner_id": owner_id,
+                "salt": base64.urlsafe_b64decode(credential.salt_b64 + "=="),
+                "verifier": base64.urlsafe_b64decode(credential.verifier_b64 + "=="),
+                "iterations": credential.iterations,
+            }
+
+        def allow_local_owner_attempt(self, _key, _now):
+            return True
+
+        def record_local_owner_failure(self, _key, _now):
+            return None
+
+        def clear_local_owner_failures(self, _key):
+            return None
+
+    class SessionService:
+        repository = CredentialRepository()
+
+        def issue_local_owner_session(self, user_id, *_credential_material):
+            return AuthenticatedUser(user_id, None, uuid4(), "local_owner"), "opaque-session", "csrf-memory"
+
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[auth.get_auth_service] = lambda: SessionService()
+    try:
+        with TestClient(app, base_url="https://localhost:8443", client=("127.0.0.1", 8443)) as client:
+            response = client.post("/api/v1/auth/local-owner/login", json={
+                "login_name": "owner", "password": password,
+            }, headers={"Origin": "https://localhost:8443"})
+        assert response.status_code == 200, response.text
+        assert response.json()["user"]["user_id"] == str(owner_id)
+        assert "__Host-rahgard_session=opaque-session" in response.headers["set-cookie"]
+        assert "Secure" in response.headers["set-cookie"]
+        assert password not in response.text
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_local_owner_login_rejects_forwarded_client_identity_before_verifier(monkeypatch):
     settings = local_settings()
     app.dependency_overrides[get_settings] = lambda: settings
@@ -84,14 +133,44 @@ def test_local_owner_login_rejects_forwarded_client_identity_before_verifier(mon
         app.dependency_overrides.clear()
 
 
-def test_auth_method_reports_only_public_local_mode():
+def test_auth_method_exposes_traveler_otp_and_local_owner_as_separate_capabilities():
     settings = local_settings()
     app.dependency_overrides[get_settings] = lambda: settings
     try:
         with TestClient(app, base_url="https://localhost:8443") as client:
             response = client.get("/api/v1/auth/method")
         assert response.status_code == 200
-        assert response.json() == {"method": "local_owner"}
+        assert response.json() == {
+            "methods": ["otp", "local_owner"],
+            "otp_delivery": "unavailable",
+        }
         assert response.headers["cache-control"] == "no-store"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_disabled_sms_reports_traveler_flow_but_never_fabricates_or_creates_a_challenge(monkeypatch):
+    settings = local_settings()
+
+    class NoSmsService:
+        def issue(self, *_args, **_kwargs):
+            raise AssertionError("disabled SMS must be rejected before issuing a challenge")
+
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[auth.get_auth_service] = lambda: NoSmsService()
+    try:
+        with TestClient(app, base_url="https://localhost:8443") as client:
+            method = client.get("/api/v1/auth/method")
+            challenge = client.post("/api/v1/auth/otp/challenges", json={
+                "phone_number": "09121234567", "locale": "fa-IR",
+            })
+        assert method.json() == {
+            "methods": ["otp", "local_owner"],
+            "otp_delivery": "unavailable",
+        }
+        assert challenge.status_code == 503
+        assert challenge.json() == {"error": {"code": "authentication_unavailable"}}
+        assert "challenge_id" not in challenge.json()
+        assert "accepted" not in challenge.json()
     finally:
         app.dependency_overrides.clear()

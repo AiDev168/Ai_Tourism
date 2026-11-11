@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { Locale } from '../i18n/messages';
-import { AuthApiError, authApi, type AuthSession } from './authApi';
+import { AuthApiError, authApi, type AuthCapabilities, type AuthSession } from './authApi';
 import { authMessages } from './authMessages';
 import { localOwnerMessages } from './localOwnerMessages';
 
@@ -19,16 +19,17 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [method, setMethod] = useState<'disabled' | 'otp' | 'local_owner' | null>(null);
+  const [capabilities, setCapabilities] = useState<AuthCapabilities | null>(null);
+  const [ownerMode, setOwnerMode] = useState(false);
   const [loginName, setLoginName] = useState('');
   const [password, setPassword] = useState('');
 
   useEffect(() => {
     let active = true;
     void authApi.method().then(value => {
-      if (active) setMethod(value.method);
+      if (active) setCapabilities(value);
     }).catch(() => {
-      if (active) setMethod('disabled');
+      if (active) setCapabilities({ methods: [], otp_delivery: 'unavailable' });
     });
     void authApi.me().then(value => {
       if (!active) return;
@@ -49,12 +50,12 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
     try {
       const result = await authApi.requestCode(phone, locale);
       if (!result.challenge_id) {
-        setError(copy.requestUnavailable);
+      setError(copy.smsUnavailable);
       } else {
         setChallengeId(result.challenge_id); setPhase('code'); setNotice(copy.codeSent);
       }
-    } catch {
-      setError(copy.genericError);
+    } catch (errorValue) {
+      setError(errorValue instanceof AuthApiError && errorValue.status === 503 ? copy.smsUnavailable : copy.genericError);
     } finally { setBusy(false); }
   };
 
@@ -85,7 +86,7 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
     setBusy(true); setError('');
     try {
       await authApi.logout(csrfToken);
-      setSession(null); setCsrfToken(''); setPhase('phone'); setChallengeId(''); setCode('');
+      setSession(null); setCsrfToken(''); setPhase('phone'); setChallengeId(''); setCode(''); setOwnerMode(false);
       onSessionChange?.(null);
     } catch (errorValue) {
       if (errorValue instanceof AuthApiError && errorValue.status === 401) {
@@ -99,7 +100,7 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
     setBusy(true); setError('');
     try {
       await authApi.deleteAccount(csrfToken);
-      setSession(null); setCsrfToken(''); setPhase('phone'); setChallengeId(''); setCode('');
+      setSession(null); setCsrfToken(''); setPhase('phone'); setChallengeId(''); setCode(''); setOwnerMode(false);
       onSessionChange?.(null);
     } catch (errorValue) {
       if (errorValue instanceof AuthApiError && errorValue.status === 401) {
@@ -116,11 +117,17 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
           <button type="button" onClick={() => void signOut()} disabled={busy}>{busy ? copy.loading : copy.signOut}</button>
           <button type="button" onClick={() => void deleteAccount()} disabled={busy}>{copy.deleteAccount}</button>
         </div>
-      ) : <button type="button" aria-expanded={open} disabled={method === null}
+      ) : <button type="button" aria-expanded={open} disabled={capabilities === null || capabilities.methods.length === 0}
         onClick={() => setOpen(value => !value)}>{open ? copy.close : copy.signIn}</button>}
       {open && !session && (
         <section className="auth-panel" aria-label={copy.signIn}>
-          {method === 'local_owner' ? (
+          {capabilities?.methods.includes('local_owner') && (
+            <button type="button" className="auth-owner-choice" aria-pressed={ownerMode}
+              onClick={() => { setOwnerMode(value => !value); setError(''); setNotice(''); }}>
+              {ownerMode ? localCopy.backToTraveler : localCopy.ownerChoice}
+            </button>
+          )}
+          {ownerMode && capabilities?.methods.includes('local_owner') ? (
             <form onSubmit={event => void submitLocalOwner(event)}>
               <h2>{localCopy.title}</h2>
               <label htmlFor="auth-local-login">{localCopy.loginName}</label>
@@ -131,14 +138,16 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
                 required minLength={1} maxLength={256} value={password} onChange={event => setPassword(event.target.value)} />
               <button type="submit" disabled={busy}>{busy ? copy.loading : copy.signIn}</button>
             </form>
-          ) : method === 'otp' && phase === 'phone' ? (
+          ) : capabilities?.methods.includes('otp') && phase === 'phone' ? (
             <form onSubmit={event => void submitPhone(event)}>
+              <h2>{copy.travelerSignIn}</h2>
               <label htmlFor="auth-phone">{copy.phone}</label>
               <input id="auth-phone" name="phone_number" type="tel" autoComplete="tel-national" inputMode="tel" required value={phone} onChange={event => setPhone(event.target.value)} aria-describedby="auth-phone-help" />
               <p id="auth-phone-help">{copy.phoneHelp}</p>
-              <button type="submit" disabled={busy}>{busy ? copy.loading : copy.sendCode}</button>
+              {capabilities.otp_delivery === 'unavailable' && <p role="status">{copy.smsUnavailable}</p>}
+              <button type="submit" disabled={busy || capabilities.otp_delivery !== 'available'}>{busy ? copy.loading : copy.sendCode}</button>
             </form>
-          ) : method === 'otp' ? (
+          ) : capabilities?.methods.includes('otp') ? (
             <form onSubmit={event => void submitCode(event)}>
               <label htmlFor="auth-code">{copy.code}</label>
               <input id="auth-code" name="code" type="text" autoComplete="one-time-code" inputMode="numeric" pattern="[0-9۰-۹٠-٩]{4,8}" required value={code} onChange={event => setCode(event.target.value)} />

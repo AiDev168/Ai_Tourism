@@ -6,6 +6,8 @@ export const localOwnerMessages: Record<Locale, {
   password: string;
   ownerAccount: string;
   invalidCredentials: string;
+  ownerChoice: string;
+  backToTraveler: string;
 }> = {
   'fa-IR': {
     title: '\u0648\u0631\u0648\u062f \u0628\u0647 \u067e\u0627\u06cc\u0644\u0648\u062a \u0645\u062d\u0644\u06cc',
@@ -13,6 +15,8 @@ export const localOwnerMessages: Record<Locale, {
     password: '\u06af\u0630\u0631\u0648\u0627\u0698\u0647',
     ownerAccount: '\u062d\u0633\u0627\u0628 \u0645\u0627\u0644\u06a9 \u0645\u062d\u0644\u06cc',
     invalidCredentials: '\u0646\u0627\u0645 \u06a9\u0627\u0631\u0628\u0631\u06cc \u06cc\u0627 \u06af\u0630\u0631\u0648\u0627\u0698\u0647 \u0646\u0627\u062f\u0631\u0633\u062a \u0627\u0633\u062a.',
+    ownerChoice: '\u0648\u0631\u0648\u062f \u0645\u0627\u0644\u06a9 \u067e\u0627\u06cc\u0644\u0648\u062a',
+    backToTraveler: '\u0628\u0627\u0632\u06af\u0634\u062a \u0628\u0647 \u0648\u0631\u0648\u062f \u0645\u0633\u0627\u0641\u0631',
   },
   'en-US': {
     title: 'Sign in to this local pilot',
@@ -20,6 +24,8 @@ export const localOwnerMessages: Record<Locale, {
     password: 'Password',
     ownerAccount: 'Local owner account',
     invalidCredentials: 'The owner login name or password is incorrect.',
+    ownerChoice: 'Local owner sign in',
+    backToTraveler: 'Back to traveler sign in',
   },
   ar: {
     title: '\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0625\u0644\u0649 \u0627\u0644\u0646\u0633\u062e\u0629 \u0627\u0644\u0645\u062d\u0644\u064a\u0629',
@@ -27,5 +33,7 @@ export const localOwnerMessages: Record<Locale, {
     password: '\u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631',
     ownerAccount: '\u062d\u0633\u0627\u0628 \u0627\u0644\u0645\u0627\u0644\u0643 \u0627\u0644\u0645\u062d\u0644\u064a',
     invalidCredentials: '\u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645 \u0623\u0648 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631 \u063a\u064a\u0631 \u0635\u062d\u064a\u062d\u0629.',
+    ownerChoice: '\u062f\u062e\u0648\u0644 \u0645\u0627\u0644\u0643 \u0627\u0644\u0646\u0633\u062e\u0629 \u0627\u0644\u0645\u062d\u0644\u064a\u0629',
+    backToTraveler: '\u0627\u0644\u0639\u0648\u062f\u0629 \u0625\u0644\u0649 \u062f\u062e\u0648\u0644 \u0627\u0644\u0645\u0633\u0627\u0641\u0631',
   },
 };
