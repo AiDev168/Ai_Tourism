@@ -4,7 +4,7 @@ import { formatNumber, type Locale } from '../i18n/messages';
 import { journeyMessages, localizeRecommendationCode } from '../i18n/journeyMessages';
 import { createTripRequirements, type TripRequirements } from './tripIntake';
 import { integrateTripFollowUp } from './followUpIntake';
-import { resolveDestinationNames, confirmDestinationCandidate, type DestinationResolution } from './destinationResolution';
+import { normalizeDestinationName, resolveDestinationNames, confirmDestinationCandidate, type DestinationResolution, type ProductionDestinationCandidate } from './destinationResolution';
 import { ApiDestinationCatalogPort } from './destinationCatalogApi';
 import { reviewableAssistantCandidate } from './assistantCandidate';
 import { TravelerGuidance } from './TravelerGuidance';
@@ -16,6 +16,16 @@ import {
 } from './travelerApi';
 
 const catalog = new ApiDestinationCatalogPort();
+
+export function LocationReference({ coordinate, locale }: { coordinate?: ProductionDestinationCandidate['coordinate']; locale: Locale }) {
+  if (!coordinate) return null;
+  const copy = journeyMessages[locale];
+  const format = (value: number) => value.toLocaleString(locale, { maximumFractionDigits: 3 });
+  return <p className="location-reference" role="note">
+    {coordinate.role === 'visitor_entrance' ? copy.pointEntrance : copy.pointReference}
+    {' '}{copy.pointCoordinates}: <bdi dir="ltr">{format(coordinate.latitude)}, {format(coordinate.longitude)}</bdi>
+  </p>;
+}
 
 const assistantCopy: Record<Locale, {
   consent: string; send: string; review: string; initial: string; unavailable: string;
@@ -245,6 +255,11 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const [activeConversation, setActiveConversation] = useState<ConversationRecord | null>(null);
   const [activeTrip, setActiveTrip] = useState<TripRecord | null>(null);
   const [resolution, setResolution] = useState<DestinationResolution | null>(null);
+  const [catalogueDestinations, setCatalogueDestinations] = useState<readonly ProductionDestinationCandidate[]>([]);
+  const [catalogueOpen, setCatalogueOpen] = useState(false);
+  const [catalogueLoading, setCatalogueLoading] = useState(false);
+  const [catalogueUnavailable, setCatalogueUnavailable] = useState(false);
+  const [catalogueSearch, setCatalogueSearch] = useState('');
   const [destinationNames, setDestinationNames] = useState<string[]>([]);
   const [durationText, setDurationText] = useState('');
   const [originText, setOriginText] = useState('');
@@ -271,6 +286,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const [error, setError] = useState('');
   const [dirty, setDirty] = useState(false);
   const restoringRequestRef = useRef<string | null>(null);
+  const resolutionSequenceRef = useRef(0);
+  const catalogueBrowseSequenceRef = useRef(0);
 
   const extracted = useMemo(() => safeRequirements(activeTrip?.extracted_requirements, activeTrip?.locale ?? locale), [activeTrip, locale]);
   const consentFields = useMemo(() => consentFieldsForReviewedProfile(
@@ -312,19 +329,72 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
     ? !dayCountValid || locallyUnplannedDays.length ? 'partial' : 'complete'
     : itinerary?.status;
 
-  const resolveNames = async (names: string[]) => {
-    if (!names.length || names.some(name => !name.trim())) { setResolution(null); return; }
+  const resolveNames = async (names: string[], explicitChoices: readonly { index: number; destinationId: string }[] = []) => {
+    const sequence = ++resolutionSequenceRef.current;
+    if (!names.length || names.some(name => !name.trim())) { setResolution(null); setCatalogueDestinations([]); return; }
     try {
       const catalogue = await catalog.load();
-      setResolution(resolveDestinationNames(names, locale, catalogue));
+      if (sequence !== resolutionSequenceRef.current) return;
+      setCatalogueDestinations(catalogue.kind === 'available' && catalogue.boundary === 'knowledge.production_destinations'
+        ? catalogue.destinations : []);
+      let resolved = resolveDestinationNames(names, locale, catalogue);
+      for (const choice of explicitChoices) {
+        resolved = confirmDestinationCandidate(resolved, choice.index, choice.destinationId);
+      }
+      setResolution(resolved);
     } catch {
+      if (sequence !== resolutionSequenceRef.current) return;
+      setCatalogueDestinations([]);
       setResolution(resolveDestinationNames(names, locale, { kind: 'unavailable' }));
     }
+  };
+
+  const browseCatalogue = async () => {
+    if (!online || catalogueLoading) return;
+    const sequence = ++catalogueBrowseSequenceRef.current;
+    setCatalogueOpen(true); setCatalogueLoading(true); setCatalogueUnavailable(false);
+    try {
+      const result = await catalog.load();
+      if (sequence !== catalogueBrowseSequenceRef.current) return;
+      if (result.kind === 'available' && result.boundary === 'knowledge.production_destinations') setCatalogueDestinations(result.destinations);
+      else { setCatalogueDestinations([]); setCatalogueUnavailable(true); }
+    } catch {
+      if (sequence !== catalogueBrowseSequenceRef.current) return;
+      setCatalogueDestinations([]); setCatalogueUnavailable(true);
+    } finally { if (sequence === catalogueBrowseSequenceRef.current) setCatalogueLoading(false); }
+  };
+
+  const addCatalogueDestination = (destination: ProductionDestinationCandidate) => {
+    if (itineraryDirty && !window.confirm(copy.discardItineraryEdits)) return;
+    const name = destination.localizedNames[locale] ?? destination.canonicalName;
+    const selected = resolution?.items.flatMap(item => item.kind === 'resolved' || item.kind === 'confirmed'
+      ? [item.destination.destinationId] : []) ?? [];
+    if (selected.includes(destination.destinationId)) return;
+    const ambiguousIndex = resolution?.items.findIndex(item => item.kind === 'ambiguous'
+      && item.candidates.some(candidate => candidate.destinationId === destination.destinationId)
+      && normalizeDestinationName(item.originalPhrase) === normalizeDestinationName(name)) ?? -1;
+    if (ambiguousIndex >= 0 && resolution) {
+      resolutionSequenceRef.current += 1;
+      setResolution(confirmDestinationCandidate(resolution, ambiguousIndex, destination.destinationId));
+      setDirty(true); invalidateConsent(); return;
+    }
+    const keptIndexes = destinationNames.map((item, index) => item.trim() ? index : -1).filter(index => index >= 0);
+    const next = [...keptIndexes.map(index => destinationNames[index]), name];
+    if (next.length > 50) return;
+    const explicitChoices = keptIndexes.flatMap((oldIndex, index) => {
+      const item = resolution?.items[oldIndex];
+      return item?.kind === 'confirmed' ? [{ index, destinationId: item.destination.destinationId }] : [];
+    });
+    explicitChoices.push({ index: next.length - 1, destinationId: destination.destinationId });
+    setDestinationNames(next); setDirty(true); invalidateConsent(); void resolveNames(next, explicitChoices);
   };
 
   useEffect(() => {
     let active = true;
     if (!session) {
+      resolutionSequenceRef.current += 1;
+      catalogueBrowseSequenceRef.current += 1;
+      setCatalogueOpen(false); setCatalogueLoading(false); setCatalogueDestinations([]);
       setConversations([]);
       setActiveConversation(null);
       setActiveTrip(null);
@@ -344,7 +414,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       if (value instanceof TravelerApiError && value.status === 401) onSessionExpired();
       else setError(copy.genericError);
     }).finally(() => { if (active) setLoadingHistory(false); });
-    return () => { active = false; };
+    return () => { active = false; resolutionSequenceRef.current += 1; catalogueBrowseSequenceRef.current += 1; };
   }, [session?.user.user_id]);
 
   useEffect(() => {
@@ -382,7 +452,9 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         setAdvisoryAcknowledgements({});
       }
     } else if (!activeTrip) {
+      resolutionSequenceRef.current += 1;
       setResolution(null);
+      setCatalogueDestinations([]);
     }
   }, [requirements, activeTrip?.trip_id]);
 
@@ -904,7 +976,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
           {extracted && <div className="profile-editor">
             <fieldset>
               <legend>{copy.profileDestination}</legend>
-              {destinationNames.map((name, index) => <div className="destination-edit-row" key={`${index}-${name}`}>
+              {destinationNames.map((name, index) => <div className="destination-edit-row" key={index}>
                 <label htmlFor={`profile-destination-${index}`}>{copy.profileDestination} {formatNumber(locale, index + 1)}</label>
                 <input id={`profile-destination-${index}`} value={name} onChange={event => {
                   const next = destinationNames.slice(); next[index] = event.target.value; setDestinationNames(next); setDirty(true); invalidateConsent(); void resolveNames(next);
@@ -912,6 +984,36 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
                 <button type="button" aria-label={`${copy.removeDestination}: ${name}`} onClick={() => { const next = destinationNames.filter((_, item) => item !== index); setDestinationNames(next); setDirty(true); invalidateConsent(); void resolveNames(next); }}>{copy.removeDestination}</button>
               </div>)}
               <button type="button" onClick={() => { const next = [...destinationNames, '']; setDestinationNames(next); setDirty(true); invalidateConsent(); setResolution(null); }}>{copy.profileDestination} +</button>
+              <button type="button" aria-expanded={catalogueOpen} aria-controls="approved-destination-browser"
+                onClick={() => { if (catalogueOpen) setCatalogueOpen(false); else void browseCatalogue(); }}
+                disabled={!online || catalogueLoading}>{copy.browseDestinations}</button>
+              {catalogueOpen && <div id="approved-destination-browser" className="approved-destination-browser">
+                {catalogueLoading ? <p role="status">{copy.checkingRecommendations}</p> : catalogueUnavailable
+                  ? <p className="journey-error" role="alert">{copy.recommendationUnavailable}</p> : catalogueDestinations.length === 0
+                    ? <p role="status">{copy.recommendationEmpty}</p> : <>
+                      <label htmlFor="approved-destination-search">{copy.searchDestinations}</label>
+                      <input id="approved-destination-search" type="search" value={catalogueSearch} dir="auto"
+                        onChange={event => setCatalogueSearch(event.target.value)} />
+                      {(() => {
+                        const query = normalizeDestinationName(catalogueSearch);
+                        const matches = catalogueDestinations.filter(destination => !query || [
+                          destination.canonicalName, ...Object.values(destination.localizedNames),
+                          destination.cityName, destination.provinceName, ...destination.aliases.map(alias => alias.value),
+                        ].some(value => typeof value === 'string' && normalizeDestinationName(value).includes(query)));
+                        return matches.length ? <ul>{matches.map(destination => {
+                          const name = destination.localizedNames[locale] ?? destination.canonicalName;
+                          const selected = resolution?.items.some(item => (item.kind === 'resolved' || item.kind === 'confirmed')
+                            && item.destination.destinationId === destination.destinationId) ?? false;
+                          return <li key={destination.destinationId}>
+                            <span dir="auto">{name} · {destination.cityName ?? destination.provinceName}</span>
+                            <LocationReference locale={locale} coordinate={destination.coordinate} />
+                            <button type="button" disabled={selected || destinationNames.filter(item => item.trim()).length >= 50}
+                              aria-label={`${copy.addDestination}: ${name} · ${destination.cityName ?? destination.provinceName ?? ''}`} onClick={() => addCatalogueDestination(destination)}>{selected ? copy.selectedByYou : copy.addDestination}</button>
+                          </li>;
+                        })}</ul> : <p role="status">{copy.noDestinationMatches}</p>;
+                      })()}
+                    </>}
+              </div>}
               {!destinationNames.length && <p>{copy.noDestination}</p>}
             </fieldset>
             <label htmlFor="profile-duration">{copy.profileDuration}</label>
@@ -988,7 +1090,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             {resolution?.kind === 'catalogue-unavailable' && <p className="journey-error" role="alert">{copy.recommendationUnavailable}</p>}
             {resolution?.items.map((item, index) => item.kind === 'ambiguous' ? <fieldset key={index} className="destination-choice">
               <legend>{item.originalPhrase}</legend>
-              {item.candidates.map(candidate => <label key={candidate.destinationId} dir="auto"><input type="radio" name={`traveler-choice-${index}`} checked={resolution.items[index]?.kind === 'confirmed' && resolution.items[index].destination.destinationId === candidate.destinationId} onChange={() => setResolution(current => current ? confirmDestinationCandidate(current, index, candidate.destinationId) : current)} />{candidate.localizedNames[locale] ?? candidate.canonicalName} · {candidate.provinceName}</label>)}
+              {item.candidates.map(candidate => <label key={candidate.destinationId} dir="auto"><input type="radio" name={`traveler-choice-${index}`} checked={resolution.items[index]?.kind === 'confirmed' && resolution.items[index].destination.destinationId === candidate.destinationId} onChange={() => { resolutionSequenceRef.current += 1; setResolution(current => current ? confirmDestinationCandidate(current, index, candidate.destinationId) : current); }} />{candidate.localizedNames[locale] ?? candidate.canonicalName} · {candidate.provinceName}</label>)}
               <button type="button" onClick={() => { setError(copy.recommendationClarify); document.getElementById(`profile-destination-${index}`)?.focus(); }}>{copy.noneOfThese}</button>
             </fieldset> : item.kind === 'resolved' || item.kind === 'confirmed' ? <p key={index} role="status" dir="auto">{item.destination.localizedNames[locale] ?? item.destination.canonicalName} · {item.kind === 'resolved' ? copy.catalogueMatch : copy.selectedByYou}</p> : item.kind === 'not-found' ? <p key={index} role="status">{item.originalPhrase}: {copy.recommendationClarify}</p> : null)}
             <button type="button" onClick={() => void confirmProfile()} disabled={busy || (!dirty && confirmed) || !online || !consentComplete || !travelerCountValid
@@ -1014,6 +1116,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             {recommendations?.status === 'available' && recommendations.items.map(item => <article className="evidence-card" key={item.recommendation_id}>
               <h4 dir="auto">{item.localized_names[locale] ?? item.canonical_name}</h4>
               <p>{item.city_name ? `${item.city_name} · ` : ''}{item.province_name}</p>
+              <LocationReference locale={locale} coordinate={catalogueDestinations.find(destination => destination.destinationId === item.destination_id)?.coordinate} />
               <p>{item.explanation_key === 'published_area_candidate' ? copy.explanationArea : copy.explanationMatch}</p>
               {!!item.matched_requirements.length && <p><strong>{copy.matched}:</strong> {item.matched_requirements.map(code => localizeRecommendationCode(locale, code)).join('، ')}</p>}
               {!!item.unknown_fields.length && <p><strong>{copy.unknown}:</strong> {item.unknown_fields.map(code => localizeRecommendationCode(locale, code)).join('، ')}</p>}
@@ -1074,6 +1177,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
               <div className="saved-itinerary-stops">
                 {dayStops.map((stop, index) => <article className="saved-stop" key={stop.recommendation_id}>
                   <h5 dir="auto">{stop.localized_names?.[locale] ?? stop.canonical_name ?? stop.name ?? ''}</h5>
+                  <LocationReference locale={locale} coordinate={catalogueDestinations.find(destination => destination.destinationId === stop.destination_id)?.coordinate} />
                   <label htmlFor={`stop-day-${stop.recommendation_id}`}>{copy.dayCount}</label>
                   <select id={`stop-day-${stop.recommendation_id}`} value={stop.day_number} onChange={event => {
                     const newDay = Number(event.target.value);

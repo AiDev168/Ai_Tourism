@@ -9,6 +9,9 @@ type CatalogueApiItem = {
   destination_type: string;
   province_name: string;
   city_name: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  coordinate_role?: 'unknown' | 'representative_point' | 'property_reference' | 'visitor_entrance' | null;
 };
 
 type CatalogueApiResponse = {
@@ -32,6 +35,16 @@ function boundedText(value: unknown, maximum: number): value is string {
 function isCatalogueApiItem(value: unknown): value is CatalogueApiItem {
   if (!value || typeof value !== 'object') return false;
   const item = value as Record<string, unknown>;
+  const latitude = item.latitude ?? null;
+  const longitude = item.longitude ?? null;
+  const role = item.coordinate_role ?? null;
+  const validRole = role === null || role === 'unknown' || role === 'representative_point'
+    || role === 'property_reference' || role === 'visitor_entrance';
+  const validPoint = latitude === null && longitude === null || (
+    typeof latitude === 'number' && Number.isFinite(latitude) && latitude >= -90 && latitude <= 90
+    && typeof longitude === 'number' && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180
+    && role !== null && role !== 'unknown'
+  );
   return typeof item.destination_id === 'string'
     && /^\d+$/.test(item.destination_id)
     && boundedText(item.destination_key, 240)
@@ -46,6 +59,7 @@ function isCatalogueApiItem(value: unknown): value is CatalogueApiItem {
     && boundedText(item.destination_type, 64)
     && boundedText(item.province_name, 240)
     && (boundedText(item.city_name, 240) || item.city_name === null)
+    && validRole && validPoint
     && Array.isArray(item.aliases)
     && item.aliases.length <= MAX_ALIASES_PER_ITEM
     && item.aliases.every(alias => Boolean(alias) && typeof alias === 'object'
@@ -96,6 +110,10 @@ export class ApiDestinationCatalogPort implements ProductionDestinationCatalogPo
         destinationType: item.destination_type,
         provinceName: item.province_name,
         cityName: item.city_name,
+        ...(item.latitude != null && item.longitude != null && item.coordinate_role
+          && item.coordinate_role !== 'unknown' ? { coordinate: {
+            latitude: item.latitude, longitude: item.longitude, role: item.coordinate_role,
+          } } : {}),
       }));
       return { kind: 'available', boundary: 'knowledge.production_destinations', destinations };
     } catch {

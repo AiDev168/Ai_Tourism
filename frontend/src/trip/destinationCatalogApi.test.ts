@@ -34,6 +34,26 @@ describe('same-origin destination catalogue port', () => {
     expect(fetcher.mock.calls[0][1]).not.toHaveProperty('body');
   });
 
+  it('preserves a valid reference point and rejects malformed coordinates', async () => {
+    const item = {
+      destination_id: '1', destination_key: 'site', canonical_name: 'Site',
+      localized_names: { 'fa-IR': null, 'en-US': null, ar: null }, aliases: [],
+      destination_type: 'heritage_site', province_name: 'Fars', city_name: 'Shiraz',
+      latitude: 29.6254, longitude: 52.5583, coordinate_role: 'representative_point',
+    };
+    const valid = await new ApiDestinationCatalogPort(vi.fn<typeof fetch>().mockResolvedValue(available([item]))).load();
+    expect(valid).toMatchObject({ kind: 'available', destinations: [{
+      coordinate: { latitude: 29.6254, longitude: 52.5583, role: 'representative_point' },
+    }] });
+    for (const invalid of [
+      { ...item, longitude: null }, { ...item, latitude: 91 },
+      { ...item, coordinate_role: 'unknown' }, { ...item, coordinate_role: 'test_fixture' },
+    ]) {
+      expect(await new ApiDestinationCatalogPort(vi.fn<typeof fetch>().mockResolvedValue(available([invalid]))).load())
+        .toEqual({ kind: 'unavailable' });
+    }
+  });
+
   it.each([
     ['503 unavailable', async () => new Response(JSON.stringify({ status: 'unavailable', error: { code: 'catalogue_unavailable' } }), { status: 503 })],
     ['incomplete result', async () => available([{ destination_id: '1' }])],

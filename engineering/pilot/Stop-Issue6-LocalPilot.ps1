@@ -48,6 +48,8 @@ if ($existingNames -contains [string]$state.database_container) {
     $remainingNames = @(& docker container ls --all --format '{{.Names}}')
     if ($LASTEXITCODE -ne 0) { throw 'Could not verify database container cleanup.' }
     if ($remainingNames -contains [string]$state.database_container) {
+        $remaining = & docker inspect $state.database_container
+        if ($LASTEXITCODE -ne 0) { throw 'Could not reverify the task-owned database container.' }
         $remainingContainer = ($remaining | Out-String) | ConvertFrom-Json
         if ($remainingContainer[0].Name -ne "/$($state.database_container)" -or
             $remainingContainer[0].Config.Labels.'ai-tourism.disposable-mvp-e2e' -ne 'true') {

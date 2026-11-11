@@ -10,6 +10,8 @@ export type ProductionDestinationCandidate = {
   destinationType: string;
   provinceName: string | null;
   cityName: string | null;
+  /** Source-backed catalogue point, not an inferred route or entrance. */
+  coordinate?: { latitude: number; longitude: number; role: 'representative_point' | 'property_reference' | 'visitor_entrance' };
 };
 
 export type ProductionCatalogue =
@@ -20,7 +22,7 @@ export interface ProductionDestinationCatalogPort {
 }
 
 export type DestinationChoice = Pick<ProductionDestinationCandidate,
-  'destinationId' | 'destinationKey' | 'canonicalName' | 'localizedNames' | 'provinceName' | 'cityName'>;
+  'destinationId' | 'destinationKey' | 'canonicalName' | 'localizedNames' | 'provinceName' | 'cityName' | 'coordinate'>;
 export type DestinationResolutionItem =
   | { kind: 'resolved'; originalPhrase: string; destination: DestinationChoice }
   | { kind: 'confirmed'; originalPhrase: string; destination: DestinationChoice }
@@ -60,6 +62,7 @@ function choice(candidate: ProductionDestinationCandidate): DestinationChoice {
     localizedNames: candidate.localizedNames,
     provinceName: candidate.provinceName,
     cityName: candidate.cityName,
+    ...(candidate.coordinate ? { coordinate: candidate.coordinate } : {}),
   };
 }
 

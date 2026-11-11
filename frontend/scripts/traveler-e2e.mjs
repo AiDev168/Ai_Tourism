@@ -765,6 +765,7 @@ async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshot
 // Explicit opt-in browser acceptance: real canonical Fars IDs in disposable QA PG17.
 // No in-memory/synthetic candidate override, provider call, or public approval.
 async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) {
+  const browseScenario = process.env.RAHGARD_GEO_BROWSE_E2E === '1';
   const keys = [
     'shiraz-hafezieh-v1', 'shiraz-eram-garden-v1',
     'shiraz-vakil-bazaar-v1', 'unesco-persepolis-v1',
@@ -806,12 +807,14 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
     });
     const selectedIds = selected.map(item => item.destination_id);
     const names = selected.map(item => item.canonical_name);
-    const requestText = prompts[locale];
+    const requestText = browseScenario
+      ? 'سفر پانزده روزه با مقصدی که هنوز انتخاب نشده است'
+      : prompts[locale];
     const extracted = fixtureRequirements(requestText, locale);
-    extracted.destinations = {
-      value: names, status: 'extracted',
-      evidence: 'selected seeded canonical Fars POIs in disposable QA',
-    };
+    extracted.destinations = browseScenario
+      ? { value: null, status: 'unknown', evidence: null }
+      : { value: names, status: 'extracted',
+        evidence: 'selected seeded canonical Fars POIs in disposable QA' };
     const started = await requestBrowserJson(page, '/api/v1/conversations', 'POST', csrf, {
       locale, request_text: requestText, extracted_requirements: extracted,
       idempotency_key: randomUUID(),
@@ -822,14 +825,16 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
       throw new Error('qa_real_geo_conversation_not_persisted');
     }
     const tripPath = '/api/v1/trips/' + trip.trip_id;
-    await requestBrowserJson(page, tripPath, 'PATCH', csrf, {
-      expected_version: trip.version,
-      confirmed_requirements: {
-        confirmation_source: 'traveler_reviewed', duration_days: 15,
-        destinations: names, constraints: [],
-      },
-      destination_ids: selectedIds,
-    }, trace);
+    if (!browseScenario) {
+      await requestBrowserJson(page, tripPath, 'PATCH', csrf, {
+        expected_version: trip.version,
+        confirmed_requirements: {
+          confirmation_source: 'traveler_reviewed', duration_days: 15,
+          destinations: names, constraints: [],
+        },
+        destination_ids: selectedIds,
+      }, trace);
+    }
 
     const historyWait = page.waitForResponse(response =>
       new URL(response.url()).pathname === '/api/v1/conversations'
@@ -837,7 +842,40 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
     await page.locator('.trip-history-heading button').click();
     await historyWait;
     await page.getByRole('button', { name: requestText, exact: true }).click();
+    await page.waitForFunction(expected => document.querySelector('#trip-prompt')?.value === expected, requestText);
     await page.locator('#profile-duration').waitFor({ state: 'visible' });
+    if (browseScenario) {
+      if (locale !== 'fa-IR') throw new Error('geo_browse_scenario_requires_persian_locale');
+      if (await page.locator('.recommendation-controls').count()) {
+        throw new Error('geo_browse_recommendations_visible_before_explicit_review');
+      }
+      await page.getByRole('button', { name: 'دیدن مقصدهای تأییدشده', exact: true }).click();
+      await page.locator('#approved-destination-search').waitFor({ state: 'visible' });
+      const browser = page.locator('#approved-destination-browser');
+      if (await browser.locator('.location-reference').count() !== 4
+          || !(await browser.textContent())?.includes('نقطهٔ تقریبی برای نمایش موقعیت؛ ورودی بازدیدکنندگان یا مسیر نیست.')) {
+        throw new Error('geo_browse_approximate_reference_warning_missing');
+      }
+      const firstName = selected[0].localized_names?.[locale] ?? selected[0].canonical_name;
+      await page.locator('#approved-destination-search').fill(firstName);
+      if (await browser.locator('li').count() !== 1) throw new Error('geo_browse_search_did_not_filter');
+      await page.locator('#approved-destination-search').fill('');
+      for (const destination of selected) {
+        const name = destination.localized_names?.[locale] ?? destination.canonical_name;
+        const locality = destination.city_name ?? destination.province_name ?? '';
+        const button = page.getByRole('button', { name: `افزودن به سفر: ${name} · ${locality}`, exact: true });
+        await button.click();
+        await button.waitFor({ state: 'visible' });
+        await page.waitForFunction(label => {
+          const match = [...document.querySelectorAll('#approved-destination-browser button')]
+            .find(item => item.getAttribute('aria-label') === label);
+          return match?.disabled === true;
+        }, `افزودن به سفر: ${name} · ${locality}`);
+      }
+      if (await page.locator('.recommendation-controls').count()) {
+        throw new Error('geo_browse_add_silently_confirmed_profile');
+      }
+    }
     const mandatory = page.locator('.requirement-consent-field input[value="must_have"]');
     for (let i = 0; i < await mandatory.count(); i += 1) {
       await mandatory.nth(i).check({ force: true });
@@ -852,14 +890,17 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
     if (consent?.contract_version !== 'recommendation-consent-v1') {
       throw new Error('qa_real_geo_consent_missing');
     }
-    const finalProfile = { ...confirmed.confirmed_requirements };
-    delete finalProfile.requirement_consent;
-    const consentRequest = { ...consent };
-    delete consentRequest.profile_version;
-    const finalTrip = await requestBrowserJson(page, tripPath, 'PATCH', csrf, {
-      expected_version: confirmed.version, confirmed_requirements: finalProfile,
-      destination_ids: selectedIds, requirement_consent: consentRequest,
-    }, trace);
+    let finalTrip = confirmed;
+    if (!browseScenario) {
+      const finalProfile = { ...confirmed.confirmed_requirements };
+      delete finalProfile.requirement_consent;
+      const consentRequest = { ...consent };
+      delete consentRequest.profile_version;
+      finalTrip = await requestBrowserJson(page, tripPath, 'PATCH', csrf, {
+        expected_version: confirmed.version, confirmed_requirements: finalProfile,
+        destination_ids: selectedIds, requirement_consent: consentRequest,
+      }, trace);
+    }
     if (finalTrip.destination_ids?.join(',') !== selectedIds.join(',')
         || finalTrip.confirmed_requirements?.requirement_consent?.profile_version !== finalTrip.version) {
       throw new Error('qa_real_geo_selected_ids_or_consent_changed');
@@ -942,7 +983,8 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
     trace.push({ method: 'PUT', path: editPath, status: 200 });
     await requestBrowserJson(page, '/api/v1/conversations/' + conversationId, 'DELETE', csrf);
     return {
-      locale, mode: 'canonical_Fars_IDs_in_disposable_QA_database',
+      locale, mode: browseScenario ? 'canonical_Fars_browse_and_explicit_review_disposable_QA'
+        : 'canonical_Fars_IDs_in_disposable_QA_database',
       canonicalKeys: keys, coordinatesRoles: roles,
       dayCount: 15, cityDay, regionalDay,
       initialStops: 4, finalStops: 3,
@@ -1609,7 +1651,8 @@ async function main() {
         throw new Error('qa_real_geo_requires_explicit_disposable_opt_in_and_rag_off');
       }
       const results = [];
-      for (const locale of ['fa-IR', 'en-US', 'ar']) {
+      const locales = process.env.RAHGARD_GEO_BROWSE_E2E === '1' ? ['fa-IR'] : ['fa-IR', 'en-US', 'ar'];
+      for (const locale of locales) {
         results.push(await runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot));
       }
       if (audit.successfulExternalResponses || audit.pageErrors) {

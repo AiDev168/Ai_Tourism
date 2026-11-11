@@ -233,6 +233,10 @@ button { cursor: pointer; }
 .destination-edit-row { align-items: end; flex-wrap: wrap; }
 .destination-edit-row label { flex-basis: 100%; }
 .destination-edit-row input { flex: 1 1 220px; }
+.approved-destination-browser { display: grid; gap: 8px; min-width: 0; }
+.approved-destination-browser ul { display: grid; gap: 8px; max-height: 22rem; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.approved-destination-browser li { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
+.location-reference { margin: 0; color: var(--muted); font-size: 0.85rem; line-height: 1.6; overflow-wrap: anywhere; }
 .evidence-card { margin-block: 12px; }
 .evidence-card h4, .evidence-card p { overflow-wrap: anywhere; }
 .saved-itinerary-days, .saved-itinerary-stops, .trip-history { display: grid; gap: 12px; }

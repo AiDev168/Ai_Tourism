@@ -194,9 +194,12 @@ def current_user(
     request: Request,
     user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
     service: Annotated[AuthenticationService, Depends(get_auth_service)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ):
     try:
-        raw_session = request.cookies.get(HOST_SESSION_COOKIE) or request.cookies.get(SESSION_COOKIE) or ""
+        # Derive the token from the same cookie that authenticated_user used.
+        # A stale cookie from another configuration must not override it.
+        raw_session = request.cookies.get(_cookie_name(settings)) or ""
         csrf_token = service.csrf_token(raw_session)
     except AuthenticationUnavailable:
         return _unavailable()
