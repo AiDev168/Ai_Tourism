@@ -12,6 +12,7 @@ import { AuthPanel } from '../auth/AuthPanel';
 import type { AuthSession } from '../auth/authApi';
 import { TravelerJourney } from '../trip/TravelerJourney';
 import { PwaUpdateNotice } from '../pwa/PwaUpdateNotice';
+import { AiProviderAdminPanel } from '../admin/aiProviders/AiProviderAdminPanel';
 
 const destinationCatalog = new ApiDestinationCatalogPort();
 
@@ -148,6 +149,23 @@ export function App() {
   const tripCopy = tripMessages[locale];
   const requirementCopy = requirementClarificationMessages[locale];
 
+  if (window.location.pathname === '/admin/ai-providers') {
+    return <>
+      <header className="topbar">
+        <a className="brand" href="/"><span className="brand-mark" aria-hidden="true">Ø±</span><span>{t('brand')}<small>{t('tagline')}</small></span></a>
+        <div className="top-actions">
+          <AuthPanel locale={locale} onSessionChange={setAuthSession} />
+          <label className="sr-only" htmlFor="locale">{t('labelLanguage')}</label>
+          <select id="locale" value={locale} onChange={event => setLocale(event.target.value as Locale)}>
+            {(['fa-IR', 'en-US', 'ar'] as Locale[]).map(value => <option key={value} value={value}>{languageName[value]}</option>)}
+          </select>
+        </div>
+      </header>
+      <AiProviderAdminPanel locale={locale} csrfToken={authSession?.csrf_token ?? ''}
+        authMethod={authSession?.user.auth_method} />
+    </>;
+  }
+
   return (
     <>
       <header className="topbar">
@@ -158,6 +176,7 @@ export function App() {
         <nav aria-label={t('navExplore')}>
           <a href="#discover">{t('navExplore')}</a>
           <a href="#itinerary">{t('navPlan')}</a>
+          {authSession?.user.auth_method === 'local_owner' && <a href="/admin/ai-providers">AI admin</a>}
         </nav>
         <div className="top-actions">
           <AuthPanel locale={locale} onSessionChange={setAuthSession} />

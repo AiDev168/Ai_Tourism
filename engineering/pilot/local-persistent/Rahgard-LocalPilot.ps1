@@ -1,7 +1,7 @@
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('Start','Stop','Status','Backup','Restore','Upgrade','Rollback','TrustCertificate','UntrustCertificate','BootstrapOwner','ResetOwner')]
+    [ValidateSet('Start','Stop','Status','Backup','Restore','Upgrade','ProvisionProviderAdmin','RevokeProviderAdmin','Rollback','TrustCertificate','UntrustCertificate','BootstrapOwner','ResetOwner')]
     [string]$Action,
     [string]$DataRoot = (Join-Path $env:LOCALAPPDATA 'Rahgard\Issue6Pilot'),
     [switch]$InitializeDatabase,
@@ -9,6 +9,10 @@ param(
     [switch]$ConfirmPrivatePilot,
     [switch]$PublishApprovedGeo,
     [switch]$ConfirmRestoreRehearsal,
+    [switch]$ApplyProviderAdminMigration,
+    [string]$ConfirmProviderAdminTarget,
+    [string]$ProviderAdminUserId,
+    [string]$ProviderAdminReason,
     [string]$Archive,
     [string]$RestoreTarget
 )
@@ -78,7 +82,7 @@ function Assert-LocalPilotReady($State) {
     if ([int]$container.HostConfig.PortBindings.'5432/tcp'[0].HostPort -ne [int]$State.database_port) {
         throw 'Persistent database port differs from recorded pilot state.'
     }
-    if ([int]$State.migration_count -ne 15) { throw 'Local pilot migration ledger is not at the reviewed 15-migration baseline.' }
+    if ([int]$State.migration_count -notin @(15,16)) { throw 'Local pilot migration ledger is not at a reviewed migration baseline.' }
     $marker = Get-LocalPilotMarker
     if (-not [string]::Equals($marker, [string]$State.marker, [StringComparison]::Ordinal)) {
         throw 'Persistent local-pilot marker changed.'
@@ -87,6 +91,13 @@ function Assert-LocalPilotReady($State) {
         -c 'SELECT count(*) FROM system.schema_migrations'
     if ($LASTEXITCODE -ne 0 -or [int](($actual | Out-String).Trim()) -ne [int]$State.migration_count) {
         throw 'Persistent migration ledger does not match local-pilot state.'
+    }
+    if ([int]$State.migration_count -eq 16) {
+        $migration = Join-Path $LocalSql '015_ai_provider_admin.sql'
+        if (-not (Test-Path -LiteralPath $migration) -or
+            (Get-FileHash -LiteralPath $migration -Algorithm SHA256).Hash.ToLowerInvariant() -ne [string]$State.migration_0015_sha256) {
+            throw 'Provider-admin migration hash does not match the reviewed local-pilot state.'
+        }
     }
     return $container
 }
@@ -778,6 +789,14 @@ function Start-LocalPilotWebProcesses($State) {
     if (-not (Test-Path -LiteralPath $pythonExe)) { throw 'Repository-local Python environment is missing; refusing a global interpreter.' }
     if (-not (Test-LocalPilotPortAvailable ([int]$State.api_port)) -or
         -not (Test-LocalPilotPortAvailable ([int]$State.https_port))) { throw 'Recorded local API/HTTPS port is occupied by an unowned listener.' }
+    $providerAdminEnabled = [int]$State.migration_count -eq 16
+    $providerVault = Join-Path $Paths.Secrets 'ai-provider-vault'
+    if ($providerAdminEnabled) {
+        if (-not (Test-Path -LiteralPath $providerVault)) {
+            New-Item -ItemType Directory -Path $providerVault | Out-Null
+            Set-LocalPilotAcl $providerVault -Directory
+        } else { Assert-LocalPilotAcl $providerVault -Directory -Protected }
+    }
     $nodeExe = $node.Source
     $apiEnv = @{
         APP_ENV='local_pilot'; APP_HOST='127.0.0.1'; APP_PORT=[string]$State.api_port; LOG_LEVEL='INFO'
@@ -790,6 +809,9 @@ function Start-LocalPilotWebProcesses($State) {
         AUTH_OTP_HMAC_SECRET=(Read-LocalPilotSecret $Paths.AppHmac)
         AUTH_CSRF_SECRET=(Read-LocalPilotSecret $Paths.AppCsrf)
         AUTH_RATE_LIMIT_SECRET=(Read-LocalPilotSecret $Paths.AppRate)
+        AI_PROVIDER_ADMIN_ENABLED=($providerAdminEnabled.ToString().ToLowerInvariant())
+        AI_PROVIDER_VAULT_DIR=$providerVault
+        AI_PROVIDER_ADMIN_RECOVERY_PEPPER=(Read-LocalPilotSecret $Paths.AppHmac)
         TOURISM_RAG_ENABLED='false'; INTERNAL_CHAT_ENABLED='false'
         PYTHONUTF8='1'; PYTHONDONTWRITEBYTECODE='1'
     }
@@ -863,7 +885,8 @@ function Get-LocalPilotRuntimeStatus($State) {
         database_port=$State.database_port; container=$Paths.Container; database_status=$dbStatus
         api_port=$State.api_port; api_status=$apiStatus; https_port=$State.https_port; https_status=$httpsStatus
         https_certificate_trusted_by_current_user=$certificateTrusted
-        migration_count=$State.migration_count; geo_packet_sha256=$State.geo_packet_sha256
+        migration_count=$State.migration_count; migration_0015_sha256=$State.migration_0015_sha256
+        geo_packet_sha256=$State.geo_packet_sha256
         map_point_notice='Representative coordinates are approximate map points, not verified entrances.'
         live_chat=$false; rag=$false
     }
@@ -1270,25 +1293,155 @@ function Invoke-LocalPilotUpgrade {
     $actual = & docker exec $Paths.Container psql -X -q -A -t -U ai_tourism_owner -d $Paths.Database -c 'SELECT count(*) FROM system.schema_migrations'
     if ($LASTEXITCODE -ne 0) { throw 'Could not read migration ledger.' }
     if ([int](($actual | Out-String).Trim()) -ne [int]$state.migration_count) { throw 'Migration ledger and local state disagree; upgrade stopped without changing the database.' }
-    $unsupported = @(Get-ChildItem -LiteralPath $LocalSql -Filter '015_*.sql' -File -ErrorAction SilentlyContinue)
-    if ($unsupported.Count) { throw 'A new SQL migration exists without an approved checksum/runner registration. Upgrade is fail-closed; review it before applying.' }
+    $providerMigration = Join-Path $LocalSql '015_ai_provider_admin.sql'
+    $migrationCandidates = @(Get-ChildItem -LiteralPath $LocalSql -Filter '015_*.sql' -File -ErrorAction SilentlyContinue)
+    if ($migrationCandidates.Count -gt 1 -or ($migrationCandidates.Count -eq 1 -and $migrationCandidates[0].Name -ne '015_ai_provider_admin.sql')) {
+        throw 'An unregistered SQL migration exists; upgrade is fail-closed.'
+    }
     foreach ($item in @(@('013_private_pilot_geo_audit.sql',$state.migration_0013_sha256),@('014_local_owner_login.sql',$state.migration_0014_sha256))) {
         $file = Join-Path $LocalSql $item[0]
         if (-not (Test-Path -LiteralPath $file) -or (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -ne $item[1]) {
             throw "Migration checksum drift detected for $($item[0]); no upgrade was attempted."
         }
     }
-    Stop-LocalPilotManagedProcess $state.proxy_process 'proxy' $state
-    Stop-LocalPilotManagedProcess $state.api_process 'api' $state
-    $state.proxy_process=$null; $state.api_process=$null
+    if ([int]$state.migration_count -eq 15 -and $ApplyProviderAdminMigration) {
+        if (-not (Test-Path -LiteralPath $providerMigration)) { throw 'Provider-admin migration file is missing.' }
+        $expectedTarget = "$($Paths.Database)@127.0.0.1:$([int]$state.database_port)"
+        if ($ConfirmProviderAdminTarget -cne $expectedTarget) { throw "Target confirmation must exactly equal $expectedTarget." }
+    } elseif ($ApplyProviderAdminMigration -and [int]$state.migration_count -ne 15) {
+        throw 'Provider-admin migration can only be applied once from the exact 15-migration baseline.'
+    }
     Push-Location $FrontendRoot
     try { & npm.cmd run build | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Frontend production build failed; old database and prior release data remain intact.' } }
     finally { Pop-Location }
+    if ([int]$state.migration_count -eq 15 -and $ApplyProviderAdminMigration) {
+        $migrationHash = (Get-FileHash -LiteralPath $providerMigration -Algorithm SHA256).Hash.ToLowerInvariant()
+        $backupResult = @(Invoke-LocalPilotBackup | Where-Object { $_.status -eq 'backup_verified' } | Select-Object -Last 1)
+        if ($backupResult.Count -ne 1 -or $backupResult[0].encryption -ne 'Windows-user DPAPI envelope' -or
+            $backupResult[0].sha256 -notmatch '^[a-f0-9]{64}$') {
+            throw 'A fresh encrypted backup could not be verified; migration was not attempted.'
+        }
+        $wrapper = "\set ON_ERROR_STOP on`n\set pilot_marker $($state.marker)`n\set migration_0014_hash $($state.migration_0014_sha256)`n\set migration_hash $migrationHash`nSET ROLE rahgard_pilot_geo_migrator;`n\i /opt/rahgard/pilot-sql/015_ai_provider_admin.sql`nRESET ROLE;`n"
+        # The no-login migrator receives only the transient DDL/FK grants needed
+        # for this exact additive migration. They are revoked even on failure.
+        Invoke-LocalPilotDockerSql @"
+GRANT CREATE ON DATABASE $($Paths.Database) TO rahgard_pilot_geo_migrator;
+GRANT USAGE, CREATE ON SCHEMA identity TO rahgard_pilot_geo_migrator;
+GRANT REFERENCES(user_id) ON identity.users, identity.web_sessions TO rahgard_pilot_geo_migrator;
+"@ -Database $Paths.Database
+        $migrationDockerArgs = @('-e',('RAHGARD_PILOT_DATABASE_MARKER=' + $state.marker),
+            '-e',('RAHGARD_PILOT_MIGRATION_0014_SHA256=' + $state.migration_0014_sha256),
+            '-e',('RAHGARD_PILOT_MIGRATION_0015_SHA256=' + $migrationHash))
+        try { Invoke-LocalPilotGuardedTcpSql $wrapper -Database $Paths.Database -DockerArgs $migrationDockerArgs }
+        finally {
+            Invoke-LocalPilotDockerSql @"
+REVOKE CREATE ON DATABASE $($Paths.Database) FROM rahgard_pilot_geo_migrator;
+REVOKE CREATE ON SCHEMA identity FROM rahgard_pilot_geo_migrator;
+REVOKE REFERENCES(user_id) ON identity.users, identity.web_sessions FROM rahgard_pilot_geo_migrator;
+"@ -Database $Paths.Database
+        }
+        $migrationRow = & docker exec $Paths.Container psql -X -q -A -t -U ai_tourism_owner -d $Paths.Database `
+            -c "SELECT migration_id||'|'||sha256 FROM system.schema_migrations WHERE migration_id='0015_ai_provider_admin'"
+        if ($LASTEXITCODE -ne 0 -or ($migrationRow | Out-String).Trim() -ne "0015_ai_provider_admin|$migrationHash") {
+            throw 'Provider-admin migration did not pass checksum verification.'
+        }
+        $state.migration_count = 16
+        $state | Add-Member -NotePropertyName migration_0015_sha256 -NotePropertyValue $migrationHash -Force
+        Write-LocalPilotState $Paths $state
+    } elseif ([int]$state.migration_count -eq 16) {
+        if (-not (Test-Path -LiteralPath $providerMigration) -or
+            (Get-FileHash -LiteralPath $providerMigration -Algorithm SHA256).Hash.ToLowerInvariant() -ne [string]$state.migration_0015_sha256) {
+            throw 'Provider-admin migration checksum drift detected; application upgrade was not attempted.'
+        }
+    }
+    Stop-LocalPilotManagedProcess $state.proxy_process 'proxy' $state
+    Stop-LocalPilotManagedProcess $state.api_process 'api' $state
+    $state.proxy_process=$null; $state.api_process=$null
     $state.configuration_sha256=Get-LocalPilotConfigDigest
     $state.pwa_build_sha256=Get-LocalPilotBuildDigest
     Write-LocalPilotState $Paths $state
     Start-LocalPilotWebProcesses ([pscustomobject]$state)
-    [pscustomobject]@{ status='application_updated_without_database_migration'; database=$Paths.Database; migration_count=$state.migration_count; configuration_sha256=$state.configuration_sha256; pwa_build_sha256=$state.pwa_build_sha256 }
+    [pscustomobject]@{ status=if ($ApplyProviderAdminMigration) {'provider_admin_migration_applied'} else {'application_updated'}; database=$Paths.Database; migration_count=$state.migration_count; configuration_sha256=$state.configuration_sha256; pwa_build_sha256=$state.pwa_build_sha256 }
+}
+
+function Invoke-ProviderAdminProvisioning {
+    if (-not $ConfirmPrivatePilot) { throw 'Provider-admin provisioning requires -ConfirmPrivatePilot.' }
+    $userId = [guid]::Empty
+    if (-not [guid]::TryParse($ProviderAdminUserId, [ref]$userId) -or $userId -eq [guid]::Empty) {
+        throw '-ProviderAdminUserId must be the exact existing local-owner user UUID.'
+    }
+    if (-not $ProviderAdminReason -or $ProviderAdminReason.Length -lt 10 -or
+        $ProviderAdminReason.Length -gt 120 -or $ProviderAdminReason -notmatch '^[A-Za-z0-9 ._-]+$') {
+        throw '-ProviderAdminReason must be a 10-120 character non-secret audit reason using plain ASCII letters, numbers, spaces, dot, underscore or hyphen.'
+    }
+    $state = Get-LocalPilotStateOrFail
+    $null = Assert-LocalPilotReady $state
+    if ([int]$state.migration_count -ne 16) { throw 'Apply and verify the additive provider-admin migration before provisioning.' }
+    $expectedTarget = "$($Paths.Database)@127.0.0.1:$([int]$state.database_port)"
+    if ($ConfirmProviderAdminTarget -cne $expectedTarget) {
+        throw "Explicit target confirmation must exactly equal $expectedTarget."
+    }
+    $id = $userId.ToString('D')
+    $eligible = & docker exec $Paths.Container psql -X -q -A -t -U ai_tourism_owner -d $Paths.Database `
+        -c "SELECT CASE WHEN EXISTS(SELECT 1 FROM identity.users WHERE user_id='$id' AND auth_subject='local_owner' AND account_status='active' AND is_synthetic=FALSE) AND NOT EXISTS(SELECT 1 FROM identity.ai_provider_admin_grants WHERE user_id='$id' AND revoked_at IS NULL) THEN 'eligible' ELSE 'blocked' END"
+    if ($LASTEXITCODE -ne 0 -or ($eligible | Out-String).Trim() -ne 'eligible') {
+        throw 'Target must be an active existing local-owner identity without a current provider-admin grant; no account or credentials were changed.'
+    }
+    $reason = $ProviderAdminReason
+    $sql = @"
+BEGIN;
+INSERT INTO identity.ai_provider_admin_grants(user_id,granted_by) VALUES ('$id','$id')
+ON CONFLICT (user_id) DO UPDATE SET granted_at=pg_catalog.now(),granted_by=EXCLUDED.granted_by,revoked_at=NULL;
+INSERT INTO identity.ai_provider_admin_mfa(user_id) VALUES ('$id') ON CONFLICT DO NOTHING;
+INSERT INTO ai_provider.audit_events(actor_id,action,target_type,target_id,outcome,metadata)
+VALUES ('$id','admin_provisioned','admin','$id','success',jsonb_build_object('method','private_local_operator','reason','$reason'));
+COMMIT;
+"@
+    Invoke-LocalPilotDockerSql $sql -Database $Paths.Database
+    $verified = & docker exec $Paths.Container psql -X -q -A -t -U ai_tourism_owner -d $Paths.Database `
+        -c "SELECT CASE WHEN EXISTS(SELECT 1 FROM identity.ai_provider_admin_grants WHERE user_id='$id' AND revoked_at IS NULL) AND EXISTS(SELECT 1 FROM identity.ai_provider_admin_mfa WHERE user_id='$id' AND enabled_at IS NULL) THEN 'ok' ELSE 'bad' END"
+    if ($LASTEXITCODE -ne 0 -or ($verified | Out-String).Trim() -ne 'ok') { throw 'Provider-admin grant did not pass post-write verification.' }
+    [pscustomobject]@{ status='provider_admin_provisioned'; user_id=$id; migration_count=$state.migration_count; totp_enrollment_required=$true; recovery_codes_issued=$false }
+}
+
+function Invoke-ProviderAdminRevocation {
+    if (-not $ConfirmPrivatePilot) { throw 'Provider-admin revocation requires -ConfirmPrivatePilot.' }
+    $userId = [guid]::Empty
+    if (-not [guid]::TryParse($ProviderAdminUserId, [ref]$userId) -or $userId -eq [guid]::Empty) {
+        throw '-ProviderAdminUserId must be the exact existing provider-admin user UUID.'
+    }
+    if (-not $ProviderAdminReason -or $ProviderAdminReason.Length -lt 10 -or
+        $ProviderAdminReason.Length -gt 120 -or $ProviderAdminReason -notmatch '^[A-Za-z0-9 ._-]+$') {
+        throw '-ProviderAdminReason must be a 10-120 character non-secret audit reason.'
+    }
+    $state = Get-LocalPilotStateOrFail
+    $null = Assert-LocalPilotReady $state
+    if ([int]$state.migration_count -ne 16) { throw 'Provider-admin migration 015 is not installed.' }
+    $expectedTarget = "$($Paths.Database)@127.0.0.1:$([int]$state.database_port)"
+    if ($ConfirmProviderAdminTarget -cne $expectedTarget) { throw "Explicit target confirmation must exactly equal $expectedTarget." }
+    $id = $userId.ToString('D')
+    $eligible = & docker exec $Paths.Container psql -X -q -A -t -U ai_tourism_owner -d $Paths.Database `
+        -c "SELECT CASE WHEN EXISTS(SELECT 1 FROM identity.users u JOIN identity.ai_provider_admin_grants g USING(user_id) WHERE u.user_id='$id' AND u.auth_subject='local_owner' AND u.account_status='active' AND g.revoked_at IS NULL) THEN 'eligible' ELSE 'blocked' END"
+    if ($LASTEXITCODE -ne 0 -or ($eligible | Out-String).Trim() -ne 'eligible') {
+        throw 'Target must be an active existing local owner with an active provider-admin grant.'
+    }
+    $reason = $ProviderAdminReason
+    $sql = @"
+BEGIN;
+UPDATE identity.ai_provider_admin_step_up SET revoked_at=pg_catalog.now() WHERE user_id='$id' AND revoked_at IS NULL;
+UPDATE identity.ai_provider_admin_mfa SET secret_ref=NULL,pending_secret_ref=NULL,enabled_at=NULL,
+    last_totp_counter=-1,recovery_hashes=ARRAY[]::BYTEA[],version=version+1,updated_at=pg_catalog.now()
+    WHERE user_id='$id';
+UPDATE identity.ai_provider_admin_grants SET revoked_at=pg_catalog.now() WHERE user_id='$id' AND revoked_at IS NULL;
+INSERT INTO ai_provider.audit_events(actor_id,action,target_type,target_id,outcome,metadata)
+VALUES ('$id','admin_revoked','admin','$id','success',jsonb_build_object('method','private_local_operator','reason','$reason'));
+COMMIT;
+"@
+    Invoke-LocalPilotDockerSql $sql -Database $Paths.Database
+    $verified = & docker exec $Paths.Container psql -X -q -A -t -U ai_tourism_owner -d $Paths.Database `
+        -c "SELECT CASE WHEN EXISTS(SELECT 1 FROM identity.ai_provider_admin_grants WHERE user_id='$id' AND revoked_at IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM identity.ai_provider_admin_step_up WHERE user_id='$id' AND revoked_at IS NULL) THEN 'ok' ELSE 'bad' END"
+    if ($LASTEXITCODE -ne 0 -or ($verified | Out-String).Trim() -ne 'ok') { throw 'Provider-admin revocation failed post-write verification.' }
+    [pscustomobject]@{ status='provider_admin_revoked'; user_id=$id; migration_count=$state.migration_count }
 }
 
 function Invoke-LocalPilotRollback {
@@ -1388,6 +1541,8 @@ try {
         'Backup' { if ($PSCmdlet.ShouldProcess($Paths.Backups,'Create and verify an encrypted DPAPI PostgreSQL backup')) { Invoke-LocalPilotBackup } }
         'Restore' { if ($PSCmdlet.ShouldProcess($Archive,'Restore into a separate marked candidate database; never switch the active database')) { Invoke-LocalPilotRestore } }
         'Upgrade' { if ($PSCmdlet.ShouldProcess($Paths.Root,'Update application bundle without applying new database migrations')) { Invoke-LocalPilotUpgrade } }
+        'ProvisionProviderAdmin' { if ($PSCmdlet.ShouldProcess($Paths.Database,'Grant one existing local owner the separate AI Provider Admin capability')) { Invoke-ProviderAdminProvisioning } }
+        'RevokeProviderAdmin' { if ($PSCmdlet.ShouldProcess($Paths.Database,'Revoke provider-admin authority and MFA for one existing local owner')) { Invoke-ProviderAdminRevocation } }
         'Rollback' { Invoke-LocalPilotRollback }
         'TrustCertificate' { if ($PSCmdlet.ShouldProcess('CurrentUser Root certificate store','Trust only the recorded localhost pilot certificate')) { Set-LocalPilotCertificateTrust $true } }
         'UntrustCertificate' { if ($PSCmdlet.ShouldProcess('CurrentUser Root certificate store','Remove only the recorded localhost pilot certificate')) { Set-LocalPilotCertificateTrust $false } }

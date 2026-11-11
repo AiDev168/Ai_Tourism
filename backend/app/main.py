@@ -14,6 +14,7 @@ from app.api.catalogue import router as catalogue_router
 from app.api.auth import router as auth_router
 from app.api.traveler import router as traveler_router
 from app.api.assistant import router as assistant_router
+from app.api.provider_admin import router as provider_admin_router
 from app.modules.identity.auth_service import AuthenticationUnavailable
 from app.modules.identity.sms import DisabledSmsAdapter, FakeSmsAdapter, SmsIrSandboxAdapter
 
@@ -26,6 +27,7 @@ app.include_router(catalogue_router)
 app.include_router(auth_router)
 app.include_router(traveler_router)
 app.include_router(assistant_router)
+app.include_router(provider_admin_router)
 if settings.auth_sms_adapter == "fake":
     app.state.sms_adapter = FakeSmsAdapter()
 elif settings.auth_sms_adapter == "sms_ir_sandbox":

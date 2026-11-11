@@ -24,6 +24,7 @@ from app.modules.trip.repository import (
     TravelerConflict, TravelerInvalidState, TravelerNotFound, TravelerRepository,
 )
 from app.modules.trip.schemas import ConversationDetail, MessageResponse, TripResponse, _bounded_json
+from app.modules.provider_admin.runtime import make_admin_chat_gateway
 
 router = APIRouter(prefix='/api/v1', tags=['traveler'])
 logger = logging.getLogger('ai_tourism.assistant')
@@ -70,6 +71,8 @@ def get_assistant_turn_repository(
 def get_chat_gateway(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AiProviderGateway[ChatRequest, ChatReply]:
+    if settings.ai_provider_admin_enabled:
+        return make_admin_chat_gateway(settings)
     return make_chat_gateway(settings)
 
 
@@ -163,7 +166,7 @@ async def assistant_turn(
     gateway: Annotated[AiProviderGateway[ChatRequest, ChatReply], Depends(get_chat_gateway)],
 ):
     response.headers['Cache-Control'] = 'no-store'
-    if not settings.internal_chat_enabled or settings.app_env.lower() not in {'development', 'test', 'local_pilot'}:
+    if (not settings.internal_chat_enabled and not settings.ai_provider_admin_enabled) or settings.app_env.lower() not in {'development', 'test', 'local_pilot'}:
         return _error(503, 'assistant_unavailable')
     try:
         reservation = await run_in_threadpool(

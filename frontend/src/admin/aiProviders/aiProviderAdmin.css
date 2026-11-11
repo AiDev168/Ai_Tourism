@@ -1,0 +1,29 @@
+.provider-admin { max-width: 72rem; margin: 2rem auto; padding: 1rem; color: var(--ink, #192722); }
+.provider-admin header { margin-block-end: 1rem; }
+.provider-admin-card { background: var(--surface, #fff); border: 1px solid var(--line, #d8e0da); border-radius: 1rem; padding: 1rem; margin-block: 1rem; box-shadow: 0 8px 28px #10251a0b; }
+.provider-admin-card h2, .provider-admin-card h3 { margin-block-start: 0; }
+.provider-admin-heading, .provider-admin-actions, .provider-admin-row, .provider-admin-route, .provider-admin-test { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.provider-admin-profile { border-block-start: 1px solid var(--line, #d8e0da); padding-block: 1rem; display: grid; gap: .75rem; }
+.provider-admin-profile > div:first-child { display: flex; gap: 1rem; flex-wrap: wrap; align-items: baseline; }
+.provider-admin-profile > div:first-child span, .provider-admin-test span { color: var(--muted, #59665f); }
+.provider-admin-fallback-choice { border-block-start: 1px solid var(--line, #d8e0da); padding-block: .55rem; }
+.provider-admin-order-controls { display: inline-flex; align-items: center; gap: .35rem; margin-inline-start: auto; }
+.provider-admin-order-controls button { min-width: 2.5rem; padding: .4rem .65rem; }
+.provider-admin-form { border-block-start: 1px solid var(--line, #d8e0da); margin-block-start: 1rem; padding-block-start: 1rem; display: grid; gap: .8rem; }
+.provider-admin label { display: flex; align-items: center; gap: .55rem; }
+.provider-admin-form > label { display: grid; align-items: start; gap: .35rem; }
+.provider-admin input:not([type=checkbox]), .provider-admin select { min-height: 2.6rem; max-width: 100%; border: 1px solid var(--line, #b9c7bd); border-radius: .55rem; padding: .4rem .6rem; font: inherit; color: inherit; background: white; }
+.provider-admin-form input:not([type=checkbox]), .provider-admin-form select { width: 100%; }
+.provider-admin fieldset { border: 1px solid var(--line, #d8e0da); border-radius: .65rem; display: grid; gap: .7rem; }
+.provider-admin fieldset > div { display: grid; grid-template-columns: minmax(8rem, auto) minmax(10rem, 1fr) minmax(8rem, .5fr); align-items: center; gap: .5rem; }
+.provider-admin button { min-height: 2.6rem; border: 0; border-radius: 99rem; padding: .55rem 1rem; color: white; background: var(--forest, #216247); font: inherit; cursor: pointer; }
+.provider-admin button:disabled { opacity: .55; cursor: not-allowed; }
+.provider-admin button[type=button] { background: var(--forest, #216247); }
+.provider-admin-error { color: #a32929; }
+.provider-admin-notice { color: #17653e; }
+.provider-admin code { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .provider-admin { margin-block: .5rem; padding: .75rem; }
+  .provider-admin fieldset > div { grid-template-columns: 1fr; }
+  .provider-admin-actions button, .provider-admin-row button, .provider-admin-route button { flex: 1 1 auto; }
+}

@@ -1,6 +1,8 @@
 from functools import lru_cache
 from urllib.parse import urlsplit
 
+from pathlib import Path
+
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -24,6 +26,9 @@ class Settings(BaseSettings):
     internal_chat_token: SecretStr | None = None
     internal_chat_daily_user_limit: int = Field(default=8, ge=1, le=1000)
     internal_chat_daily_global_limit: int = Field(default=100, ge=1, le=100000)
+    ai_provider_admin_enabled: bool = False
+    ai_provider_vault_dir: Path | None = None
+    ai_provider_admin_recovery_pepper: SecretStr | None = None
     tourism_rag_enabled: bool = False
     tourism_rag_api_url: str = "http://127.0.0.1:8765"
     tourism_rag_api_token: SecretStr | None = None
@@ -66,6 +71,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_auth_configuration(self):
+        if self.ai_provider_admin_enabled:
+            if self.app_env.lower() != "local_pilot" or not self.auth_enabled or not self.auth_cookie_secure:
+                raise ValueError("AI provider administration is restricted to authenticated local pilot")
+            if self.ai_provider_vault_dir is None or self.ai_provider_admin_recovery_pepper is None:
+                raise ValueError("Provider vault and recovery pepper are required when admin is enabled")
+            if len(self.ai_provider_admin_recovery_pepper.get_secret_value().encode("utf-8")) < 32:
+                raise ValueError("Provider recovery pepper must contain at least 32 bytes")
         if self.auth_local_owner_enabled:
             origin = urlsplit(self.auth_allowed_origins.strip())
             if (

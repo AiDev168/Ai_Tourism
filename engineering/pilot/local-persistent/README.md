@@ -62,7 +62,36 @@ Restore is intentionally a **rehearsal**, not a cutover. After `Backup`, use the
 
 It creates a uniquely named, isolated `rahgard_restore_<id>` candidate database, preinstalls the exact required extensions using the operator role, then grants the non-superuser restore role permissions on `tiger` and `topology` only within that candidate. It verifies the marker and empty-target contract before restoring. Its filtered archive list excludes only the preinstalled extension DDL, the extension-owned `tiger`/`topology` schema declarations, and PostGIS `spatial_ref_sys` seed data; that reference table is supplied by the version-checked PostGIS extension. Unknown extension entries fail closed. It verifies the archive hash and restored table/migration contract and records the result. It never overwrites or switches the active database. Failed rehearsal candidates are preserved for inspection; never retry into them or remove them as a shortcut. `Rollback` fails closed because there is no reviewed reversible migration or safe active-database cutover contract. A restore candidate requires a separately reviewed owner-operated cutover procedure; do not point the application at it manually.
 
-`Upgrade -ConfirmPrivatePilot` updates the app/PWA bundle only after checking the migration ledger and recorded SQL checksums. New migration files are blocked until an explicit reviewed runner registration is added. No automatic down-migration is attempted.
+`Upgrade -ConfirmPrivatePilot` updates the app/PWA bundle only after checking the migration ledger and recorded SQL checksums. Migration 0015 has a separate opt-in step described below. No automatic down-migration is attempted.
+
+## AI provider administration (Migration 0015)
+
+This feature is disabled unless Migration 0015 has been explicitly applied and the local runner starts the app with `AI_PROVIDER_ADMIN_ENABLED=true`. The upgrade first builds the PWA and creates a fresh verified DPAPI backup. Apply the additive migration only to the exact local pilot target:
+
+```powershell
+& .\engineering\pilot\local-persistent\Rahgard-LocalPilot.ps1 Upgrade `
+  -ConfirmPrivatePilot -ApplyProviderAdminMigration `
+  -ConfirmProviderAdminTarget 'rahgard_pilot_local@127.0.0.1:55439'
+```
+
+The runner verifies the current 15-migration state and exact Migration 0014 checksum, applies 0015 through the marked loopback PostgreSQL path with a no-login migrator role, revokes temporary DDL/FK grants in `finally`, verifies the resulting checksum, and then restarts only the recorded local API/HTTPS processes. The application is never pointed at a disposable or shared database. If the database is not at the exact recorded 15-migration checkpoint, the command stops.
+
+Grant the separate provider-admin capability to the already existing local owner only after reviewing the target UUID and reason. No account or password is created or modified:
+
+```powershell
+& .\engineering\pilot\local-persistent\Rahgard-LocalPilot.ps1 ProvisionProviderAdmin `
+  -ConfirmPrivatePilot -ConfirmProviderAdminTarget 'rahgard_pilot_local@127.0.0.1:55439' `
+  -ProviderAdminUserId '<existing-local-owner-uuid>' `
+  -ProviderAdminReason 'Approved local provider administration'
+```
+
+Revoke this capability and invalidate its provider-admin MFA material with `-Action RevokeProviderAdmin` and the same explicit target, user ID, and non-secret reason. Provisioning and revocation use the private local operator connection and are audited. Traveler OTP or local-owner authentication by itself does not grant this capability.
+
+After the operator grant, open `https://localhost:8443/admin/ai-providers`, sign in as the local owner, enroll an authenticator, and confirm the one-time recovery codes. Sensitive mutations require fresh session-bound TOTP step-up; one-time recovery codes provide bounded recovery. Provider API keys are stored as DPAPI CurrentUser ciphertext in the ACL-protected `secrets\ai-provider-vault` folder; PostgreSQL stores only opaque references. Do not copy that vault to another Windows account or machine.
+
+The current application Gateway and admin control plane implement **Chat only**. Vision, Embedding, and Reranking are visibly unavailable and cannot be activated; no fake capability is reported. LM Studio is restricted to an explicit numeric loopback address. The GapGPT profile uses `https://api.gapgpt.app/v1` and a server-side bearer key. Model discovery/connection validation is a non-generative `/models` request; this path has not been live-verified in this environment. Activation reads the current database route on every traveler assistant request, so a server restart is not needed after activation. Fallback is off by default and, when enabled, applies only to an administrator-selected ordered list of validated Chat revisions.
+
+No provider API key is included in this repository. Do not run a paid/live GapGPT completion or claim a successful live inference until the owner supplies approved credentials and explicitly authorizes that test. A local LM Studio test similarly requires its server and model to be running. These gates are independent of the isolated offline tests.
 
 ## Review and recovery boundaries
 

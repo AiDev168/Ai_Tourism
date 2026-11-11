@@ -198,7 +198,7 @@ function Write-LocalPilotState($Paths, $State) {
             $staged.root_sha256 -eq $Paths.RootHash -and $staged.container_name -eq $Paths.Container -and
             $staged.database -eq $Paths.Database -and $staged.bind_mount -eq $Paths.Db
         $fields = @('lifecycle','database_port','api_port','https_port','marker','migration_count',
-            'migration_0012_sha256','migration_0013_sha256','migration_0014_sha256','geo_packet_sha256',
+            'migration_0012_sha256','migration_0013_sha256','migration_0014_sha256','migration_0015_sha256','geo_packet_sha256',
             'https_thumbprint','database_certificate_sha256','configuration_sha256','pwa_build_sha256')
         $mismatches = @()
         foreach ($field in $fields) {
