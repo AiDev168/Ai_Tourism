@@ -33,18 +33,48 @@ function proxyApi(req, res) {
     const normalized = name.toLowerCase();
     if (normalized === 'forwarded' || normalized.startsWith('x-forwarded-')) delete headers[name];
   }
+
+  // Owner login performs multiple bounded PostgreSQL operations and PBKDF2.
+  // On Windows/Docker, several sequential TLS connections can exceed the
+  // former generic 12s proxy limit while /health and GET /method remain OK.
+  // Keep other routes at 12s. A larger login limit is NOT a substitute for
+  // measuring and reducing backend latency once the first pilot is working.
+  const ownerLogin = req.method === 'POST'
+    && req.url === '/api/v1/auth/local-owner/login';
+  const upstreamTimeoutMs = ownerLogin ? 30_000 : 12_000;
+  const start = process.hrtime.bigint();
+  let timedOut = false;
+  const elapsedMs = () => Number((process.hrtime.bigint() - start) / 1_000_000n);
+
   const upstream = http.request({
     hostname: '127.0.0.1', port: apiPort, method: req.method,
     path: req.url, headers,
-    timeout: 12_000,
+    timeout: upstreamTimeoutMs,
   }, (upstreamResponse) => {
     res.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
     upstreamResponse.pipe(res);
   });
-  upstream.on('timeout', () => upstream.destroy(new Error('API timeout')));
-  upstream.on('error', () => {
-    if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    res.end(JSON.stringify({ error: { code: 'upstream_unavailable' } }));
+  upstream.on('timeout', () => {
+    timedOut = true;
+    // This is safe operational metadata; never log raw URL/query, user name,
+    // password, request/response body, cookies, or authentication headers.
+    console.error('LOCAL_PROXY_UPSTREAM_TIMEOUT route='
+      + (ownerLogin ? 'owner_login' : 'other')
+      + ' elapsed_ms=' + elapsedMs());
+    upstream.destroy(new Error('API timeout'));
+  });
+  upstream.on('error', (error) => {
+    const safeCodes = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE']);
+    const code = safeCodes.has(error?.code) ? error.code : 'OTHER';
+    console.error('LOCAL_PROXY_UPSTREAM_ERROR route='
+      + (ownerLogin ? 'owner_login' : 'other')
+      + ' kind=' + (timedOut ? 'timeout' : code)
+      + ' elapsed_ms=' + elapsedMs());
+    if (!res.headersSent) res.writeHead(timedOut ? 504 : 502, {
+      'content-type': 'application/json',
+      'cache-control': 'no-store',
+    });
+    if (!res.writableEnded) res.end(JSON.stringify({ error: { code: 'upstream_unavailable' } }));
   });
   req.pipe(upstream);
 }
