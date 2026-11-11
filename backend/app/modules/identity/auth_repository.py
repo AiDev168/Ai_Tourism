@@ -314,14 +314,23 @@ class AuthRepository:
         expected_salt: bytes, expected_verifier: bytes, expected_iterations: int,
     ) -> dict[str, Any] | None:
         with self.connection() as conn, conn.transaction():
+            # Serialize session issuance with password reset without granting the
+            # runtime role UPDATE privilege on stored password verifiers.
+            # Both operations acquire this transaction-scoped lock first.
+            conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                ("rahgard:local-owner-credential:" + str(user_id),),
+            )
             owner = conn.execute(
                 """SELECT user_id FROM identity.users
                    WHERE user_id=%s AND auth_subject='local_owner'
                      AND account_status='active' AND is_synthetic=FALSE FOR UPDATE""",
                 (user_id,),
             ).fetchone()
+            # SELECT ... FOR UPDATE requires UPDATE privilege in PostgreSQL.
+            # Password verifiers must remain SELECT-only to ai_tourism_app.
             credential = conn.execute(
-                "SELECT salt,verifier,iterations FROM identity.local_owner_credentials WHERE owner_id=%s FOR UPDATE",
+                "SELECT salt,verifier,iterations FROM identity.local_owner_credentials WHERE owner_id=%s",
                 (user_id,),
             ).fetchone()
             if (owner is None or credential is None or bytes(credential["salt"]) != expected_salt
