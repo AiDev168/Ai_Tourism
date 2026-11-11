@@ -2,7 +2,7 @@
 
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -29,6 +29,8 @@ class StartConversationRequest(StrictModel):
     locale: Locale = "fa-IR"
     request_text: str = Field(min_length=1, max_length=1200)
     extracted_requirements: dict[str, Any] = Field(default_factory=dict)
+    traveler_timezone: str | None = Field(default=None, max_length=80)
+    traveler_reference_date: date | None = None
     confirmed_requirements: dict[str, Any] = Field(default_factory=dict)
     destination_ids: list[str] = Field(default_factory=list, max_length=50)
     idempotency_key: str = Field(min_length=8, max_length=128)
@@ -186,8 +188,9 @@ class MessageResponse(StrictModel):
     role: Literal["user", "assistant", "system", "tool"]
     content: str
     created_at: datetime
-    # A bounded advisory hint, never authoritative; never exposes raw metadata.
-    candidate_requirements: dict[str, str | int] = Field(default_factory=dict, max_length=8)
+    # A bounded, validated advisory object, never authoritative. The repository
+    # sanitizes the metadata through TripRequirementsV1 before exposing it.
+    candidate_requirements: dict[str, Any] = Field(default_factory=dict, max_length=4)
 
 
 class TripResponse(StrictModel):

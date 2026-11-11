@@ -38,7 +38,9 @@ _REQUEST_ID_PATTERN = r"^[A-Za-z0-9_-]{8,64}$"
 class OwnerRagFilters(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    canonical_entity_key: str | None = Field(default=None, min_length=1, max_length=240)
+    canonical_entity_key: str | None = Field(
+        default=None, min_length=1, max_length=160, pattern=r"^[\w.:-]+$"
+    )
 
 
 class OwnerRagRequestWire(BaseModel):
@@ -63,14 +65,14 @@ class OwnerRagRequestWire(BaseModel):
 class OwnerRagSourceWire(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    source_id: str = Field(min_length=1, max_length=240)
-    source_name: str = Field(min_length=1, max_length=500)
+    source_id: str = Field(min_length=1, max_length=160, pattern=r"^[\w.:-]+$")
+    source_name: str = Field(min_length=1, max_length=250)
     source_url: str = Field(min_length=1, max_length=2_048)
-    source_role: str = Field(min_length=1, max_length=64)
+    source_role: str = Field(min_length=1, max_length=100)
     retrieved_at: str | None = Field(default=None, max_length=40)
     valid_from: str | None = Field(default=None, max_length=40)
     valid_until: str | None = Field(default=None, max_length=40)
-    license: str | None = Field(default=None, max_length=500)
+    license: str | None = Field(default=None, max_length=200)
 
     @field_validator("source_url")
     @classmethod
@@ -86,16 +88,18 @@ class OwnerRagSourceWire(BaseModel):
 class OwnerRagItemWire(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    evidence_id: str = Field(min_length=1, max_length=240)
-    document_id: str = Field(min_length=1, max_length=240)
+    evidence_id: str = Field(min_length=1, max_length=160, pattern=r"^[\w.:-]+$")
+    document_id: str = Field(min_length=1, max_length=160, pattern=r"^[\w.:-]+$")
     content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    text: str = Field(min_length=1, max_length=8_000)
+    text: str = Field(min_length=1, max_length=12_000)
     locale: Literal["fa-IR", "en-US", "ar"]
     corpus: Literal["spatial_destinations", "culinary_knowledge"]
-    canonical_entity_key: str | None = Field(default=None, min_length=1, max_length=240)
-    claim_key: str | None = Field(default=None, min_length=1, max_length=240)
+    canonical_entity_key: str | None = Field(
+        default=None, min_length=1, max_length=160, pattern=r"^[\w.:-]+$"
+    )
+    claim_key: str | None = Field(default=None, min_length=1, max_length=160, pattern=r"^[\w.:-]+$")
     score: float | None = Field(default=None, strict=True, allow_inf_nan=False)
-    sources: list[OwnerRagSourceWire] = Field(min_length=1, max_length=32)
+    sources: list[OwnerRagSourceWire] = Field(min_length=1, max_length=20)
 
 
 class OwnerRagResponseWire(BaseModel):
@@ -108,7 +112,7 @@ class OwnerRagResponseWire(BaseModel):
     corpus_version: str | None = Field(default=None, max_length=160)
     retrieval_version: str | None = Field(default=None, max_length=160)
     generated_at: str = Field(min_length=20, max_length=40)
-    warnings: list[str] = Field(default_factory=list, max_length=32)
+    warnings: list[str] = Field(default_factory=list, max_length=10)
 
     @field_validator("generated_at")
     @classmethod
@@ -116,8 +120,8 @@ class OwnerRagResponseWire(BaseModel):
         from datetime import datetime
 
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if parsed.tzinfo is None or parsed.utcoffset() is None:
-            raise ValueError("generated_at must be timezone-aware")
+        if parsed.tzinfo is None or parsed.utcoffset() is None or parsed.utcoffset().total_seconds() != 0:
+            raise ValueError("generated_at must be UTC")
         return value
 
     @model_validator(mode="after")
@@ -171,8 +175,8 @@ def _parse_datetime(value: str | None):
     from datetime import datetime
 
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ValueError("timestamp must be timezone-aware")
+    if parsed.tzinfo is None or parsed.utcoffset() is None or parsed.utcoffset().total_seconds() != 0:
+        raise ValueError("timestamp must be UTC")
     return parsed
 
 

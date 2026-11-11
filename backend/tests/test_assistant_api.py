@@ -6,7 +6,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
-from app.api.assistant import get_assistant_turn_repository, get_chat_gateway
+from app.api.assistant import _candidate_profile, get_assistant_turn_repository, get_chat_gateway
 from app.api.auth import require_authenticated_csrf
 from app.api.traveler import get_traveler_repository
 from app.core.config import Settings, get_settings
@@ -140,13 +140,33 @@ def test_authenticated_turn_persists_candidate_without_confirming_it():
         result = c.post(f'/api/v1/conversations/{CONV}/assistant-turns', json=body())
         assert result.status_code == 200, result.text
         assert result.headers['cache-control'] == 'no-store'
-        assert result.json()['candidate_requirements']['duration_days'] == 3
+        candidate = result.json()['candidate_requirements']
+        assert candidate['contract_version'] == 'trip-requirements-v1'
+        assert candidate['fields']['duration_days']['status'] == 'missing'
         assert result.json()['trip']['confirmed_requirements'] == {}
         assert repo.last['user_id'] == OWNER and repo.finished['turn_id'] == TURN
         assert len(gateway.calls) == 1
         assert gateway.calls[0].history[0].content == 'سفر سه روزه'
     finally:
         c.app.dependency_overrides.clear()
+
+
+def test_assistant_candidate_uses_trip_contract_and_only_accepts_exact_source_spans():
+    text = 'می‌خواهم چند روز از تهران به شیراز سفر کنم و hiking دوست دارم'
+    candidate = _candidate_profile(text, 'fa-IR', {
+        'destination': 'شیراز', 'origin': 'تهران', 'interest': 'hiking',
+    }, {'destination': 'شیراز', 'origin': 'تهران', 'interest': 'hiking'})
+    assert candidate.contract_version == 'trip-requirements-v1'
+    assert candidate.original_text == text
+    assert candidate.fields.destination.value == 'شیراز'
+    assert candidate.fields.destination.source == 'traveler'
+    assert candidate.fields.origin.source == 'llm'
+    assert candidate.fields.origin.value == 'تهران'
+    assert candidate.fields.origin.source == 'llm'
+    assert candidate.fields.duration_days.status == 'missing'
+    assert candidate.fields.interests.value == ['hiking']
+    assert candidate.fields.interests.source == 'llm'
+    assert candidate.fields.destination.evidence_span.text == 'شیراز'
 
 
 def test_completed_replay_does_not_invoke_provider_again():
@@ -212,7 +232,9 @@ def test_long_history_keeps_original_trip_and_latest_correction_without_confirmi
         assert sent_content.count('PERSIAN_15_DAY_ORIGINAL_REQUEST') == 1
         assert sent_content[-1] == 'Latest correction: keep 15 days and wheelchair access mandatory.'
         assert len(sent_history) == 12
-        assert result.json()['candidate_requirements'] == {'duration_days': 30, 'traveler_count': 5}
+        candidate = result.json()['candidate_requirements']
+        assert candidate['fields']['duration_days']['status'] == 'missing'
+        assert candidate['fields']['travelers']['status'] == 'missing'
         assert result.json()['trip']['duration_days'] == 15
         assert result.json()['trip']['confirmed_requirements'] == {
             'duration_days': 15,

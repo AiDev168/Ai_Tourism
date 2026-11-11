@@ -17,6 +17,9 @@ from app.modules.identity.authorization import Principal, get_principal
 from app.modules.integrations.ai_gateway import AiProviderGateway
 from app.modules.integrations.chat_adapter import ChatRequest, ChatReply, make_chat_gateway
 from app.modules.trip.assistant_turns import AssistantTurnRepository, ChatBudgetExceeded
+from app.modules.trip.requirements_interpretation import (
+    EvidenceSpan, RequirementValue, TripRequirementsV1, interpret_trip_requirements,
+)
 from app.modules.trip.repository import (
     TravelerConflict, TravelerInvalidState, TravelerNotFound, TravelerRepository,
 )
@@ -53,7 +56,7 @@ class AssistantTurnResponse(BaseModel):
     conversation: ConversationDetail
     trip: TripResponse
     message: MessageResponse
-    candidate_requirements: dict[str, str | int | None]
+    candidate_requirements: TripRequirementsV1 | dict[str, str | int | None]
     clarification: str | None
     replayed: bool
 
@@ -75,6 +78,78 @@ def _error(status: int, code: str) -> JSONResponse:
                         headers={'Cache-Control': 'no-store'})
 
 
+def _candidate_profile(
+    text: str, locale: str, hints: dict[str, Any], evidence: dict[str, str],
+) -> TripRequirementsV1:
+    """Build a typed profile; model hints need exact current-turn evidence."""
+    profile = interpret_trip_requirements(text, locale)
+    fields = profile.fields.model_dump()
+    key_to_field = {
+        'destination': 'destination', 'origin': 'origin', 'duration_days': 'duration_days',
+        'traveler_count': 'travelers', 'budget_text': 'budget',
+        'interest': 'interests', 'relative_start_date': 'relative_start_date',
+        'travel_start': 'travel_dates', 'travel_end': 'travel_dates',
+        'hard_constraint': 'hard_constraints', 'accessibility': 'accessibility',
+    }
+    for key, field_name in key_to_field.items():
+        current = getattr(profile.fields, field_name)
+        raw_value = hints.get(key)
+        quote = evidence.get(key)
+        if current.status != 'missing' or raw_value is None or not isinstance(quote, str):
+            continue
+        start = text.find(quote)
+        if start < 0 or not quote or len(quote) > 200:
+            continue
+        # Parse the quoted source with the same deterministic contract. This
+        # allows useful multilingual extraction while refusing unsupported
+        # conversions (especially dates, money and numeric quantities).
+        parsed_quote = interpret_trip_requirements(quote, locale)
+        quoted_field_name = {'traveler_count': 'travelers', 'budget_text': 'budget',
+                             'interest': 'interests', 'hard_constraint': 'hard_constraints',
+                             'travel_start': 'travel_dates', 'travel_end': 'travel_dates'}.get(key, key)
+        quoted_field = getattr(parsed_quote.fields, quoted_field_name, None)
+        value = quoted_field.value if quoted_field is not None and quoted_field.status == 'known' else None
+        if key in {'duration_days', 'traveler_count'}:
+            if type(raw_value) is not int or quoted_field is None or quoted_field.status != 'known' or value != raw_value:
+                continue
+        elif key in {'destination', 'origin', 'interest', 'hard_constraint', 'accessibility'}:
+            if not isinstance(raw_value, str) or raw_value.strip() not in quote:
+                continue
+        elif key == 'budget_text':
+            if (not isinstance(raw_value, str) or quoted_field is None
+                    or quoted_field.status != 'known' or not quote):
+                continue
+        elif key in {'relative_start_date', 'travel_start', 'travel_end'}:
+            if quoted_field is None or quoted_field.status != 'known':
+                continue
+            if key == 'relative_start_date' and (
+                type(raw_value) is not int or quoted_field.value.offset_days != raw_value
+            ):
+                continue
+            if key in {'travel_start', 'travel_end'}:
+                expected = quoted_field.value.get('start' if key == 'travel_start' else 'end')
+                if not isinstance(raw_value, str) or expected is None or expected.isoformat() != raw_value:
+                    continue
+        span = EvidenceSpan(start=start, end=start + len(quote), text=quote)
+        if key in {'destination', 'origin'}:
+            candidate_value = raw_value.strip()
+        elif key == 'interest':
+            candidate_value = [raw_value.strip()]
+        elif key in {'hard_constraint', 'accessibility'}:
+            candidate_value = [raw_value.strip()]
+        else:
+            candidate_value = value
+        try:
+            fields[field_name] = RequirementValue(
+                status='known', value=candidate_value, evidence_span=span, source='llm',
+            )
+        except Exception:
+            # Invalid/unrepresentable provider candidates are omitted; they do
+            # not weaken the deterministic interpretation.
+            continue
+    return profile.model_copy(update={'fields': profile.fields.model_validate(fields)})
+
+
 @router.post('/conversations/{conversation_id}/assistant-turns', response_model=AssistantTurnResponse)
 async def assistant_turn(
     conversation_id: UUID,
@@ -88,7 +163,7 @@ async def assistant_turn(
     gateway: Annotated[AiProviderGateway[ChatRequest, ChatReply], Depends(get_chat_gateway)],
 ):
     response.headers['Cache-Control'] = 'no-store'
-    if not settings.internal_chat_enabled or settings.app_env.lower() not in {'development', 'test'}:
+    if not settings.internal_chat_enabled or settings.app_env.lower() not in {'development', 'test', 'local_pilot'}:
         return _error(503, 'assistant_unavailable')
     try:
         reservation = await run_in_threadpool(
@@ -146,10 +221,13 @@ async def assistant_turn(
             reply = await gateway.invoke(ChatRequest(
                 locale=locale, text=body.content, history=history,
             ))
+            candidate_profile = _candidate_profile(
+                body.content, locale, reply.requirements, reply.requirement_evidence,
+            )
             await run_in_threadpool(
                 repository.complete, user_id=principal.user_id,
                 turn_id=reservation.turn_id, reply=reply.reply,
-                requirements=reply.requirements, clarification=reply.clarification,
+                requirements=candidate_profile.model_dump(mode='json'), clarification=reply.clarification,
             )
         except Exception:
             try:

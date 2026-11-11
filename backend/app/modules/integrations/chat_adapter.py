@@ -44,6 +44,9 @@ class ChatReply(BaseModel):
     reply: str = Field(min_length=1, max_length=2000)
     # Candidate data remains untrusted and requires explicit user review.
     requirements: dict[str, str | int | None] = Field(default_factory=dict, max_length=20)
+    # Exact source quotations are checked against the current traveler turn
+    # before candidate values can enter the typed profile.
+    requirement_evidence: dict[str, str] = Field(default_factory=dict, max_length=20)
     clarification: str | None = Field(default=None, max_length=500)
 
     @field_validator("requirements")
@@ -59,11 +62,13 @@ class ChatReply(BaseModel):
                     and "\\" not in item
                     and not any(ord(char) < 32 or ord(char) == 127 for char in item)):
                 hints[key] = item.strip()
-        for key, bound in (("duration_days", 365), ("traveler_count", 50)):
+        for key, bound in (("duration_days", 365), ("traveler_count", 50),
+                           ("relative_start_date", 365)):
             item = value.get(key)
             if type(item) is int and 1 <= item <= bound:
                 hints[key] = item
-        for key, limit in (("budget_text", 100), ("interest", 100)):
+        for key, limit in (("budget_text", 100), ("interest", 100),
+                           ("hard_constraint", 120), ("accessibility", 120)):
             item = value.get(key)
             if (isinstance(item, str) and 0 < len(item.strip()) <= limit
                     and "\\" not in item
@@ -84,6 +89,19 @@ class ChatReply(BaseModel):
             except ValueError:
                 pass
         return hints
+
+    @field_validator("requirement_evidence")
+    @classmethod
+    def bounded_evidence(cls, value: dict[str, str]) -> dict[str, str]:
+        allowed = {"destination", "origin", "duration_days", "traveler_count", "budget_text",
+                   "interest", "relative_start_date", "travel_start", "travel_end",
+                   "hard_constraint", "accessibility"}
+        return {
+            key: quote.strip()
+            for key, quote in value.items()
+            if key in allowed and isinstance(quote, str) and 0 < len(quote.strip()) <= 200
+            and not any(ord(char) < 32 or ord(char) == 127 for char in quote)
+        }
 
 
 def _parse_provider_content(content: object) -> ChatReply:
@@ -126,7 +144,7 @@ class RemoteChatAdapter:
 
     async def invoke(self, request: ChatRequest) -> ChatReply:
         parsed = urlsplit(self.endpoint)
-        if (not self.enabled or self.environment not in {"development", "test"}
+        if (not self.enabled or self.environment not in {"development", "test", "local_pilot"}
                 or parsed.scheme != "https" or not parsed.hostname
                 or parsed.username or parsed.password or parsed.query or parsed.fragment
                 or not self.model or len(self.model) > 160 or self.token is None
@@ -137,14 +155,20 @@ class RemoteChatAdapter:
             "max_tokens": 800,
             "messages": [
                 {"role": "system", "content": (
-                    "Return one JSON object with reply (string), requirements (object), "
+                "Return one JSON object with reply (string), requirements (object), "
+                "requirement_evidence (object mapping each candidate field to an exact short quote "
+                "copied from ONLY the current user message), "
                     "and clarification (string or null). In requirements, use ONLY "
                     "destination (city-name string), duration_days (integer 1..365), "
                     "origin (departure city string), traveler_count (integer 1..50), "
                     "budget_text (exact stated amount WITH currency/denomination), "
                     "travel_start and travel_end (BOTH ISO YYYY-MM-DD dates, only when "
                     "explicitly stated, without converting local calendars), and "
-                    "interest (one explicitly stated interest, max 100 characters). "
+                "interest (one explicitly stated interest, max 100 characters), "
+                "relative_start_date (integer offset-days 0..365), hard_constraint "
+                "and accessibility (short exact strings from the user). "
+                "Never return a field unless requirement_evidence contains its exact wording "
+                "from the current message. Do not cite conversation history as current-turn evidence. "
                     "Use these fields ONLY when explicitly supported by traveler statements. "
                     "Omit unknown fields; do not infer a city or group size. If the "
                     "traveler corrects an earlier statement, follow the latest clear "

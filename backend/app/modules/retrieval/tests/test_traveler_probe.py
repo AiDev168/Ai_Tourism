@@ -16,7 +16,7 @@ from app.modules.retrieval.contracts import (
 )
 from app.modules.retrieval.traveler_probe import probe_selected_destination
 
-NOW = datetime(2026, 11, 10, 9, 0, tzinfo=UTC)
+NOW = datetime.now(UTC)
 OWNER_TEXT = "Owner-only retrieved description must never be returned."
 
 

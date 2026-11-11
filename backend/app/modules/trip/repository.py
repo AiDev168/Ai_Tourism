@@ -139,6 +139,20 @@ def _public_conversation_message(row: Mapping[str, Any]) -> dict[str, Any]:
     if message.get("role") == "assistant" and isinstance(metadata, Mapping):
         raw = metadata.get("requirements_candidate")
         if isinstance(raw, Mapping):
+            # Current assistant turns store the shared typed interpretation
+            # contract. Validate the whole bounded payload before returning it
+            # in history; malformed or oversized legacy metadata is dropped.
+            if raw.get("contract_version") == "trip-requirements-v1":
+                try:
+                    from app.modules.trip.requirements_interpretation import TripRequirementsV1
+
+                    validated = TripRequirementsV1.model_validate(raw)
+                    public_candidate = validated.model_dump(mode="json")
+                    if len(json.dumps(public_candidate, ensure_ascii=False)) <= 16_000:
+                        message["candidate_requirements"] = public_candidate
+                        return message
+                except (ValueError, TypeError):
+                    pass
             name = raw.get("destination")
             if (isinstance(name, str) and 0 < len(name.strip()) <= 100
                     and "\\" not in name

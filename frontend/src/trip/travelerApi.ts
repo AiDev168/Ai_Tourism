@@ -1,5 +1,5 @@
 import type { Locale } from '../i18n/messages';
-import type { TripRequirements } from './tripIntake';
+import type { TripRequirements, TripRequirementsV1 } from './tripIntake';
 
 export type ConversationMessage = {
   message_id: string;
@@ -8,7 +8,7 @@ export type ConversationMessage = {
   content: string;
   created_at: string;
   /** Advisory hints persisted with an AI reply, never traveler-confirmed. */
-  candidate_requirements?: Record<string, string | number | null>;
+  candidate_requirements?: TripRequirementsV1 | Record<string, string | number | null>;
 };
 
 export type TripRecord = {
@@ -287,6 +287,9 @@ async function request<T>(path: string, csrfToken: string | undefined, init?: Re
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
 
 export const travelerApi = {
+  interpretRequirements: (csrf: string, body: { request_text: string; locale: Locale }) => request<{ requirements: TripRequirementsV1 }>(
+    '/requirements/interpret', csrf, json('POST', body),
+  ),
   createConversation: (csrf: string, body: {
     locale: Locale;
     request_text: string;
@@ -334,7 +337,7 @@ export const travelerApi = {
     conversation: ConversationRecord;
     trip: TripRecord;
     message: ConversationMessage;
-    candidate_requirements: Record<string, string | number | null>;
+    candidate_requirements: TripRequirementsV1 | Record<string, string | number | null>;
     clarification: string | null;
     replayed: boolean;
   }>(`/conversations/${encodeURIComponent(conversationId)}/assistant-turns`, csrf, json('POST', body)),

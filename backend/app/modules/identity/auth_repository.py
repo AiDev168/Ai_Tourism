@@ -3,6 +3,8 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+import logging
+from time import perf_counter
 from typing import Any
 from uuid import UUID
 
@@ -11,6 +13,8 @@ from psycopg.rows import dict_row
 
 from app.core.config import Settings
 
+logger = logging.getLogger("ai_tourism.auth.database")
+
 
 class AuthRepository:
     def __init__(self, settings: Settings) -> None:
@@ -18,16 +22,31 @@ class AuthRepository:
 
     @contextmanager
     def connection(self) -> Iterator[psycopg.Connection[Any]]:
-        with psycopg.connect(
-            host=self.settings.database_host,
-            port=self.settings.database_port,
-            dbname=self.settings.database_name,
-            user=self.settings.database_user,
-            password=self.settings.database_password.get_secret_value(),
-            connect_timeout=self.settings.database_connect_timeout_seconds,
-            application_name="ai-tourism-auth",
-            row_factory=dict_row,
-        ) as connection:
+        connect_started = perf_counter()
+        try:
+            connection = psycopg.connect(
+                host=self.settings.database_host,
+                port=self.settings.database_port,
+                dbname=self.settings.database_name,
+                user=self.settings.database_user,
+                password=self.settings.database_password.get_secret_value(),
+                connect_timeout=self.settings.database_connect_timeout_seconds,
+                application_name="ai-tourism-auth",
+                row_factory=dict_row,
+            )
+        except psycopg.Error:
+            # Emit duration only. psycopg exception text can include sensitive
+            # connection details and is deliberately not logged here.
+            logger.info(
+                "auth.database.connection.timing",
+                extra={"outcome": "failed", "connection_open_ms": round((perf_counter() - connect_started) * 1000, 2)},
+            )
+            raise
+        logger.info(
+            "auth.database.connection.timing",
+            extra={"outcome": "opened", "connection_open_ms": round((perf_counter() - connect_started) * 1000, 2)},
+        )
+        with connection:
             yield connection
 
     def create_challenge(

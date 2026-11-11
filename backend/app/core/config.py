@@ -80,13 +80,25 @@ class Settings(BaseSettings):
         if self.internal_chat_enabled:
             chat_url = urlsplit(self.internal_chat_endpoint)
             if (
-                self.app_env.lower() not in {"development", "test"}
+                self.app_env.lower() not in {"development", "test", "local_pilot"}
                 or chat_url.scheme != "https" or not chat_url.hostname
                 or chat_url.username or chat_url.password or chat_url.query or chat_url.fragment
                 or not self.internal_chat_model.strip() or len(self.internal_chat_model) > 160
                 or self.internal_chat_token is None
             ):
                 raise ValueError("Internal Chat configuration is invalid")
+            if self.app_env.lower() == "local_pilot":
+                allowed = urlsplit(self.auth_allowed_origins.strip())
+                if (
+                    not self.auth_enabled or not self.auth_cookie_secure
+                    or self.app_host not in {"127.0.0.1", "::1", "localhost"}
+                    or "," in self.auth_allowed_origins
+                    or allowed.scheme != "https"
+                    or allowed.hostname not in {"localhost", "127.0.0.1", "::1"}
+                    or allowed.username or allowed.password or allowed.path
+                    or allowed.query or allowed.fragment
+                ):
+                    raise ValueError("Local-pilot Chat requires authenticated HTTPS loopback access")
             token = self.internal_chat_token.get_secret_value()
             if not token or token != token.strip() or "\r" in token or "\n" in token:
                 raise ValueError("Internal Chat configuration is invalid")

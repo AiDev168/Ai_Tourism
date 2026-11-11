@@ -37,11 +37,11 @@ class PublishedSourceIdentity(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    source_id: str = Field(min_length=1, max_length=240)
-    source_name: str = Field(min_length=1, max_length=500)
+    source_id: str = Field(min_length=1, max_length=160, pattern=r"^[\w.:-]+$")
+    source_name: str = Field(min_length=1, max_length=250)
     source_url: str = Field(min_length=1, max_length=2_048)
-    source_role: str = Field(min_length=1, max_length=64)
-    license: str | None = Field(default=None, max_length=500)
+    source_role: str = Field(min_length=1, max_length=100)
+    license: str | None = Field(default=None, max_length=200)
     retrieved_at: datetime | None = None
     valid_from: datetime | None = None
     valid_until: datetime | None = None
@@ -104,15 +104,15 @@ class MappedEvidence(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    evidence_id: str = Field(min_length=1, max_length=240)
-    canonical_entity_key: str
+    evidence_id: str = Field(min_length=1, max_length=160, pattern=r"^[\w.:-]+$")
+    canonical_entity_key: str = Field(min_length=1, max_length=160, pattern=r"^[\w.:-]+$")
     destination_id: int = Field(gt=0)
-    document_id: str
-    claim_key: str
+    document_id: str = Field(min_length=1, max_length=160, pattern=r"^[\w.:-]+$")
+    claim_key: str = Field(min_length=1, max_length=160, pattern=r"^[\w.:-]+$")
     content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     locale: Literal["fa-IR", "en-US", "ar"]
     corpus: Literal["spatial_destinations", "culinary_knowledge"]
-    text: str = Field(min_length=1, max_length=8_000)
+    text: str = Field(min_length=1, max_length=12_000)
     sources: tuple[PublishedSourceIdentity, ...]
 
 

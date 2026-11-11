@@ -3,13 +3,59 @@ import type { Locale } from '../i18n/messages';
 export type Field<T> = { value: T | null; status: 'extracted' | 'unknown' | 'ambiguous'; evidence: string | null; candidates?: T[] };
 export type TripRequirements = {
   requestText: string; locale: Locale; destinations: Field<string[]>; origin: Field<string>; durationDays: Field<number>;
+  relativeStartDate: Field<{ offset_days: number; anchor_date: string | null; timezone: string | null }>;
   travelDates: Field<{ start: string; end: string }>; travelerCount: Field<number>;
   accessibility: Field<Array<'wheelchair_access' | 'step_free_access'>>;
-  budget: Field<{ amount: number; currency: string | null; unit: string; raw: string }>;
+  budget: Field<{ amount: number; currency: string | null; unit: string; raw: string; scale?: string | null; currency_status?: 'known' | 'unknown' | 'ambiguous' }>;
   interests: Field<string[]>; softPreferences: Field<string[]>; constraints: Field<string[]>; extractionStatus: 'ready' | 'needs_clarification';
   missingRequired: Array<'destination' | 'duration'>; ambiguousRequired: Array<'destination' | 'duration'>;
-  confirmationRequired: string[]; destinationVerification: 'user_input_unverified';
+  clarificationFields?: string[]; confirmationRequired: string[]; destinationVerification: 'user_input_unverified';
 };
+
+type RequirementEnvelope<T> = { status?: 'known' | 'missing' | 'ambiguous'; value?: T | null; evidence_span?: { start: number; end: number; text: string } | null; candidates?: T[] };
+export type TripRequirementsV1 = {
+  contract_version: 'trip-requirements-v1'; original_text: string; locale: Locale;
+  fields: {
+    destination: RequirementEnvelope<string>; origin: RequirementEnvelope<string>;
+    relative_start_date: RequirementEnvelope<{ offset_days: number; anchor_date: string | null; timezone: string | null }>;
+    duration_days: RequirementEnvelope<number>; travel_dates: RequirementEnvelope<{ start: string; end: string }>;
+    travelers: RequirementEnvelope<number>; budget: RequirementEnvelope<{ amount: string; scale: string | null; currency: string | null; currency_status: 'known' | 'unknown' | 'ambiguous'; raw: string }>;
+    interests: RequirementEnvelope<string[]>; hard_constraints: RequirementEnvelope<string[]>; accessibility: RequirementEnvelope<string[]>;
+  };
+  clarification: { missing_fields: string[]; ambiguous_fields: string[]; question_fields: string[] };
+};
+
+/** Convert the server-authoritative typed contract without reinterpreting text. */
+export function tripRequirementsV1ToTripRequirements(value: TripRequirementsV1): TripRequirements {
+  const project = <T, U = T>(field: RequirementEnvelope<T>, mapValue: (input: T) => U = (input => input as unknown as U), mapCandidates: (input: T) => U = mapValue): Field<U> => ({
+    value: field.value === undefined || field.value === null ? null : mapValue(field.value),
+    status: field.status === 'known' ? 'extracted' : field.status === 'ambiguous' ? 'ambiguous' : 'unknown',
+    evidence: field.evidence_span?.text ?? null,
+    ...(field.candidates?.length ? { candidates: field.candidates.map(mapCandidates) } : {}),
+  });
+  const fields = value.fields;
+  const toBudget = (money: NonNullable<typeof fields.budget.value>) => ({
+    amount: Number(money.amount), currency: money.currency,
+    unit: money.scale ?? 'unit', raw: money.raw,
+    scale: money.scale, currency_status: money.currency_status,
+  });
+  const budget = project(fields.budget, toBudget);
+  const missingRequired = value.clarification.missing_fields.flatMap(field => field === 'duration_days' ? ['duration' as const] : field === 'destination' ? ['destination' as const] : []);
+  const ambiguousRequired = value.clarification.ambiguous_fields.flatMap(field => field === 'duration_days' ? ['duration' as const] : field === 'destination' ? ['destination' as const] : []);
+  return {
+    requestText: value.original_text, locale: value.locale,
+    destinations: project(fields.destination, name => [name], name => [name]),
+    origin: project(fields.origin), relativeStartDate: project(fields.relative_start_date),
+    durationDays: project(fields.duration_days),
+    travelDates: project(fields.travel_dates), travelerCount: project(fields.travelers),
+    accessibility: project(fields.accessibility) as TripRequirements['accessibility'],
+    budget, interests: project(fields.interests), softPreferences: { value: null, status: 'unknown', evidence: null },
+    constraints: project(fields.hard_constraints),
+    extractionStatus: value.clarification.question_fields.length ? 'needs_clarification' : 'ready',
+    missingRequired, ambiguousRequired, clarificationFields: value.clarification.question_fields,
+    confirmationRequired: [], destinationVerification: 'user_input_unverified',
+  };
+}
 const configuredDurationLimit = Number(import.meta.env?.VITE_MAX_TRIP_DURATION_DAYS);
 export const MAX_TRIP_DURATION_DAYS = Number.isInteger(configuredDurationLimit) && configuredDurationLimit > 0 ? configuredDurationLimit : 365;
 export type TripIntakeResult = { kind: 'invalid'; reason: 'request-required' | 'request-too-long' | 'duration-too-long' } | { kind: 'clarification'; requirements: TripRequirements } | { kind: 'ready'; requirements: TripRequirements };
@@ -38,7 +84,7 @@ export function extractDurationDays(requestText:string):number|null {
   if(vals.length&&new Set(vals).size===1)return vals[0];
   return null;
 }
-const durationSpans=(text:string)=>{const normalized=normalize(text);const spans=[...normalized.matchAll(durationRegex)].map(m=>({days:(numberValue(m[1])??0)*(/week|هفته|أسبوع|اسبوع/iu.test(m[2])?7:1),raw:m[0],index:m.index??0}));if(!spans.some(s=>/week|هفته|أسبوع|اسبوع/iu.test(s.raw))){const twoWeeks=normalized.match(/(?:^|\s)(?:أسبوعين|اسبوعين)(?:$|\s)/u);const oneWeek=normalized.match(/(?:^|\s)(?:أسبوع|اسبوع)(?:$|\s)/u);if(twoWeeks)spans.push({days:14,raw:'أسبوعين',index:twoWeeks.index??0});else if(oneWeek)spans.push({days:7,raw:'أسبوع',index:oneWeek.index??0});}return spans;};
+const durationSpans=(text:string)=>{const normalized=normalize(text);const spans=[...normalized.matchAll(durationRegex)].filter(m=>{const start=m.index??0;const end=start+m[0].length;const before=normalized.slice(Math.max(0,start-12),start);const after=normalized.slice(end,end+18);return !/(?:از\s*|\bin\s*)$/iu.test(before)&&!/^\s*(?:دیگه|دیگر|بعد|later|from\s+now)(?:\s|$)/iu.test(after);}).map(m=>({days:(numberValue(m[1])??0)*(/week|هفته|أسبوع|اسبوع/iu.test(m[2])?7:1),raw:m[0],index:m.index??0}));if(!spans.some(s=>/week|هفته|أسبوع|اسبوع/iu.test(s.raw))){const twoWeeks=normalized.match(/(?:^|\s)(?:أسبوعين|اسبوعين)(?:$|\s)/u);const oneWeek=normalized.match(/(?:^|\s)(?:أسبوع|اسبوع)(?:$|\s)/u);if(twoWeeks)spans.push({days:14,raw:twoWeeks[0],index:twoWeeks.index??0});else if(oneWeek)spans.push({days:7,raw:oneWeek[0],index:oneWeek.index??0});}return spans;};
 const cleanPlace=(s:string)=>s.replace(/^[\s,،؛:]+|[\s,،؛:.!?؟]+$/g,'').replace(/\s+/g,' ').trim();
 const genericPlace=/^(?:a city|the city|city|a town|town|somewhere|یک شهر|شهر|یه شهر|مدينة|مدينة ما|بلدة)$/iu;
 function extractPlaces(source:string, locale:Locale, spans:ReturnType<typeof durationSpans>):{places:Field<string[]>;origin:Field<string>} {
@@ -48,7 +94,7 @@ function extractPlaces(source:string, locale:Locale, spans:ReturnType<typeof dur
   if(originMatch){const candidate=cleanPlace(originMatch[1].replace(/^(?:tehran|تهران|طهران)$/iu,'$&'));if(candidate&&!genericPlace.test(candidate))origin={value:candidate,status:'extracted',evidence:originMatch[0]};}
   // A small deterministic alias set covers commonly requested destinations; this is
   // extraction only, never verification. Unknown places still use the syntax parser below.
-  const contextual=/(?:travel|trip|journey|visit|سفر|مسافرت|رحلة|السفر|أريد|اريد)/iu.test(text)||spans.length>0;
+  const contextual=/(?:travel|trip|journey|visit|سفر|مسافرت|رحلة|السفر|أرید|میخواهم|می‌خواهم|می‌خوام|برم|أريد|اريد)/iu.test(text)||spans.length>0;
   if(!contextual)return{origin,places:{value:null,status:'unknown',evidence:null}};
   const known=/\b(Shiraz|Kashan|Isfahan|Esfahan|Tehran|Yazd|Qeshm)\b|شیراز|کاشان|اصفهان|تهران|طهران|یزد|قشم|شيراز|كاشان/giu;
   const found=[...text.matchAll(known)].filter(m=>!(origin.value&&m[0].toLocaleLowerCase()===origin.value.toLocaleLowerCase())).map(m=>({name:m[0],index:m.index??0}));
@@ -78,7 +124,7 @@ function explicitAccessibilityNeeds(text:string):TripRequirements['accessibility
  if(stepFree)value.push('step_free_access');
  return value.length?{value,status:'extracted',evidence:null}:{value:null,status:'unknown',evidence:null};
 }
-function parseBudget(text:string):TripRequirements['budget'] {const m=normalize(text).match(/([\d,]+(?:\.\d+)?)\s*(میلیون|million|مليون)?\s*(تومان|ریال|IRR|toman|rial|ر.س|ريال|درهم|AED|USD|دلار|دولار)/iu);if(!m)return{value:null,status:'unknown',evidence:null};const amount=Number(m[1].replaceAll(',',''));if(/\u0631\.\u0633/iu.test(m[3]))return{value:{amount,currency:'SAR',unit:`${m[2]??''} ${m[3]}`.trim(),raw:m[0]},status:'extracted',evidence:m[0]};return{value:{amount,currency:/IRR|ریال|rial|ريال/iu.test(m[3])?'IRR':/AED|درهم/iu.test(m[3])?'AED':/USD|دلار|دولار/iu.test(m[3])?'USD':null,unit:`${m[2]??''} ${m[3]}`.trim(),raw:m[0]},status:'extracted',evidence:m[0]};}
+function parseBudget(text:string):TripRequirements['budget'] {const normalized=normalize(text);const markers=[...normalized.matchAll(/(?:\u0647\u0632\u06cc\u0646\u0647|\u0628\u0648\u062f\u062c\u0647|\u062e\u0631\u062c|cost|budget|spend)/giu)];const pattern=/([\d,]+(?:\.\d+)?)(?:\s*(\u0645\u06cc\u0644\u06cc\u0648\u0646|million|\u0645\u0644\u064a\u0648\u0646|\u0647\u0632\u0627\u0631|thousand|\u0645\u0644\u064a\u0627\u0631\u062f|billion))?(?:\s*(\u062a\u0648\u0645\u0627\u0646|\u0631\u06cc\u0627\u0644|IRR|toman|rial|USD|\u062f\u0644\u0627\u0631|EUR|AED|\u062f\u0631\u0647\u0645|\u0631\.\s*\u0633))?/giu;const matches=[...normalized.matchAll(pattern)];const nearby=matches.filter(m=>m[1]&&((!markers.length&&m[3])||markers.some(marker=>Math.min(Math.abs((m.index??0)-(marker.index??0)),Math.abs((m.index??0)+m[0].length-(marker.index??0)))<=48)));const m=nearby.sort((a,b)=>{const distance=(item:RegExpMatchArray)=>Math.min(...markers.map(marker=>Math.min(Math.abs((item.index??0)-(marker.index??0)),Math.abs((item.index??0)+item[0].length-(marker.index??0)))));return Number(Boolean(b[2]||b[3]))-Number(Boolean(a[2]||a[3]))||distance(a)-distance(b);})[0];if(!m)return{value:null,status:'unknown',evidence:null};const amount=Number(m[1].replaceAll(',',''));const scale=m[2]??'';const currencyText=m[3]??'';const currency=/(?:\u0631\s*\.\s*\u0633)/iu.test(currencyText)?'SAR':/(?:IRR|\u0631\u06cc\u0627\u0644|rial)/iu.test(currencyText)?'IRR':/(?:toman|\u062a\u0648\u0645\u0627\u0646)/iu.test(currencyText)?null:/(?:USD|\u062f\u0644\u0627\u0631)/iu.test(currencyText)?'USD':/(?:EUR)/iu.test(currencyText)?'EUR':/(?:AED|\u062f\u0631\u0647\u0645|\u0631\.\s*\u0633)/iu.test(currencyText)?'AED':null;const raw=m[0].trim();return{value:{amount,currency,unit:[scale,currencyText].filter(Boolean).join(' ')||'unknown',raw},status:'extracted',evidence:raw};}
 function extractedText(text:string, trigger:RegExp):Field<string[]> {const m=normalize(text).match(trigger);return m?{value:[cleanPlace(m[1])],status:'extracted',evidence:m[0]}:{value:null,status:'unknown',evidence:null};}
 function directedText(text:string, patterns:RegExp[]):Field<string[]> {
  const normalized=normalize(text);
@@ -96,12 +142,30 @@ function explicitSoftPreferences(text:string):Field<string[]> {
  ]);
 }
 function explicitHardConstraints(text:string):Field<string[]> {
- return directedText(text,[
-  new RegExp(`\\b(?:must(?:\\s+not)?|need(?:\\s+to)?|required(?:\\s+to)?|do\\s+not|want(?:\\s+to)?)\\s+(.+?)${directiveEnd}`,'giu'),
-  new RegExp(`(?:باید|ضروری(?:\\s+است)?|نباید|می\\s+خواهم|میخواهم)\\s+(.+?)${directiveEnd}`,'gu'),
-  new RegExp(`(?:يجب(?:\\s+أن)?|ضروري|لا\\s+(?:أريد|اريد)|(?:أريد|اريد))\\s+(.+?)${directiveEnd}`,'gu'),
-  new RegExp(`(.+?)\\s+(?:می\\s+خواهم|میخواهم)${directiveEnd}`,'gu'),
- ]);
+ const normalized=normalize(text);
+ const values:string[]=[];
+ const hardMarkers=[
+  /\b(?:must(?:\s+not)?|need(?:\s+to)?|required(?:\s+to)?|do\s+not)\s+(.+?)(?=\s+(?:but|however|during|for)\b|[.!?;]|$)/giu,
+  /(?:باید|ضروری(?:\s+است)?|نباید)\s+(.+?)(?=\s+(?:اما|ولی|برای)\s|[.!؟؛]|$)/gu,
+  /(?:يجب(?:\s+أن)?|ضروري|لا\s+(?:أريد|اريد))\s+(.+?)(?=\s+(?:لكن|لمدة|في)\s|[.!؟؛]|$)/gu,
+ ];
+ for(const pattern of hardMarkers) for(const match of normalized.matchAll(pattern)) if(match[1]) values.push(cleanPlace(match[1]));
+ const surface=/(paved\s+paths?|مسیرهای\s*سنگ\s*فرش|طرقا\s*معبدة)/giu;
+ for(const match of normalized.matchAll(surface)) {
+  const before=normalized.slice(Math.max(0,(match.index??0)-24),match.index??0);
+  if(/(?:prefer|would like|ترجیح\s*می\s*دهم|أفضل|افضل)\s*$/iu.test(before)) continue;
+  const after=normalized.slice((match.index??0)+match[0].length,(match.index??0)+match[0].length+20);
+  if(/(?:want|أريد|اريد)\s*$/iu.test(before)||/می\s*خواهم/u.test(after)) values.push(cleanPlace(match[0]));
+  else if(/paved|surface|terrain/iu.test(match[0])) values.push(cleanPlace(match[0]));
+ }
+ const unique=[...new Set(values.filter(Boolean))];
+ return unique.length?{value:unique,status:'extracted',evidence:unique.join(' / ')}:{value:null,status:'unknown',evidence:null};
+}
+function explicitRelativeStart(text:string):TripRequirements['relativeStartDate'] {
+ const match=normalize(text).match(new RegExp(`(?:\\u0627\\u0632\\s*)?(${numPattern})\\s*(?:\\u0631\\u0648\\u0632|days?)\\s*(?:\\u062f\\u06cc\\u06af\\u0647|\\u062f\\u06cc\\u06af\\u0631|\\u0628\\u0639\\u062f|later|from\\s+now)`, 'iu'));
+ if(!match)return{value:null,status:'unknown',evidence:null};
+ const offset=numberValue(match[1]);
+ return offset!==null&&offset>=0&&offset<=365?{value:{offset_days:offset,anchor_date:null,timezone:null},status:'extracted',evidence:match[0]}:{value:null,status:'unknown',evidence:match[0]};
 }
 export function createTripRequirements(input:{requestText:string;locale:Locale;maxDurationDays?:number}):TripIntakeResult {
  const original=input.requestText; const text=normalize(original).trim(); if(!text)return{kind:'invalid',reason:'request-required'};if(text.length>1200)return{kind:'invalid',reason:'request-too-long'};
@@ -112,7 +176,7 @@ export function createTripRequirements(input:{requestText:string;locale:Locale;m
   const accessibility=explicitAccessibilityNeeds(text);
  const missingRequired:Array<'destination'|'duration'>=[];const ambiguousRequired:Array<'destination'|'duration'>=[];
  if(!places.value){(places.status==='ambiguous'?ambiguousRequired:missingRequired).push('destination');}if(!duration.value){(duration.status==='ambiguous'?ambiguousRequired:missingRequired).push('duration');}
- const interest=extractedText(text,/(?:interested in|love|enjoy|أحب|احب)\s+(.+?)(?:[.!؟؛،,;]|$)/iu);if(!interest.value){const end=text.indexOf(' علاقه دارم');const start=end>=0?text.lastIndexOf(' به ',end):-1;if(start>=0)Object.assign(interest,{value:[cleanPlace(text.slice(start+4,end))],status:'extracted',evidence:text.slice(start,end+12)});}
-  const requirements:TripRequirements={requestText:original,locale:input.locale,destinations:places,origin,durationDays:duration,travelDates:explicitDateRange(text),travelerCount:(()=>{const n=explicitCount(text);return n?{value:n,status:'extracted' as const,evidence:text.match(new RegExp(`${n}\\s*(?:people|travelers|travellers|نفر|مسافر|أشخاص|اشخاص|أفراد|افراد)`,'iu'))?.[0]??null}:{value:null,status:'unknown' as const,evidence:null};})(),accessibility,budget:parseBudget(text),interests:interest,softPreferences:explicitSoftPreferences(text),constraints:explicitHardConstraints(text),extractionStatus:missingRequired.length||ambiguousRequired.length?'needs_clarification':'ready',missingRequired,ambiguousRequired,confirmationRequired:[],destinationVerification:'user_input_unverified'};
+ const interest=extractedText(text,/(?:interested in|love|enjoy|أحب|احب)\s+(.+?)(?:[.!؟؛،,;]|$)/iu);if(!interest.value){const historical=text.match(/(?:\u0645\u0646\u0627\u0637\u0642\s*\u062a\u0627\u0631\u06cc\u062e\u06cc|\u062c\u0627\u0647\u0627\u06cc\s*\u062a\u0627\u0631\u06cc\u062e\u06cc|\bhistorical\s+(?:areas|places|attractions)\b)/iu);if(historical)Object.assign(interest,{value:['historical_attractions'],status:'extracted',evidence:historical[0]});}{const end=text.indexOf(' علاقه دارم');const start=end>=0?text.lastIndexOf(' به ',end):-1;if(start>=0)Object.assign(interest,{value:[cleanPlace(text.slice(start+4,end))],status:'extracted',evidence:text.slice(start,end+12)});}
+  const requirements:TripRequirements={requestText:original,locale:input.locale,destinations:places,origin,relativeStartDate:explicitRelativeStart(text),durationDays:duration,travelDates:explicitDateRange(text),travelerCount:(()=>{const n=explicitCount(text);return n?{value:n,status:'extracted' as const,evidence:text.match(new RegExp(`${n}\\s*(?:people|travelers|travellers|نفر|مسافر|أشخاص|اشخاص|أفراد|افراد)`,'iu'))?.[0]??null}:{value:null,status:'unknown' as const,evidence:null};})(),accessibility,budget:parseBudget(text),interests:interest,softPreferences:explicitSoftPreferences(text),constraints:explicitHardConstraints(text),extractionStatus:missingRequired.length||ambiguousRequired.length?'needs_clarification':'ready',missingRequired,ambiguousRequired,confirmationRequired:[],destinationVerification:'user_input_unverified'};
  return requirements.extractionStatus==='ready'?{kind:'ready',requirements}:{kind:'clarification',requirements};
 }

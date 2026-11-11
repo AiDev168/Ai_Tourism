@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatNumber, type Locale } from '../i18n/messages';
 import { tripMessages } from '../i18n/tripMessages';
+import { requirementClarificationMessages } from '../i18n/requirementClarificationMessages';
 import { destinationResolutionMessages } from '../i18n/destinationResolutionMessages';
-import { createTripRequirements, MAX_TRIP_DURATION_DAYS, type TripRequirements } from '../trip/tripIntake';
+import { createTripRequirements, MAX_TRIP_DURATION_DAYS, tripRequirementsV1ToTripRequirements, type TripRequirements } from '../trip/tripIntake';
+import { travelerApi } from '../trip/travelerApi';
 import { confirmDestinationCandidate, resolveDestinationNames, type DestinationResolution } from '../trip/destinationResolution';
 import { ApiDestinationCatalogPort } from '../trip/destinationCatalogApi';
 import { useLocale } from '../i18n/LocaleContext';
@@ -84,7 +86,7 @@ export function App() {
     };
   }, []);
 
-  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     // Read the live form controls at the submit boundary. React state remains
@@ -110,17 +112,31 @@ export function App() {
       return;
     }
     setError('');
-    if (result.kind === 'clarification') {
-      setRequirements(result.requirements);
-      loadDestinationResolution(result.requirements.destinations.value, locale);
-      setClarifications(result.requirements.missingRequired);
-      setAmbiguities(result.requirements.ambiguousRequired);
+    let interpreted = result.requirements;
+    if (authSession && online) {
+      try {
+        const response = await travelerApi.interpretRequirements(authSession.csrf_token, {
+          request_text: requestText, locale,
+        });
+        interpreted = tripRequirementsV1ToTripRequirements(response.requirements);
+      } catch {
+        setError(locale === 'fa-IR' ? 'برداشت نیازهای سفر در سرور انجام نشد. دوباره تلاش کنید.'
+          : locale === 'ar' ? 'تعذر تحليل متطلبات الرحلة على الخادم. حاول مرة أخرى.'
+            : 'The server could not interpret this trip request. Please try again.');
+        return;
+      }
+    }
+    if (result.kind === 'clarification' || interpreted.clarificationFields?.length) {
+      setRequirements(interpreted);
+      loadDestinationResolution(interpreted.destinations.value, locale);
+      setClarifications(interpreted.missingRequired);
+      setAmbiguities(interpreted.ambiguousRequired);
       return;
     }
     setClarifications([]);
     setAmbiguities([]);
-    setRequirements(result.requirements);
-    loadDestinationResolution(result.requirements.destinations.value, locale);
+    setRequirements(interpreted);
+    loadDestinationResolution(interpreted.destinations.value, locale);
   };
 
   const clearTripDraft = () => {
@@ -130,6 +146,7 @@ export function App() {
     setError(''); setClarifications([]); setAmbiguities([]); setRequirements(null); setDestinationResolution(null); setCatalogueLoading(false);
   };
   const tripCopy = tripMessages[locale];
+  const requirementCopy = requirementClarificationMessages[locale];
 
   return (
     <>
@@ -181,10 +198,12 @@ export function App() {
                 {tripCopy.submit} <span aria-hidden="true">↗</span>
               </button>
               <p className="fixture-pill">{tripCopy.sessionNotice}</p>
-              {!!clarifications.length && <section className="trip-response" aria-live="polite" aria-labelledby="clarification-title">
+              {!!clarifications.length && requirements && <section className="trip-response" aria-live="polite" aria-labelledby="clarification-title">
                 <h2 id="clarification-title">{tripCopy.clarificationTitle}</h2>
                 <ul>{clarifications.map(field => <li key={field}>{field === 'destination' ? tripCopy.askDestination : tripCopy.askDuration}</li>)}
                   {ambiguities.map(field => <li key={field}>{field === 'destination' ? tripCopy.askAmbiguousDestination : tripCopy.askAmbiguousDuration}</li>)}</ul>
+                {requirements.clarificationFields?.includes('budget.currency') && <p>{requirementCopy.budgetCurrency}</p>}
+                {requirements.clarificationFields?.includes('relative_start_date.anchor') && <p>{requirementCopy.relativeAnchor}</p>}
               </section>}
               {requirements && <section className="trip-response trip-summary" aria-live="polite" aria-labelledby="captured-title">
                 <div className="trip-summary-heading"><h2 id="captured-title">{tripCopy.capturedTitle}</h2>
@@ -215,6 +234,7 @@ export function App() {
                   <div><dt>{tripCopy.summaryDestination}</dt><dd dir="auto">{requirements.destinations.value?.join(' → ') ?? tripCopy.unknown}</dd></div>
                   <div className="trip-summary-request"><dt>{tripCopy.summaryRequest}</dt><dd dir="auto">{requirements.requestText}</dd></div>
                   <div><dt>{tripCopy.summaryDuration}</dt><dd>{requirements.durationDays.value === null ? tripCopy.unknown : tripCopy.durationDays.replace('{value}', formatNumber(locale, requirements.durationDays.value))}</dd></div>
+                  <div><dt>{requirementCopy.relativeDeparture.split('{days}')[0].trim()}</dt><dd>{requirements.relativeStartDate.value ? requirementCopy.relativeDeparture.replace('{days}', formatNumber(locale, requirements.relativeStartDate.value.offset_days)) : tripCopy.unknown}</dd></div>
                   <div><dt>{tripCopy.summaryTravelers}</dt><dd>{requirements.travelerCount.value === null ? tripCopy.unknown : formatNumber(locale, requirements.travelerCount.value)}</dd></div>
                   <div><dt>{tripCopy.summaryBudget}</dt><dd dir="auto">{requirements.budget.value?.raw ?? tripCopy.unknown}</dd></div>
                   <div><dt>{tripCopy.summaryInterests}</dt><dd dir="auto">{requirements.interests.value?.join('، ') ?? tripCopy.unknown}</dd></div>

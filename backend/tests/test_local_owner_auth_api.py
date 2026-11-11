@@ -69,7 +69,7 @@ def test_local_owner_login_returns_only_normal_secure_session(monkeypatch):
         app.dependency_overrides.clear()
 
 
-def test_local_owner_http_login_accepts_long_persian_password_and_issues_secure_session():
+def test_local_owner_http_login_accepts_long_persian_password_and_issues_secure_session(caplog):
     settings = local_settings()
     owner_id = uuid4()
     password = "متنپسوردفارسیطولانیبرایآزمایش" * 5
@@ -112,6 +112,15 @@ def test_local_owner_http_login_accepts_long_persian_password_and_issues_secure_
         assert "__Host-rahgard_session=opaque-session" in response.headers["set-cookie"]
         assert "Secure" in response.headers["set-cookie"]
         assert password not in response.text
+        timing = next(record for record in caplog.records if record.msg == "auth.local_owner.timing")
+        assert timing.outcome == "success"
+        assert timing.credential_read_ms >= 0
+        assert timing.pbkdf2_ms >= 0
+        assert timing.limiter_check_ms >= 0
+        assert timing.limiter_update_ms >= 0
+        assert timing.session_issue_ms >= 0
+        assert password not in caplog.text
+        assert "opaque-session" not in caplog.text
     finally:
         app.dependency_overrides.clear()
 

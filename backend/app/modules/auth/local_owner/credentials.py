@@ -16,6 +16,7 @@ import ipaddress
 import json
 import secrets
 import threading
+from time import perf_counter
 import time
 from typing import Callable, TypeVar
 from urllib.parse import urlsplit
@@ -223,6 +224,7 @@ def verify_and_issue(
     allowed_origin: str,
     session_issuer: Callable[[UUID], _SESSION],
     forwarded_for: str | None = None,
+    timing_recorder: Callable[[str, float], None] | None = None,
 ) -> _SESSION | None:
     """Verify a local owner password and delegate actual session creation.
 
@@ -235,7 +237,10 @@ def verify_and_issue(
     peer = ipaddress.ip_address(request_peer).compressed
     owner_key = str(credential.owner_id) if credential else "unknown-owner"
     limit_key = hashlib.sha256((peer + "\0" + owner_key).encode("utf-8")).hexdigest()
+    limiter_started = perf_counter()
     allowed = limiter.allowed(limit_key)
+    if timing_recorder:
+        timing_recorder("limiter_check_ms", (perf_counter() - limiter_started) * 1000)
     salt = _DUMMY_SALT
     expected = _DUMMY_VERIFIER
     valid_credential = credential is not None
@@ -259,13 +264,27 @@ def verify_and_issue(
     if len(candidate_bytes) > _MAX_PASSWORD_BYTES:
         candidate_bytes = b"invalid-password-input"
         password_valid = False
+    kdf_started = perf_counter()
     candidate = hashlib.pbkdf2_hmac("sha256", candidate_bytes, salt, _ITERATIONS, _VERIFIER_BYTES)
+    if timing_recorder:
+        timing_recorder("pbkdf2_ms", (perf_counter() - kdf_started) * 1000)
     matched = hmac.compare_digest(candidate, expected)
     if not allowed or not valid_credential or not password_valid or not matched:
+        limiter_update_started = perf_counter()
         limiter.failed(limit_key)
+        if timing_recorder:
+            timing_recorder("limiter_update_ms", (perf_counter() - limiter_update_started) * 1000)
         return None
+    limiter_update_started = perf_counter()
     limiter.succeeded(limit_key)
-    return session_issuer(credential.owner_id)
+    if timing_recorder:
+        timing_recorder("limiter_update_ms", (perf_counter() - limiter_update_started) * 1000)
+    session_started = perf_counter()
+    try:
+        return session_issuer(credential.owner_id)
+    finally:
+        if timing_recorder:
+            timing_recorder("session_issue_ms", (perf_counter() - session_started) * 1000)
 
 
 # Backward-compatible short name for application adapters implementing the

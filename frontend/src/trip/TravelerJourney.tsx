@@ -7,6 +7,8 @@ import { integrateTripFollowUp } from './followUpIntake';
 import { normalizeDestinationName, resolveDestinationNames, confirmDestinationCandidate, type DestinationResolution, type ProductionDestinationCandidate } from './destinationResolution';
 import { ApiDestinationCatalogPort } from './destinationCatalogApi';
 import { reviewableAssistantCandidate } from './assistantCandidate';
+import { tripRequirementsV1ToTripRequirements, type TripRequirementsV1 } from './tripIntake';
+import { requirementClarificationMessages } from '../i18n/requirementClarificationMessages';
 import { TravelerGuidance } from './TravelerGuidance';
 import { nextTripQuestion } from './clarificationGuide';
 import {
@@ -91,6 +93,14 @@ function newIdempotencyKey(): string {
 
 function safeRequirements(value: unknown, locale: Locale): TripRequirements | null {
   if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const possibleV1 = (record.requirements_v1 ?? value) as Partial<TripRequirementsV1>;
+  if (possibleV1.contract_version === 'trip-requirements-v1'
+      && possibleV1.fields && possibleV1.clarification
+      && typeof possibleV1.original_text === 'string') {
+    try { return tripRequirementsV1ToTripRequirements(possibleV1 as TripRequirementsV1); }
+    catch { return null; }
+  }
   const candidate = value as Partial<TripRequirements>;
   if (typeof candidate.requestText !== 'string' || !candidate.destinations || !candidate.durationDays) return null;
   return {
@@ -274,7 +284,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const [messageText, setMessageText] = useState('');
   const [assistantPromptSelected, setAssistantPromptSelected] = useState(false);
   const [remoteConsent, setRemoteConsent] = useState(false);
-  const [assistantCandidate, setAssistantCandidate] = useState<Record<string, string | number | null> | null>(null);
+  const [assistantCandidate, setAssistantCandidate] = useState<unknown>(null);
   const [recommendations, setRecommendations] = useState<RecommendationResult | null>(null);
   const [itinerary, setItinerary] = useState<ItineraryRecord | null>(null);
   const [editableStops, setEditableStops] = useState<ItineraryStop[]>([]);
@@ -302,6 +312,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
     && Number(travelerCountText) >= 1 && Number(travelerCountText) <= 50);
   const consentComplete = consentIsComplete(consentFields, requirementChoices, advisoryAcknowledgements);
   const reviewedAssistantCandidate = reviewableAssistantCandidate(assistantCandidate);
+  const requirementCopy = requirementClarificationMessages[locale];
   const guidedQuestion = activeTrip ? nextTripQuestion(locale, destinationNames, durationText) : null;
   const invalidateConsent = () => {
     setRequirementChoices({});
@@ -934,6 +945,24 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             {reviewedAssistantCandidate &&
               <div className="assistant-candidate" role="status">
                 <strong>{assistantCopy[locale].review}</strong>
+                {reviewedAssistantCandidate.typedRequirements && <dl className="assistant-candidate-evidence">
+                  {Object.entries(reviewedAssistantCandidate.typedRequirements.fields).map(([fieldName, field]) => {
+                    const labels = requirementCopy.fieldLabels;
+                    const label = labels[fieldName] ?? fieldName;
+                    const value = field.value;
+                    const evidence = field.evidence_span?.text;
+                    const state = field.status === 'known' ? requirementCopy.known
+                      : field.status === 'ambiguous' ? requirementCopy.ambiguous : requirementCopy.unresolved;
+                    return <div key={fieldName}>
+                      <dt>{label}</dt><dd>{state}{value === undefined || value === null ? '' : `: ${typeof value === 'string' ? value : JSON.stringify(value)}`}</dd>
+                      {evidence && <><dt>{requirementCopy.evidence}</dt><dd dir="auto">{evidence}</dd></>}
+                    </div>;
+                  })}
+                  {!!reviewedAssistantCandidate.typedRequirements.clarification.question_fields.length && <div>
+                    <dt>{requirementCopy.unresolved}</dt>
+                    <dd>{reviewedAssistantCandidate.typedRequirements.clarification.question_fields.map(field => requirementCopy.fieldLabels[field.split('.')[0]] ?? field).join('، ')}</dd>
+                  </div>}
+                </dl>}
                 <dl>
                   {reviewedAssistantCandidate.destination !== null && <>
                     <dt>{assistantCopy[locale].destination}</dt>

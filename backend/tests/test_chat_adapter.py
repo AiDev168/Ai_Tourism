@@ -67,6 +67,71 @@ def test_server_configuration_is_disabled_by_default_and_rejects_production():
         )
 
 
+def test_explicit_local_pilot_chat_profile_requires_secure_authenticated_loopback():
+    token = SecretStr("local-pilot-test-token")
+    valid = Settings(
+        _env_file=None, database_password="test", app_env="local_pilot",
+        auth_enabled=True, auth_local_owner_enabled=True, auth_sms_adapter="disabled",
+        auth_cookie_secure=True, auth_allowed_origins="https://localhost:8443",
+        auth_otp_hmac_secret=SecretStr("a" * 32), auth_csrf_secret=SecretStr("b" * 32),
+        auth_rate_limit_secret=SecretStr("c" * 32),
+        auth_session_idle_seconds=3600, auth_session_absolute_seconds=86400,
+        internal_chat_enabled=True,
+        internal_chat_endpoint="https://chat.example.invalid/v1/completions",
+        internal_chat_model="configured-server-profile", internal_chat_token=token,
+    )
+    assert valid.internal_chat_enabled is True
+    safe_values = dict(
+        _env_file=None, database_password="test", app_env="local_pilot",
+        auth_enabled=True, auth_local_owner_enabled=True, auth_sms_adapter="disabled",
+        auth_cookie_secure=True, auth_allowed_origins="https://localhost:8443",
+        auth_otp_hmac_secret=SecretStr("a" * 32), auth_csrf_secret=SecretStr("b" * 32),
+        auth_rate_limit_secret=SecretStr("c" * 32),
+        auth_session_idle_seconds=3600, auth_session_absolute_seconds=86400,
+        internal_chat_enabled=True,
+        internal_chat_endpoint="https://chat.example.invalid/v1/completions",
+        internal_chat_model="configured-server-profile", internal_chat_token=token,
+    )
+    for unsafe in (
+        {"auth_cookie_secure": False},
+        {"app_host": "0.0.0.0"},
+        {"auth_allowed_origins": "https://localhost:8443,https://example.invalid"},
+        {"auth_enabled": False},
+    ):
+        with pytest.raises(ValidationError):
+            Settings(**(safe_values | unsafe))
+
+
+def test_remote_adapter_allows_explicit_local_pilot_profile_only_when_enabled():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop",
+            "message": {"content": json.dumps({"reply": "Please confirm trip duration."})},
+        }]})
+
+    remote = RemoteChatAdapter(
+        enabled=True, environment="local_pilot", endpoint="https://example.invalid/chat",
+        model="profile-model", token=SecretStr("server-only-test-token"),
+        transport=httpx.MockTransport(handler),
+    )
+    result = asyncio.run(remote.invoke(ChatRequest(locale="fa-IR", text="Original request")))
+    assert result.reply == "Please confirm trip duration."
+    assert len(calls) == 1
+    assert calls[0].headers["authorization"] == "Bearer server-only-test-token"
+
+    disabled = RemoteChatAdapter(
+        enabled=False, environment="local_pilot", endpoint="https://example.invalid/chat",
+        model="profile-model", token=SecretStr("server-only-test-token"),
+        transport=httpx.MockTransport(handler),
+    )
+    with pytest.raises(AiCapabilityUnavailable):
+        asyncio.run(disabled.invoke(ChatRequest(locale="fa-IR", text="Original request")))
+    assert len(calls) == 1
+
+
 @pytest.mark.parametrize("content,expected_reply,expected_requirements", [
     ("برای انتخاب مقصد ابتدا بگویید چند روز وقت دارید؟",
      "برای انتخاب مقصد ابتدا بگویید چند روز وقت دارید؟", {}),
@@ -212,6 +277,7 @@ def test_additional_trip_hints_are_bounded_and_remain_advisory():
         "travel_start": "2027-03-01",
         "travel_end": "2027-03-04",
         "interest": "باغ‌های تاریخی",
+        "hard_constraint": "UNTRUSTED",
     }
 
 

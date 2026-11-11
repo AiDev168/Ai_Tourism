@@ -39,6 +39,12 @@ from app.modules.trip.repository import (
     TravelerRepository,
     localized_recommendation_explanation,
 )
+from app.modules.trip.requirements_interpretation import (
+    TripInterpretationRequest,
+    TripInterpretationResponse,
+    interpret_trip_requirements,
+    trip_requirements_storage_view,
+)
 from app.modules.trip.schemas import (
     AppendMessageRequest,
     ConversationDeleteResponse,
@@ -59,6 +65,32 @@ from app.modules.trip.schemas import (
 
 logger = logging.getLogger("ai_tourism.traveler")
 router = APIRouter(prefix="/api/v1", tags=["traveler"])
+
+
+@router.post("/requirements/interpret", response_model=TripInterpretationResponse)
+def interpret_requirements(
+    body: TripInterpretationRequest,
+    response: Response,
+    principal: Annotated[Principal, Depends(get_principal)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+):
+    """Return an authenticated, deterministic interpretation of current text.
+
+    This is an advisory extraction only. It does not alter a trip or confirm a
+    profile; the caller must persist it and receive explicit traveler review.
+    """
+    del principal
+    _mark_no_store(response)
+    try:
+        requirements = interpret_trip_requirements(
+            body.request_text,
+            body.locale,
+            traveler_timezone=body.traveler_timezone,
+            traveler_reference_date=body.traveler_reference_date,
+        )
+        return {"requirements": requirements}
+    except (ValueError, OverflowError):
+        return _error(422, "invalid_requirements")
 
 
 def get_traveler_repository(settings: Annotated[Settings, Depends(get_settings)]) -> TravelerRepository:
@@ -146,7 +178,11 @@ def create_conversation(
             user_id=principal.user_id,
             locale=body.locale,
             request_text=body.request_text,
-            extracted_requirements=body.extracted_requirements,
+            extracted_requirements=trip_requirements_storage_view(interpret_trip_requirements(
+                body.request_text, body.locale,
+                traveler_timezone=body.traveler_timezone,
+                traveler_reference_date=body.traveler_reference_date,
+            )),
             # Extraction and resolver output are untrusted until the traveler
             # reviews and submits the explicit profile-confirmation request.
             confirmed_requirements={},
@@ -187,7 +223,11 @@ def create_trip_in_conversation(
             conversation_id=conversation_id,
             locale=body.locale,
             request_text=body.request_text,
-            extracted_requirements=body.extracted_requirements,
+            extracted_requirements=trip_requirements_storage_view(interpret_trip_requirements(
+                body.request_text, body.locale,
+                traveler_timezone=body.traveler_timezone,
+                traveler_reference_date=body.traveler_reference_date,
+            )),
             # A new trip draft starts unconfirmed; only PATCH /trips/{id}
             # records user-reviewed requirements and canonical destination IDs.
             confirmed_requirements={},

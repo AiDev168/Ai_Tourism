@@ -158,6 +158,50 @@ def test_maps_wire_evidence_without_inventing_chunk_version_or_time():
     assert evidence.sources[0].retrieved_at is None
 
 
+def test_accepts_owner_wire_maximum_text_and_metadata_without_truncation():
+    req = make_request()
+    row = item(
+        req,
+        evidence_id="e" * 160,
+        document_id="d" * 160,
+        canonical_entity_key="c" * 160,
+        claim_key="k" * 160,
+        text="x" * 12_000,
+        sources=[{
+            "source_id": "s" * 160,
+            "source_name": "n" * 250,
+            "source_url": "https://example.invalid/source",
+            "source_role": "r" * 100,
+            "retrieved_at": None,
+            "valid_from": None,
+            "valid_until": None,
+            "license": "l" * 200,
+        }],
+    )
+    result = map_owner_response(req, owner_ok(req, rows=[row]))
+    assert len(result.evidence[0].text) == 12_000
+    assert result.evidence[0].sources[0].source_role == "r" * 100
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda body: body["items"][0].update(text="x" * 12_001),
+        lambda body: body.update(warnings=["w"] * 11),
+        lambda body: body.update(generated_at="2026-11-09T13:00:01+01:00"),
+        lambda body: body["items"][0]["sources"][0].update(
+            retrieved_at="2026-11-09T13:00:00+01:00"
+        ),
+    ],
+)
+def test_rejects_values_outside_owner_wire_limits_and_timestamp_contract(mutate):
+    req = make_request()
+    body = owner_ok(req)
+    mutate(body)
+    with pytest.raises(RetrievalUnavailable):
+        map_owner_response(req, body)
+
+
 @pytest.mark.parametrize(
     ("outcome", "exception"),
     [

@@ -3,6 +3,7 @@
 import logging
 import string
 import base64
+from time import perf_counter
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -170,8 +171,18 @@ def local_owner_login(
     peer = request.client.host if request.client else ""
     repository = service.repository
     phase = "credential_lookup"
+    request_started = perf_counter()
+    credential_read_ms = 0.0
+    stage_timings: dict[str, float] = {}
+
+    def record_stage(name: str, elapsed_ms: float) -> None:
+        if name in {"pbkdf2_ms", "limiter_check_ms", "limiter_update_ms", "session_issue_ms"}:
+            stage_timings[name] = round(max(0.0, elapsed_ms), 2)
+
     try:
+        credential_started = perf_counter()
         row = repository.load_local_owner_credential(body.login_name)
+        credential_read_ms = (perf_counter() - credential_started) * 1000
         credential = None
         session_issuer = service.issue_local_owner_session
         if row is not None:
@@ -191,11 +202,13 @@ def local_owner_login(
                     owner_id, expected_salt, expected_verifier, expected_iterations,
                 )
         phase = "credential_verification"
+        verification_started = perf_counter()
         result = verify_and_issue(
             credential, body.password, limiter=_PersistentLocalOwnerLimiter(repository),
             request_peer=peer, host=request.headers.get("host", ""), origin=origin,
             allowed_origin=allowed[0], session_issuer=session_issuer,
             forwarded_for=request.headers.get("x-forwarded-for") if "x-forwarded-for" in request.headers else None,
+            timing_recorder=record_stage,
         )
     except (AuthenticationUnavailable, psycopg.Error) as error:
         # Never log credentials, SQL, connection strings, or request content.
@@ -208,7 +221,30 @@ def local_owner_login(
             )
         else:
             logger.warning("auth.local_owner_unavailable phase=%s", phase)
+        logger.info(
+            "auth.local_owner.timing",
+            extra={
+                "outcome": "unavailable",
+                "credential_read_ms": round(credential_read_ms, 2),
+                "verification_and_limiter_ms": 0.0,
+                **stage_timings,
+                "total_ms": round((perf_counter() - request_started) * 1000, 2),
+            },
+        )
         return _unavailable()
+    verification_ms = (perf_counter() - verification_started) * 1000
+    logger.info(
+        "auth.local_owner.timing",
+        extra={
+            "outcome": "success" if result is not None else "rejected",
+            "credential_read_ms": round(credential_read_ms, 2),
+            "verification_and_limiter_ms": round(
+                max(0.0, verification_ms - stage_timings.get("session_issue_ms", 0.0)), 2,
+            ),
+            **stage_timings,
+            "total_ms": round((perf_counter() - request_started) * 1000, 2),
+        },
+    )
     if result is None:
         return JSONResponse(status_code=401, content={"error": {"code": "unauthenticated"}})
     user, raw_session, csrf_token = result
