@@ -54,8 +54,13 @@ def _target() -> tuple[str, int, str, str, str]:
 
 def _connect() -> tuple[psycopg.Connection[Any], str]:
     host, port, name, marker, password = _target()
+    # The identity SELECT below must not open an implicit outer transaction.
+    # Otherwise the following connection.transaction() is only a SAVEPOINT:
+    # closing the connection rolls back the newly created owner even though
+    # the CLI prints success. With autocommit=True the explicit transaction()
+    # used for create/reset is the top-level atomic COMMIT boundary.
     connection = psycopg.connect(host=host, port=port, dbname=name, user=ROLE, password=password,
-                                 connect_timeout=3, row_factory=dict_row,
+                                 connect_timeout=3, row_factory=dict_row, autocommit=True,
                                  options="-c statement_timeout=10000 -c lock_timeout=3000",
                                  application_name="rahgard-local-owner-bootstrap")
     try:
@@ -114,6 +119,14 @@ def create_owner(login_name: str, password: str) -> None:
                    (owner_id,login_name,salt,verifier,iterations) VALUES (%s,%s,%s,%s,%s)""",
                 (owner_id,login_name,salt,verifier,iterations),
             )
+        # A success message is permitted only after the explicit transaction
+        # has committed and the restricted bootstrap role can read it back.
+        saved = connection.execute(
+            "SELECT owner_id FROM identity.local_owner_credentials WHERE login_name=%s",
+            (login_name,),
+        ).fetchone()
+        if saved is None or saved["owner_id"] != owner_id:
+            raise BootstrapBlocked("local owner credential was not durably committed")
     finally:
         connection.close()
 
