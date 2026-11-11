@@ -169,6 +169,7 @@ def local_owner_login(
         return JSONResponse(status_code=401, content={"error": {"code": "unauthenticated"}})
     peer = request.client.host if request.client else ""
     repository = service.repository
+    phase = "credential_lookup"
     try:
         row = repository.load_local_owner_credential(body.login_name)
         credential = None
@@ -184,17 +185,29 @@ def local_owner_login(
             expected_verifier = bytes(row["verifier"])
             expected_iterations = int(row["iterations"])
             def session_issuer(owner_id):
+                nonlocal phase
+                phase = "session_issue"
                 return service.issue_local_owner_session(
                     owner_id, expected_salt, expected_verifier, expected_iterations,
                 )
+        phase = "credential_verification"
         result = verify_and_issue(
             credential, body.password, limiter=_PersistentLocalOwnerLimiter(repository),
             request_peer=peer, host=request.headers.get("host", ""), origin=origin,
             allowed_origin=allowed[0], session_issuer=session_issuer,
             forwarded_for=request.headers.get("x-forwarded-for") if "x-forwarded-for" in request.headers else None,
         )
-    except (AuthenticationUnavailable, psycopg.Error):
-        logger.warning("auth.local_owner_unavailable")
+    except (AuthenticationUnavailable, psycopg.Error) as error:
+        # Never log credentials, SQL, connection strings, or request content.
+        # SQLSTATE and the fixed phase are enough to diagnose a privilege
+        # failure such as 42501 without revealing private account material.
+        if isinstance(error, psycopg.Error):
+            logger.warning(
+                "auth.local_owner_database_unavailable phase=%s sqlstate=%s",
+                phase, error.sqlstate or "unknown",
+            )
+        else:
+            logger.warning("auth.local_owner_unavailable phase=%s", phase)
         return _unavailable()
     if result is None:
         return JSONResponse(status_code=401, content={"error": {"code": "unauthenticated"}})
