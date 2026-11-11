@@ -33,6 +33,7 @@ afterEach(() => {
 describe('OTP delivery failure UX', () => {
   it('shows a generic retry state without opening code entry when no usable challenge is returned', async () => {
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ method: 'otp' }))
       .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401))
       .mockResolvedValueOnce(response({ challenge_id: null, status: 'unavailable' }, 202));
     vi.stubGlobal('fetch', fetchMock);

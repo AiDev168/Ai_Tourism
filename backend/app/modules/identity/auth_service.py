@@ -27,8 +27,9 @@ class ChallengeResult:
 @dataclass(frozen=True, slots=True)
 class AuthenticatedUser:
     user_id: UUID
-    phone_e164: str
+    phone_e164: str | None
     session_id: UUID
+    auth_method: str = "otp"
 
 
 class AuthenticationService:
@@ -145,12 +146,44 @@ class AuthenticationService:
         if not raw_session or len(raw_session) > 128:
             return None
         token_hash = hashlib.sha256(raw_session.encode()).digest()
-        row = self.repository.resolve_session(
-            token_hash, datetime.now(UTC), self.settings.auth_session_idle_seconds or 0
+        if self.settings.auth_local_owner_enabled:
+            row = self.repository.resolve_session(
+                token_hash, datetime.now(UTC), self.settings.auth_session_idle_seconds or 0,
+                allow_local_owner=True,
+            )
+        else:
+            row = self.repository.resolve_session(
+                token_hash, datetime.now(UTC), self.settings.auth_session_idle_seconds or 0,
+            )
+        if row is None:
+            return None
+        return AuthenticatedUser(
+            row["user_id"], row["phone_e164"], row["session_id"], row.get("auth_method", "otp")
+        )
+
+    def issue_local_owner_session(self, user_id: UUID, expected_salt: bytes,
+                                  expected_verifier: bytes, expected_iterations: int
+                                  ) -> tuple[AuthenticatedUser, str, str] | None:
+        """Create a normal revocable session for the private local owner only."""
+        self._enabled()
+        if not self.settings.auth_local_owner_enabled:
+            return None
+        raw_session = secrets.token_urlsafe(32)
+        csrf = self._csrf_for_session(raw_session)
+        now = datetime.now(UTC)
+        row = self.repository.create_local_owner_session(
+            user_id=user_id,
+            token_hash=hashlib.sha256(raw_session.encode()).digest(),
+            csrf_hash=hashlib.sha256(csrf.encode()).digest(),
+            now=now,
+            idle_expires_at=now + timedelta(seconds=self.settings.auth_session_idle_seconds or 0),
+            absolute_expires_at=now + timedelta(seconds=self.settings.auth_session_absolute_seconds or 0),
+            expected_salt=expected_salt, expected_verifier=expected_verifier,
+            expected_iterations=expected_iterations,
         )
         if row is None:
             return None
-        return AuthenticatedUser(row["user_id"], row["phone_e164"], row["session_id"])
+        return (AuthenticatedUser(row["user_id"], None, row["session_id"], "local_owner"), raw_session, csrf)
 
     def _csrf_for_session(self, raw_session: str) -> str:
         digest = self._hmac("auth_csrf_secret", b"rahgard:csrf:v1\0" + raw_session.encode())

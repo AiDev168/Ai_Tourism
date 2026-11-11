@@ -114,6 +114,7 @@ def publish_private(packet: dict[str, Any], packet_bytes: bytes, authorization: 
         raise ApprovalBlocked("private pilot database guard is incomplete")
     approved = validate_authorization(packet, packet_bytes, authorization, host, port, database, marker, owner_key)
     connection = None
+    stage = "connect"
     try:
         expected_migration_hash = hashlib.sha256(MIGRATION_FILE.read_bytes()).hexdigest()
         expected_pilot_migration_hash = hashlib.sha256(PILOT_MIGRATION_FILE.read_bytes()).hexdigest()
@@ -122,6 +123,7 @@ def publish_private(packet: dict[str, Any], packet_bytes: bytes, authorization: 
                                      connect_timeout=3, row_factory=dict_row,
                                      options="-c statement_timeout=10000 -c lock_timeout=3000",
                                      application_name="rahgard-private-geo-publication")
+        stage = "publisher_identity_check"
         with connection.transaction():
             identity = connection.execute(
                 """SELECT current_database() AS name, current_user AS role, session_user AS session_role,
@@ -183,6 +185,7 @@ def publish_private(packet: dict[str, Any], packet_bytes: bytes, authorization: 
                     or not hmac.compare_digest(str(identity["marker"]), marker)):
                 raise ApprovalBlocked("private pilot identity or marker does not match")
             activated = 0
+            stage = "controlled_geo_approval_function"
             for record in approved:
                 validate_authorization(packet, packet_bytes, authorization, host, port, database, marker, owner_key)
                 result = connection.execute(
@@ -194,6 +197,7 @@ def publish_private(packet: dict[str, Any], packet_bytes: bytes, authorization: 
                 if result["activated"] is not True and result["activated"] is not False:
                     raise ApprovalBlocked("private pilot geographic activation returned an invalid result")
                 activated += int(result["activated"])
+            stage = "production_view_verification"
             rows = connection.execute(
                 "SELECT destination_key, latitude, longitude, coordinate_role FROM knowledge.production_destinations WHERE destination_key = ANY(%s::text[])",
                 ([record["destination_key"] for record in approved],),
@@ -210,8 +214,12 @@ def publish_private(packet: dict[str, Any], packet_bytes: bytes, authorization: 
         return {"status": "private_pilot_geo_published", "approved": len(approved), "activated": activated}
     except ApprovalBlocked:
         raise
-    except Exception:
-        raise ApprovalBlocked("private pilot publication failed") from None
+    except Exception as exc:
+        # Preserve a non-sensitive diagnostic class/SQLSTATE for the protected
+        # local operator log without exposing SQL values, credentials, or data.
+        sqlstate = getattr(exc, "sqlstate", None) or "none"
+        primary = getattr(getattr(exc, "diag", None), "message_primary", None) or "no-diagnostic"
+        raise ApprovalBlocked(f"private pilot publication failed at {stage} ({type(exc).__name__}, sqlstate={sqlstate}, diagnostic={primary})") from None
     finally:
         if connection is not None:
             connection.close()
@@ -235,7 +243,10 @@ def main() -> int:
         result = publish_private(packet, raw, authorization, explicitly_authorized=args.apply_approved_geo)
         print(json.dumps(result, sort_keys=True))
         return 0
-    except (ApprovalBlocked, OSError, ValueError, TypeError):
+    except ApprovalBlocked as exc:
+        print(f"BLOCKED: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError, TypeError):
         print("BLOCKED: private pilot geo publication was not applied.", file=sys.stderr)
         return 2
 

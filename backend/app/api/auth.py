@@ -2,6 +2,7 @@
 
 import logging
 import string
+import base64
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -16,6 +17,7 @@ from app.modules.identity.auth_service import (
     AuthenticationUnavailable,
     AuthenticatedUser,
 )
+from app.modules.auth.local_owner import parse_credential, verify_and_issue
 from app.modules.identity.phone import InvalidPhoneNumber, normalize_iranian_mobile
 from app.modules.identity.sms import DisabledSmsAdapter
 from app.modules.trip.repository import TravelerRepository
@@ -47,6 +49,16 @@ class ChallengeResponse(BaseModel):
     message: str = "If sign-in can proceed, a code will be sent."
 
 
+class AuthMethodResponse(BaseModel):
+    method: Literal["disabled", "otp", "local_owner"]
+
+
+class LocalOwnerLoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    login_name: str = Field(min_length=3, max_length=40, pattern=r"^[a-z][a-z0-9._-]{2,39}$")
+    password: str = Field(min_length=1, max_length=256)
+
+
 class VerifyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     challenge_id: UUID
@@ -64,8 +76,9 @@ class VerifyRequest(BaseModel):
 
 class PublicUser(BaseModel):
     user_id: UUID
-    phone_e164: str
-    phone_verified: bool = True
+    phone_e164: str | None = None
+    phone_verified: bool | None = True
+    auth_method: Literal["otp", "local_owner"] = "otp"
 
 
 class SessionResponse(BaseModel):
@@ -101,6 +114,91 @@ def _delete_cookie(response: Response, settings: Settings) -> None:
     )
 
 
+class _PersistentLocalOwnerLimiter:
+    """Adapter over the marked pilot DB's durable failed-attempt ledger."""
+
+    def __init__(self, repository):
+        self.repository = repository
+
+    def allowed(self, key: str) -> bool:
+        from datetime import UTC, datetime
+        return self.repository.allow_local_owner_attempt(key, datetime.now(UTC))
+
+    def failed(self, key: str) -> None:
+        from datetime import UTC, datetime
+        self.repository.record_local_owner_failure(key, datetime.now(UTC))
+
+    def succeeded(self, key: str) -> None:
+        self.repository.clear_local_owner_failures(key)
+
+
+@router.get("/method", response_model=AuthMethodResponse)
+def authentication_method(settings: Annotated[Settings, Depends(get_settings)]):
+    if not settings.auth_enabled:
+        return AuthMethodResponse(method="disabled")
+    if settings.auth_local_owner_enabled:
+        return AuthMethodResponse(method="local_owner")
+    if settings.auth_sms_adapter != "disabled":
+        return AuthMethodResponse(method="otp")
+    return AuthMethodResponse(method="disabled")
+
+
+@router.post("/local-owner/login", response_model=SessionResponse)
+def local_owner_login(
+    body: LocalOwnerLoginRequest,
+    request: Request,
+    response: Response,
+    settings: Annotated[Settings, Depends(get_settings)],
+    service: Annotated[AuthenticationService, Depends(get_auth_service)],
+):
+    if not settings.auth_enabled or not settings.auth_local_owner_enabled:
+        return _unavailable()
+    origin = request.headers.get("origin", "")
+    allowed = [item.strip() for item in settings.auth_allowed_origins.split(",") if item.strip()]
+    if len(allowed) != 1:
+        return _unavailable()
+    if any(header in request.headers for header in (
+        "forwarded", "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto"
+    )):
+        return JSONResponse(status_code=401, content={"error": {"code": "unauthenticated"}})
+    peer = request.client.host if request.client else ""
+    repository = service.repository
+    try:
+        row = repository.load_local_owner_credential(body.login_name)
+        credential = None
+        session_issuer = service.issue_local_owner_session
+        if row is not None:
+            credential = parse_credential({
+                "version": 1, "algorithm": "pbkdf2-sha256", "owner_id": str(row["owner_id"]),
+                "iterations": row["iterations"],
+                "salt_b64": base64.urlsafe_b64encode(bytes(row["salt"])).decode().rstrip("="),
+                "verifier_b64": base64.urlsafe_b64encode(bytes(row["verifier"])).decode().rstrip("="),
+            })
+            expected_salt = bytes(row["salt"])
+            expected_verifier = bytes(row["verifier"])
+            expected_iterations = int(row["iterations"])
+            def session_issuer(owner_id):
+                return service.issue_local_owner_session(
+                    owner_id, expected_salt, expected_verifier, expected_iterations,
+                )
+        result = verify_and_issue(
+            credential, body.password, limiter=_PersistentLocalOwnerLimiter(repository),
+            request_peer=peer, host=request.headers.get("host", ""), origin=origin,
+            allowed_origin=allowed[0], session_issuer=session_issuer,
+            forwarded_for=request.headers.get("x-forwarded-for") if "x-forwarded-for" in request.headers else None,
+        )
+    except (AuthenticationUnavailable, psycopg.Error):
+        logger.warning("auth.local_owner_unavailable")
+        return _unavailable()
+    if result is None:
+        return JSONResponse(status_code=401, content={"error": {"code": "unauthenticated"}})
+    user, raw_session, csrf_token = result
+    _set_cookie(response, raw_session, settings)
+    return SessionResponse(user=PublicUser(
+        user_id=user.user_id, phone_e164=None, phone_verified=None, auth_method="local_owner",
+    ), csrf_token=csrf_token)
+
+
 @router.post("/otp/challenges", response_model=ChallengeResponse, status_code=202)
 def request_challenge(
     body: ChallengeRequest,
@@ -108,7 +206,7 @@ def request_challenge(
     settings: Annotated[Settings, Depends(get_settings)],
     service: Annotated[AuthenticationService, Depends(get_auth_service)],
 ):
-    if not settings.auth_enabled:
+    if not settings.auth_enabled or settings.auth_local_owner_enabled:
         return _unavailable()
     try:
         result = service.issue(
@@ -135,7 +233,7 @@ def verify_challenge(
     settings: Annotated[Settings, Depends(get_settings)],
     service: Annotated[AuthenticationService, Depends(get_auth_service)],
 ):
-    if not settings.auth_enabled:
+    if not settings.auth_enabled or settings.auth_local_owner_enabled:
         return _unavailable()
     try:
         result = service.verify(
@@ -204,7 +302,9 @@ def current_user(
     except AuthenticationUnavailable:
         return _unavailable()
     return SessionResponse(
-        user=PublicUser(user_id=user.user_id, phone_e164=user.phone_e164), csrf_token=csrf_token
+        user=PublicUser(user_id=user.user_id, phone_e164=user.phone_e164,
+                        phone_verified=True if user.phone_e164 else None,
+                        auth_method=user.auth_method), csrf_token=csrf_token
     )
 
 

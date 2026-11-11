@@ -24,9 +24,18 @@ const mime = new Map([
 ]);
 
 function proxyApi(req, res) {
+  // The proxy is loopback-only. Preserve the browser's exact localhost Host
+  // authority so same-origin local-owner auth can compare it with Origin, and
+  // strip every client-supplied forwarding header: the backend trusts the TCP
+  // peer address, not proxy assertions about a remote identity.
+  const headers = { ...req.headers };
+  for (const name of Object.keys(headers)) {
+    const normalized = name.toLowerCase();
+    if (normalized === 'forwarded' || normalized.startsWith('x-forwarded-')) delete headers[name];
+  }
   const upstream = http.request({
     hostname: '127.0.0.1', port: apiPort, method: req.method,
-    path: req.url, headers: { ...req.headers, host: `127.0.0.1:${apiPort}`, 'x-forwarded-proto': 'https' },
+    path: req.url, headers,
     timeout: 12_000,
   }, (upstreamResponse) => {
     res.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);

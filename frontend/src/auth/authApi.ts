@@ -1,5 +1,11 @@
-export type AuthUser = { user_id: string; phone_e164: string; phone_verified: true };
+export type AuthUser = {
+  user_id: string;
+  phone_e164: string | null;
+  phone_verified: boolean | null;
+  auth_method?: 'otp' | 'local_owner';
+};
 export type AuthSession = { user: AuthUser; csrf_token: string };
+export type AuthMethod = 'disabled' | 'otp' | 'local_owner';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/v1/auth${path}`, {
@@ -20,7 +26,11 @@ export class AuthApiError extends Error {
 }
 
 export const authApi = {
+  method: () => request<{ method: AuthMethod }>('/method'),
   me: () => request<AuthSession>('/me'),
+  loginLocalOwner: (login_name: string, password: string) => request<AuthSession>(
+    '/local-owner/login', { method: 'POST', body: JSON.stringify({ login_name, password }) },
+  ),
   requestCode: (phone_number: string, locale: string) => request<{
     challenge_id: string | null; status: 'accepted' | 'unavailable'; message: string;
   }>(

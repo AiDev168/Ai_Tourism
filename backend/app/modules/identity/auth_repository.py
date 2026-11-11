@@ -245,20 +245,129 @@ class AuthRepository:
                 "session_id": session["session_id"],
             }
 
-    def resolve_session(self, token_hash: bytes, now: datetime, idle_seconds: int) -> dict[str, Any] | None:
-        with self.connection() as conn, conn.transaction():
+    def load_local_owner_credential(self, login_name: str) -> dict[str, Any] | None:
+        """Read the single pilot verifier without exposing plaintext or altering it."""
+        with self.connection() as conn:
             row = conn.execute(
-                """SELECT s.session_id, s.user_id, u.phone_e164
-                   FROM identity.web_sessions s
-                   JOIN identity.users u ON u.user_id=s.user_id
-                   JOIN identity.verified_phones v ON v.user_id=u.user_id
-                   WHERE s.token_hash=%s AND s.revoked_at IS NULL
-                     AND s.idle_expires_at>%s AND s.absolute_expires_at>%s
-                     AND u.account_status='active' AND u.is_synthetic=FALSE
-                     AND v.phone_e164=u.phone_e164
-                   FOR UPDATE OF s""",
-                (token_hash, now, now),
+                """SELECT c.owner_id, c.salt, c.verifier, c.iterations,
+                          u.account_status, u.is_synthetic, u.auth_subject
+                   FROM identity.local_owner_credentials c
+                   JOIN identity.users u ON u.user_id=c.owner_id
+                   WHERE c.login_name=%s""",
+                (login_name,),
             ).fetchone()
+            if (row is None or row["account_status"] != "active" or row["is_synthetic"]
+                    or row["auth_subject"] != "local_owner"):
+                return None
+            return row
+
+    def allow_local_owner_attempt(self, key: str, now: datetime, window_seconds: int = 900,
+                                  maximum: int = 5) -> bool:
+        if len(key) != 64 or any(char not in "0123456789abcdef" for char in key):
+            return False
+        digest = bytes.fromhex(key)
+        epoch = int(now.timestamp())
+        window = epoch - epoch % window_seconds
+        with self.connection() as conn, conn.transaction():
+            conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (key,))
+            conn.execute(
+                "DELETE FROM identity.local_owner_login_limits WHERE window_started_at < to_timestamp(%s)",
+                (window - 2 * window_seconds,),
+            )
+            row = conn.execute(
+                """SELECT COALESCE(sum(hit_count),0) AS hits FROM identity.local_owner_login_limits
+                   WHERE dimension='login' AND subject_digest=%s
+                     AND window_started_at >= to_timestamp(%s)""",
+                (digest, window - window_seconds),
+            ).fetchone()
+            if row["hits"] >= maximum:
+                return False
+            conn.execute(
+                """INSERT INTO identity.local_owner_login_limits
+                   (dimension,subject_digest,window_started_at,hit_count)
+                   VALUES ('login',%s,to_timestamp(%s),1)
+                   ON CONFLICT (dimension,subject_digest,window_started_at)
+                   DO UPDATE SET hit_count=identity.local_owner_login_limits.hit_count+1""",
+                (digest, window),
+            )
+            return True
+
+    def record_local_owner_failure(self, key: str, now: datetime, window_seconds: int = 900) -> None:
+        if len(key) != 64 or any(char not in "0123456789abcdef" for char in key):
+            return
+        # Reservation is persisted atomically in allowed() before PBKDF2 work.
+        # This method exists for the verifier callback contract.
+        return None
+
+    def clear_local_owner_failures(self, key: str) -> None:
+        if len(key) != 64 or any(char not in "0123456789abcdef" for char in key):
+            return
+        with self.connection() as conn:
+            conn.execute(
+                "DELETE FROM identity.local_owner_login_limits WHERE dimension='login' AND subject_digest=%s",
+                (bytes.fromhex(key),),
+            )
+
+    def create_local_owner_session(
+        self, *, user_id: UUID, token_hash: bytes, csrf_hash: bytes, now: datetime,
+        idle_expires_at: datetime, absolute_expires_at: datetime,
+        expected_salt: bytes, expected_verifier: bytes, expected_iterations: int,
+    ) -> dict[str, Any] | None:
+        with self.connection() as conn, conn.transaction():
+            owner = conn.execute(
+                """SELECT user_id FROM identity.users
+                   WHERE user_id=%s AND auth_subject='local_owner'
+                     AND account_status='active' AND is_synthetic=FALSE FOR UPDATE""",
+                (user_id,),
+            ).fetchone()
+            credential = conn.execute(
+                "SELECT salt,verifier,iterations FROM identity.local_owner_credentials WHERE owner_id=%s FOR UPDATE",
+                (user_id,),
+            ).fetchone()
+            if (owner is None or credential is None or bytes(credential["salt"]) != expected_salt
+                    or bytes(credential["verifier"]) != expected_verifier
+                    or credential["iterations"] != expected_iterations):
+                return None
+            session = conn.execute(
+                """INSERT INTO identity.web_sessions
+                   (token_hash,user_id,csrf_hash,created_at,last_seen_at,idle_expires_at,absolute_expires_at)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING session_id""",
+                (token_hash,user_id,csrf_hash,now,now,idle_expires_at,absolute_expires_at),
+            ).fetchone()
+            return {"user_id": user_id, "session_id": session["session_id"]}
+
+    def resolve_session(self, token_hash: bytes, now: datetime, idle_seconds: int,
+                        allow_local_owner: bool = False) -> dict[str, Any] | None:
+        with self.connection() as conn, conn.transaction():
+            if allow_local_owner:
+                row = conn.execute(
+                    """SELECT s.session_id, s.user_id, u.phone_e164,
+                              CASE WHEN c.owner_id IS NOT NULL THEN 'local_owner' ELSE 'otp' END AS auth_method
+                       FROM identity.web_sessions s
+                       JOIN identity.users u ON u.user_id=s.user_id
+                       LEFT JOIN identity.verified_phones v ON v.user_id=u.user_id
+                       LEFT JOIN identity.local_owner_credentials c ON c.owner_id=u.user_id
+                       WHERE s.token_hash=%s AND s.revoked_at IS NULL
+                         AND s.idle_expires_at>%s AND s.absolute_expires_at>%s
+                         AND u.account_status='active' AND u.is_synthetic=FALSE
+                         AND ((v.phone_e164=u.phone_e164 AND u.phone_e164 IS NOT NULL)
+                              OR (c.owner_id IS NOT NULL AND u.auth_subject='local_owner'))
+                       FOR UPDATE OF s""",
+                    (token_hash, now, now),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """SELECT s.session_id, s.user_id, u.phone_e164, 'otp' AS auth_method
+                       FROM identity.web_sessions s
+                       JOIN identity.users u ON u.user_id=s.user_id
+                       JOIN identity.verified_phones v ON v.user_id=u.user_id
+                       WHERE s.token_hash=%s AND s.revoked_at IS NULL
+                         AND s.idle_expires_at>%s AND s.absolute_expires_at>%s
+                         AND u.account_status='active' AND u.is_synthetic=FALSE
+                         AND v.phone_e164=u.phone_e164
+                       FOR UPDATE OF s""",
+                    (token_hash, now, now),
+                ).fetchone()
             if row is None:
                 return None
             conn.execute(
@@ -267,7 +376,8 @@ class AuthRepository:
                    WHERE session_id=%s""",
                 (now, now + timedelta(seconds=idle_seconds), row["session_id"]),
             )
-            return {"user_id": row["user_id"], "phone_e164": row["phone_e164"], "session_id": row["session_id"]}
+            return {"user_id": row["user_id"], "phone_e164": row["phone_e164"],
+                    "session_id": row["session_id"], "auth_method": row["auth_method"]}
 
     def refresh_csrf(self, session_id: UUID, csrf_hash: bytes) -> None:
         with self.connection() as conn:

@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     tourism_rag_api_token: SecretStr | None = None
     auth_enabled: bool = False
     auth_sms_adapter: str = "disabled"
+    auth_local_owner_enabled: bool = False
     sms_ir_sandbox_api_key: SecretStr | None = None
     auth_otp_hmac_secret: SecretStr | None = None
     auth_csrf_secret: SecretStr | None = None
@@ -65,6 +66,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_auth_configuration(self):
+        if self.auth_local_owner_enabled:
+            origin = urlsplit(self.auth_allowed_origins.strip())
+            if (
+                self.app_env.lower() != "local_pilot" or not self.auth_enabled
+                or self.auth_sms_adapter != "disabled" or not self.auth_cookie_secure
+                or self.app_host not in {"127.0.0.1", "::1", "localhost"}
+                or "," in self.auth_allowed_origins
+                or origin.scheme != "https" or origin.hostname not in {"localhost", "127.0.0.1", "::1"}
+                or origin.username or origin.password or origin.path or origin.query or origin.fragment
+            ):
+                raise ValueError("Local owner authentication is restricted to a secure localhost pilot")
         if self.internal_chat_enabled:
             chat_url = urlsplit(self.internal_chat_endpoint)
             if (
@@ -125,7 +137,7 @@ class Settings(BaseSettings):
                 raise ValueError("Both authentication session lifetimes must be configured")
             if self.auth_session_idle_seconds > self.auth_session_absolute_seconds:
                 raise ValueError("Session idle lifetime cannot exceed absolute lifetime")
-            if self.auth_sms_adapter == "disabled":
+            if self.auth_sms_adapter == "disabled" and not self.auth_local_owner_enabled:
                 raise ValueError("Authentication is enabled without an available SMS delivery adapter")
             if not self.auth_allowed_origins.strip():
                 raise ValueError("AUTH_ALLOWED_ORIGINS must contain at least one exact origin")

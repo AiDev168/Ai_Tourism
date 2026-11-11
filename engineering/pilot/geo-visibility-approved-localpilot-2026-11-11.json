@@ -1,0 +1,57 @@
+{
+  "schema": "rahgard.geo-visibility-batch.v1",
+  "scope": "Shiraz/Fars orientation-only map display",
+  "reviewer": "Product owner",
+  "reviewed_at": "2026-11-11T05:05:40Z",
+  "approval_reference": "product-owner-chat-consent-2026-11-11",
+  "records": [
+    {
+      "destination_key": "shiraz-hafezieh-v1",
+      "decision": "approve_approximate_display",
+      "canonical_name": "آرامگاه حافظ (حافظیه)",
+      "destination_type": "historic_memorial",
+      "province_name": "فارس",
+      "city_name": "شیراز",
+      "latitude": 29.6254028,
+      "longitude": 52.5583194,
+      "coordinate_role": "representative_point",
+      "source_url": "https://en.wikipedia.org/wiki/Tomb_of_Hafez"
+    },
+    {
+      "destination_key": "shiraz-eram-garden-v1",
+      "decision": "approve_approximate_display",
+      "canonical_name": "باغ ارم",
+      "destination_type": "historic_garden",
+      "province_name": "فارس",
+      "city_name": "شیراز",
+      "latitude": 29.63583,
+      "longitude": 52.52528,
+      "coordinate_role": "representative_point",
+      "source_url": "https://en.wikipedia.org/wiki/Eram_Garden"
+    },
+    {
+      "destination_key": "shiraz-vakil-bazaar-v1",
+      "decision": "approve_approximate_display",
+      "canonical_name": "بازار وکیل",
+      "destination_type": "historic_bazaar",
+      "province_name": "فارس",
+      "city_name": "شیراز",
+      "latitude": 29.6149806,
+      "longitude": 52.5467972,
+      "coordinate_role": "representative_point",
+      "source_url": "https://en.wikipedia.org/wiki/Vakil_Bazaar"
+    },
+    {
+      "destination_key": "unesco-persepolis-v1",
+      "decision": "approve_approximate_display",
+      "canonical_name": "تخت جمشید",
+      "destination_type": "archaeological_site",
+      "province_name": "فارس",
+      "city_name": null,
+      "latitude": 29.93444,
+      "longitude": 52.89028,
+      "coordinate_role": "property_reference",
+      "source_url": "https://whc.unesco.org/en/list/114/maps/"
+    }
+  ]
+}
