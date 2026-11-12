@@ -178,6 +178,7 @@ describe('AI provider admin panel', () => {
     expect(fetchMock.mock.calls.filter(call => String(call[0]).endsWith('/profiles')).length).toBeGreaterThan(1);
     await act(async () => { inference.click(); }); await settle();
     expect(host.textContent).toContain('Real inference passed for this model.');
+    expect(host.textContent).toContain('Capability verified');
     expect(host.querySelector('.provider-admin-inference-ok')).not.toBeNull();
   });
 });
