@@ -52,4 +52,18 @@ describe('provider administration client', () => {
     expect(() => providerAdminApi.testInference('csrf', 'p', 'chat', 'm', 65)).toThrow(RangeError);
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
+
+  it('sends only revision and expected_version when activating a validated route', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      capability: 'chat', active: true, version: 1, revision: 'revision-1',
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await providerAdminApi.activate('csrf', 'chat', 'revision-1', 0);
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/api/v1/admin/ai-providers/routes/chat/activate');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(String(options.body))).toEqual({ revision: 'revision-1', expected_version: 0 });
+    expect(((options.headers as Record<string, string>)['X-CSRF-Token'])).toBe('csrf');
+  });
+
 });
