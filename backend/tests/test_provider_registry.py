@@ -340,3 +340,30 @@ def test_initial_revision_failure_aborts_profile_transaction():
             secret_ref=None, actor_id=uuid4(),
         )
     assert isinstance(connection.exit_error, RuntimeError)
+
+@pytest.mark.parametrize("has_current_step_up", [True, False])
+def test_step_up_expiry_reads_dict_row_by_column_name(has_current_step_up):
+    """An active MFA step-up must not fail when psycopg returns a dict_row."""
+    user_id, session_id = uuid4(), uuid4()
+    expiry = datetime.now(UTC) + timedelta(minutes=3)
+    row = {"expires_at": expiry} if has_current_step_up else None
+
+    class DictRowConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query, params):
+            normalized = " ".join(query.split())
+            assert "SELECT s.expires_at" in normalized
+            assert "s.revoked_at IS NULL" in normalized
+            assert "s.expires_at>%s" in normalized
+            assert "g.revoked_at IS NULL" in normalized
+            assert "m.enabled_at IS NOT NULL" in normalized
+            assert params[:2] == (user_id, session_id)
+            return _Cursor(row)
+
+    actual = ProviderRegistry(DictRowConnection).step_up_expires_at(user_id, session_id)
+    assert actual == (expiry if has_current_step_up else None)
