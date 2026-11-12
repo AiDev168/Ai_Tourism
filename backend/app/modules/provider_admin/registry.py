@@ -302,7 +302,10 @@ class ProviderRegistry:
             result = _row(cur)
             if result is None:
                 raise RegistryNotFound("Provider revision was not found")
-            self._audit(conn, actor_id, "revision_validated", "revision", str(revision_id), outcome,
+            # Validation outcomes and audit outcomes have distinct SQL CHECK vocabularies.
+            # Preserve the exact validation result above; audit only success or failure.
+            audit_outcome = "success" if outcome == "valid" else "failure"
+            self._audit(conn, actor_id, "revision_validated", "revision", str(revision_id), audit_outcome,
                         {"validation_id": str(result["validation_id"])})
             return result
 
