@@ -156,6 +156,7 @@ def test_actual_pwa_budget_shapes_reach_mandatory_and_acknowledged_advisory_asse
     # unit retains the scale/currency wording, and no FX or Rial/Toman conversion occurs.
     parser_budgets = [
         {"amount": 20, "currency": None, "unit": "million toman", "raw": "20 million toman"},
+        {"amount": 20, "currency": "TOMAN", "unit": "million toman", "raw": "20 million toman"},
         {"amount": 20, "currency": "IRR", "unit": "million IRR", "raw": "20 million IRR"},
         {"amount": 20, "currency": "IRR", "unit": "میلیون ریال", "raw": "۲۰ میلیون ریال"},
         {"amount": 20, "currency": "USD", "unit": "million USD", "raw": "20 million USD"},

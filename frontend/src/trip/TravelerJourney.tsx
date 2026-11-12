@@ -1293,8 +1293,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
 
       {session && <section className="trip-history" aria-labelledby="trip-history-title">
         <div className="trip-history-heading"><h3 id="trip-history-title">{copy.historyTitle}</h3><button type="button" onClick={() => void travelerApi.listConversations(50).then(result => setConversations(result.items)).catch(applyFailure)} disabled={loadingHistory || busy}>{copy.retry}</button></div>
-        {loadingHistory ? <p role="status">{copy.saving}</p> : conversations.length === 0 ? <p>{copy.historyEmpty}</p> : conversations.map(conversation => <article className="history-conversation" key={conversation.conversation_id}>
-          {(conversation.trips ?? []).map(trip => <div className="history-trip" key={trip.trip_id}>
+        {loadingHistory ? <p role="status">{copy.saving}</p> : conversations.length === 0 ? <p>{copy.historyEmpty}</p> : conversations.map(conversation => <article className="history-conversation" data-conversation-id={conversation.conversation_id} key={conversation.conversation_id}>
+          {(conversation.trips ?? []).map(trip => <div className="history-trip" data-trip-id={trip.trip_id} key={trip.trip_id}>
             <button type="button" onClick={() => void restoreTrip(conversation.conversation_id, trip.trip_id)} disabled={busy} dir="auto">{trip.original_request || copy.openTrip}</button>
             <button type="button" onClick={() => void deleteTrip(trip)} disabled={busy}>{copy.deleteTrip}</button>
           </div>)}

@@ -13,6 +13,15 @@ const page = await context.newPage();
 let pageErrors = 0;
 page.on('pageerror', () => { pageErrors += 1; });
 page.on('dialog', dialog => { void dialog.dismiss(); });
+const safeRoute = value => value.replace(/[0-9a-f-]{36}/giu, ':id');
+page.on('request', request => {
+  const url = new URL(request.url());
+  if (url.pathname.startsWith('/api/v1/')) process.stdout.write(`API_REQUEST:${request.method()}:${safeRoute(url.pathname)}\n`);
+});
+page.on('response', response => {
+  const url = new URL(response.url());
+  if (url.pathname.startsWith('/api/v1/')) process.stdout.write(`API_RESPONSE:${response.status()}:${safeRoute(url.pathname)}\n`);
+});
 await page.goto('https://localhost:8443/', { waitUntil: 'domcontentloaded' });
 process.stdout.write('PILOT_BROWSER_READY: enter the owner login privately in Chrome.\n');
 const input = createInterface({ input: process.stdin, output: process.stdout });
@@ -31,7 +40,9 @@ for await (const command of input) {
       const { runJourney } = await import(`./issue11-journey-runner.mjs?run=${Date.now()}`);
       await runJourney({ page, context });
     } catch (error) {
-      const code = error instanceof Error && /^[a-z0-9_:-]+$/u.test(error.message) ? error.message : 'unexpected_browser_error';
+      const code = error instanceof Error && /^[a-z0-9_:-]+$/u.test(error.message) ? error.message
+        : error?.name === 'TimeoutError' ? 'browser_timeout'
+          : error?.name === 'Error' ? 'browser_action_error' : 'unexpected_browser_error';
       process.stdout.write(`JOURNEY_BLOCKED:${code}\n`);
     }
   } else if (action === 'history') {

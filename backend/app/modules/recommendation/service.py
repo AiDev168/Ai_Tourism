@@ -170,7 +170,7 @@ def _validate_budget(value: object) -> bool:
         raise _InvalidRequirements from None
     if not decimal_amount.is_finite() or decimal_amount < 0:
         raise _InvalidRequirements
-    if currency is not None and (not isinstance(currency, str) or currency not in {"IRR", "USD", "AED", "SAR"}):
+    if currency is not None and (not isinstance(currency, str) or currency not in {"IRR", "TOMAN", "USD", "AED", "SAR"}):
         raise _InvalidRequirements
     if not isinstance(unit, str) or not unit.strip():
         raise _InvalidRequirements
@@ -182,7 +182,7 @@ def _validate_budget(value: object) -> bool:
     unit_currency = {
         "rial": "IRR", "irr": "IRR", "million rial": "IRR", "million irr": "IRR",
         "ریال": "IRR", "میلیون ریال": "IRR",
-        "toman": None, "million toman": None, "تومان": None, "میلیون تومان": None,
+        "toman": "TOMAN", "million toman": "TOMAN", "تومان": "TOMAN", "میلیون تومان": "TOMAN",
         "usd": "USD", "dollar": "USD", "million usd": "USD", "million dollar": "USD",
         "دلار": "USD", "میلیون دلار": "USD",
         "aed": "AED", "dirham": "AED", "million aed": "AED", "million dirham": "AED",
@@ -190,7 +190,11 @@ def _validate_budget(value: object) -> bool:
         "\u0631.\u0633": "SAR", "million \u0631.\u0633": "SAR",
     }
     expected_currency = unit_currency.get(normalized_unit, "unsupported")
-    if expected_currency == "unsupported" or currency != expected_currency:
+    # Older persisted profiles may have a null currency beside an explicit
+    # Toman unit. Preserve that representation without converting its amount;
+    # current parser output carries currency="TOMAN".
+    legacy_toman = expected_currency == "TOMAN" and currency is None
+    if expected_currency == "unsupported" or (currency != expected_currency and not legacy_toman):
         raise _InvalidRequirements
     raw = value.get("raw")
     if raw is not None and (not isinstance(raw, str) or len(raw) > 240):
