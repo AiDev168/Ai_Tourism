@@ -367,3 +367,47 @@ def test_step_up_expiry_reads_dict_row_by_column_name(has_current_step_up):
 
     actual = ProviderRegistry(DictRowConnection).step_up_expires_at(user_id, session_id)
     assert actual == (expiry if has_current_step_up else None)
+
+@pytest.mark.parametrize(
+    ("validation_outcome", "audit_outcome"),
+    [("valid", "success"), ("invalid", "failure"), ("unavailable", "failure")],
+)
+def test_validation_record_maps_outcome_to_audit_schema_enum(validation_outcome, audit_outcome):
+    """Provider tests must persist even though audit and validation enums differ."""
+    revision_id, actor_id, validation_id = uuid4(), uuid4(), uuid4()
+    seen = []
+
+    class RecordingConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query, params):
+            normalized = " ".join(query.split())
+            if "INSERT INTO ai_provider.revision_validations" in normalized:
+                seen.append(("validation", params[1]))
+                return _Cursor({"validation_id": validation_id, "outcome": params[1]})
+            if "INSERT INTO ai_provider.audit_events" in normalized:
+                # Mirrors the CHECK constraint in Migration 0015.
+                assert params[4] in {"success", "denied", "failure"}
+                seen.append(("audit", params[4]))
+                assert params[0] == actor_id
+                assert params[3] == str(revision_id)
+                return _Cursor(None)
+            raise AssertionError(normalized)
+
+    details = {
+        "capability": "chat",
+        "test_kind": "inference",
+        "model_selected": True,
+        "capability_verified": True,
+        "actual_inference_passed": True,
+    }
+    saved = ProviderRegistry(RecordingConnection).record_validation(
+        revision_id, outcome=validation_outcome,
+        safe_details=details, actor_id=actor_id,
+    )
+    assert saved["validation_id"] == validation_id
+    assert seen == [("validation", validation_outcome), ("audit", audit_outcome)]
