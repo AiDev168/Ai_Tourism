@@ -13,6 +13,7 @@ from app.core.config import Settings, get_settings
 from app.modules.identity.authorization import Principal, get_principal
 from app.modules.integrations.chat_adapter import ChatReply
 from app.modules.trip.assistant_turns import TurnReservation
+from app.modules.trip.requirements_interpretation import interpret_trip_requirements
 
 OWNER = UUID('9d6c521e-6d84-4a8c-b463-e0fe5a2dc0d1')
 OTHER = uuid4()
@@ -130,6 +131,28 @@ def test_explicit_consent_and_disabled_gateway_do_not_reserve():
     try:
         assert c.post(f'/api/v1/conversations/{CONV}/assistant-turns', json=body()).status_code == 503
         assert repo.calls == 0 and not gateway.calls
+    finally:
+        c.app.dependency_overrides.clear()
+
+
+def test_conversation_api_returns_five_key_typed_assistant_candidate():
+    c, _, _ = client()
+    traveler = c.app.dependency_overrides[get_traveler_repository]()
+    original_conversation = traveler.conversation
+    candidate = interpret_trip_requirements("Plan a trip to Shiraz", "en-US").model_dump(mode="json")
+
+    def with_candidate(user_id, conversation_id):
+        result = original_conversation(user_id, conversation_id)
+        result["messages"][0]["candidate_requirements"] = candidate
+        return result
+
+    traveler.conversation = with_candidate
+    try:
+        response = c.get(f"/api/v1/conversations/{CONV}")
+        assert response.status_code == 200
+        returned = response.json()["messages"][0]["candidate_requirements"]
+        assert returned["contract_version"] == "trip-requirements-v1"
+        assert len(returned) == 5
     finally:
         c.app.dependency_overrides.clear()
 

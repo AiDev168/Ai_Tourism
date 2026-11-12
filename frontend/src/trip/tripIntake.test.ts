@@ -3,6 +3,21 @@ import { createTripRequirements, extractDurationDays, tripRequirementsV1ToTripRe
 
 const intake=(requestText:string,locale:'fa-IR'|'en-US'|'ar'='fa-IR')=>createTripRequirements({requestText,locale});
 describe('natural-language trip intake v2',()=>{
+ it('keeps the owner Persian request as tomorrow, five travelers, historical Shiraz and five million TOMAN',()=>{
+  const text='برای فردا برای 5 نفر برای بازدید از مناطق تاریخی شیراز برنامه ریزی سفر کن و هزینه ای که میخوایم بکنیم 5 میلیون تومان است';
+  const result=intake(text);
+  expect(result.kind).toBe('clarification');
+  if(result.kind==='clarification'){
+   const fields=result.requirements;
+   expect(fields.requestText).toBe(text);
+   expect(fields.destinations.value).toContain('شیراز');
+   expect(fields.travelerCount.value).toBe(5);
+   expect(fields.interests.value).toContain('historical_attractions');
+   expect(fields.relativeStartDate.value?.offset_days).toBe(1);
+   expect(fields.budget.value).toMatchObject({amount:5,currency:'TOMAN'});
+   expect(fields.durationDays.value).toBeNull();
+  }
+ });
  it.each([
   ['سفر ۳ روزه به شیراز به همراه خانواده','fa-IR',3,'شیراز'],
   ['برای ۷ روز به کاشان سفر می‌کنم','fa-IR',7,'کاشان'],
@@ -23,7 +38,7 @@ describe('natural-language trip intake v2',()=>{
  it('flags conflicting durations and alternative destinations for confirmation',()=>{expect(intake('سفر به شیراز برای ۷ روز و ۱۰ روز')).toMatchObject({kind:'clarification',requirements:{ambiguousRequired:['duration']}});expect(intake('Travel to Shiraz or Kashan for 7 days','en-US')).toMatchObject({kind:'clarification',requirements:{ambiguousRequired:['destination']}});});
  it('does not hide a conflict between an explicit day count and a standalone week',()=>expect(intake('Trip to Shiraz for 4 days and one week','en-US')).toMatchObject({kind:'clarification',requirements:{ambiguousRequired:['duration']}}));
  it('uses configurable technical maximum without a three-day cap',()=>{expect(createTripRequirements({requestText:'Trip to Shiraz for 366 days',locale:'en-US'})).toEqual({kind:'invalid',reason:'duration-too-long'});expect(createTripRequirements({requestText:'Trip to Shiraz for 30 days',locale:'en-US',maxDurationDays:30}).kind).toBe('ready');});
- it('preserves the entered budget quantity and denomination without converting Rial or Toman',()=>{const r=intake('برای ۷ روز به شیراز با خانواده سفر می‌کنم؛ بودجه ۲۰ میلیون تومان است و به باغ علاقه دارم');expect(r.kind).toBe('ready');if(r.kind==='ready'){expect(r.requirements.budget.value).toMatchObject({amount:20,unit:'میلیون تومان',currency:null,raw:'20 میلیون تومان'});expect(r.requirements.travelerCount.value).toBeNull();expect(r.requirements.interests.value).toEqual(['باغ']);expect(r.requirements.travelDates.value).toBeNull();}});
+ it('preserves the entered budget quantity and denomination without converting Rial or Toman',()=>{const r=intake('برای ۷ روز به شیراز با خانواده سفر می‌کنم؛ بودجه ۲۰ میلیون تومان است و به باغ علاقه دارم');expect(r.kind).toBe('ready');if(r.kind==='ready'){expect(r.requirements.budget.value).toMatchObject({amount:20,unit:'میلیون تومان',currency:'TOMAN',raw:'20 میلیون تومان'});expect(r.requirements.travelerCount.value).toBeNull();expect(r.requirements.interests.value).toEqual(['باغ']);expect(r.requirements.travelDates.value).toBeNull();}});
  it('keeps unknown optional values from blocking intake',()=>expect(intake('I want to travel to Shiraz for four days','en-US').kind).toBe('ready'));
  it('extracts only an explicit ISO date range and rejects invalid dates as ambiguous',()=>{const valid=intake('Trip to Shiraz for 4 days from 2027-03-02 to 2027-03-05','en-US');expect(valid.kind).toBe('ready');if(valid.kind==='ready')expect(valid.requirements.travelDates.value).toEqual({start:'2027-03-02',end:'2027-03-05'});const invalid=intake('Trip to Shiraz for 4 days from 2027-02-31 to 2027-03-05','en-US');if(invalid.kind==='ready')expect(invalid.requirements.travelDates.status).toBe('ambiguous');});
  it('keeps toman and rial units distinct and extracts only explicitly stated traveler counts',()=>{const toman=intake('Trip to Shiraz for 4 days, budget 20 million toman, four people','en-US');const rial=intake('Trip to Shiraz for 4 days, budget 20 million IRR, four people','en-US');expect(toman.kind).toBe('ready');expect(rial.kind).toBe('ready');if(toman.kind==='ready'&&rial.kind==='ready'){expect(toman.requirements.budget.value?.unit).toBe('million toman');expect(rial.requirements.budget.value?.unit).toBe('million IRR');expect(toman.requirements.budget.value?.amount).toBe(rial.requirements.budget.value?.amount);expect(toman.requirements.travelerCount.value).toBe(4);}});
@@ -31,7 +46,7 @@ describe('natural-language trip intake v2',()=>{
   it('distinguishes Persian stay duration from relative departure wording',()=>{expect(intake('سه روز دیگر به شیراز می‌رویم')).toMatchObject({kind:'clarification',requirements:{durationDays:{value:null},relativeStartDate:{value:{offset_days:3}}}});expect(intake('سفر سه‌روزه به شیراز')).toMatchObject({kind:'ready',requirements:{durationDays:{value:3},relativeStartDate:{value:null}}});});
  it('maps server v1 interpretation without reparsing and preserves unknown currency',()=>{const result=intake('از دو روز دیگه با 4 نفر میخوام برم از مناطق تاریخی شیراز دیدن کنم و فقط 10 میلیون هزینه میخوام بکنم');expect(result.kind).toBe('clarification');if(result.kind==='clarification'){const req=result.requirements;const mapped=tripRequirementsV1ToTripRequirements({contract_version:'trip-requirements-v1',original_text:req.requestText,locale:req.locale,fields:{destination:{status:'known',value:'شیراز',evidence_span:{start:0,end:5,text:'شیراز'}},origin:{status:'missing',value:null},relative_start_date:{status:'known',value:{offset_days:2,anchor_date:null,timezone:null}},duration_days:{status:'missing',value:null},travel_dates:{status:'missing',value:null},travelers:{status:'known',value:4},budget:{status:'known',value:{amount:'10',scale:'million',currency:null,currency_status:'unknown',raw:'10 میلیون'}},interests:{status:'known',value:['historical_attractions']},hard_constraints:{status:'missing',value:null},accessibility:{status:'missing',value:null}},clarification:{missing_fields:['duration_days'],ambiguous_fields:[],question_fields:['duration_days','budget.currency']}});expect(mapped.durationDays.value).toBeNull();expect(mapped.relativeStartDate.value?.offset_days).toBe(2);expect(mapped.budget.value).toMatchObject({amount:10,currency:null,scale:'million'});expect(mapped.requestText).toBe(req.requestText);}});
  it.each([
-  ['Trip to Shiraz for 4 days, budget 20 million toman', 'en-US', 20, null, 'million toman'],
+  ['Trip to Shiraz for 4 days, budget 20 million toman', 'en-US', 20, 'TOMAN', 'million toman'],
   ['Trip to Shiraz for 4 days, budget 20 million IRR', 'en-US', 20, 'IRR', 'million IRR'],
   ['سفر ۴ روزه به شیراز با بودجهٔ ۲۰ میلیون ریال', 'fa-IR', 20, 'IRR', 'میلیون ریال'],
   ['Trip to Shiraz for 4 days, budget 20 million USD', 'en-US', 20, 'USD', 'million USD'],

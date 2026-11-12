@@ -202,7 +202,7 @@ def interpret_trip_requirements(
     )
 
     traveler_match = re.search(
-        rf"(?:با|همراه\s+با|with)\s*{_NUMBER}\s*(?:نفر|مسافر|people|travelers|travellers)",
+        rf"(?:با|همراه\s+با|برای|with)\s*{_NUMBER}\s*(?:نفر|مسافر|people|travelers|travellers)",
         request_text, re.IGNORECASE | re.UNICODE,
     )
     travelers = _number(traveler_match.group("number")) if traveler_match else None
@@ -236,7 +236,18 @@ def interpret_trip_requirements(
         else:
             relative_field = _missing()
     else:
-        relative_field = _missing()
+        tomorrow_match = re.search(r"(?<!\w)(?:برای\s+)?فردا(?!\w)", request_text)
+        if tomorrow_match:
+            anchor = traveler_reference_date
+            relative_field = _known(
+                RelativeStartDateValue(
+                    offset_days=1,
+                    anchor_date=anchor + timedelta(days=1) if anchor else None,
+                    timezone=traveler_timezone,
+                ), _span(request_text, *tomorrow_match.span()),
+            )
+        else:
+            relative_field = _missing()
 
     duration_match, _ = _find_first(request_text, [
         rf"(?:سفر|مدت|به\s*مدت)\s*{_NUMBER}\s*[-\u200c\s]*(?:روزه|روز)",
@@ -259,10 +270,10 @@ def interpret_trip_requirements(
         duration_field = _missing()
 
     amount_pattern = (
-        r"(?P<amount>\d+(?:[،,.]\d+)?|یک|يهك|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده|"
+        r"(?<!\w)(?P<amount>\d+(?:[،,.]\d+)?|یک|يهك|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده|"
         r"one|two|three|four|five|six|seven|eight|nine|ten)\s*"
         r"(?P<scale>میلیون|مليون|million|هزار|thousand|میلیارد|billion)?\s*"
-        r"(?P<currency>تومان|ریال|ريال|IRR|دلار|USD|یورو|EUR|درهم|AED)?"
+        r"(?P<currency>تومان|ریال|ريال|IRR|دلار|USD|یورو|EUR|درهم|AED)?(?!\w)"
     )
     amount_matches = list(re.finditer(amount_pattern, request_text, re.IGNORECASE | re.UNICODE))
     budget_markers = list(re.finditer(r"هزینه|بودجه|خرج|cost|budget|spend", request_text, re.I | re.U))

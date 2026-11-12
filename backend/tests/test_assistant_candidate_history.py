@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.modules.trip.repository import _public_conversation_message
+from app.modules.trip.requirements_interpretation import interpret_trip_requirements
 from app.modules.trip.schemas import MessageResponse
 
 
@@ -98,3 +99,14 @@ def test_history_rejects_unsupported_dates_and_budget_without_denomination():
         }},
     ))
     assert MessageResponse.model_validate(row).candidate_requirements == {}
+
+
+def test_typed_five_key_candidate_survives_owner_history_response_validation():
+    profile = interpret_trip_requirements("Plan a trip to Shiraz", "en-US")
+    row = _public_conversation_message(message(
+        "assistant", {"requirements_candidate": profile.model_dump(mode="json")},
+    ))
+    parsed = MessageResponse.model_validate(row)
+    assert parsed.candidate_requirements["contract_version"] == "trip-requirements-v1"
+    assert len(parsed.candidate_requirements) == 5
+    assert "metadata" not in row

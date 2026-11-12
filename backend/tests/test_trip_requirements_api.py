@@ -56,3 +56,20 @@ def test_persisted_requirements_view_keeps_v1_evidence_and_exact_original_budget
     assert budget["value"]["amount"] == "10"
     assert budget["value"]["currency"] is None
     assert stored["clarificationFields"] == ["destination", "duration_days", "budget.currency"]
+
+
+def test_owner_persian_request_keeps_tomorrow_party_and_toman_without_duration():
+    text = "برای فردا برای 5 نفر برای بازدید از مناطق تاریخی شیراز برنامه ریزی سفر کن و هزینه ای که میخوایم بکنیم 5 میلیون تومان است"
+    result = interpret_trip_requirements(text, "fa-IR")
+    fields = result.fields
+    assert fields.destination.value == "شیراز"
+    assert fields.travelers.value == 5
+    assert fields.interests.value == ["historical_attractions"]
+    assert fields.relative_start_date.value.offset_days == 1
+    assert fields.relative_start_date.value.anchor_date is None
+    assert fields.budget.value.amount == "5", fields.budget.value.raw
+    assert fields.budget.value.scale == "million"
+    assert fields.budget.value.currency == "TOMAN"
+    assert fields.duration_days.status == "missing"
+    assert fields.origin.status == "missing"
+    assert fields.budget.evidence_span.text in text

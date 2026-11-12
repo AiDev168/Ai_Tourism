@@ -190,7 +190,9 @@ class MessageResponse(StrictModel):
     created_at: datetime
     # A bounded, validated advisory object, never authoritative. The repository
     # sanitizes the metadata through TripRequirementsV1 before exposing it.
-    candidate_requirements: dict[str, Any] = Field(default_factory=dict, max_length=4)
+    # The validated trip-requirements-v1 envelope has five top-level keys;
+    # legacy bounded suggestions can contain more than four named fields.
+    candidate_requirements: dict[str, Any] = Field(default_factory=dict, max_length=10)
 
 
 class TripResponse(StrictModel):
