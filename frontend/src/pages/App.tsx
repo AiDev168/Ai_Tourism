@@ -13,10 +13,31 @@ import type { AuthSession } from '../auth/authApi';
 import { TravelerJourney } from '../trip/TravelerJourney';
 import { PwaUpdateNotice } from '../pwa/PwaUpdateNotice';
 import { AiProviderAdminPanel } from '../admin/aiProviders/AiProviderAdminPanel';
+import { displayTripInterest } from '../trip/interestDisplay';
 
 const destinationCatalog = new ApiDestinationCatalogPort();
 
 const languageName: Record<Locale, string> = { 'fa-IR': 'فارسی', 'en-US': 'English', ar: 'العربية' };
+const plannerCopy: Record<Locale, { title: string; intro: string; next: string; budgetScope: string }> = {
+  'fa-IR': {
+    title: 'سفرت را با گفت‌وگو بساز',
+    intro: 'خواسته‌هایت را بنویس. آنچه فهمیده‌ایم را می‌بینی، به سؤال‌های کوتاه پاسخ می‌دهی و پیش از پیشنهاد یا برنامه، خودت اطلاعات سفر را تأیید می‌کنی.',
+    next: 'ادامهٔ گفت‌وگو و بررسی سفر',
+    budgetScope: 'هنوز مشخص نیست این بودجه برای کل سفر است یا هر نفر؛ پیش از اتکا به هزینه، آن را روشن کنید.',
+  },
+  'en-US': {
+    title: 'Plan your trip through conversation',
+    intro: 'Describe what you need, review what we understood, answer short questions, and confirm your trip before suggestions or a plan.',
+    next: 'Continue the conversation',
+    budgetScope: 'We do not yet know whether this budget is for the whole trip or per person. Clarify it before relying on costs.',
+  },
+  ar: {
+    title: 'خطط رحلتك عبر المحادثة',
+    intro: 'اكتب احتياجاتك، وراجع ما فهمناه، وأجب عن أسئلة قصيرة، ثم أكد تفاصيل الرحلة قبل عرض الاقتراحات أو الخطة.',
+    next: 'تابع المحادثة ومراجعة الرحلة',
+    budgetScope: 'لم يتضح بعد ما إذا كانت الميزانية للرحلة كلها أم لكل شخص؛ وضح ذلك قبل الاعتماد على التكلفة.',
+  },
+};
 
 const photos = {
   hero: '/images/naghshe-jahan-1280.webp',
@@ -191,12 +212,12 @@ export function App() {
 
       {!online && <p className="offline-banner" role="status">{t('offline')}</p>}
 
-      <main id="home">
-        <section className="hero">
+      <main id="home" className={authSession ? 'traveler-app' : undefined}>
+        <section className={authSession ? 'hero hero-planner' : 'hero'}>
           <div className="hero-copy">
             <p className="eyebrow"><span className="sun">✳</span>{t('heroEyebrow')}</p>
-            <h1>{t('heroTitle').split('\n').map((line, index) => <span key={index}>{line}<br /></span>)}</h1>
-            <p className="hero-body">{t('heroBody')}</p>
+            <h1>{authSession ? plannerCopy[locale].title : t('heroTitle').split('\n').map((line, index) => <span key={index}>{line}<br /></span>)}</h1>
+            <p className="hero-body">{authSession ? plannerCopy[locale].intro : t('heroBody')}</p>
             <form className="trip-form" onSubmit={submit} noValidate>
               <label htmlFor="trip-prompt">{tripCopy.requestLabel}</label>
               <p className="trip-form-help" id="trip-prompt-help">{tripCopy.requestHelp}</p>
@@ -256,15 +277,17 @@ export function App() {
                   <div><dt>{requirementCopy.relativeDeparture.split('{days}')[0].trim()}</dt><dd>{requirements.relativeStartDate.value ? requirementCopy.relativeDeparture.replace('{days}', formatNumber(locale, requirements.relativeStartDate.value.offset_days)) : tripCopy.unknown}</dd></div>
                   <div><dt>{tripCopy.summaryTravelers}</dt><dd>{requirements.travelerCount.value === null ? tripCopy.unknown : formatNumber(locale, requirements.travelerCount.value)}</dd></div>
                   <div><dt>{tripCopy.summaryBudget}</dt><dd dir="auto">{requirements.budget.value?.raw ?? tripCopy.unknown}</dd></div>
-                  <div><dt>{tripCopy.summaryInterests}</dt><dd dir="auto">{requirements.interests.value?.join('، ') ?? tripCopy.unknown}</dd></div>
+                  <div><dt>{tripCopy.summaryInterests}</dt><dd dir="auto">{requirements.interests.value?.map(value => displayTripInterest(value, locale)).join('، ') ?? tripCopy.unknown}</dd></div>
                   <div><dt>{tripCopy.summaryDates}</dt><dd dir="auto">{requirements.travelDates.value ? `${requirements.travelDates.value.start} – ${requirements.travelDates.value.end}` : tripCopy.unknown}</dd></div>
                   <div><dt>{tripCopy.summaryConstraints}</dt><dd dir="auto">{requirements.constraints.value?.join('، ') ?? tripCopy.unknown}</dd></div>
                 </dl>
+                {requirements.budget.value && <p className="trip-budget-scope" role="note">{plannerCopy[locale].budgetScope}</p>}
+                {authSession && <a className="planner-next-link" href="#itinerary">{plannerCopy[locale].next} ↓</a>}
               </section>}
             </form>
           </div>
 
-          <figure className="hero-art">
+          {!authSession && <figure className="hero-art">
             {heroImageFailed ? (
               <div className="image-fallback" role="img" aria-label={t('imageFallback')}>{t('imageFallback')}</div>
             ) : (
@@ -288,7 +311,7 @@ export function App() {
               <span>{t('heroLocation')}</span>
               <PhotoCredit source={photoSources.hero} author="Bernard Gagnon" label={t('photoCreditLabel')} />
             </figcaption>
-          </figure>
+          </figure>}
         </section>
 
         <PwaUpdateNotice locale={locale} />
@@ -309,7 +332,7 @@ export function App() {
           onStartNewDraft={clearTripDraft}
         />
 
-        <section className="section discover" id="discover">
+        {!authSession && <section className="section discover" id="discover">
           <div className="section-heading">
             <div>
               <p className="eyebrow">{t('explore')}</p>
@@ -355,7 +378,7 @@ export function App() {
               </div>
             </article>
           </div>
-        </section>
+        </section>}
 
       </main>
 

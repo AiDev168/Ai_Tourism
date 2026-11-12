@@ -11,6 +11,7 @@ import { tripRequirementsV1ToTripRequirements, type TripRequirementsV1 } from '.
 import { requirementClarificationMessages } from '../i18n/requirementClarificationMessages';
 import { TravelerGuidance } from './TravelerGuidance';
 import { nextTripQuestion } from './clarificationGuide';
+import { displayTripInterest, reviewedTripInterests } from './interestDisplay';
 import {
   travelerApi, TravelerApiError, parseRetrievalEvidence, type ConversationRecord, type ConversationSummary,
   type ItineraryRecord, type ItineraryStop, type RecommendationResult, type RequirementConsentDecision,
@@ -18,6 +19,12 @@ import {
 } from './travelerApi';
 
 const catalog = new ApiDestinationCatalogPort();
+
+const chatFlowCopy: Record<Locale, { start: string; conversation: string; oneDay: string; twoDays: string; review: string; relativeDate: string }> = {
+  'fa-IR': { start: 'ذخیرهٔ درخواست و شروع گفت‌وگو', conversation: 'گفت‌وگوی همین سفر', oneDay: 'یک روز', twoDays: 'دو روز', review: 'گام بعد: اطلاعات سفر را بررسی و تأیید کنید', relativeDate: 'گفتید حرکت فردا یا چند روز دیگر است. تاریخ شروع و پایان را بر اساس تقویم خودتان انتخاب و تأیید کنید؛ ما تاریخ را از ساعت سرور حدس نمی‌زنیم.' },
+  'en-US': { start: 'Save request and start conversation', conversation: 'This trip’s conversation', oneDay: 'One day', twoDays: 'Two days', review: 'Next: review and confirm your trip details', relativeDate: 'You gave a relative departure date. Select and confirm calendar dates in your timezone; we do not guess them from the server clock.' },
+  ar: { start: 'احفظ الطلب وابدأ المحادثة', conversation: 'محادثة هذه الرحلة', oneDay: 'يوم واحد', twoDays: 'يومان', review: 'التالي: راجع تفاصيل الرحلة وأكدها', relativeDate: 'ذكرت موعد مغادرة نسبيًا. اختر تاريخ البداية والنهاية وفق تقويمك وأكدهما؛ لا نخمن التاريخ من ساعة الخادم.' },
+};
 
 export function LocationReference({ coordinate, locale }: { coordinate?: ProductionDestinationCandidate['coordinate']; locale: Locale }) {
   if (!coordinate) return null;
@@ -193,7 +200,11 @@ function validTravelDates(start: string, end: string): boolean {
 }
 
 function parseInterests(text: string): string[] {
-  return [...new Set(text.split(/[,،؛;]/u).map(value => value.trim()).filter(Boolean))];
+  return reviewedTripInterests(text);
+}
+
+function displayInterests(values: readonly string[], locale: Locale): string {
+  return values.map(value => displayTripInterest(value, locale)).join('، ');
 }
 
 function consentFieldsForReviewedProfile(
@@ -473,7 +484,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         setBudgetText(requirements.budget.value?.raw ?? '');
         setTravelStartText(requirements.travelDates.value?.start ?? '');
         setTravelEndText(requirements.travelDates.value?.end ?? '');
-        setInterestText(requirements.interests.value?.join('، ') ?? '');
+        setInterestText(displayInterests(requirements.interests.value ?? [], locale));
         const suggestedDays = validDayCount(requirements.durationDays.value);
         if (!activeTrip?.latest_itinerary_id && suggestedDays !== null) setDayCount(suggestedDays);
         void resolveNames(requirements.destinations.value ?? []);
@@ -529,6 +540,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       setStatus(copy.saveSuccess);
       const history = await travelerApi.listConversations(50);
       setConversations(history.items);
+      requestAnimationFrame(() => document.getElementById('trip-follow-up')?.focus());
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
   };
@@ -579,7 +591,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       setBudgetText(restoredBudget);
       setTravelStartText(restoredStart);
       setTravelEndText(restoredEnd);
-      setInterestText(restoredInterests.join('، '));
+      setInterestText(displayInterests(restoredInterests, locale));
       if (parsed) {
         restoringRequestRef.current = parsed.requestText;
         onRestoreRequest(parsed.requestText, parsed);
@@ -651,7 +663,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         setBudgetText(latest.budget.value?.raw ?? '');
         setTravelStartText(latest.travelDates.value?.start ?? '');
         setTravelEndText(latest.travelDates.value?.end ?? '');
-        setInterestText(latest.interests.value?.join('، ') ?? '');
+        setInterestText(displayInterests(latest.interests.value ?? [], locale));
         restoringRequestRef.current = latest.requestText;
         onRestoreRequest(latest.requestText, latest);
         void resolveNames(latest.destinations.value ?? []);
@@ -724,7 +736,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       setTravelEndText(reviewedAssistantCandidate.travelEnd);
     }
     if (reviewedAssistantCandidate.interest !== undefined) {
-      setInterestText(current => parseInterests([current, reviewedAssistantCandidate.interest!].filter(Boolean).join('، ')).join('، '));
+      setInterestText(current => displayInterests(parseInterests([current, reviewedAssistantCandidate.interest!].filter(Boolean).join('، ')), locale));
     }
     setDirty(true);
     invalidateConsent(); // Explicit profile confirmation remains mandatory.
@@ -875,9 +887,13 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   return (
     <section className="traveler-workspace" id="itinerary" dir={locale === 'en-US' ? 'ltr' : 'rtl'} aria-labelledby="traveler-workspace-title">
       <div className="traveler-workspace-heading">
-        <div><p className="eyebrow">{copy.workspaceTitle}</p><h2 id="traveler-workspace-title">{activeTrip ? activeTrip.original_request : copy.workspaceTitle}</h2></div>
+        <div><p className="eyebrow">{copy.workspaceTitle}</p><h2 id="traveler-workspace-title">{activeTrip ? chatFlowCopy[locale].conversation : copy.workspaceTitle}</h2></div>
         {activeTrip && <span className="saved-pill">{copy.savedRecord}</span>}
       </div>
+
+      {requirements && !activeTrip && <button className="primary journey-action" type="button" onClick={() => void persistDraft()} disabled={busy || !session || !online}>
+        {busy ? copy.saving : activeConversation ? copy.createAnotherTrip : chatFlowCopy[locale].start}
+      </button>}
 
       <TravelerGuidance locale={locale} hasTrip={Boolean(activeTrip)} confirmed={confirmed}
         hasRecommendations={Boolean(recommendations)} hasItinerary={Boolean(itinerary)} />
@@ -887,9 +903,6 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       {error && <p className="journey-error" role="alert">{error}</p>}
       {status && <p className="journey-status" role="status">{status}</p>}
 
-      {requirements && !activeTrip && <button className="primary journey-action" type="button" onClick={() => void persistDraft()} disabled={busy || !session || !online}>
-        {busy ? copy.saving : activeConversation ? copy.createAnotherTrip : copy.saveTrip}
-      </button>}
       {requirements && activeTrip && dirty && session
         && requirements.requestText !== activeTrip.original_request
         && <button className="primary journey-action" type="button" onClick={() => void (async () => {
@@ -936,16 +949,24 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             <button type="button" disabled={busy || !online} onClick={() => {
               document.getElementById('trip-follow-up')?.focus();
             }}>{guidedQuestion.answerLabel}</button>
+            {guidedQuestion.field === 'duration' && <div className="clarification-short-answers">
+              {([['1', chatFlowCopy[locale].oneDay], ['2', chatFlowCopy[locale].twoDays]] as const).map(([days, label]) =>
+                <button key={days} type="button" disabled={busy || !online} onClick={() => {
+                  setMessageText(locale === 'fa-IR' ? `مدت سفر ${days} روز است.` : locale === 'ar' ? `مدة الرحلة ${days} يوم.` : `The trip is ${days} day${days === '1' ? '' : 's'}.`);
+                  setAssistantPromptSelected(false);
+                  document.getElementById('trip-follow-up')?.focus();
+                }}>{label}</button>)}
+            </div>}
           </div>}
           <div className="assistant-prompt-suggestions" aria-label={assistantCopy[locale].promptsTitle}>
-            <p>{assistantCopy[locale].promptsTitle}</p>
+            <details><summary>{assistantCopy[locale].promptsTitle}</summary>
             <p>{assistantCopy[locale].promptHelp}</p>
             <div>{assistantCopy[locale].prompts.map(prompt => <button key={prompt} type="button"
               disabled={busy || !online} onClick={() => {
                 setMessageText(prompt);
                 setAssistantPromptSelected(true);
                 document.getElementById('trip-follow-up')?.focus();
-              }}>{prompt}</button>)}</div>
+              }}>{prompt}</button>)}</div></details>
           </div>
           <label htmlFor="trip-follow-up">{copy.messagePlaceholder}</label>
           <textarea id="trip-follow-up" value={messageText}
@@ -1028,6 +1049,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
 
         <article className="recommend-panel journey-panel" id="journey-recommendations">
           <div className="panel-title"><span className="mini-icon" aria-hidden="true">↗</span>{copy.profileTitle}</div>
+          <p className="profile-next-step">{chatFlowCopy[locale].review}</p>
           {extracted && <div className="profile-editor">
             <fieldset>
               <legend>{copy.profileDestination}</legend>
@@ -1085,6 +1107,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
               onChange={event => { setBudgetText(event.target.value); setDirty(true); invalidateConsent(); }} />
             {!budgetValid && <p className="journey-error" role="alert">{copy.profileBudgetInvalid}</p>}
             <label htmlFor="profile-travel-start">{copy.profileTravelStart}</label>
+            {extracted?.relativeStartDate?.value && !extracted.travelDates.value && <p className="profile-relative-date" role="note">{chatFlowCopy[locale].relativeDate}</p>}
             <input id="profile-travel-start" type="date" value={travelStartText}
               onChange={event => { setTravelStartText(event.target.value); setDirty(true); invalidateConsent(); }} />
             <label htmlFor="profile-travel-end">{copy.profileTravelEnd}</label>

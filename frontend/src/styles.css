@@ -73,6 +73,16 @@ button { cursor: pointer; }
   gap: clamp(32px, 6vw, 96px); align-items: center;
 }
 .hero-copy { min-width: 0; padding-block: 10px; }
+.hero-planner { display: block; max-width: 1240px; padding-block: 26px 10px; }
+.hero-planner .hero-copy { padding: 0; }
+.hero-planner h1 { font-size: clamp(27px, 4vw, 43px); margin-block-end: 10px; }
+.hero-planner .hero-body { max-width: 72ch; margin-block-end: 16px; }
+.hero-planner .trip-form { max-width: none; box-shadow: none; }
+.hero-planner .trip-form textarea { min-height: 105px; font-size: 16px; }
+.hero-planner .trip-summary dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.trip-budget-scope { margin-block: 12px; color: #765424; font-size: 12px; line-height: 1.8; }
+.planner-next-link { display: inline-flex; margin-block-start: 12px; padding: 10px 16px; border-radius: 999px; background: var(--forest); color: white; font-weight: 750; text-decoration: none; }
+.traveler-app .traveler-workspace { padding-block-start: 12px; }
 .eyebrow {
   margin: 0 0 15px; display: flex; align-items: center; gap: 9px; color: var(--clay);
   font-size: 11px; font-weight: 750; line-height: 1.7;
@@ -215,6 +225,14 @@ button { cursor: pointer; }
 .saved-message { padding: 12px; border-radius: 14px; background: #f4efe5; overflow-wrap: anywhere; }
 .saved-message p { white-space: pre-wrap; margin-block: 6px 0; }
 .saved-message-assistant, .saved-message-system, .saved-message-tool { background: #eef3ed; }
+.saved-message-user { margin-inline-start: 14%; }
+.saved-message-assistant { margin-inline-end: 14%; border-inline-start: 3px solid var(--forest); }
+.clarification-short-answers { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 10px; }
+.clarification-short-answers button { border: 1px solid var(--forest); border-radius: 999px; padding: 8px 14px; background: white; color: var(--forest-deep); }
+.assistant-prompt-suggestions details { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.assistant-prompt-suggestions summary { cursor: pointer; font-weight: 700; }
+.profile-next-step { margin: 12px 0 0; color: var(--forest-deep); font-weight: 700; }
+.profile-relative-date { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fff4d8; color: #674d29; line-height: 1.8; }
 .profile-editor, .recommendation-controls, .itinerary-start { display: grid; gap: 12px; margin-block-start: 16px; }
 .profile-editor input, .profile-editor textarea, .journey-panel textarea,
 .saved-stop textarea, .journey-panel select, .saved-stop select {
@@ -261,6 +279,8 @@ button { cursor: pointer; }
   outline-offset: 3px;
 }
 @media (max-width: 760px) {
+  .hero-planner { padding: 20px 18px 8px; }
+  .hero-planner .trip-summary dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .traveler-workspace { padding: 30px 18px 52px; }
   .journey-columns { grid-template-columns: minmax(0, 1fr); }
   .traveler-workspace-heading, .history-trip { align-items: stretch; }
