@@ -852,15 +852,32 @@ function Stop-LocalPilotManagedProcess($ProcessState, [string]$Kind, $State) {
     }
     $cim = Get-CimInstance Win32_Process -Filter "ProcessId = $([int]$ProcessState.pid)" -ErrorAction Stop
     $command = [string]$cim.CommandLine
+    if ([string]::IsNullOrWhiteSpace($command)) {
+        # Some Windows process providers omit CommandLine/ExecutablePath for a
+        # same-user process even when PID, start time and its owned loopback
+        # socket remain observable. In that case require all three identity
+        # anchors instead of weakening the check to PID alone.
+        $owner = Invoke-CimMethod -InputObject $cim -MethodName GetOwner -ErrorAction Stop
+        $currentOwner = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+        if (-not $owner.User -or "$($owner.Domain)\$($owner.User)" -cne $currentOwner -or
+            [IO.Path]::GetFileName([string]$ProcessState.executable) -ine $(if ($Kind -eq 'api') {'python.exe'} else {'node.exe'})) {
+            throw "Refusing to stop a process with incomplete Windows identity metadata ($Kind)."
+        }
+        $port = if ($Kind -eq 'api') { [int]$State.api_port } else { [int]$State.https_port }
+        $listeners = @(Get-NetTCPConnection -State Listen -LocalAddress 127.0.0.1 -LocalPort $port -ErrorAction SilentlyContinue |
+            Where-Object { [int]$_.OwningProcess -eq [int]$ProcessState.pid })
+        if ($listeners.Count -ne 1) { throw "Refusing to stop a process whose recorded loopback listener cannot be verified ($Kind)." }
+    }
     if ($Kind -eq 'api') {
-        if ($command -notmatch 'python(\.exe)?' -or $command -notmatch 'app\.main:app' -or
-            $command -notmatch "--port\s+$([int]$State.api_port)" -or $command -notmatch '127\.0\.0\.1') {
+        $invalidApiCommand = $command -and ($command -notmatch 'python(\.exe)?' -or $command -notmatch 'app\.main:app' -or
+            $command -notmatch "--port\s+$([int]$State.api_port)" -or $command -notmatch '127\.0\.0\.1')
+        if ($invalidApiCommand) {
             throw 'Refusing to stop a process that no longer matches the recorded API identity.'
         }
     } else {
         $proxyScript = [regex]::Escape((Join-Path $ProjectRoot 'engineering\pilot\local_https_proxy.mjs'))
         $listener = @(Get-NetTCPConnection -State Listen -LocalAddress 127.0.0.1 -LocalPort ([int]$State.https_port) -ErrorAction SilentlyContinue)
-        if ($command -notmatch 'node(\.exe)?' -or $command -notmatch $proxyScript -or
+        if (($command -and ($command -notmatch 'node(\.exe)?' -or $command -notmatch $proxyScript)) -or
             -not ($listener | Where-Object { [int]$_.OwningProcess -eq [int]$ProcessState.pid })) {
             throw 'Refusing to stop a process that no longer matches the recorded HTTPS proxy identity.'
         }
@@ -1327,7 +1344,8 @@ function Invoke-LocalPilotUpgrade {
         Invoke-LocalPilotDockerSql @"
 GRANT CREATE ON DATABASE $($Paths.Database) TO rahgard_pilot_geo_migrator;
 GRANT USAGE, CREATE ON SCHEMA identity TO rahgard_pilot_geo_migrator;
-GRANT REFERENCES(user_id) ON identity.users, identity.web_sessions TO rahgard_pilot_geo_migrator;
+GRANT REFERENCES(user_id) ON identity.users TO rahgard_pilot_geo_migrator;
+GRANT REFERENCES(session_id) ON identity.web_sessions TO rahgard_pilot_geo_migrator;
 "@ -Database $Paths.Database
         $migrationDockerArgs = @('-e',('RAHGARD_PILOT_DATABASE_MARKER=' + $state.marker),
             '-e',('RAHGARD_PILOT_MIGRATION_0014_SHA256=' + $state.migration_0014_sha256),
@@ -1337,7 +1355,8 @@ GRANT REFERENCES(user_id) ON identity.users, identity.web_sessions TO rahgard_pi
             Invoke-LocalPilotDockerSql @"
 REVOKE CREATE ON DATABASE $($Paths.Database) FROM rahgard_pilot_geo_migrator;
 REVOKE CREATE ON SCHEMA identity FROM rahgard_pilot_geo_migrator;
-REVOKE REFERENCES(user_id) ON identity.users, identity.web_sessions FROM rahgard_pilot_geo_migrator;
+REVOKE REFERENCES(user_id) ON identity.users FROM rahgard_pilot_geo_migrator;
+REVOKE REFERENCES(session_id) ON identity.web_sessions FROM rahgard_pilot_geo_migrator;
 "@ -Database $Paths.Database
         }
         $migrationRow = & docker exec $Paths.Container psql -X -q -A -t -U ai_tourism_owner -d $Paths.Database `

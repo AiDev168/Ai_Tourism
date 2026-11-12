@@ -67,6 +67,9 @@ def test_activation_is_cas_guarded_validated_and_keeps_secret_reference_opaque()
     assert result.config["capabilities"]["chat"]["model"] == "real-model-id"
     assert any("FOR UPDATE" in query for query, _ in connection.queries)
     assert any("generation=%s" in query for query, _ in connection.queries)
+    validation_query = next(query for query, _ in connection.queries if "revision_validations" in query)
+    assert "details->>'capability'=%s" in validation_query
+    assert "details->>'test_kind'='inference'" in validation_query
     assert "dpapi:opaque-ref-123" not in " ".join(query for query, _ in connection.queries)
 
 
@@ -144,6 +147,54 @@ def test_unsupported_capability_and_stale_expected_generation_fail_closed():
         ProviderRegistry(lambda: connection).deactivate("chat", expected_generation=4, actor_id=uuid4())
 
 
+@pytest.mark.parametrize("capability", ["vision", "embedding", "reranking"])
+def test_independent_capability_route_requires_its_own_validated_inference(capability):
+    revision_id = uuid4()
+
+    class CapabilityConnection:
+        def __init__(self):
+            self.generation = 2
+            self.queries = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query, params=None):
+            normalized = " ".join(query.split())
+            self.queries.append((normalized, params))
+            if "FROM ai_provider.active_routes WHERE capability=%s FOR UPDATE" in normalized:
+                return _Cursor({"revision_id": None, "generation": self.generation})
+            if "FROM ai_provider.revisions r JOIN ai_provider.profiles" in normalized:
+                return _Cursor({
+                    "revision_id": revision_id,
+                    "profile_id": uuid4(),
+                    "config": {"capabilities": {capability: {"model_id": f"{capability}-model"}}},
+                    "secret_ref": "opaque-vault-reference",
+                    "enabled": True,
+                    "archived_at": None,
+                    "latest_validation": "valid",
+                })
+            if "UPDATE ai_provider.active_routes SET" in normalized:
+                self.generation += 1
+                return _Cursor({"generation": self.generation})
+            if "INSERT INTO ai_provider.audit_events" in normalized:
+                return _Cursor(None)
+            raise AssertionError(normalized)
+
+    connection = CapabilityConnection()
+    active = ProviderRegistry(lambda: connection).activate(
+        capability, revision_id, expected_generation=2, actor_id=uuid4()
+    )
+    assert active.capability == capability
+    assert active.revision_id == revision_id
+    validation_query = next(query for query, _ in connection.queries if "revision_validations" in query)
+    assert "details->>'capability'=%s" in validation_query
+    assert "details->>'test_kind'='inference'" in validation_query
+
+
 @pytest.mark.parametrize("args", [
     ("chat", True, []),
     ("chat", False, [uuid4()]),
@@ -175,6 +226,28 @@ def test_secret_material_cannot_be_embedded_in_revision_config_or_validation_det
     assert ProviderRegistry._validation_details({"latency_ms": 25, "error_code": "timeout"}) == {
         "latency_ms": 25, "error_code": "timeout"
     }
+
+
+def test_inference_validation_details_cannot_be_claimed_by_discovery_or_partial_result():
+    with pytest.raises(RegistryRejected, match="Inference success"):
+        ProviderRegistry._validation_details({
+            "capability": "embedding", "test_kind": "discovery",
+            "models_catalog_reachable": True, "model_selected": True,
+            "capability_verified": False, "actual_inference_passed": True,
+        })
+    assert ProviderRegistry._validation_details({"capability": "chat", "test_kind": "inference"}) == {
+        "capability": "chat", "test_kind": "inference"
+    }
+
+
+def test_valid_inference_record_cannot_be_written_without_all_success_flags():
+    registry = ProviderRegistry(lambda: pytest.fail("invalid validation must fail before DB"))
+    with pytest.raises(RegistryRejected, match="successful model capability test"):
+        registry.record_validation(uuid4(), outcome="valid", actor_id=uuid4(), safe_details={
+            "capability": "embedding", "test_kind": "inference",
+            "models_catalog_reachable": True, "model_selected": True,
+            "capability_verified": False, "actual_inference_passed": False,
+        })
 
 
 def test_migration_has_marker_guard_opaque_refs_and_disabled_fallback():

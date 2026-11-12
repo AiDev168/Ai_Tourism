@@ -36,4 +36,20 @@ describe('provider administration client', () => {
     expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({ code: 'one-time-test-code' });
     expect(((fetchMock.mock.calls[0][1] as RequestInit).headers as Record<string, string>)['X-CSRF-Token']).toBe('csrf-memory');
   });
+
+  it('keeps discovery distinct from bounded explicit inference and uses per-capability fallback routes', async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => new Response(JSON.stringify(init?.method === 'PUT' ? { capability: 'vision', enabled: true, ordered_revision_ids: ['rev-v'] } : { status: 'reachable', models: ['vision-model'], capability_support: { chat: 'unknown', vision: 'supported', embedding: 'unsupported', reranking: 'unknown' } }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await providerAdminApi.discoverModels('csrf', 'profile/one');
+    await providerAdminApi.testConnection('csrf', 'profile/one', 'vision', 'vision-model');
+    await providerAdminApi.testInference('csrf', 'profile/one', 'vision', 'vision-model');
+    await providerAdminApi.saveFallback('csrf', { capability: 'vision', enabled: true, ordered_revision_ids: ['rev-v'] });
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/profiles/profile%2Fone/discover-models');
+    expect(JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body))).toEqual({ capability: 'vision', model_id: 'vision-model', test_kind: 'discovery' });
+    expect(JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body))).toEqual({ capability: 'vision', model_id: 'vision-model', test_kind: 'inference', max_output_tokens: 32 });
+    expect(String(fetchMock.mock.calls[3][0])).toContain('/fallback/vision');
+    expect(JSON.parse(String((fetchMock.mock.calls[3][1] as RequestInit).body))).toEqual({ enabled: true, ordered_revision_ids: ['rev-v'] });
+    expect(() => providerAdminApi.testInference('csrf', 'p', 'chat', 'm', 65)).toThrow(RangeError);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
 });

@@ -284,6 +284,15 @@ class ProviderRegistry:
         if outcome not in {"valid", "invalid", "unavailable"}:
             raise RegistryRejected("Invalid validation outcome")
         safe_details = self._validation_details(safe_details)
+        if outcome == "valid" and (
+            not safe_details.get("capability") or not safe_details.get("test_kind")
+        ):
+            raise RegistryRejected("Successful validation must identify its capability and test kind")
+        if outcome == "valid" and safe_details.get("test_kind") == "inference" and not all(
+            safe_details.get(key) is True
+            for key in ("model_selected", "capability_verified", "actual_inference_passed")
+        ):
+            raise RegistryRejected("Inference validation requires a successful model capability test")
         with self._connect() as conn:
             cur = conn.execute(
                 """INSERT INTO ai_provider.revision_validations(revision_id,outcome,details,validated_by)
@@ -296,6 +305,20 @@ class ProviderRegistry:
             self._audit(conn, actor_id, "revision_validated", "revision", str(revision_id), outcome,
                         {"validation_id": str(result["validation_id"])})
             return result
+
+    def capability_validation(
+        self, revision_id: UUID, capability: str, *, test_kind: str = "inference"
+    ) -> dict[str, Any] | None:
+        cap = _validate_capability(capability)
+        if test_kind not in {"discovery", "inference"}:
+            raise RegistryRejected("Invalid provider validation kind")
+        with self._connect() as conn:
+            return _row(conn.execute(
+                """SELECT outcome,details,validated_at FROM ai_provider.revision_validations
+                   WHERE revision_id=%s AND details->>'capability'=%s AND details->>'test_kind'=%s
+                   ORDER BY validated_at DESC,validation_id DESC LIMIT 1""",
+                (revision_id, cap, test_kind),
+            ))
 
     def active_snapshot(self, capability: str) -> ActiveRoute:
         cap = _validate_capability(capability)
@@ -324,9 +347,11 @@ class ProviderRegistry:
             cur = conn.execute(
                 """SELECT r.revision_id,r.config,r.secret_ref,p.enabled,p.archived_at,
                           (SELECT v.outcome FROM ai_provider.revision_validations v
-                           WHERE v.revision_id=r.revision_id ORDER BY v.validated_at DESC LIMIT 1) AS latest_validation
+                           WHERE v.revision_id=r.revision_id AND v.details->>'capability'=%s
+                             AND v.details->>'test_kind'='inference'
+                           ORDER BY v.validated_at DESC,v.validation_id DESC LIMIT 1) AS latest_validation
                    FROM ai_provider.revisions r JOIN ai_provider.profiles p USING(profile_id)
-                   WHERE r.revision_id=%s""", (revision_id,)
+                   WHERE r.revision_id=%s""", (cap, revision_id)
             )
             item = _row(cur)
             if item is None:
@@ -369,10 +394,12 @@ class ProviderRegistry:
                 cur = conn.execute(
                     """SELECT r.revision_id,r.profile_id,r.config,r.secret_ref,p.enabled,p.archived_at,
                               (SELECT outcome FROM ai_provider.revision_validations v
-                               WHERE v.revision_id=r.revision_id ORDER BY validated_at DESC LIMIT 1) AS latest_validation
+                               WHERE v.revision_id=r.revision_id AND v.details->>'capability'=%s
+                                 AND v.details->>'test_kind'='inference'
+                               ORDER BY v.validated_at DESC,v.validation_id DESC LIMIT 1) AS latest_validation
                        FROM ai_provider.revisions r JOIN ai_provider.profiles p USING(profile_id)
                        WHERE r.revision_id=%s""",
-                    (revision_id,),
+                    (cap, revision_id),
                 )
                 selected = _row(cur)
                 if selected is None:
@@ -426,10 +453,12 @@ class ProviderRegistry:
                     cur = conn.execute(
                         """SELECT r.config,p.enabled,p.archived_at,
                                   (SELECT outcome FROM ai_provider.revision_validations v
-                                   WHERE v.revision_id=r.revision_id ORDER BY validated_at DESC LIMIT 1) AS result
+                                   WHERE v.revision_id=r.revision_id AND v.details->>'capability'=%s
+                                     AND v.details->>'test_kind'='inference'
+                                   ORDER BY v.validated_at DESC,v.validation_id DESC LIMIT 1) AS result
                            FROM ai_provider.revisions r JOIN ai_provider.profiles p USING(profile_id)
                            WHERE r.revision_id=%s""",
-                        (revision_id,),
+                        (cap, revision_id),
                     )
                     candidate = _row(cur)
                     if (candidate is None or not candidate["enabled"] or candidate["archived_at"] is not None
@@ -732,7 +761,9 @@ class ProviderRegistry:
     @staticmethod
     def _validation_details(value: Mapping[str, Any]) -> dict[str, Any]:
         allowed = {"status_code", "latency_ms", "error_code", "available_model_count",
-                   "tested_model_id", "capability", "model_available"}
+                   "tested_model_id", "capability", "model_available", "test_kind",
+                   "models_catalog_reachable", "model_selected", "capability_verified",
+                   "actual_inference_passed"}
         if any(key not in allowed for key in value):
             raise RegistryRejected("Validation details contain an unsupported field")
         result = dict(value)
@@ -746,11 +777,13 @@ class ProviderRegistry:
             raise RegistryRejected("Validation details contain an invalid latency")
         if result.get("available_model_count") is not None and result["available_model_count"] > 1000:
             raise RegistryRejected("Validation details contain an invalid model count")
-        for key in ("error_code", "capability"):
+        for key in ("error_code", "capability", "test_kind"):
             item = result.get(key)
             if item is not None and (not isinstance(item, str) or not 1 <= len(item) <= 80
                                      or any(ch not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for ch in item)):
                 raise RegistryRejected("Validation details contain an invalid code")
+        if result.get("test_kind") is not None and result["test_kind"] not in {"discovery", "inference"}:
+            raise RegistryRejected("Validation details contain an invalid test kind")
         model_id = result.get("tested_model_id")
         if model_id is not None and (not isinstance(model_id, str) or not 1 <= len(model_id) <= 160
                                      or any(ord(ch) < 32 for ch in model_id)):
@@ -758,4 +791,14 @@ class ProviderRegistry:
         available = result.get("model_available")
         if available is not None and type(available) is not bool:
             raise RegistryRejected("Validation details contain an invalid availability flag")
+        for key in ("models_catalog_reachable", "model_selected", "capability_verified", "actual_inference_passed"):
+            item = result.get(key)
+            if item is not None and type(item) is not bool:
+                raise RegistryRejected("Validation details contain an invalid test result flag")
+        if result.get("actual_inference_passed") is True and (
+            result.get("test_kind") != "inference"
+            or result.get("capability_verified") is not True
+            or result.get("model_selected") is not True
+        ):
+            raise RegistryRejected("Inference success requires a verified selected model and capability")
         return result

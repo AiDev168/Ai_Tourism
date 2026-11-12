@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
@@ -12,18 +14,20 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import Response
 from psycopg.rows import dict_row
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, StrictBool, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StrictBool, StrictInt, field_validator, model_validator
 
 from app.api.auth import authenticated_user, require_authenticated_csrf
 from app.core.config import Settings, get_settings
+from app.modules.identity.auth_repository import AuthRepository
 from app.modules.identity.auth_service import AuthenticatedUser
 from app.modules.provider_admin.providers import (
     ChatProviderConfig,
-    OpenAiCompatibleChatAdapter,
+    OpenAiCompatibleProviderAdapter,
     ProviderAuthenticationError,
     ProviderConfigurationError,
+    ProviderCapabilityUnsupported,
     ProviderTransportError,
-    validate_chat_config,
+    validate_provider_base_config,
 )
 from app.modules.provider_admin.registry import (
     ProviderRegistry,
@@ -42,6 +46,29 @@ from app.modules.provider_admin.vault import DpapiSecretVault, VaultUnavailable
 
 router = APIRouter(prefix="/api/v1/admin/ai-providers", tags=["ai-provider-admin"])
 _CAPABILITIES = {"chat", "vision", "embedding", "reranking"}
+_MFA_FAILURE_LIMIT = 5
+
+
+def _consume_admin_mfa_attempt(settings: Settings, user: AuthenticatedUser, now: datetime) -> None:
+    """Apply a privacy-preserving, per-admin rolling-window limit to MFA proofs."""
+    secret = settings.auth_rate_limit_secret
+    if secret is None:
+        raise HTTPException(status_code=503, detail="provider_admin_unavailable") from None
+    digest = hmac.new(
+        secret.get_secret_value().encode("utf-8"),
+        b"rahgard:provider-admin-mfa:v1\0" + user.user_id.bytes,
+        hashlib.sha256,
+    ).digest()
+    try:
+        allowed = AuthRepository(settings).allow_verification_attempt(
+            [("verify_challenge", digest, _MFA_FAILURE_LIMIT)],
+            now,
+            settings.auth_rate_window_seconds,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="provider_admin_unavailable") from None
+    if not allowed:
+        raise HTTPException(status_code=429, detail="mfa_rate_limited")
 
 
 class CapabilityBinding(BaseModel):
@@ -74,11 +101,17 @@ class ProfileWrite(BaseModel):
     def supported_capabilities(cls, value):
         if set(value) - _CAPABILITIES:
             raise ValueError("Unsupported capability")
-        # The current tested transport and production call path implements Chat
-        # only. A saved configuration must not suggest unimplemented support.
-        if set(value) != {"chat"}:
-            raise ValueError("Only the verified Chat capability is currently supported")
         return value
+
+    @model_validator(mode="after")
+    def provider_capability_contract(self):
+        # GapGPT's account-specific API capability list has not yet been
+        # verified. Keep it Chat-only until the operator has tested and
+        # approved its actual account contract. Local LM Studio capabilities
+        # are independently tested before activation.
+        if self.provider_kind == "openai_compatible" and set(self.capabilities) - {"chat"}:
+            raise ValueError("Remote provider capabilities require verified account support")
+        return self
 
     @field_validator("enabled")
     @classmethod
@@ -125,7 +158,6 @@ class DeactivateRoute(BaseModel):
 
 class FallbackPolicyWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    capability: Literal["chat"]
     enabled: StrictBool
     ordered_revision_ids: list[UUID] = Field(max_length=3)
 
@@ -212,15 +244,9 @@ def _revision_config(
     probe_key = body.api_key or (
         SecretStr("present-secret-placeholder") if old_secret_ref else None
     )
-    provider_config = ChatProviderConfig(
-        provider_kind=body.provider_kind,
-        base_url=body.base_url,
-        model_id=body.capabilities["chat"].model_id,
-        api_key=probe_key,
-        timeout_seconds=body.timeout_seconds,
-        max_tokens=body.capabilities["chat"].max_tokens,
+    normalized_url = validate_provider_base_config(
+        body.provider_kind, body.base_url, probe_key
     )
-    normalized_url = validate_chat_config(provider_config)
     if (body.auth_mode == "bearer") != (probe_key is not None):
         raise ProviderConfigurationError("Authentication mode and secret do not match")
     new_ref = (
@@ -232,13 +258,18 @@ def _revision_config(
 
 
 def _provider_adapter(
-    revision: dict[str, Any], registry: ProviderRegistry, vault: DpapiSecretVault
+    revision: dict[str, Any], registry: ProviderRegistry, vault: DpapiSecretVault,
+    capability: str | None = None,
 ):
     config = revision["config"]
-    binding = config["capabilities"]["chat"]
+    bindings = config["capabilities"]
+    selected_capability = capability or next(iter(bindings))
+    binding = bindings.get(selected_capability)
+    if binding is None:
+        raise RegistryRejected("Capability is not configured for this revision")
     ref = revision.get("secret_ref")
     key = SecretStr(vault.get(ref).decode("utf-8")) if ref else None
-    return OpenAiCompatibleChatAdapter(
+    return OpenAiCompatibleProviderAdapter(
         ChatProviderConfig(
             provider_kind=revision["provider_kind"],
             base_url=config["base_url"],
@@ -246,6 +277,7 @@ def _provider_adapter(
             api_key=key,
             timeout_seconds=config.get("timeout_seconds", 20),
             max_tokens=binding.get("max_tokens", 800),
+            capability=selected_capability,
         )
     )
 
@@ -259,9 +291,10 @@ def _get_revision(registry: ProviderRegistry, profile_id: UUID):
     return profile, value
 
 
-def _check_chat_capability(capability: str) -> None:
-    if capability != "chat":
+def _check_capability(capability: str) -> str:
+    if capability not in _CAPABILITIES:
         raise HTTPException(status_code=422, detail="capability_unsupported")
+    return capability
 
 
 @router.get("/me")
@@ -309,12 +342,13 @@ def verify_mfa_enrollment(
 ):
     registry = _registry(settings)
     _admin(settings, registry, user)
+    now = datetime.now(UTC)
+    _consume_admin_mfa_attempt(settings, user, now)
     mfa = registry.get_admin_mfa(user.user_id) or {}
     reference = mfa.get("pending_secret_ref")
     if not reference:
         raise HTTPException(status_code=409, detail="mfa_enrollment_missing")
     secret = _vault(settings).get(reference)
-    now = datetime.now(UTC)
     counter = _totp_counter(secret, body.code, now)
     if counter is None:
         raise HTTPException(status_code=401, detail="mfa_code_invalid")
@@ -342,10 +376,11 @@ def step_up(
 ):
     registry = _registry(settings)
     _admin(settings, registry, user)
+    now = datetime.now(UTC)
+    _consume_admin_mfa_attempt(settings, user, now)
     mfa = registry.get_admin_mfa(user.user_id) or {}
     if mfa.get("enabled_at") is None or not mfa.get("secret_ref"):
         raise HTTPException(status_code=403, detail="mfa_required")
-    now = datetime.now(UTC)
     secret = _vault(settings).get(mfa["secret_ref"])
     counter = _totp_counter(secret, body.code, now)
     if counter is None:
@@ -370,9 +405,10 @@ def recovery_step_up(
 ):
     registry = _registry(settings)
     _admin(settings, registry, user)
+    now = datetime.now(UTC)
+    _consume_admin_mfa_attempt(settings, user, now)
     pepper = settings.ai_provider_admin_recovery_pepper.get_secret_value().encode("utf-8")
     verifier = hash_recovery_code(body.code, pepper)
-    now = datetime.now(UTC)
     if not registry.consume_recovery_and_step_up(
         user.user_id,
         user.session_id,
@@ -532,11 +568,13 @@ async def discover_models(
     _step_up(registry, user)
     try:
         _profile, revision = _get_revision(registry, profile_id)
-        models = await _provider_adapter(revision, registry, _vault(settings)).discover_models()
+        adapter = _provider_adapter(revision, registry, _vault(settings))
+        models = await adapter.discover_models()
+        support = adapter.capability_support()
         return {
             "models": list(models),
-            "supported_capabilities": ["chat"],
-            "unsupported_capabilities": ["vision", "embedding", "reranking"],
+            "status": "reachable",
+            "capability_support": support,
         }
     except (RegistryNotFound, VaultUnavailable):
         raise HTTPException(status_code=503, detail="provider_unavailable") from None
@@ -546,9 +584,10 @@ async def discover_models(
 
 class ConnectionTestBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    capability: str
+    capability: Literal["chat", "vision", "embedding", "reranking"]
     model_id: str = Field(min_length=1, max_length=160)
-    test_kind: Literal["non_generative"]
+    test_kind: Literal["discovery", "inference"]
+    max_output_tokens: StrictInt = Field(default=32, ge=1, le=64)
 
 
 @router.post("/profiles/{profile_id}/test")
@@ -562,66 +601,119 @@ async def test_profile(
     registry = _registry(settings)
     _admin(settings, registry, user)
     _step_up(registry, user)
-    _check_chat_capability(body.capability)
-    profile, revision = _get_revision(registry, profile_id)
-    configured = revision["config"]["capabilities"]["chat"]["model_id"]
-    if configured != body.model_id:
+    capability = _check_capability(body.capability)
+    _profile, revision = _get_revision(registry, profile_id)
+    binding = revision["config"].get("capabilities", {}).get(capability)
+    if binding is None:
+        raise HTTPException(status_code=422, detail="capability_not_configured")
+    if binding["model_id"] != body.model_id:
         raise HTTPException(status_code=422, detail="model_not_configured")
     started = time.perf_counter()
+    latency_ms = 0
     try:
-        result = await _provider_adapter(revision, registry, _vault(settings)).test_connection()
-        valid = bool(result["model_available"])
+        result = await _provider_adapter(
+            revision, registry, _vault(settings), capability
+        ).test_capability(
+            capability,
+            body.model_id,
+            test_kind=body.test_kind,
+            max_output_tokens=body.max_output_tokens,
+        )
+        latency_ms = int(result["latency_ms"])
+        valid = bool(result["actual_inference_passed"])
         registry.record_validation(
             revision["revision_id"],
-            outcome="valid" if valid else "invalid",
+            outcome="valid" if valid else "unavailable" if result["status"] == "unavailable" else "invalid",
             safe_details={
-                "capability": "chat",
-                "model_available": valid,
-                "latency_ms": result["latency_ms"],
+                "capability": capability,
+                "test_kind": body.test_kind,
+                "tested_model_id": body.model_id,
+                "models_catalog_reachable": result["models_catalog_reachable"],
+                "model_selected": result["model_selected"],
+                "capability_verified": result["capability_verified"],
+                "actual_inference_passed": result["actual_inference_passed"],
+                "latency_ms": latency_ms,
             },
             actor_id=user.user_id,
         )
-        return {
-            "success": valid,
-            "status": "validated" if valid else "unavailable",
-            "latency_ms": result["latency_ms"],
-            "model_id": body.model_id,
-            "capability": "chat",
-        }
+        return result
     except ProviderAuthenticationError:
+        latency_ms = round((time.perf_counter() - started) * 1000)
         registry.record_validation(
             revision["revision_id"],
             outcome="invalid",
             safe_details={
-                "capability": "chat",
+                "capability": capability,
+                "test_kind": body.test_kind,
+                "tested_model_id": body.model_id,
                 "error_code": "authentication_failed",
-                "latency_ms": round((time.perf_counter() - started) * 1000),
+                "latency_ms": latency_ms,
             },
             actor_id=user.user_id,
         )
         return {
             "success": False,
             "status": "authentication_failed",
-            "latency_ms": round((time.perf_counter() - started) * 1000),
+            "latency_ms": latency_ms,
             "model_id": body.model_id,
-            "capability": "chat",
+            "capability": capability,
+            "test_kind": body.test_kind,
+            "models_catalog_reachable": False,
+            "model_selected": False,
+            "capability_verified": False,
+            "actual_inference_passed": False,
+        }
+    except ProviderCapabilityUnsupported:
+        latency_ms = round((time.perf_counter() - started) * 1000)
+        registry.record_validation(
+            revision["revision_id"],
+            outcome="invalid",
+            safe_details={
+                "capability": capability,
+                "test_kind": body.test_kind,
+                "tested_model_id": body.model_id,
+                "error_code": "unsupported",
+                "latency_ms": latency_ms,
+            },
+            actor_id=user.user_id,
+        )
+        return {
+            "success": False,
+            "status": "unsupported",
+            "latency_ms": latency_ms,
+            "model_id": body.model_id,
+            "capability": capability,
+            "test_kind": body.test_kind,
+            "models_catalog_reachable": False,
+            "model_selected": False,
+            "capability_verified": False,
+            "actual_inference_passed": False,
         }
     except (ProviderTransportError, VaultUnavailable):
+        latency_ms = round((time.perf_counter() - started) * 1000)
         registry.record_validation(
             revision["revision_id"],
             outcome="unavailable",
             safe_details={
-                "capability": "chat",
-                "latency_ms": round((time.perf_counter() - started) * 1000),
+                "capability": capability,
+                "test_kind": body.test_kind,
+                "tested_model_id": body.model_id,
+                "error_code": "unavailable",
+                "latency_ms": latency_ms,
             },
             actor_id=user.user_id,
         )
         return {
             "success": False,
             "status": "unavailable",
-            "latency_ms": round((time.perf_counter() - started) * 1000),
+            "latency_ms": latency_ms,
             "model_id": body.model_id,
-            "capability": "chat",
+            "capability": capability,
+            "test_kind": body.test_kind,
+            "models_catalog_reachable": False,
+            "model_selected": False,
+            "capability_verified": False,
+            "actual_inference_passed": False,
         }
 
 
@@ -659,22 +751,28 @@ def routes(
 
 
 @router.get("/fallback")
-def get_fallback_policy(
+def get_fallback_policies(
     user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
     registry = _registry(settings)
     _admin(settings, registry, user)
-    policy = registry.get_fallback("chat")
     return {
-        "capability": "chat",
-        "enabled": policy["enabled"],
-        "ordered_revision_ids": [str(value) for value in policy["ordered_revision_ids"]],
+        "policies": [
+            {
+                "capability": capability,
+                "enabled": policy["enabled"],
+                "ordered_revision_ids": [str(value) for value in policy["ordered_revision_ids"]],
+            }
+            for capability in sorted(_CAPABILITIES)
+            if (policy := registry.get_fallback(capability)) is not None
+        ]
     }
 
 
-@router.put("/fallback")
+@router.put("/fallback/{capability}")
 def put_fallback_policy(
+    capability: str,
     body: FallbackPolicyWrite,
     user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
@@ -683,9 +781,10 @@ def put_fallback_policy(
     registry = _registry(settings)
     _admin(settings, registry, user)
     _step_up(registry, user)
+    capability = _check_capability(capability)
     try:
         policy = registry.set_fallback(
-            body.capability,
+            capability,
             body.enabled,
             body.ordered_revision_ids,
             actor_id=user.user_id,
@@ -693,7 +792,7 @@ def put_fallback_policy(
     except (RegistryRejected, RegistryNotFound):
         raise HTTPException(status_code=422, detail="fallback_configuration_rejected") from None
     return {
-        "capability": "chat",
+        "capability": capability,
         "enabled": policy["enabled"],
         "ordered_revision_ids": [str(value) for value in policy["ordered_revision_ids"]],
     }
@@ -711,6 +810,9 @@ def revisions(
     for profile in registry.list_profiles():
         for revision in registry.list_revisions(profile["profile_id"]):
             for capability, binding in revision["config"].get("capabilities", {}).items():
+                validation = registry.capability_validation(
+                    revision["revision_id"], capability, test_kind="inference"
+                )
                 output.append(
                     {
                         "revision": str(revision["revision_id"]),
@@ -718,10 +820,12 @@ def revisions(
                         "profile_name": profile["name"],
                         "capability": capability,
                         "model_id": binding["model_id"],
-                        "validated_at": revision["validated_at"].isoformat()
-                        if revision.get("validated_at")
+                        "validated_at": validation["validated_at"].isoformat()
+                        if validation and validation.get("validated_at")
                         else "",
-                        "validation_status": revision.get("latest_validation"),
+                        "validation_status": validation.get("outcome") if validation else "pending",
+                        "validation_details": validation.get("details", {}) if validation else {},
+                        "validation_test_kind": "inference" if validation else None,
                         "active": routes_by_cap.get(capability, {}).get("revision")
                         == str(revision["revision_id"]),
                     }
@@ -740,7 +844,7 @@ def activate_route(
     registry = _registry(settings)
     _admin(settings, registry, user)
     _step_up(registry, user)
-    _check_chat_capability(capability)
+    _check_capability(capability)
     _translate_registry_errors(
         lambda: registry.activate(
             capability,
@@ -765,7 +869,7 @@ def deactivate_route(
     registry = _registry(settings)
     _admin(settings, registry, user)
     _step_up(registry, user)
-    _check_chat_capability(capability)
+    _check_capability(capability)
     _translate_registry_errors(
         lambda: registry.deactivate(
             capability, expected_generation=body.expected_version, actor_id=user.user_id
@@ -787,7 +891,7 @@ def rollback_route(
     registry = _registry(settings)
     _admin(settings, registry, user)
     _step_up(registry, user)
-    _check_chat_capability(capability)
+    _check_capability(capability)
     _translate_registry_errors(
         lambda: registry.rollback(
             capability,

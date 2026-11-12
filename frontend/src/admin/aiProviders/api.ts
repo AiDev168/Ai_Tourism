@@ -1,4 +1,6 @@
 export type ProviderCapability = 'chat' | 'vision' | 'embedding' | 'reranking';
+export type CapabilitySupport = 'supported' | 'unsupported' | 'unknown';
+export type CapabilitySupportMap = Record<ProviderCapability, CapabilitySupport>;
 export type CapabilityBinding = { model_id: string; max_tokens?: number };
 export type ProviderProfile = {
   id: string; name: string; provider_kind: 'lm_studio' | 'openai_compatible'; base_url: string;
@@ -11,9 +13,16 @@ export type ActiveRoute = { capability: ProviderCapability; profile_id: string |
 export type AdminMe = { admin: boolean; mfa_enrolled: boolean; step_up_expires_at: string | null; provisioned: boolean };
 export type AdminAuditEvent = { action: string; actor: string; target: string | null; result: string; created_at: string };
 export type AdminUsage = { capability: ProviderCapability; calls: number; successes: number; failures: number; latency_ms_avg: number | null; period_start: string };
-export type ModelDiscovery = { models: string[]; supported_capabilities: ProviderCapability[]; unsupported_capabilities: ProviderCapability[] };
-export type ConnectionTest = { success: boolean; status: 'validated' | 'unavailable' | 'unsupported' | 'authentication_failed'; latency_ms: number | null; model_id: string; capability: ProviderCapability };
-export type FallbackPolicy = { capability: 'chat'; enabled: boolean; ordered_revision_ids: string[] };
+export type ModelDiscovery = { models: string[]; status: 'reachable' | 'unavailable'; capability_support: CapabilitySupportMap };
+export type ConnectionTestStatus = 'models_catalog_reachable' | 'inference_passed' | 'model_not_found' | 'unsupported' | 'authentication_failed' | 'unavailable';
+export type ConnectionTestKind = 'discovery' | 'inference';
+export type ConnectionTest = {
+  success: boolean; status: ConnectionTestStatus; latency_ms: number | null; model_id: string;
+  capability: ProviderCapability; test_kind: ConnectionTestKind;
+  models_catalog_reachable: boolean; model_selected: boolean; capability_verified: boolean;
+  actual_inference_passed: boolean;
+};
+export type FallbackPolicy = { capability: ProviderCapability; enabled: boolean; ordered_revision_ids: string[] };
 
 export class ProviderAdminApiError extends Error {
   constructor(readonly status: number, readonly code: string) { super(code); }
@@ -50,7 +59,11 @@ export const providerAdminApi = {
   updateProfile: (csrf: string, id: string, input: Partial<ProfileInput> & { expected_version: number }) => request<ProviderProfile>(csrf, `/profiles/${encodeURIComponent(id)}`, { ...json(input), method: 'PATCH' }),
   archiveProfile: (csrf: string, id: string) => request<void>(csrf, `/profiles/${encodeURIComponent(id)}/archive`, json({})),
   discoverModels: (csrf: string, id: string) => request<ModelDiscovery>(csrf, `/profiles/${encodeURIComponent(id)}/discover-models`, json({})),
-  testConnection: (csrf: string, id: string, capability: ProviderCapability, model_id: string) => request<ConnectionTest>(csrf, `/profiles/${encodeURIComponent(id)}/test`, json({ capability, model_id, test_kind: 'non_generative' })),
+  testConnection: (csrf: string, id: string, capability: ProviderCapability, model_id: string) => request<ConnectionTest>(csrf, `/profiles/${encodeURIComponent(id)}/test`, json({ capability, model_id, test_kind: 'discovery' })),
+  testInference: (csrf: string, id: string, capability: ProviderCapability, model_id: string, max_output_tokens = 32) => {
+    if (!Number.isInteger(max_output_tokens) || max_output_tokens < 1 || max_output_tokens > 64) throw new RangeError('max_output_tokens must be an integer from 1 to 64');
+    return request<ConnectionTest>(csrf, `/profiles/${encodeURIComponent(id)}/test`, json({ capability, model_id, test_kind: 'inference', max_output_tokens }));
+  },
   routes: (csrf: string) => request<{ routes: ActiveRoute[] }>(csrf, '/routes'),
   activate: (csrf: string, capability: ProviderCapability, profile_id: string, revision: string, expected_version: number) => request<ActiveRoute>(csrf, `/routes/${capability}/activate`, json({ profile_id, revision, expected_version })),
   deactivate: (csrf: string, capability: ProviderCapability, expected_version: number) => request<ActiveRoute>(csrf, `/routes/${capability}/deactivate`, json({ expected_version })),
@@ -58,6 +71,6 @@ export const providerAdminApi = {
   revisions: (csrf: string) => request<{ revisions: ProviderRevision[] }>(csrf, '/revisions'),
   audit: (csrf: string) => request<{ events: AdminAuditEvent[] }>(csrf, '/audit'),
   usage: (csrf: string) => request<{ usage: AdminUsage[] }>(csrf, '/usage'),
-  fallback: (csrf: string) => request<FallbackPolicy>(csrf, '/fallback'),
-  saveFallback: (csrf: string, policy: FallbackPolicy) => request<FallbackPolicy>(csrf, '/fallback', { method: 'PUT', body: JSON.stringify(policy) }),
+  fallbacks: (csrf: string) => request<{ policies: FallbackPolicy[] }>(csrf, '/fallback'),
+  saveFallback: (csrf: string, policy: FallbackPolicy) => request<FallbackPolicy>(csrf, `/fallback/${policy.capability}`, { method: 'PUT', body: JSON.stringify({ enabled: policy.enabled, ordered_revision_ids: policy.ordered_revision_ids }) }),
 };
