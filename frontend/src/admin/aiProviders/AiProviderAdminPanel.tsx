@@ -164,7 +164,11 @@ export function AiProviderAdminPanel({ locale, csrfToken, authMethod, onRequireL
       const { id, version, api_key, ...profileInput } = form;
       if (id && version !== undefined) await providerAdminApi.updateProfile(csrfToken, id, { ...profileInput, ...(api_key ? { api_key } : {}), expected_version: version });
       else await providerAdminApi.createProfile(csrfToken, { ...profileInput, ...(api_key ? { api_key } : {}) });
-      if (id) setDiscovered(current => { const next = { ...current }; delete next[id]; return next; });
+      if (id) {
+        setDiscovered(current => { const next = { ...current }; delete next[id]; return next; });
+        // Tests belong to an immutable revision; editing a profile invalidates cached UI results.
+        setTests(current => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${id}:`))));
+      }
       setForm(null); setNotice(copy.success); await reload();
     } catch { setError(copy.failed); } finally { setBusy(false); }
   };
@@ -252,8 +256,16 @@ export function AiProviderAdminPanel({ locale, csrfToken, authMethod, onRequireL
             const discoveryResult = tests[profile.id + ':' + capability + ':discovery'];
             const inferenceResult = tests[profile.id + ':' + capability + ':inference'];
             const support = discovered[profile.id]?.capability_support[capability] ?? 'unknown';
+            // Inventory support is advisory. A successful bounded inference on the current
+            // immutable revision provides stronger evidence than the catalog's 'unknown'.
+            const latestRevisionId = data.revisions.find(revision => revision.profile_id === profile.id)?.revision;
+            const validatedCurrent = data.revisions.find(revision =>
+              revision.revision === latestRevisionId && revision.capability === capability
+              && revision.model_id === profile.capabilities[capability]?.model_id
+            )?.validation_status === 'valid';
+            const verified = inferenceResult?.actual_inference_passed === true || validatedCurrent;
             return <div className="provider-admin-test" key={capability}>
-              <strong>{capability}: {profile.capabilities[capability]?.model_id}</strong><span>{capabilityLabels[support]}</span>
+              <strong>{capability}: {profile.capabilities[capability]?.model_id}</strong><span>{verified ? capabilityLabels.capabilityVerified : capabilityLabels[support]}</span>
               <button type="button" disabled={busy} onClick={() => void runCapabilityTest(profile, capability, 'discovery')}>{capabilityLabels.modelInventoryTest}</button>
               {discoveryResult && <span role="status">{capabilityTestStatus(discoveryResult)}{discoveryResult.latency_ms !== null && ' · ' + discoveryResult.latency_ms + ' ms'}</span>}
               {support !== 'unsupported' && <div className="provider-admin-inference"><p>{capabilityLabels.inferenceWarning}</p><button type="button" disabled={busy} onClick={() => void runCapabilityTest(profile, capability, 'inference')}>{capabilityLabels.runInference}</button>{inferenceResult && <span role="status" className={inferenceResult.actual_inference_passed ? 'provider-admin-inference-ok' : undefined}>{capabilityTestStatus(inferenceResult)}{inferenceResult.latency_ms !== null && ' · ' + inferenceResult.latency_ms + ' ms'}</span>}</div>}
@@ -284,7 +296,7 @@ export function AiProviderAdminPanel({ locale, csrfToken, authMethod, onRequireL
       <section className="provider-admin-card"><h2>{copy.activeRoutes}</h2>{capabilities.map(capability => {
         const route = routeByCapability[capability]; const selectable = data.revisions.filter(item => item.capability === capability && item.validation_status === 'valid' && data.profiles.some(profile => profile.id === item.profile_id && profile.enabled));
         return <div className="provider-admin-route" key={capability}><strong>{capability}</strong>{route?.active ? <span>{route.profile_name} · {route.model_id} · {copy.revision} {route.revision}</span> : <span>{capabilityLabels.unknown} · {copy.noRoute}</span>}
-          {route?.active ? <button type="button" disabled={busy} onClick={() => void mutate(() => providerAdminApi.deactivate(csrfToken, capability, route.version))}>{copy.deactivate}</button> : <><select disabled={!selectable.length} aria-label={capability + ' ' + copy.selectProfile} id={'activate-' + capability} defaultValue=""><option value="">{copy.selectProfile}</option>{selectable.map(revision => <option key={revision.revision} value={revision.revision}>{revision.profile_name} · {revision.model_id}</option>)}</select><button type="button" disabled={busy || !selectable.length} onClick={() => { const select = document.getElementById('activate-' + capability) as HTMLSelectElement; const revision = selectable.find(item => item.revision === select.value); if (revision) void mutate(() => providerAdminApi.activate(csrfToken, capability, revision.profile_id, revision.revision, route?.version ?? 0)); else setError(copy.failed); }}>{copy.activate}</button></>}
+          {route?.active ? <button type="button" disabled={busy} onClick={() => void mutate(() => providerAdminApi.deactivate(csrfToken, capability, route.version))}>{copy.deactivate}</button> : <><select disabled={!selectable.length} aria-label={capability + ' ' + copy.selectProfile} id={'activate-' + capability} defaultValue=""><option value="">{copy.selectProfile}</option>{selectable.map(revision => <option key={revision.revision} value={revision.revision}>{revision.profile_name} · {revision.model_id}</option>)}</select><button type="button" disabled={busy || !selectable.length} onClick={() => { const select = document.getElementById('activate-' + capability) as HTMLSelectElement; const revision = selectable.find(item => item.revision === select.value); if (revision) void mutate(() => providerAdminApi.activate(csrfToken, capability, revision.revision, route?.version ?? 0)); else setError(copy.failed); }}>{copy.activate}</button></>}
         </div>;
       })}</section>
       <section className="provider-admin-card"><h2>{copy.fallbackOrder}</h2>{capabilities.map(capability => {
