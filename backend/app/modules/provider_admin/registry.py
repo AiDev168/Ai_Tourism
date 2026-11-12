@@ -707,7 +707,7 @@ class ProviderRegistry:
                 (user_id, session_id, point),
             )
             item = cur.fetchone()
-            return item[0] if item else None
+            return item["expires_at"] if item else None
 
     def revoke_step_up(self, user_id: UUID, session_id: UUID) -> None:
         with self._connect() as conn:
