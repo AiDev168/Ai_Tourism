@@ -800,7 +800,9 @@ function Start-LocalPilotWebProcesses($State) {
     $nodeExe = $node.Source
     $apiEnv = @{
         APP_ENV='local_pilot'; APP_HOST='127.0.0.1'; APP_PORT=[string]$State.api_port; LOG_LEVEL='INFO'
-        DATABASE_HOST='localhost'; DATABASE_PORT=[string]$State.database_port; DATABASE_NAME=$Paths.Database
+        # PostgreSQL is published on IPv4 loopback only. `localhost` may first
+        # attempt ::1 and consume the entire connection timeout per request.
+        DATABASE_HOST='127.0.0.1'; DATABASE_PORT=[string]$State.database_port; DATABASE_NAME=$Paths.Database
         DATABASE_USER='ai_tourism_app'; DATABASE_PASSWORD=(Read-LocalPilotSecret $Paths.AppPassword)
         DATABASE_CONNECT_TIMEOUT_SECONDS='3'; PGSSLMODE='verify-full'; PGSSLROOTCERT=$Paths.DatabaseCertificate
         AUTH_ENABLED='true'; AUTH_LOCAL_OWNER_ENABLED='true'; AUTH_SMS_ADAPTER='disabled'

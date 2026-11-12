@@ -73,6 +73,7 @@ async def request_context(request: Request, call_next):
     logger.info(
         "request.completed",
         extra={"request_id": request_id, "result": str(response.status_code),
-               "latency_ms": round((time.perf_counter() - started) * 1000, 2)},
+               "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+               "route": getattr(request.scope.get("route"), "path", "unmatched")},
     )
     return response

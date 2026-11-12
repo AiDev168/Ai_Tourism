@@ -91,7 +91,7 @@ function newIdempotencyKey(): string {
   return crypto.randomUUID();
 }
 
-function safeRequirements(value: unknown, locale: Locale): TripRequirements | null {
+function safeRequirements(value: unknown, locale: Locale, originalRequest?: string): TripRequirements | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
   const possibleV1 = (record.requirements_v1 ?? value) as Partial<TripRequirementsV1>;
@@ -102,13 +102,39 @@ function safeRequirements(value: unknown, locale: Locale): TripRequirements | nu
     catch { return null; }
   }
   const candidate = value as Partial<TripRequirements>;
-  if (typeof candidate.requestText !== 'string' || !candidate.destinations || !candidate.durationDays) return null;
+  const requestText = typeof candidate.requestText === 'string' ? candidate.requestText : originalRequest;
+  if (!requestText) return null;
+  const parsed = createTripRequirements({ requestText, locale });
+  if (parsed.kind === 'invalid') return null;
+  const defaults = parsed.requirements;
+  const field = <T,>(input: unknown, valid: (value: unknown) => value is T, fallback: TripRequirements[keyof TripRequirements]) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return fallback;
+    const entry = input as Record<string, unknown>;
+    if (!['extracted', 'unknown', 'ambiguous'].includes(String(entry.status))
+        || (entry.value !== null && !valid(entry.value))) return fallback;
+    return input;
+  };
+  const strings = (item: unknown): item is string[] => Array.isArray(item) && item.every(value => typeof value === 'string');
+  const stringValue = (item: unknown): item is string => typeof item === 'string';
+  const numberValue = (item: unknown): item is number => typeof item === 'number' && Number.isFinite(item);
+  const dates = (item: unknown): item is { start: string; end: string } => !!item && typeof item === 'object'
+    && typeof (item as Record<string, unknown>).start === 'string' && typeof (item as Record<string, unknown>).end === 'string';
+  const budget = (item: unknown): item is NonNullable<TripRequirements['budget']['value']> => !!item && typeof item === 'object'
+    && typeof (item as Record<string, unknown>).raw === 'string' && numberValue((item as Record<string, unknown>).amount);
   return {
-    ...candidate,
-    accessibility: candidate.accessibility ?? { value: null, status: 'unknown', evidence: null },
-    softPreferences: candidate.softPreferences ?? { value: null, status: 'unknown', evidence: null },
-    locale,
-  } as TripRequirements;
+    ...defaults,
+    requestText, locale,
+    destinations: field(candidate.destinations, strings, defaults.destinations) as TripRequirements['destinations'],
+    origin: field(candidate.origin, stringValue, defaults.origin) as TripRequirements['origin'],
+    durationDays: field(candidate.durationDays, numberValue, defaults.durationDays) as TripRequirements['durationDays'],
+    travelDates: field(candidate.travelDates, dates, defaults.travelDates) as TripRequirements['travelDates'],
+    travelerCount: field(candidate.travelerCount, numberValue, defaults.travelerCount) as TripRequirements['travelerCount'],
+    accessibility: field(candidate.accessibility, strings, defaults.accessibility) as TripRequirements['accessibility'],
+    budget: field(candidate.budget, budget, defaults.budget) as TripRequirements['budget'],
+    interests: field(candidate.interests, strings, defaults.interests) as TripRequirements['interests'],
+    softPreferences: field(candidate.softPreferences, strings, defaults.softPreferences) as TripRequirements['softPreferences'],
+    constraints: field(candidate.constraints, strings, defaults.constraints) as TripRequirements['constraints'],
+  };
 }
 
 function choiceIds(resolution: DestinationResolution | null): string[] {
@@ -299,7 +325,7 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const resolutionSequenceRef = useRef(0);
   const catalogueBrowseSequenceRef = useRef(0);
 
-  const extracted = useMemo(() => safeRequirements(activeTrip?.extracted_requirements, activeTrip?.locale ?? locale), [activeTrip, locale]);
+  const extracted = useMemo(() => safeRequirements(activeTrip?.extracted_requirements, activeTrip?.locale ?? locale, activeTrip?.original_request), [activeTrip, locale]);
   const consentFields = useMemo(() => consentFieldsForReviewedProfile(
     extracted, originText, travelerCountText, budgetText, travelStartText, travelEndText,
   ), [extracted, originText, travelerCountText, budgetText, travelStartText, travelEndText]);
@@ -514,10 +540,10 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       const conversation = await travelerApi.getConversation(conversationId);
       const trip = await travelerApi.getTrip(tripId);
       setActiveConversation(conversation);
-      setActiveTrip(trip);
       setAssistantCandidate(null);
       setRemoteConsent(false);
-      const parsed = safeRequirements(trip.extracted_requirements, trip.locale);
+      const parsed = safeRequirements(trip.extracted_requirements, trip.locale, trip.original_request);
+      setActiveTrip(trip);
       const hasReviewedProfile = trip.confirmed_requirements.confirmation_source === 'traveler_reviewed';
       const storedNames = trip.confirmed_requirements.destinations;
       const restoredNames = hasReviewedProfile && Array.isArray(storedNames)

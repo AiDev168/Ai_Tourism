@@ -43,6 +43,21 @@ describe('AI provider admin panel', () => {
     expect(host.querySelector('input[autocomplete="one-time-code"]')).not.toBeNull();
   });
 
+  it('keeps the granted admin and enrollment UI when an optional usage read fails', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/me')) return Promise.resolve(json({ admin: true, mfa_enrolled: false, step_up_expires_at: null, provisioned: true }));
+      if (url.endsWith('/usage')) return Promise.resolve(json({ error: { code: 'request_failed' } }, 503));
+      if (url.endsWith('/fallback')) return Promise.resolve(json({ policies: [] }));
+      return Promise.resolve(json({ profiles: [], routes: [], revisions: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => { root.render(<AiProviderAdminPanel locale="en-US" csrfToken="csrf" />); }); await settle();
+    expect(host.textContent).toContain('Set up two-factor authentication');
+    expect(host.textContent).toContain('Some settings could not be loaded. Other sections remain available; please retry.');
+    expect(host.textContent).not.toContain('Sign in with the local owner account');
+    expect(host.querySelector('button')).not.toBeNull();
+  });
+
   it('renders Arabic RTL admin copy and no configured profile empty state after step-up', async () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url.endsWith('/me')) return Promise.resolve(json({ admin: true, mfa_enrolled: true, step_up_expires_at: '2099-01-01T00:00:00Z', provisioned: true }));

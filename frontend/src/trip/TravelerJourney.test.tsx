@@ -370,6 +370,48 @@ describe('persisted traveler journey', () => {
     expect(host.textContent).not.toContain(journeyMessages['en-US'].findRecommendations);
   });
 
+  it('reopens both legacy extracted-requirement shapes without a blank page or data write', async () => {
+    vi.spyOn(ApiDestinationCatalogPort.prototype, 'load').mockResolvedValue({ kind: 'available', boundary: 'knowledge.production_destinations', destinations: [] });
+    const requests = ['Plan a trip to Shiraz', 'Plan a 10-day trip to Shiraz'];
+    const trips = requests.map((requestText, index) => ({
+      ...tripRecord(requestText, createTripRequirements({ requestText, locale: 'en-US' })),
+      trip_id: `legacy-${index + 1}`,
+      extracted_requirements: index === 0
+        ? { difficulty: null, season: null, transport: null, travel_style: null }
+        : { requestText, destinations: { value: ['Shiraz'], status: 'extracted', evidence: 'Shiraz' },
+            durationDays: { value: 10, status: 'extracted', evidence: '10 days' },
+            origin: { value: null, status: 'unknown', evidence: null },
+            interests: { value: null, status: 'unknown', evidence: null },
+            budget: { value: null, status: 'unknown', evidence: null } },
+    }));
+    const conversation = {
+      conversation_id: 'conversation-1', locale: 'en-US', version: 1,
+      started_at: trips[0].created_at, updated_at: trips[0].updated_at, last_message_at: trips[0].updated_at,
+      trips, messages: [],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/conversations?limit=50')) return response({ items: [conversation], next_cursor: null });
+      if (url === '/api/v1/conversations/conversation-1') return response(conversation);
+      const trip = trips.find(item => url === `/api/v1/trips/${item.trip_id}`);
+      if (trip) return response(trip);
+      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      throw new Error(`Unexpected request: ${init?.method ?? 'GET'} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => root.render(<TravelerJourney locale="en-US" session={session} online requirements={null}
+      onSessionExpired={() => undefined} onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
+    await settle();
+    for (const requestText of requests) {
+      await act(async () => { [...host.querySelectorAll('button')].find(button => button.textContent === requestText)!.click(); });
+      await settle();
+      expect(host.textContent).toContain(journeyMessages['en-US'].profileTitle);
+      expect(host.textContent).toContain(requestText);
+      expect(host.querySelector('.journey-error')).toBeNull();
+    }
+    expect(fetchMock.mock.calls.every(call => (call[1]?.method ?? 'GET') === 'GET')).toBe(true);
+  });
+
   it('renders needs-confirmation guidance when the backend reason code is null', async () => {
     const requestText = 'Plan a 3-day trip to Shiraz';
     const parsed = createTripRequirements({ requestText, locale: 'en-US' });

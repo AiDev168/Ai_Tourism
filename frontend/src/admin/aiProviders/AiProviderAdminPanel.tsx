@@ -114,13 +114,30 @@ export function AiProviderAdminPanel({ locale, csrfToken, authMethod, onRequireL
       const identity = await providerAdminApi.me(csrfToken);
       setMe(identity);
       if (!identity.admin) { setData(emptyPanel); return; }
-      const [profiles, routes, revisions, audit, usage, fallbackResponse] = await Promise.all([
+      const [profiles, routes, revisions, audit, usage, fallbackResponse] = await Promise.allSettled([
         providerAdminApi.profiles(csrfToken), providerAdminApi.routes(csrfToken), providerAdminApi.revisions(csrfToken), providerAdminApi.audit(csrfToken), providerAdminApi.usage(csrfToken), providerAdminApi.fallbacks(csrfToken),
       ]);
       const fallbacks = emptyFallbacks();
-      for (const policy of fallbackResponse.policies) fallbacks[policy.capability] = policy;
-      setData({ profiles: profiles.profiles, routes: routes.routes, revisions: revisions.revisions, audit: audit.events, usage: usage.usage, fallbacks });
-      setFallbackDrafts(fallbacks);
+      const fallbackLoaded = fallbackResponse.status === 'fulfilled' && Array.isArray(fallbackResponse.value.policies);
+      if (fallbackLoaded) {
+        for (const policy of fallbackResponse.value.policies) fallbacks[policy.capability] = policy;
+        setFallbackDrafts(fallbacks);
+      }
+      setData(current => ({
+        profiles: profiles.status === 'fulfilled' && Array.isArray(profiles.value.profiles) ? profiles.value.profiles : current.profiles,
+        routes: routes.status === 'fulfilled' && Array.isArray(routes.value.routes) ? routes.value.routes : current.routes,
+        revisions: revisions.status === 'fulfilled' && Array.isArray(revisions.value.revisions) ? revisions.value.revisions : current.revisions,
+        audit: audit.status === 'fulfilled' && Array.isArray(audit.value.events) ? audit.value.events : current.audit,
+        usage: usage.status === 'fulfilled' && Array.isArray(usage.value.usage) ? usage.value.usage : current.usage,
+        fallbacks: fallbackLoaded ? fallbacks : current.fallbacks,
+      }));
+      if (profiles.status === 'rejected' || !Array.isArray(profiles.value.profiles)
+          || routes.status === 'rejected' || !Array.isArray(routes.value.routes)
+          || revisions.status === 'rejected' || !Array.isArray(revisions.value.revisions)
+          || audit.status === 'rejected' || !Array.isArray(audit.value.events)
+          || usage.status === 'rejected' || !Array.isArray(usage.value.usage) || !fallbackLoaded) {
+        setError('partial');
+      }
     } catch (caught) {
       setMe(null); setData(emptyPanel);
       setError(caught instanceof ProviderAdminApiError && caught.status === 403 ? 'forbidden' : caught instanceof ProviderAdminApiError && caught.status === 401 ? 'unauthenticated' : 'failed');
@@ -220,7 +237,7 @@ export function AiProviderAdminPanel({ locale, csrfToken, authMethod, onRequireL
   if (error === 'forbidden' || (me && !me.admin)) return <main className="provider-admin" dir={locale === 'en-US' ? 'ltr' : 'rtl'}><h1>{copy.title}</h1><p role="alert">{copy.forbidden}</p>{authMethod !== 'local_owner' && onRequireLocalOwnerLogin && <button type="button" onClick={onRequireLocalOwnerLogin}>{locale === 'fa-IR' ? 'ورود مدیر محلی' : locale === 'ar' ? 'تسجيل دخول المدير المحلي' : 'Sign in as local owner'}</button>}</main>;
   return <main className="provider-admin" dir={locale === 'en-US' ? 'ltr' : 'rtl'}>
     <header><h1>{copy.title}</h1><p>{copy.intro}</p></header>
-    {error && <p className="provider-admin-error" role="alert">{error === 'forbidden' ? copy.forbidden : copy.failed}</p>}
+    {error && <p className="provider-admin-error" role="alert">{error === 'forbidden' ? copy.forbidden : error === 'partial' ? (locale === 'fa-IR' ? 'بخشی از تنظیمات دریافت نشد؛ بخش‌های دیگر در دسترس‌اند. دوباره تلاش کنید.' : locale === 'ar' ? 'تعذّر تحميل بعض الإعدادات؛ الأقسام الأخرى متاحة. حاول مرة أخرى.' : 'Some settings could not be loaded. Other sections remain available; please retry.') : copy.failed}</p>}
     {notice && <p className="provider-admin-notice" role="status">{notice}</p>}
     {recoveryCodes.length > 0 && <section className="provider-admin-card" role="alert"><h2>{copy.recovery}</h2><ul>{recoveryCodes.map(value => <li key={value}><code>{value}</code></li>)}</ul><button type="button" onClick={() => setRecoveryCodes([])}>{copy.closeRecovery}</button></section>}
     {me && !me.mfa_enrolled && <section className="provider-admin-card"><h2>{copy.enroll}</h2>{!enrollment ? <button type="button" disabled={busy} onClick={() => void providerAdminApi.enrollMfa(csrfToken).then(setEnrollment).catch(() => setError(copy.failed))}>{copy.enroll}</button> : <><p><code>{enrollment.secret}</code></p><p><a href={enrollment.otpauth_uri}>{enrollment.otpauth_uri}</a></p><form onSubmit={event => void submitEnrollment(event)}><label>{copy.code}<input autoComplete="one-time-code" inputMode="numeric" value={code} onChange={event => setCode(event.target.value)} required /></label><button disabled={busy}>{copy.confirmEnroll}</button></form></>}</section>}
