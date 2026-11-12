@@ -65,7 +65,7 @@ export const providerAdminApi = {
     return request<ConnectionTest>(csrf, `/profiles/${encodeURIComponent(id)}/test`, json({ capability, model_id, test_kind: 'inference', max_output_tokens }));
   },
   routes: (csrf: string) => request<{ routes: ActiveRoute[] }>(csrf, '/routes'),
-  activate: (csrf: string, capability: ProviderCapability, profile_id: string, revision: string, expected_version: number) => request<ActiveRoute>(csrf, `/routes/${capability}/activate`, json({ profile_id, revision, expected_version })),
+  activate: (csrf: string, capability: ProviderCapability, revision: string, expected_version: number) => request<ActiveRoute>(csrf, `/routes/${capability}/activate`, json({ revision, expected_version })),
   deactivate: (csrf: string, capability: ProviderCapability, expected_version: number) => request<ActiveRoute>(csrf, `/routes/${capability}/deactivate`, json({ expected_version })),
   rollback: (csrf: string, capability: ProviderCapability, revision: string, expected_version: number) => request<ActiveRoute>(csrf, `/routes/${capability}/rollback`, json({ revision, expected_version })),
   revisions: (csrf: string) => request<{ revisions: ProviderRevision[] }>(csrf, '/revisions'),
