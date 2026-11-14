@@ -125,5 +125,7 @@ migrations require a reviewed, separately guarded upgrade procedure and backup.
   catalogue is not evidence of a real destination recommendation.
 - This staging deployment is not a public launch. Physical Android install,
   reconnect, and traveler-flow acceptance still require the owner's device.
-- Compose uses Docker secrets sourced from protected host files. The DB and API
-  have no `ports:` mapping. `staging_private` is an internal network.
+- Compose uses Docker secret file mounts from a `0700` host directory. Secret
+  files are `0640` with group 999 for the non-root container service accounts;
+  the host directory prevents other host users from traversing them. The DB and
+  API have no `ports:` mapping. `staging_private` is an internal network.
