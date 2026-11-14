@@ -83,9 +83,12 @@ if [[ "$resume_mode" == true ]]; then
   expected_ledger+=",0001_core_schema:$(sha256sum "$sql_dir/001_core_schema.sql" | cut -d' ' -f1)"
   expected_ledger+=",0002_synthetic_knowledge_seed:$(sha256sum "$sql_dir/002_synthetic_knowledge_seed.sql" | cut -d' ' -f1)"
   expected_ledger+=",0003_synthetic_e2e_seed:$(sha256sum "$sql_dir/003_synthetic_e2e_seed.sql" | cut -d' ' -f1)"
+  expected_ledger+=",0004_app_role_grants:$(sha256sum "$sql_dir/004_app_role_grants.sql" | cut -d' ' -f1)"
+  expected_ledger+=",0005_verified_unesco_destination_seed:$(sha256sum "$sql_dir/005_verified_unesco_destination_seed.sql" | cut -d' ' -f1)"
+  expected_ledger+=",0006_verified_unesco_destination_seed_batch2:$(sha256sum "$sql_dir/006_verified_unesco_destination_seed_batch2.sql" | cut -d' ' -f1)"
   actual_ledger=$(db_scalar "SELECT COALESCE(string_agg(migration_id || ':' || sha256, ',' ORDER BY migration_id), '') FROM system.schema_migrations")
   [[ "$actual_ledger" == "$expected_ledger" ]] || {
-    echo 'Recovery is permitted only for the exact checksum-verified prefix 0000-0003; preserve all other states for manual review.' >&2; exit 2;
+    echo 'Recovery is permitted only for the exact checksum-verified prefix 0000-0006; preserve all other states for manual review.' >&2; exit 2;
   }
   if ! db_scalar "SELECT to_regclass('public.rahgard_private_pilot_marker') IS NULL" | grep -qx t; then
     echo 'Pilot marker table exists before its expected migration stage; preserving state for manual review.' >&2; exit 2
@@ -104,9 +107,9 @@ fi
 if [[ "$resume_mode" != true ]]; then
   {
     printf '\\getenv app_password RAHGARD_APP_DB_PASSWORD\n\\set app_user ai_tourism_app\n\\set migration_hash %s\n' "$(sha256sum "$sql_dir/000_bootstrap.sql" | cut -d' ' -f1)"
-    printf '\\i /opt/rahgard/database-sql/000_bootstrap.sql\n'
+    sed 's/\r$//' "$sql_dir/000_bootstrap.sql"
   } | owner_psql
-  owner_psql < "$legacy"
+  sed 's/\r$//' "$legacy" | owner_psql
   owner_psql -c "INSERT INTO system.schema_migrations(migration_id,sha256) VALUES ('0000_legacy_tourism_points_baseline','$legacy_hash')"
 fi
 
@@ -127,7 +130,7 @@ apply_base() {
       [[ $(sed 's/\r$//' "$sql_dir/$file" | grep -Fxc "$old") == 1 ]] || { echo 'Immutable 0004 adaptation token changed.' >&2; return 2; }
       sed 's/\r$//' "$sql_dir/$file" | sed 's/GRANT CONNECT ON DATABASE ai_tourism_dev TO :"app_user";/GRANT CONNECT ON DATABASE rahgard_pilot_vps_staging TO :"app_user";/'
     else
-      printf '\\i /opt/rahgard/database-sql/%s\n' "$file"
+      sed 's/\r$//' "$sql_dir/$file"
     fi
   } | owner_psql
   [[ $(db_scalar "SELECT sha256 FROM system.schema_migrations WHERE migration_id='$migration_id'") == "$hash" ]] || {
@@ -179,11 +182,14 @@ owner_psql -c "GRANT SELECT ON public.rahgard_private_pilot_marker TO rahgard_pi
 
 trap 'owner_psql -c "REVOKE CREATE ON SCHEMA operations FROM rahgard_pilot_geo_migrator,rahgard_pilot_geo_executor; REVOKE rahgard_pilot_geo_executor FROM rahgard_pilot_geo_migrator; REVOKE INSERT ON system.schema_migrations FROM rahgard_pilot_geo_migrator; REVOKE UPDATE(status,updated_at),REFERENCES(destination_key) ON knowledge.destinations FROM rahgard_pilot_geo_migrator; REVOKE SELECT ON knowledge.destinations,knowledge.destination_sources,knowledge.knowledge_sources,system.schema_migrations,public.rahgard_private_pilot_marker FROM rahgard_pilot_geo_migrator; REVOKE USAGE ON SCHEMA knowledge,operations,system,public FROM rahgard_pilot_geo_migrator;" >/dev/null 2>&1 || true' EXIT
 {
-  printf 'SET ROLE rahgard_pilot_geo_migrator;\n\\set migration_hash %s\n\\i /opt/rahgard/pilot-sql/013_private_pilot_geo_audit.sql\nRESET ROLE;\n' "$hash_0013"
+  printf 'SET ROLE rahgard_pilot_geo_migrator;\n\\set migration_hash %s\n' "$hash_0013"
+  sed 's/\r$//' "$pilot_dir/013_private_pilot_geo_audit.sql"
+  printf 'RESET ROLE;\n'
 } | tcp_psql
 owner_psql -c "REVOKE CREATE ON SCHEMA operations FROM rahgard_pilot_geo_migrator,rahgard_pilot_geo_executor; REVOKE rahgard_pilot_geo_executor FROM rahgard_pilot_geo_migrator; REVOKE INSERT ON system.schema_migrations FROM rahgard_pilot_geo_migrator; REVOKE UPDATE(status,updated_at),REFERENCES(destination_key) ON knowledge.destinations FROM rahgard_pilot_geo_migrator; REVOKE SELECT ON knowledge.destinations,knowledge.destination_sources,knowledge.knowledge_sources,system.schema_migrations,public.rahgard_private_pilot_marker FROM rahgard_pilot_geo_migrator; REVOKE USAGE ON SCHEMA knowledge,operations,system,public FROM rahgard_pilot_geo_migrator;"
 {
-  printf '\\set pilot_marker %s\n\\set migration_hash %s\n\\i /opt/rahgard/staging-sql/016_staging_invitation_auth.sql\n' "$marker" "$hash_0016"
+  printf '\\set pilot_marker %s\n\\set migration_hash %s\n' "$marker" "$hash_0016"
+  sed 's/\r$//' "$staging_migration"
 } | tcp_psql
 
 [[ $(db_scalar "SELECT count(*) FROM system.schema_migrations") == 15 ]] || { echo 'Expected 15 staging migrations (0000-0013 plus 0016) did not verify.' >&2; exit 2; }

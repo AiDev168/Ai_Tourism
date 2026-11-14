@@ -70,7 +70,7 @@ or logs.
    destination view is empty. It does not publish the
    research/geo packet. If interrupted, do not reset or recreate the volume.
    The guarded initializer resumes only when its protected claim matches and
-   the ledger is the exact checksum-verified prefix 0000–0003; other partial
+   the ledger is the exact checksum-verified prefix 0000–0006; other partial
    states stop for manual review.
 6. By default, `deploy.sh <tested-commit-sha>` builds from the exported source,
    starts the API/PWA, and checks the loopback web response. It preserves the
