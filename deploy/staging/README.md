@@ -68,8 +68,10 @@ or logs.
    0013 through 0016 (omitting owner-only admin/publication migrations), checks
    every checksum, removes temporary grants, and verifies the production
    destination view is empty. It does not publish the
-   research/geo packet. If interrupted, do not rerun or recreate the volume;
-   preserve the claim/ledger and investigate the exact partial state.
+   research/geo packet. If interrupted, do not reset or recreate the volume.
+   The guarded initializer resumes only when its protected claim matches and
+   the ledger is the exact checksum-verified prefix 0000–0003; other partial
+   states stop for manual review.
 6. By default, `deploy.sh <tested-commit-sha>` builds from the exported source,
    starts the API/PWA, and checks the loopback web response. It preserves the
    database volume and rolls the application symlink back on a failed health
