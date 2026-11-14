@@ -84,7 +84,11 @@ services:
       - internal_chat_token
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks: [staging_private]
+    # The local LiteLLM/vLLM endpoint runs on the host. The private network
+    # deliberately has no host route, so only the API gets this second bridge
+    # for the configured host-gateway model endpoint; PostgreSQL remains
+    # reachable only through staging_private.
+    networks: [staging_private, staging_model]
     depends_on:
       db: {condition: service_healthy}
     healthcheck:
@@ -126,6 +130,8 @@ networks:
   staging_private:
     internal: true
   staging_frontend:
+    driver: bridge
+  staging_model:
     driver: bridge
 
 volumes:
