@@ -48,7 +48,9 @@ or logs.
    Transfer that archive and its hash through the approved authenticated SSH
    channel. Do not transfer `.venv`, virtual environments, `.env`, or secrets.
 4. Run `fetch-release.sh <tested-commit-sha> <archive-path> <archive-sha256>`.
-   This validates the archive digest and path names before extraction.
+   This validates the archive digest and path names before extraction, then
+   makes non-secret source files readable to container users while preserving
+   executable script modes. Do not put secrets in a release archive.
 5. From the extracted release's `deploy/staging` directory, start only its
    dedicated DB service:
 

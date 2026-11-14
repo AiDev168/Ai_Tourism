@@ -17,6 +17,14 @@ if tar -tzf "$archive" | awk 'BEGIN{bad=0} /^\// || /(^|\/)\.\.(\/|$)/ {bad=1} E
   echo 'Release archive contains an unsafe path.' >&2; exit 2
 fi
 tar -xzf "$archive" -C "$release" --no-same-owner
+# The release archive is application source, not secret material. Because this
+# script runs with umask 077, restore readable modes so containers running as
+# non-root can read their bind-mounted SQL and init scripts. Preserve the
+# executable bit only for files that were executable in the archive.
+find "$release" -type d -exec chmod 0755 {} +
+find "$release" -type f -perm /111 -exec chmod 0755 {} +
+find "$release" -type f ! -perm /111 -exec chmod 0644 {} +
+chmod 0755 "$release"
 printf '%s\n' "$sha" > "$release/RELEASE_COMMIT"
 chmod 0444 "$release/RELEASE_COMMIT"
 test -s "$release/deploy/staging/compose.yaml"
