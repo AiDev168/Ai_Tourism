@@ -21,7 +21,7 @@ services:
       - staging_pgdata:/var/lib/postgresql/data
       - ./db-init:/docker-entrypoint-initdb.d:ro
       - ../../engineering/database-prep/sql:/opt/rahgard/database-sql:ro
-      - ../../engineering/database-prep/legacy:/opt/rahgard/legacy:ro
+      - ../../database:/opt/rahgard/legacy:ro
       - ../../engineering/pilot/sql:/opt/rahgard/pilot-sql:ro
       - ../../engineering/pilot/sql/016_staging_invitation_auth.sql:/opt/rahgard/staging-sql/016_staging_invitation_auth.sql:ro
     networks: [staging_private]

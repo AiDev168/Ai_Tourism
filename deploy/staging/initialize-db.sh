@@ -65,7 +65,7 @@ printf '%s\n' "$marker" > "$RAHGARD_SECRET_DIR/initialization-claim"; chmod 600 
 printf 'started\n' > "$started_file"; chmod 600 "$started_file"
 
 sql_dir=../../engineering/database-prep/sql
-legacy=../../engineering/database-prep/legacy/tourism_points.sql
+legacy=../../database/tourism_points.sql
 pilot_dir=../../engineering/pilot/sql
 staging_migration=../../engineering/pilot/sql/016_staging_invitation_auth.sql
 [[ -s "$legacy" && -s "$staging_migration" ]] || { echo 'Required immutable migration inputs are missing.' >&2; exit 2; }
