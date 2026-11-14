@@ -47,6 +47,7 @@ class AssistantTurnRepository:
         idempotency_key: str, expected_version: int, content: str,
         extracted_requirements: dict[str, Any] | None,
         per_user_limit: int, global_limit: int,
+        existing_user_message_id: UUID | None = None,
     ) -> TurnReservation:
         fingerprint = json.dumps({'content': content, 'extracted': extracted_requirements},
                                  ensure_ascii=False, sort_keys=True, separators=(',', ':'))
@@ -110,14 +111,37 @@ class AssistantTurnRepository:
             ).fetchone()
             if global_row is None:
                 raise ChatBudgetExceeded
-            message_id, turn_id = uuid4(), uuid4()
-            conn.execute(
-                """INSERT INTO conversation.messages
-                   (message_id,conversation_id,trip_id,role,content,message_type,metadata,is_synthetic)
-                   VALUES (%s,%s,%s,'user',%s,'text',%s,FALSE)""",
-                (message_id, conversation_id, trip_id, content,
-                 Jsonb({'source': 'internal_chat', 'consent': 'explicit'})),
-            )
+            if existing_user_message_id is not None:
+                existing_message = conn.execute(
+                    """SELECT m.message_id FROM conversation.messages m
+                       JOIN conversation.conversations c USING (conversation_id)
+                       WHERE m.message_id=%s AND m.conversation_id=%s AND m.trip_id=%s
+                         AND c.user_id=%s AND m.role='user' AND m.content=%s
+                       FOR UPDATE OF m""",
+                    (existing_user_message_id, conversation_id, trip_id, user_id, content),
+                ).fetchone()
+                trip_user_messages = conn.execute(
+                    """SELECT COUNT(*) AS n FROM conversation.messages
+                       WHERE conversation_id=%s AND trip_id=%s AND role='user'""",
+                    (conversation_id, trip_id),
+                ).fetchone()['n']
+                prior_turn = conn.execute(
+                    """SELECT 1 FROM conversation.assistant_turns
+                       WHERE user_message_id=%s LIMIT 1""", (existing_user_message_id,),
+                ).fetchone()
+                if existing_message is None or trip_user_messages != 1 or prior_turn:
+                    raise TravelerConflict
+                message_id = existing_user_message_id
+            else:
+                message_id = uuid4()
+                conn.execute(
+                    """INSERT INTO conversation.messages
+                       (message_id,conversation_id,trip_id,role,content,message_type,metadata,is_synthetic)
+                       VALUES (%s,%s,%s,'user',%s,'text',%s,FALSE)""",
+                    (message_id, conversation_id, trip_id, content,
+                     Jsonb({'source': 'internal_chat', 'consent': 'explicit'})),
+                )
+            turn_id = uuid4()
             conn.execute(
                 """INSERT INTO conversation.assistant_turns
                    (turn_id,user_id,conversation_id,trip_id,idempotency_key,
@@ -135,6 +159,31 @@ class AssistantTurnRepository:
                 (conversation_id,),
             )
             return TurnReservation(turn_id, 'reserved', row['language_code'], message_id, None, True)
+
+    def budget_status(self, *, user_id: UUID, per_user_limit: int, global_limit: int) -> dict[str, int]:
+        """Read the current UTC-day limits without reserving or consuming a turn."""
+        with self.traveler.connection() as conn:
+            row = conn.execute(
+                """WITH today AS (SELECT (NOW() AT TIME ZONE 'UTC')::date AS budget_day)
+                   SELECT COALESCE(u.hit_count, 0) AS user_used,
+                          COALESCE(g.hit_count, 0) AS global_used
+                   FROM today d
+                   LEFT JOIN integration.chat_daily_user_budget u
+                     ON u.user_id=%s AND u.budget_day=d.budget_day
+                   LEFT JOIN integration.chat_daily_global_budget g
+                     ON g.budget_day=d.budget_day""",
+                (user_id,),
+            ).fetchone()
+        user_used = int(row['user_used'])
+        global_used = int(row['global_used'])
+        return {
+            'user_used': user_used,
+            'user_remaining': max(0, per_user_limit - user_used),
+            'user_limit': per_user_limit,
+            'global_used': global_used,
+            'global_remaining': max(0, global_limit - global_used),
+            'global_limit': global_limit,
+        }
 
     def history(self, *, user_id: UUID, conversation_id: UUID, trip_id: UUID,
                 exclude_message_id: UUID) -> list[dict[str, str]]:

@@ -104,6 +104,23 @@ button { cursor: pointer; }
   background: transparent; color: var(--ink); line-height: 1.85; font-size: 13px;
 }
 .trip-form textarea::placeholder { color: #929990; }
+.ai-processing-consent { display: grid; gap: 8px; margin: 14px 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); }
+.ai-processing-consent label { display: flex; align-items: flex-start; gap: 8px; }
+.ai-processing-consent select { max-width: 100%; min-height: 40px; }
+.jalali-date-field { position: relative; display: grid; gap: 5px; margin-block: 8px; }
+.travel-date-label { color: var(--ink); font-size: 14px; font-weight: 750; }
+.jalali-date-trigger { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: space-between; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: white; color: var(--ink); text-align: start; }
+.jalali-gregorian-equivalent { color: var(--muted); font-size: 12px; }
+.jalali-calendar { position: absolute; z-index: 20; inset-block-start: calc(100% + 4px); inset-inline: 0; width: min(340px, 100%); padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: 0 12px 34px #172a221f; }
+.jalali-calendar-heading { display: flex; align-items: center; justify-content: space-between; margin-block-end: 8px; }
+.jalali-calendar-heading button { min-width: 40px; min-height: 40px; border: 0; border-radius: 8px; background: #f2f4f1; color: var(--ink); font-size: 22px; }
+.jalali-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; text-align: center; }
+.jalali-calendar-grid [role="columnheader"] { padding-block: 6px; color: var(--muted); font-size: 11px; }
+.jalali-calendar-grid [role="gridcell"] { display: grid; min-width: 0; min-height: 38px; place-items: center; border: 0; border-radius: 8px; background: white; color: var(--ink); }
+.jalali-calendar-grid button[aria-pressed="true"] { background: var(--green); color: white; }
+.jalali-calendar-grid button:focus-visible, .jalali-date-trigger:focus-visible { outline: 3px solid #ca8a3a; outline-offset: 2px; }
+.jalali-clear-date { margin-block-start: 8px; border: 0; background: transparent; color: var(--muted); text-decoration: underline; }
+.assistant-provider-state { margin-block: 8px; color: var(--muted); font-size: 12px; }
 .trip-response { margin-block-start: 13px; padding: 14px; border-inline-start: 3px solid var(--saffron); border-radius: 10px; color: var(--ink); background: #f7f3e9; }
 .trip-response h2 { margin: 0 0 8px; font-size: 13px; line-height: 1.6; }
 .trip-response ul { margin: 0; padding-inline-start: 20px; font-size: 12px; line-height: 1.8; }

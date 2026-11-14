@@ -12,6 +12,8 @@ import { requirementClarificationMessages } from '../i18n/requirementClarificati
 import { TravelerGuidance } from './TravelerGuidance';
 import { nextTripQuestion } from './clarificationGuide';
 import { displayTripInterest, reviewedTripInterests } from './interestDisplay';
+import { JalaliDatePicker } from './JalaliDatePicker';
+import { deviceCalendarDate } from './jalaliDate';
 import {
   travelerApi, TravelerApiError, parseRetrievalEvidence, type ConversationRecord, type ConversationSummary,
   type ItineraryRecord, type ItineraryStop, type RecommendationResult, type RequirementConsentDecision,
@@ -291,12 +293,14 @@ export type TravelerJourneyProps = {
   session: AuthSession | null;
   online: boolean;
   requirements: TripRequirements | null;
+  initialRemoteConsent?: boolean;
+  travelerTimezone?: string;
   onSessionExpired: () => void;
   onRestoreRequest: (text: string, requirements: TripRequirements) => void;
   onStartNewDraft: () => void;
 };
 
-export function TravelerJourney({ locale, session, online, requirements, onSessionExpired, onRestoreRequest, onStartNewDraft }: TravelerJourneyProps) {
+export function TravelerJourney({ locale, session, online, requirements, initialRemoteConsent = false, travelerTimezone = 'Asia/Tehran', onSessionExpired, onRestoreRequest, onStartNewDraft }: TravelerJourneyProps) {
   const copy = journeyMessages[locale];
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversation, setActiveConversation] = useState<ConversationRecord | null>(null);
@@ -321,6 +325,8 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   const [messageText, setMessageText] = useState('');
   const [assistantPromptSelected, setAssistantPromptSelected] = useState(false);
   const [remoteConsent, setRemoteConsent] = useState(false);
+  const [assistantState, setAssistantState] = useState<'loading' | 'configured' | 'disabled' | 'unavailable' | 'quota_exhausted' | 'responded'>('loading');
+  const [assistantRemaining, setAssistantRemaining] = useState<number | null>(null);
   const [assistantCandidate, setAssistantCandidate] = useState<unknown>(null);
   const [recommendations, setRecommendations] = useState<RecommendationResult | null>(null);
   const [itinerary, setItinerary] = useState<ItineraryRecord | null>(null);
@@ -466,6 +472,27 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
   }, [session?.user.user_id]);
 
   useEffect(() => {
+    let current = true;
+    if (!session || !online) {
+      setAssistantRemaining(null);
+      setAssistantState(online ? 'disabled' : 'unavailable');
+      return () => { current = false; };
+    }
+    setAssistantState('loading');
+    void travelerApi.assistantStatus().then(result => {
+      if (current) {
+        setAssistantState(result.state);
+        setAssistantRemaining(Math.min(result.user_remaining, result.global_remaining));
+      }
+    }).catch(() => { if (current) { setAssistantState('unavailable'); setAssistantRemaining(null); } });
+    return () => { current = false; };
+  }, [session?.user.user_id, online]);
+
+  useEffect(() => {
+    if (!activeTrip && requirements) setRemoteConsent(initialRemoteConsent);
+  }, [initialRemoteConsent, requirements?.requestText, activeTrip?.trip_id]);
+
+  useEffect(() => {
     if (requirements) {
       if (activeTrip && requirements.requestText !== activeTrip.original_request && restoringRequestRef.current !== requirements.requestText) {
         setDirty(true);
@@ -526,18 +553,65 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
         locale,
         request_text: requirements.requestText,
         extracted_requirements: requirements,
+        traveler_timezone: travelerTimezone,
+        traveler_reference_date: deviceCalendarDate(travelerTimezone),
         destination_ids,
         idempotency_key: newIdempotencyKey(),
       };
       const result = activeConversation
         ? await travelerApi.createTripInConversation(csrf, activeConversation.conversation_id, body)
         : await travelerApi.createConversation(csrf, body);
-      setActiveConversation(result.conversation);
-      setActiveTrip(result.trip);
-      setDayCount(tripDayCount(result.trip, requirements) ?? 1);
+      let savedConversation = result.conversation;
+      let savedTrip = result.trip;
+      setActiveConversation(savedConversation);
+      setActiveTrip(savedTrip);
+      setDayCount(tripDayCount(savedTrip, requirements) ?? 1);
       setConfirmed(false);
       setDirty(false);
+      setRemoteConsent(initialRemoteConsent);
       setStatus(copy.saveSuccess);
+      if (initialRemoteConsent) {
+        try {
+          const firstReply = await travelerApi.assistantTurn(csrf, savedConversation.conversation_id, {
+            trip_id: savedTrip.trip_id,
+            content: requirements.requestText,
+            idempotency_key: newIdempotencyKey(),
+            expected_version: savedConversation.version,
+            remote_processing_consent: true,
+            existing_user_message_id: result.initial_message.message_id,
+          });
+          savedConversation = firstReply.conversation;
+          savedTrip = firstReply.trip;
+          setActiveConversation(savedConversation);
+          setActiveTrip(savedTrip);
+          setAssistantCandidate(firstReply.candidate_requirements);
+          setAssistantState('responded');
+          setAssistantRemaining(value => value === null ? null : Math.max(0, value - 1));
+          setStatus(locale === 'fa-IR' ? 'دستیار به درخواست شما پاسخ داد؛ پیشنهادهای استخراج‌شده هنوز تأیید نشده‌اند.'
+            : locale === 'ar' ? 'أجاب المساعد عن طلبك؛ وما زالت المتطلبات المقترحة غير مؤكدة.'
+              : 'The assistant replied; extracted suggestions are still unconfirmed.');
+        } catch (value) {
+          if (value instanceof TravelerApiError && value.status === 429) {
+            setAssistantState('quota_exhausted');
+            setAssistantRemaining(0);
+            setError(locale === 'fa-IR' ? 'سهمیهٔ روزانهٔ دستیار تمام شده است. درخواست شما ذخیره شد و ارسال خودکار دیگری انجام نمی‌شود.'
+              : locale === 'ar' ? 'اكتملت الحصة اليومية للمساعد. تم حفظ طلبك ولن نعيد الإرسال تلقائياً.'
+                : 'The assistant daily limit is reached. Your request is saved; it will not be retried automatically.');
+          } else if (value instanceof TravelerApiError && value.status === 503) {
+            setAssistantState('unavailable');
+            setError(assistantCopy[locale].unavailable);
+          } else applyFailure(value);
+          // The request/conversation remains saved even if the provider fails.
+          const [freshConversation, freshTrip] = await Promise.all([
+            travelerApi.getConversation(savedConversation.conversation_id),
+            travelerApi.getTrip(savedTrip.trip_id),
+          ]).catch(() => [savedConversation, savedTrip] as const);
+          savedConversation = freshConversation;
+          savedTrip = freshTrip;
+          setActiveConversation(savedConversation);
+          setActiveTrip(savedTrip);
+        }
+      }
       const history = await travelerApi.listConversations(50);
       setConversations(history.items);
       requestAnimationFrame(() => document.getElementById('trip-follow-up')?.focus());
@@ -689,13 +763,22 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
       setActiveConversation(result.conversation);
       setActiveTrip(result.trip);
       setAssistantCandidate(result.candidate_requirements);
+      setAssistantState('responded');
+      setAssistantRemaining(value => value === null ? null : Math.max(0, value - 1));
       setMessageText('');
       setAssistantPromptSelected(false);
       // AI replies are advisory: do not reset consent, the reviewed trip,
       // recommendations, or a saved itinerary after a chat message.
     } catch (value) {
       // A provider outage is different from an unavailable destination catalogue.
-      if (value instanceof TravelerApiError && value.status === 503) {
+      if (value instanceof TravelerApiError && value.status === 429) {
+        setAssistantState('quota_exhausted');
+        setAssistantRemaining(0);
+        setError(locale === 'fa-IR' ? 'سهمیهٔ روزانهٔ دستیار تمام شده است. پیام ذخیره شد و ارسال خودکار دیگری انجام نمی‌شود.'
+          : locale === 'ar' ? 'اكتملت الحصة اليومية للمساعد. تم حفظ الرسالة ولن نعيد الإرسال تلقائياً.'
+            : 'The assistant daily limit is reached. Your message is saved; it will not be retried automatically.');
+      } else if (value instanceof TravelerApiError && value.status === 503) {
+        setAssistantState('unavailable');
         setError(assistantCopy[locale].unavailable);
       } else {
         applyFailure(value);
@@ -984,6 +1067,15 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
                 onChange={event => setRemoteConsent(event.currentTarget.checked)} />
               {assistantCopy[locale].consent}
             </label>
+            <p className="assistant-provider-state" role="status" data-provider-state={assistantState}>
+              {assistantState === 'loading' ? (locale === 'fa-IR' ? 'در حال بررسی وضعیت دستیار…' : locale === 'ar' ? 'جارٍ التحقق من حالة المساعد…' : 'Checking assistant status…')
+                : assistantState === 'configured' ? (locale === 'fa-IR' ? 'مسیر دستیار تنظیم شده است؛ پاسخ موفق هنوز در این گفت‌وگو ثبت نشده.' : locale === 'ar' ? 'مسار المساعد مُعدّ؛ لم يُسجّل رد ناجح في هذه المحادثة بعد.' : 'Assistant route is configured; no successful reply is recorded in this conversation yet.')
+                  : assistantState === 'responded' ? (locale === 'fa-IR' ? 'دستیار در همین گفت‌وگو پاسخ داده است.' : locale === 'ar' ? 'أجاب المساعد في هذه المحادثة.' : 'The assistant has replied in this conversation.')
+                    : assistantState === 'quota_exhausted' ? (locale === 'fa-IR' ? 'سهمیهٔ روزانهٔ دستیار تمام شده است.' : locale === 'ar' ? 'اكتملت الحصة اليومية للمساعد.' : 'The assistant daily limit is reached.')
+                      : assistantState === 'disabled' ? (locale === 'fa-IR' ? 'پاسخ‌گویی هوشمند فعال نیست؛ می‌توانید اطلاعات سفر را دستی ذخیره کنید.' : locale === 'ar' ? 'المساعد غير مفعّل؛ يمكنك حفظ تفاصيل الرحلة يدوياً.' : 'AI replies are disabled; you can still save trip details manually.')
+                        : (locale === 'fa-IR' ? 'دستیار اکنون در دسترس نیست؛ درخواست سفر شما همچنان قابل ذخیره است.' : locale === 'ar' ? 'المساعد غير متاح حالياً؛ ويمكن حفظ تفاصيل الرحلة.' : 'The assistant is currently unavailable; trip details can still be saved.')}
+              {assistantRemaining !== null && assistantState !== 'disabled' && assistantState !== 'unavailable' && <> · {locale === 'fa-IR' ? `سهمیهٔ قابل استفاده: ${formatNumber(locale, assistantRemaining)}` : locale === 'ar' ? `المتبقي اليوم: ${formatNumber(locale, assistantRemaining)}` : `${assistantRemaining} requests available today`}</>}
+            </p>
             <p className="assistant-action-help">{assistantCopy[locale].advisorActionHelp}</p>
             <button className="primary" type="button" onClick={() => void askAssistant()}
               disabled={busy || !online || !remoteConsent || messageText.length > 1200}>
@@ -1106,13 +1198,13 @@ export function TravelerJourney({ locale, session, online, requirements, onSessi
             <input id="profile-budget" type="text" maxLength={100} dir="auto" value={budgetText}
               onChange={event => { setBudgetText(event.target.value); setDirty(true); invalidateConsent(); }} />
             {!budgetValid && <p className="journey-error" role="alert">{copy.profileBudgetInvalid}</p>}
-            <label htmlFor="profile-travel-start">{copy.profileTravelStart}</label>
             {extracted?.relativeStartDate?.value && !extracted.travelDates.value && <p className="profile-relative-date" role="note">{chatFlowCopy[locale].relativeDate}</p>}
-            <input id="profile-travel-start" type="date" value={travelStartText}
-              onChange={event => { setTravelStartText(event.target.value); setDirty(true); invalidateConsent(); }} />
-            <label htmlFor="profile-travel-end">{copy.profileTravelEnd}</label>
-            <input id="profile-travel-end" type="date" value={travelEndText}
-              onChange={event => { setTravelEndText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            <JalaliDatePicker id="profile-travel-start" label={copy.profileTravelStart} locale={locale}
+              value={travelStartText} timeZone={travelerTimezone}
+              onChange={value => { setTravelStartText(value); setDirty(true); invalidateConsent(); }} />
+            <JalaliDatePicker id="profile-travel-end" label={copy.profileTravelEnd} locale={locale}
+              value={travelEndText} timeZone={travelerTimezone}
+              onChange={value => { setTravelEndText(value); setDirty(true); invalidateConsent(); }} />
             {!datesValid && <p className="journey-error" role="alert">{copy.profileDatesInvalid}</p>}
             <label htmlFor="profile-interests">{copy.profileInterests}</label>
             <textarea id="profile-interests" maxLength={300} rows={2} dir="auto" value={interestText}

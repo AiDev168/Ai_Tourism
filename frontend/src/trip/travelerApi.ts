@@ -287,13 +287,22 @@ async function request<T>(path: string, csrfToken: string | undefined, init?: Re
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
 
 export const travelerApi = {
-  interpretRequirements: (csrf: string, body: { request_text: string; locale: Locale }) => request<{ requirements: TripRequirementsV1 }>(
+  assistantStatus: () => request<{
+    state: 'configured' | 'disabled' | 'unavailable' | 'quota_exhausted';
+    user_used: number; user_remaining: number; user_limit: number;
+    global_used: number; global_remaining: number; global_limit: number;
+  }>('/assistant/status', undefined),
+  interpretRequirements: (csrf: string, body: {
+    request_text: string; locale: Locale; traveler_timezone?: string; traveler_reference_date?: string;
+  }) => request<{ requirements: TripRequirementsV1 }>(
     '/requirements/interpret', csrf, json('POST', body),
   ),
   createConversation: (csrf: string, body: {
     locale: Locale;
     request_text: string;
     extracted_requirements: TripRequirements;
+    traveler_timezone?: string;
+    traveler_reference_date?: string;
     confirmed_requirements?: Record<string, unknown>;
     destination_ids?: string[];
     idempotency_key: string;
@@ -304,6 +313,8 @@ export const travelerApi = {
     locale: Locale;
     request_text: string;
     extracted_requirements: TripRequirements;
+    traveler_timezone?: string;
+    traveler_reference_date?: string;
     confirmed_requirements?: Record<string, unknown>;
     destination_ids?: string[];
     idempotency_key: string;
@@ -333,6 +344,7 @@ export const travelerApi = {
     expected_version: number;
     remote_processing_consent: true;
     extracted_requirements?: TripRequirements;
+    existing_user_message_id?: string;
   }) => request<{
     conversation: ConversationRecord;
     trip: TripRecord;

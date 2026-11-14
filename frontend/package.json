@@ -15,6 +15,7 @@
     "visual-qa": "node scripts/visual-qa.mjs"
   },
   "dependencies": {
+    "jalaali-js": "2.0.1",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },

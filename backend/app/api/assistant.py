@@ -24,7 +24,7 @@ from app.modules.trip.repository import (
     TravelerConflict, TravelerInvalidState, TravelerNotFound, TravelerRepository,
 )
 from app.modules.trip.schemas import ConversationDetail, MessageResponse, TripResponse, _bounded_json
-from app.modules.provider_admin.runtime import make_admin_chat_gateway
+from app.modules.provider_admin.runtime import make_admin_chat_gateway, provider_registry
 
 router = APIRouter(prefix='/api/v1', tags=['traveler'])
 logger = logging.getLogger('ai_tourism.assistant')
@@ -38,6 +38,7 @@ class AssistantTurnRequest(BaseModel):
     expected_version: int = Field(ge=1)
     remote_processing_consent: Literal[True]
     extracted_requirements: dict[str, Any] | None = None
+    existing_user_message_id: UUID | None = None
 
     @field_validator('content')
     @classmethod
@@ -79,6 +80,62 @@ def get_chat_gateway(
 def _error(status: int, code: str) -> JSONResponse:
     return JSONResponse(status_code=status, content={'error': {'code': code}},
                         headers={'Cache-Control': 'no-store'})
+
+
+def _chat_route_state(settings: Settings) -> str:
+    """Report configured route readiness only; never probes or calls a model."""
+    if settings.app_env.lower() not in {'development', 'test', 'local_pilot'}:
+        return 'disabled'
+    if settings.ai_provider_admin_enabled:
+        if settings.ai_provider_vault_dir is None:
+            return 'disabled'
+        try:
+            registry = provider_registry(settings)
+            active = registry.active_snapshot('chat')
+            if active.revision_id is not None:
+                eligible = registry.validated_snapshot('chat', active.revision_id)
+                return 'configured' if eligible.revision_id == active.revision_id else 'unavailable'
+            fallback = registry.get_fallback('chat')
+            if fallback.get('enabled'):
+                for revision_id in fallback.get('ordered_revision_ids', []):
+                    try:
+                        eligible = registry.validated_snapshot('chat', revision_id)
+                    except Exception:
+                        continue
+                    if eligible.revision_id == revision_id:
+                        return 'configured'
+            return 'disabled'
+        except Exception:
+            return 'unavailable'
+    if settings.internal_chat_enabled and settings.internal_chat_token is not None:
+        return 'configured'
+    return 'disabled'
+
+
+@router.get('/assistant/status')
+def assistant_status(
+    response: Response,
+    principal: Annotated[Principal, Depends(get_principal)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    repository: Annotated[AssistantTurnRepository, Depends(get_assistant_turn_repository)],
+):
+    """Return safe route/quota facts without spending an assistant invocation."""
+    response.headers['Cache-Control'] = 'no-store'
+    try:
+        route_state = _chat_route_state(settings)
+        budget = repository.budget_status(
+            user_id=principal.user_id,
+            per_user_limit=settings.internal_chat_daily_user_limit,
+            global_limit=settings.internal_chat_daily_global_limit,
+        )
+        state = route_state
+        if state == 'configured' and (
+            budget['user_remaining'] == 0 or budget['global_remaining'] == 0
+        ):
+            state = 'quota_exhausted'
+        return {'state': state, **budget}
+    except Exception:
+        return _error(503, 'assistant_status_unavailable')
 
 
 def _candidate_profile(
@@ -177,6 +234,7 @@ async def assistant_turn(
             extracted_requirements=body.extracted_requirements,
             per_user_limit=settings.internal_chat_daily_user_limit,
             global_limit=settings.internal_chat_daily_global_limit,
+            existing_user_message_id=body.existing_user_message_id,
         )
     except TravelerNotFound:
         return _error(404, 'resource_not_found')
@@ -206,6 +264,7 @@ async def assistant_turn(
             )
             original_request = trip_context.get('original_request') if trip_context else None
             if (isinstance(original_request, str) and original_request.strip()
+                    and original_request != body.content
                     and not any(
                         item.get('role') == 'user' and item.get('content') == original_request
                         for item in history if isinstance(item, dict)

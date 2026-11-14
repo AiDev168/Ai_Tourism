@@ -39,6 +39,12 @@ class FakeChatRepo:
             raise TravelerNotFound
         return TurnReservation(TURN, self.status, 'fa-IR', USER_MSG, ASSISTANT_MSG, self.status == 'reserved' and not getattr(self, 'is_replay', False))
 
+    def budget_status(self, **kwargs):
+        return {'user_used': 2, 'user_remaining': kwargs['per_user_limit'] - 2,
+                'user_limit': kwargs['per_user_limit'], 'global_used': 11,
+                'global_remaining': kwargs['global_limit'] - 11,
+                'global_limit': kwargs['global_limit']}
+
     def history(self, **kwargs):
         assert kwargs['user_id'] == OWNER
         return [{'role': 'user', 'content': 'سفر سه روزه'}]
@@ -170,6 +176,36 @@ def test_authenticated_turn_persists_candidate_without_confirming_it():
         assert repo.last['user_id'] == OWNER and repo.finished['turn_id'] == TURN
         assert len(gateway.calls) == 1
         assert gateway.calls[0].history[0].content == 'سفر سه روزه'
+    finally:
+        c.app.dependency_overrides.clear()
+
+
+def test_initial_persisted_request_can_be_reused_as_the_first_ai_turn():
+    c, repo, gateway = client()
+    request = body()
+    request['existing_user_message_id'] = str(USER_MSG)
+    try:
+        result = c.post(f'/api/v1/conversations/{CONV}/assistant-turns', json=request)
+        assert result.status_code == 200, result.text
+        assert repo.last['existing_user_message_id'] == USER_MSG
+        assert len(gateway.calls) == 1
+        assert gateway.calls[0].text == request['content']
+    finally:
+        c.app.dependency_overrides.clear()
+
+
+def test_assistant_status_reports_configuration_and_budget_without_invocation():
+    c, repo, gateway = client()
+    try:
+        result = c.get('/api/v1/assistant/status')
+        assert result.status_code == 200
+        assert result.headers['cache-control'] == 'no-store'
+        assert result.json() == {
+            'state': 'configured', 'user_used': 2, 'user_remaining': 6,
+            'user_limit': 8, 'global_used': 11, 'global_remaining': 89,
+            'global_limit': 100,
+        }
+        assert gateway.calls == [] and repo.calls == 0
     finally:
         c.app.dependency_overrides.clear()
 

@@ -39,6 +39,51 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('persisted traveler journey', () => {
+  it('sends the consented first request to the assistant without duplicating the persisted user message', async () => {
+    const requestText = 'Plan a trip to Shiraz for five people tomorrow';
+    const parsed = createTripRequirements({ requestText, locale: 'en-US' });
+    if (parsed.kind === 'invalid') throw new Error('Expected a valid request');
+    const trip = tripRecord(requestText, parsed);
+    const initialMessage = { message_id: 'initial-user-message', trip_id: trip.trip_id, role: 'user', content: requestText, created_at: trip.created_at };
+    const conversation = {
+      conversation_id: 'conversation-1', locale: 'en-US', version: 1,
+      started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
+      trips: [trip], messages: [initialMessage],
+    };
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input); const method = init?.method ?? 'GET';
+      calls.push({ url, init });
+      if (url === '/api/v1/assistant/status') return response({ state: 'configured', user_used: 0, user_remaining: 8, user_limit: 8, global_used: 0, global_remaining: 100, global_limit: 100 });
+      if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
+      if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: initialMessage }, 201);
+      if (url.endsWith('/assistant-turns') && method === 'POST') return response({
+        conversation: { ...conversation, version: 2 }, trip: { ...trip, version: 2 },
+        message: { message_id: 'assistant-1', trip_id: trip.trip_id, role: 'assistant', content: 'How many nights would you like to stay?', created_at: trip.created_at },
+        candidate_requirements: {}, clarification: 'How many nights would you like to stay?', replayed: false,
+      });
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => root.render(<TravelerJourney locale="en-US" session={session} online requirements={parsed.requirements}
+      initialRemoteConsent travelerTimezone="Asia/Tehran" onSessionExpired={() => undefined}
+      onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
+    await settle();
+    await act(async () => host.querySelector<HTMLButtonElement>('.journey-action')!.click());
+    await settle();
+    const create = calls.find(call => call.url === '/api/v1/conversations')!;
+    const savedBody = JSON.parse(String(create.init?.body));
+    expect(savedBody.traveler_timezone).toBe('Asia/Tehran');
+    expect(savedBody.traveler_reference_date).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+    const assistant = calls.find(call => call.url.endsWith('/assistant-turns'))!;
+    const turnBody = JSON.parse(String(assistant.init?.body));
+    expect(turnBody.content).toBe(requestText);
+    expect(turnBody.existing_user_message_id).toBe(initialMessage.message_id);
+    expect(turnBody.expected_version).toBe(1);
+    expect(calls.filter(call => call.url === '/api/v1/conversations').length).toBe(1);
+    expect(host.textContent).toContain('assistant replied');
+  });
+
   it('labels catalogue reference points separately from entrances in all locales', async () => {
     for (const locale of ['fa-IR', 'en-US', 'ar'] as const) {
       await act(async () => root.render(<LocationReference locale={locale} coordinate={{

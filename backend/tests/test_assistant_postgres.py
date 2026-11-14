@@ -128,6 +128,45 @@ def test_real_reservation_completion_replay_and_version(assistant_db):
     assert n == 3
 
 
+def test_existing_initial_request_is_attached_without_duplicate_user_message(assistant_db):
+    traveler, assistant, owner, conversation, trip = assistant_db
+    with traveler.connection() as conn:
+        row = conn.execute(
+            """SELECT message_id,content FROM conversation.messages
+               WHERE conversation_id=%s AND trip_id=%s AND role='user'""",
+            (conversation, trip),
+        ).fetchone()
+        before = conn.execute(
+            """SELECT COUNT(*) AS n FROM conversation.messages
+               WHERE conversation_id=%s AND trip_id=%s AND role='user'""",
+            (conversation, trip),
+        ).fetchone()["n"]
+    assert before == 1
+    reserved = assistant.reserve(
+        user_id=owner, conversation_id=conversation, trip_id=trip,
+        idempotency_key=f"assistant-initial-{uuid4().hex}", expected_version=1,
+        content=row["content"], extracted_requirements=None,
+        per_user_limit=8, global_limit=100000,
+        existing_user_message_id=row["message_id"],
+    )
+    assert reserved.created and reserved.user_message_id == row["message_id"]
+    with traveler.connection() as conn:
+        after = conn.execute(
+            """SELECT COUNT(*) AS n FROM conversation.messages
+               WHERE conversation_id=%s AND trip_id=%s AND role='user'""",
+            (conversation, trip),
+        ).fetchone()["n"]
+    assert after == before
+    assert traveler.conversation(owner, conversation)["version"] == 2
+    assert traveler.trip(owner, trip)["confirmed_requirements"] == {}
+    with traveler.connection() as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM conversation.messages WHERE conversation_id=%s",
+            (conversation,),
+        ).fetchone()["n"]
+    assert n == 1
+
+
 def test_long_chat_context_retains_initial_request_and_latest_corrections(assistant_db):
     traveler, assistant, owner, conversation, trip = assistant_db
     # The initial trip request is recorded as a real user message by the

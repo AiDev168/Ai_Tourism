@@ -14,6 +14,7 @@ import { TravelerJourney } from '../trip/TravelerJourney';
 import { PwaUpdateNotice } from '../pwa/PwaUpdateNotice';
 import { AiProviderAdminPanel } from '../admin/aiProviders/AiProviderAdminPanel';
 import { displayTripInterest } from '../trip/interestDisplay';
+import { deviceCalendarDate } from '../trip/jalaliDate';
 
 const destinationCatalog = new ApiDestinationCatalogPort();
 
@@ -74,6 +75,11 @@ export function App() {
   const [heroImageFailed, setHeroImageFailed] = useState(false);
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
+  const [initialRemoteConsent, setInitialRemoteConsent] = useState(false);
+  const [travelerTimezone, setTravelerTimezone] = useState(() =>
+    locale === 'fa-IR' ? 'Asia/Tehran' : (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'));
+  const [assistantRouteState, setAssistantRouteState] = useState<'loading' | 'configured' | 'disabled' | 'unavailable' | 'quota_exhausted'>('loading');
+  const [assistantRemaining, setAssistantRemaining] = useState<number | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const requestTextRef = useRef('');
   const catalogueRequestVersion = useRef(0);
@@ -108,6 +114,24 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let current = true;
+    if (!authSession || !online) {
+      setAssistantRouteState(online ? 'disabled' : 'unavailable');
+      setAssistantRemaining(null);
+      return () => { current = false; };
+    }
+    setAssistantRouteState('loading');
+    void travelerApi.assistantStatus().then(result => {
+      if (!current) return;
+      setAssistantRouteState(result.state);
+      setAssistantRemaining(Math.min(result.user_remaining, result.global_remaining));
+    }).catch(() => {
+      if (current) { setAssistantRouteState('unavailable'); setAssistantRemaining(null); }
+    });
+    return () => { current = false; };
+  }, [authSession?.user.user_id, online]);
+
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -138,7 +162,8 @@ export function App() {
     if (authSession && online) {
       try {
         const response = await travelerApi.interpretRequirements(authSession.csrf_token, {
-          request_text: requestText, locale,
+          request_text: requestText, locale, traveler_timezone: travelerTimezone,
+          traveler_reference_date: deviceCalendarDate(travelerTimezone),
         });
         interpreted = tripRequirementsV1ToTripRequirements(response.requirements);
       } catch {
@@ -164,6 +189,7 @@ export function App() {
   const clearTripDraft = () => {
     catalogueRequestVersion.current += 1;
     if (promptRef.current) promptRef.current.value = '';
+    setInitialRemoteConsent(false);
     requestTextRef.current = '';
     setError(''); setClarifications([]); setAmbiguities([]); setRequirements(null); setDestinationResolution(null); setCatalogueLoading(false);
   };
@@ -228,11 +254,36 @@ export function App() {
                 rows={4}
                 maxLength={1200}
                 defaultValue=""
-                onInput={event => { catalogueRequestVersion.current += 1; requestTextRef.current = event.currentTarget.value; setRequirements(null); setClarifications([]); setAmbiguities([]); setDestinationResolution(null); setCatalogueLoading(false); setError(''); }}
+                onInput={event => { catalogueRequestVersion.current += 1; requestTextRef.current = event.currentTarget.value; setInitialRemoteConsent(false); setRequirements(null); setClarifications([]); setAmbiguities([]); setDestinationResolution(null); setCatalogueLoading(false); setError(''); }}
                 placeholder={tripCopy.placeholder}
                 aria-describedby={error ? 'form-error trip-prompt-help' : 'trip-prompt-help'}
                 aria-invalid={error ? true : undefined}
               />
+              {authSession && <fieldset className="ai-processing-consent">
+                <legend>{locale === 'fa-IR' ? 'گفت‌وگوی هوشمند' : locale === 'ar' ? 'المحادثة الذكية' : 'AI conversation'}</legend>
+                <label htmlFor="initial-ai-consent">
+                  <input id="initial-ai-consent" type="checkbox" checked={initialRemoteConsent}
+                    onChange={event => setInitialRemoteConsent(event.currentTarget.checked)} />
+                  {locale === 'fa-IR'
+                    ? 'موافقم متن درخواست و پیام‌های سفر برای پاسخ‌گویی به سرویس هوش مصنوعی فعال ارسال شود.'
+                    : locale === 'ar'
+                      ? 'أوافق على إرسال نص الطلب ورسائل الرحلة إلى خدمة الذكاء الاصطناعي النشطة للرد.'
+                      : 'I agree to send this request and trip messages to the active AI service for replies.'}
+                </label>
+                <p className="assistant-provider-state" role="status" data-provider-state={assistantRouteState}>
+                  {assistantRouteState === 'loading' ? (locale === 'fa-IR' ? 'در حال بررسی وضعیت دستیار…' : locale === 'ar' ? 'جارٍ التحقق من حالة المساعد…' : 'Checking assistant status…')
+                    : assistantRouteState === 'configured' ? (locale === 'fa-IR' ? 'مسیر دستیار تنظیم شده است؛ این وضعیت به‌تنهایی پاسخ موفق را ثابت نمی‌کند.' : locale === 'ar' ? 'مسار المساعد مُعدّ؛ وهذا لا يثبت وحده نجاح الرد.' : 'Assistant route is configured; this alone does not prove a successful reply.')
+                      : assistantRouteState === 'quota_exhausted' ? (locale === 'fa-IR' ? 'سهمیهٔ روزانهٔ دستیار تمام شده است.' : locale === 'ar' ? 'اكتملت الحصة اليومية للمساعد.' : 'The assistant daily limit is reached.')
+                        : assistantRouteState === 'disabled' ? (locale === 'fa-IR' ? 'پاسخ‌گویی هوشمند فعال نیست؛ می‌توانید دستی برنامه‌ریزی کنید.' : locale === 'ar' ? 'المساعد غير مفعّل؛ يمكنك التخطيط يدوياً.' : 'AI replies are disabled; manual planning remains available.')
+                          : (locale === 'fa-IR' ? 'وضعیت دستیار در دسترس نیست؛ درخواست سفر را می‌توانید ذخیره کنید.' : locale === 'ar' ? 'حالة المساعد غير متاحة؛ يمكنك حفظ طلب الرحلة.' : 'Assistant status is unavailable; you can still save the trip request.')}
+                  {assistantRemaining !== null && assistantRouteState !== 'disabled' && assistantRouteState !== 'unavailable' && <> · {locale === 'fa-IR' ? `سهمیهٔ باقی‌مانده: ${formatNumber(locale, assistantRemaining)}` : locale === 'ar' ? `المتبقي اليوم: ${formatNumber(locale, assistantRemaining)}` : `${assistantRemaining} requests available today`}</>}
+                </p>
+                <label htmlFor="traveler-timezone">{locale === 'fa-IR' ? 'منطقهٔ زمانی برای عبارت‌هایی مثل «فردا»' : locale === 'ar' ? 'المنطقة الزمنية لعبارات مثل «غداً»' : 'Timezone for phrases such as “tomorrow”'}</label>
+                <select id="traveler-timezone" value={travelerTimezone} onChange={event => setTravelerTimezone(event.currentTarget.value)}>
+                  <option value="Asia/Tehran">Asia/Tehran</option>
+                  <option value={Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}>{Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'} ({locale === 'fa-IR' ? 'دستگاه' : locale === 'ar' ? 'الجهاز' : 'device'})</option>
+                </select>
+              </fieldset>}
               {error && <p id="form-error" className="form-error" role="alert">{error}</p>}
               <button type="submit" className="primary">
                 {tripCopy.submit} <span aria-hidden="true">↗</span>
@@ -320,6 +371,8 @@ export function App() {
           session={authSession}
           online={online}
           requirements={requirements}
+          initialRemoteConsent={initialRemoteConsent}
+          travelerTimezone={travelerTimezone}
           onSessionExpired={() => setAuthSession(null)}
           onRestoreRequest={(text, restored) => {
             requestTextRef.current = text;
