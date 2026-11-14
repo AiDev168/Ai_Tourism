@@ -22,5 +22,8 @@ fi
 if ! grep -q '^RAHGARD_STATE_DIR=' "$root/.env"; then
   printf 'RAHGARD_STATE_DIR=%s/state\n' "$root" >> "$root/.env"
 fi
+# This non-secret file may be edited on Windows. Strip CRLF terminators so
+# shell sourcing never appends carriage returns to host/secret-directory paths.
+sed -i 's/\r$//' "$root/.env"
 chmod 0600 "$root/.env"
 printf 'Prepared owner-only deployment directories at %s. DNS, Nginx, containers and database were not modified.\n' "$root"

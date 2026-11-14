@@ -4,7 +4,7 @@ umask 077
 cd "$(dirname "$0")"
 config="${RAHGARD_DEPLOY_CONFIG:-/opt/rahgard-staging/.env}"
 test -f "$config" || { echo 'Create the private non-secret deployment .env first.' >&2; exit 2; }
-set -a; . "$config"; set +a
+set -a; . <(sed 's/\r$//' "$config"); set +a
 compose=(docker compose --env-file "$config" -f compose.yaml)
 database=rahgard_pilot_vps_staging
 state_dir="${RAHGARD_STATE_DIR:-/opt/rahgard-staging/state}"

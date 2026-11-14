@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 umask 077
 cd "$(dirname "$0")"
-set -a; . /opt/rahgard-staging/.env; set +a
+set -a; . <(sed 's/\r$//' /opt/rahgard-staging/.env); set +a
 host="${RAHGARD_PUBLIC_HOST:-}"
 [[ "$host" == rahgard.hinaa.ir ]] || { echo 'This release is pinned to the owner-selected rahgard.hinaa.ir host.' >&2; exit 2; }
 file=/etc/nginx/conf.d/rahgard-staging.conf

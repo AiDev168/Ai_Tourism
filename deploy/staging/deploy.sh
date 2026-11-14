@@ -9,6 +9,7 @@ test "$(cat "$release/RELEASE_COMMIT")" = "$sha"
 test -s "$root/.env"
 build_images=$(sed -n 's/^RAHGARD_BUILD_IMAGES=//p' "$root/.env" | tail -1)
 build_images="${build_images:-true}"
+build_images="${build_images%$'\r'}"
 grep -q "^RAHGARD_RELEASE_SHA=$sha$" "$root/.env" || {
   sed -i "s/^RAHGARD_RELEASE_SHA=.*/RAHGARD_RELEASE_SHA=$sha/" "$root/.env"
   chmod 0600 "$root/.env"
