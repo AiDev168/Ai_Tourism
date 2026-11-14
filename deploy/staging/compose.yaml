@@ -1,0 +1,145 @@
+name: ${RAHGARD_COMPOSE_PROJECT:-rahgard-staging}
+
+services:
+  db:
+    build:
+      context: ../..
+      dockerfile: engineering/database-prep/Dockerfile
+    image: rahgard-postgres:17-postgis36-vector087
+    environment:
+      POSTGRES_DB: rahgard_pilot_vps_staging
+      POSTGRES_USER: ai_tourism_owner
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_owner_password
+      TZ: UTC
+      PGTZ: UTC
+    secrets:
+      - pg_owner_password
+      - app_db_password
+      - geo_authorizer_password
+      - geo_publisher_password
+    volumes:
+      - staging_pgdata:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+      - ../../engineering/database-prep/sql:/opt/rahgard/database-sql:ro
+      - ../../engineering/database-prep/legacy:/opt/rahgard/legacy:ro
+      - ../../engineering/pilot/sql:/opt/rahgard/pilot-sql:ro
+      - ../../engineering/pilot/sql/016_staging_invitation_auth.sql:/opt/rahgard/staging-sql/016_staging_invitation_auth.sql:ro
+    networks: [staging_private]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/staging/Dockerfile.api
+    image: rahgard-api:${RAHGARD_RELEASE_SHA:?Set tested RAHGARD_RELEASE_SHA}
+    environment:
+      APP_ENV: staging
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      LOG_LEVEL: INFO
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: rahgard_pilot_vps_staging
+      DATABASE_USER: ai_tourism_app
+      DATABASE_CONNECT_TIMEOUT_SECONDS: 3
+      AUTH_ENABLED: "true"
+      AUTH_SMS_ADAPTER: disabled
+      AUTH_LOCAL_OWNER_ENABLED: "false"
+      STAGING_AUTH_ENABLED: "true"
+      STAGING_PUBLIC_HOST: ${RAHGARD_PUBLIC_HOST:?Set RAHGARD_PUBLIC_HOST in the private deployment config}
+      AUTH_COOKIE_SECURE: "true"
+      AUTH_ALLOWED_ORIGINS: https://${RAHGARD_PUBLIC_HOST:?Set RAHGARD_PUBLIC_HOST in the private deployment config}
+      AUTH_SESSION_IDLE_SECONDS: 1800
+      AUTH_SESSION_ABSOLUTE_SECONDS: 43200
+      AUTH_OTP_LENGTH: 6
+      AUTH_OTP_TTL_SECONDS: 300
+      AUTH_OTP_MAX_ATTEMPTS: 5
+      AUTH_OTP_RESEND_COOLDOWN_SECONDS: 60
+      AUTH_RATE_WINDOW_SECONDS: 900
+      AUTH_PHONE_ISSUE_LIMIT: 3
+      AUTH_IP_ISSUE_LIMIT: 20
+      AUTH_GLOBAL_ISSUE_LIMIT: 300
+      AUTH_PHONE_VERIFY_LIMIT: 20
+      AUTH_IP_VERIFY_LIMIT: 60
+      INTERNAL_CHAT_ENABLED: ${RAHGARD_CHAT_ENABLED:-true}
+      INTERNAL_CHAT_ENDPOINT: http://host.docker.internal:8000/v1/chat/completions
+      INTERNAL_CHAT_MODEL: ${RAHGARD_CHAT_MODEL:-Qwen3-VL-30B-A3B-Instruct}
+      INTERNAL_CHAT_DAILY_USER_LIMIT: 8
+      INTERNAL_CHAT_DAILY_GLOBAL_LIMIT: 100
+      AI_PROVIDER_ADMIN_ENABLED: "false"
+      TOURISM_RAG_ENABLED: "false"
+      AUTH_TRUSTED_PROXY_CIDRS: 172.16.0.0/12
+    secrets:
+      - app_db_password
+      - auth_otp_hmac_secret
+      - auth_csrf_secret
+      - auth_rate_limit_secret
+      - internal_chat_token
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [staging_private]
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/staging/Dockerfile.web
+    image: rahgard-web:${RAHGARD_RELEASE_SHA:?Set tested RAHGARD_RELEASE_SHA}
+    ports:
+      - "127.0.0.1:${RAHGARD_WEB_BIND_PORT:-18080}:8080"
+    networks: [staging_private]
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+
+networks:
+  staging_private:
+    internal: true
+
+volumes:
+  staging_pgdata:
+    name: ${RAHGARD_PG_VOLUME:-rahgard_staging_pgdata}
+
+secrets:
+  pg_owner_password:
+    file: ${RAHGARD_SECRET_DIR:?Set RAHGARD_SECRET_DIR in private deployment config}/pg_owner_password
+  app_db_password:
+    file: ${RAHGARD_SECRET_DIR:?Set RAHGARD_SECRET_DIR in private deployment config}/app_db_password
+  geo_authorizer_password:
+    file: ${RAHGARD_SECRET_DIR:?Set RAHGARD_SECRET_DIR in private deployment config}/geo_authorizer_password
+  geo_publisher_password:
+    file: ${RAHGARD_SECRET_DIR:?Set RAHGARD_SECRET_DIR in private deployment config}/geo_publisher_password
+  auth_otp_hmac_secret:
+    file: ${RAHGARD_SECRET_DIR:?Set RAHGARD_SECRET_DIR in private deployment config}/auth_otp_hmac_secret
+  auth_csrf_secret:
+    file: ${RAHGARD_SECRET_DIR:?Set RAHGARD_SECRET_DIR in private deployment config}/auth_csrf_secret
+  auth_rate_limit_secret:
+    file: ${RAHGARD_SECRET_DIR:?Set RAHGARD_SECRET_DIR in private deployment config}/auth_rate_limit_secret
+  internal_chat_token:
+    file: ${RAHGARD_SECRET_DIR:?Set RAHGARD_SECRET_DIR in private deployment config}/internal_chat_token

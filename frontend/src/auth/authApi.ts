@@ -2,11 +2,11 @@ export type AuthUser = {
   user_id: string;
   phone_e164: string | null;
   phone_verified: boolean | null;
-  auth_method?: 'otp' | 'local_owner';
+  auth_method?: 'otp' | 'local_owner' | 'staging_invite';
 };
 export type AuthSession = { user: AuthUser; csrf_token: string };
 export type AuthCapabilities = {
-  methods: Array<'otp' | 'local_owner'>;
+  methods: Array<'otp' | 'local_owner' | 'staging_invite'>;
   otp_delivery: 'available' | 'unavailable';
 };
 
@@ -33,6 +33,12 @@ export const authApi = {
   me: () => request<AuthSession>('/me'),
   loginLocalOwner: (login_name: string, password: string) => request<AuthSession>(
     '/local-owner/login', { method: 'POST', body: JSON.stringify({ login_name, password }) },
+  ),
+  stagingLogin: (email: string, password: string) => request<AuthSession>(
+    '/staging/login', { method: 'POST', body: JSON.stringify({ email, password }) },
+  ),
+  redeemStagingInvite: (invite_code: string, email: string, password: string) => request<AuthSession>(
+    '/staging/redeem', { method: 'POST', body: JSON.stringify({ invite_code, email, password }) },
   ),
   requestCode: (phone_number: string, locale: string) => request<{
     challenge_id: string | null; status: 'accepted' | 'unavailable'; message: string;

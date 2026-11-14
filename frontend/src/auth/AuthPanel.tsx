@@ -5,10 +5,18 @@ import { authMessages } from './authMessages';
 import { localOwnerMessages } from './localOwnerMessages';
 
 type Phase = 'phone' | 'code';
+type StagingMode = 'login' | 'redeem';
+
+const stagingCopy = {
+  'fa-IR': { account: 'ورود آزمایشی', email: 'ایمیل', password: 'گذرواژه (حداقل ۱۶ نویسه)', invite: 'کد دعوت', redeem: 'فعال‌سازی دعوت', switchToRedeem: 'کد دعوت دارید؟ ایجاد حساب', switchToLogin: 'بازگشت به ورود', invalid: 'ورود یا کد دعوت معتبر نیست.', smsUnavailable: 'ارسال پیامک در این محیط تنظیم نشده است؛ کد ورود پیامکی ارسال نمی‌شود.' },
+  'en-US': { account: 'Private pilot sign in', email: 'Email', password: 'Password (at least 16 characters)', invite: 'Invitation code', redeem: 'Activate invitation', switchToRedeem: 'Have an invitation? Create account', switchToLogin: 'Back to sign in', invalid: 'The sign-in details or invitation are invalid.', smsUnavailable: 'SMS delivery is not configured in this environment. No OTP will be sent.' },
+  ar: { account: 'تسجيل دخول تجريبي خاص', email: 'البريد الإلكتروني', password: 'كلمة المرور (16 حرفًا على الأقل)', invite: 'رمز الدعوة', redeem: 'تفعيل الدعوة', switchToRedeem: 'لديك دعوة؟ إنشاء حساب', switchToLogin: 'العودة إلى تسجيل الدخول', invalid: 'بيانات الدخول أو الدعوة غير صالحة.', smsUnavailable: 'إرسال الرسائل النصية غير مُعدّ في هذه البيئة؛ لن يُرسل رمز تحقق.' },
+} as const;
 
 export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessionChange?: (session: AuthSession | null) => void }) {
   const copy = authMessages[locale];
   const localCopy = localOwnerMessages[locale];
+  const stageCopy = stagingCopy[locale];
   const [session, setSession] = useState<AuthSession | null>(null);
   const [csrfToken, setCsrfToken] = useState('');
   const [phase, setPhase] = useState<Phase>('phone');
@@ -23,6 +31,10 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
   const [ownerMode, setOwnerMode] = useState(false);
   const [loginName, setLoginName] = useState('');
   const [password, setPassword] = useState('');
+  const [stagingMode, setStagingMode] = useState<StagingMode>('login');
+  const [stagingEmail, setStagingEmail] = useState('');
+  const [stagingPassword, setStagingPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -82,6 +94,20 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
     } finally { setBusy(false); }
   };
 
+  const submitStaging = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setBusy(true); setError('');
+    try {
+      const value = stagingMode === 'login'
+        ? await authApi.stagingLogin(stagingEmail, stagingPassword)
+        : await authApi.redeemStagingInvite(inviteCode, stagingEmail, stagingPassword);
+      setSession(value); setCsrfToken(value.csrf_token); setStagingPassword(''); setInviteCode(''); setOpen(false);
+      onSessionChange?.(value);
+    } catch (errorValue) {
+      setStagingPassword('');
+      setError(errorValue instanceof AuthApiError && errorValue.status === 401 ? stageCopy.invalid : copy.genericError);
+    } finally { setBusy(false); }
+  };
+
   const signOut = async () => {
     setBusy(true); setError('');
     try {
@@ -113,7 +139,7 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
     <div className="auth-entry">
       {session ? (
         <div className="auth-signed-in" aria-live="polite">
-          <span dir={session.user.phone_e164 ? 'ltr' : 'auto'}>{session.user.phone_e164 ?? localCopy.ownerAccount}</span>
+          <span dir={session.user.phone_e164 ? 'ltr' : 'auto'}>{session.user.phone_e164 ?? (session.user.auth_method === 'staging_invite' ? stageCopy.account : localCopy.ownerAccount)}</span>
           <button type="button" onClick={() => void signOut()} disabled={busy}>{busy ? copy.loading : copy.signOut}</button>
           <button type="button" onClick={() => void deleteAccount()} disabled={busy}>{copy.deleteAccount}</button>
         </div>
@@ -138,6 +164,25 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
                 required minLength={1} maxLength={256} value={password} onChange={event => setPassword(event.target.value)} />
               <button type="submit" disabled={busy}>{busy ? copy.loading : copy.signIn}</button>
             </form>
+          ) : capabilities?.methods.includes('staging_invite') ? (
+            <section aria-label={stageCopy.account}>
+              <p role="note">{stageCopy.smsUnavailable}</p>
+              <button type="button" className="auth-owner-choice" onClick={() => { setStagingMode(value => value === 'login' ? 'redeem' : 'login'); setError(''); setNotice(''); setStagingPassword(''); }}>
+                {stagingMode === 'login' ? stageCopy.switchToRedeem : stageCopy.switchToLogin}
+              </button>
+              <form onSubmit={event => void submitStaging(event)}>
+                <h2>{stagingMode === 'login' ? stageCopy.account : stageCopy.redeem}</h2>
+                {stagingMode === 'redeem' && <>
+                  <label htmlFor="auth-stage-invite">{stageCopy.invite}</label>
+                  <input id="auth-stage-invite" name="invite_code" autoComplete="one-time-code" required minLength={32} maxLength={128} value={inviteCode} onChange={event => setInviteCode(event.target.value)} />
+                </>}
+                <label htmlFor="auth-stage-email">{stageCopy.email}</label>
+                <input id="auth-stage-email" name="email" type="email" autoComplete="email" required maxLength={254} value={stagingEmail} onChange={event => setStagingEmail(event.target.value)} />
+                <label htmlFor="auth-stage-password">{stageCopy.password}</label>
+                <input id="auth-stage-password" name="password" type="password" autoComplete={stagingMode === 'login' ? 'current-password' : 'new-password'} required minLength={stagingMode === 'login' ? 1 : 16} maxLength={256} value={stagingPassword} onChange={event => setStagingPassword(event.target.value)} />
+                <button type="submit" disabled={busy}>{busy ? copy.loading : stagingMode === 'login' ? copy.signIn : stageCopy.redeem}</button>
+              </form>
+            </section>
           ) : capabilities?.methods.includes('otp') && phase === 'phone' ? (
             <form onSubmit={event => void submitPhone(event)}>
               <h2>{copy.travelerSignIn}</h2>

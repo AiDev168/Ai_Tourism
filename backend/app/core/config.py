@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     auth_enabled: bool = False
     auth_sms_adapter: str = "disabled"
     auth_local_owner_enabled: bool = False
+    staging_auth_enabled: bool = False
+    staging_public_host: str = ""
     sms_ir_sandbox_api_key: SecretStr | None = None
     auth_otp_hmac_secret: SecretStr | None = None
     auth_csrf_secret: SecretStr | None = None
@@ -71,6 +73,22 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_auth_configuration(self):
+        environment = self.app_env.lower()
+        if environment not in {"development", "test", "local_pilot", "staging", "production"}:
+            raise ValueError("APP_ENV is not supported")
+        if self.staging_auth_enabled:
+            host = self.staging_public_host.lower().strip()
+            origin = urlsplit(self.auth_allowed_origins.strip())
+            if (
+                environment != "staging" or not self.auth_enabled
+                or self.auth_local_owner_enabled or self.auth_sms_adapter != "disabled"
+                or not self.auth_cookie_secure or not host or "/" in host or ":" in host
+                or "," in self.auth_allowed_origins
+                or origin.scheme != "https" or origin.hostname != host
+                or origin.port is not None or origin.username or origin.password
+                or origin.path or origin.query or origin.fragment
+            ):
+                raise ValueError("Staging invitation authentication requires one exact HTTPS public origin")
         if self.ai_provider_admin_enabled:
             if self.app_env.lower() != "local_pilot" or not self.auth_enabled or not self.auth_cookie_secure:
                 raise ValueError("AI provider administration is restricted to authenticated local pilot")
@@ -92,12 +110,18 @@ class Settings(BaseSettings):
         if self.internal_chat_enabled:
             chat_url = urlsplit(self.internal_chat_endpoint)
             if (
-                self.app_env.lower() not in {"development", "test", "local_pilot"}
-                or chat_url.scheme != "https" or not chat_url.hostname
+                environment not in {"development", "test", "local_pilot", "staging"}
+                or not chat_url.hostname
                 or chat_url.username or chat_url.password or chat_url.query or chat_url.fragment
                 or not self.internal_chat_model.strip() or len(self.internal_chat_model) > 160
                 or self.internal_chat_token is None
             ):
+                raise ValueError("Internal Chat configuration is invalid")
+            if environment == "staging":
+                if (not self.staging_auth_enabled or chat_url.scheme != "http"
+                        or chat_url.hostname != "host.docker.internal" or chat_url.port != 8000):
+                    raise ValueError("Staging Chat may use only the private host vLLM endpoint")
+            elif chat_url.scheme != "https":
                 raise ValueError("Internal Chat configuration is invalid")
             if self.app_env.lower() == "local_pilot":
                 allowed = urlsplit(self.auth_allowed_origins.strip())
@@ -117,7 +141,7 @@ class Settings(BaseSettings):
         if self.tourism_rag_enabled:
             parsed_rag_url = urlsplit(self.tourism_rag_api_url)
             if (
-                self.app_env.lower() not in {"development", "test"}
+                environment not in {"development", "test"}
                 or parsed_rag_url.scheme != "http"
                 or parsed_rag_url.hostname != "127.0.0.1"
                 or parsed_rag_url.port != 8765
@@ -137,7 +161,7 @@ class Settings(BaseSettings):
                 raise ValueError("TOURISM_RAG_API_TOKEN is invalid")
         if self.auth_sms_adapter not in {"disabled", "fake", "sms_ir_sandbox"}:
             raise ValueError("AUTH_SMS_ADAPTER must be disabled, fake, or sms_ir_sandbox")
-        if self.app_env.lower() == "production":
+        if environment == "production":
             if self.auth_enabled:
                 raise ValueError("Authentication is disabled in production pending separate SMS authorization")
             if not self.auth_cookie_secure:
@@ -161,7 +185,8 @@ class Settings(BaseSettings):
                 raise ValueError("Both authentication session lifetimes must be configured")
             if self.auth_session_idle_seconds > self.auth_session_absolute_seconds:
                 raise ValueError("Session idle lifetime cannot exceed absolute lifetime")
-            if self.auth_sms_adapter == "disabled" and not self.auth_local_owner_enabled:
+            if (self.auth_sms_adapter == "disabled" and not self.auth_local_owner_enabled
+                    and not self.staging_auth_enabled):
                 raise ValueError("Authentication is enabled without an available SMS delivery adapter")
             if not self.auth_allowed_origins.strip():
                 raise ValueError("AUTH_ALLOWED_ORIGINS must contain at least one exact origin")

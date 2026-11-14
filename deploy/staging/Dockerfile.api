@@ -1,0 +1,22 @@
+FROM python:3.13.9-slim-bookworm AS build
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+RUN pip install --no-cache-dir uv==0.13.1
+WORKDIR /src
+COPY pyproject.toml uv.lock ./
+ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+RUN uv sync --frozen --no-dev --no-install-project
+
+FROM python:3.13.9-slim-bookworm
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+RUN groupadd --system rahgard && useradd --system --gid rahgard --home-dir /app rahgard
+WORKDIR /app
+COPY --from=build /app/.venv /app/.venv
+COPY backend/app /app/backend/app
+COPY backend/scripts /app/backend/scripts
+COPY deploy/staging/api-entrypoint.sh /usr/local/bin/rahgard-entrypoint
+RUN chmod 0555 /usr/local/bin/rahgard-entrypoint && chown -R rahgard:rahgard /app
+USER rahgard
+WORKDIR /app/backend
+EXPOSE 8000
+ENTRYPOINT ["/usr/local/bin/rahgard-entrypoint"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

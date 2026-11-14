@@ -365,10 +365,47 @@ class AuthRepository:
             return {"user_id": user_id, "session_id": session["session_id"]}
 
     def resolve_session(self, token_hash: bytes, now: datetime, idle_seconds: int,
-                        allow_local_owner: bool = False) -> dict[str, Any] | None:
+                        allow_local_owner: bool = False,
+                        allow_staging: bool = False) -> dict[str, Any] | None:
         with self.connection() as conn, conn.transaction():
-            if allow_local_owner:
+            if allow_staging and not allow_local_owner:
                 row = conn.execute(
+                    """SELECT s.session_id, s.user_id, u.phone_e164,
+                              CASE WHEN sc.user_id IS NOT NULL THEN 'staging_invite' ELSE 'otp' END AS auth_method
+                       FROM identity.web_sessions s
+                       JOIN identity.users u ON u.user_id=s.user_id
+                       LEFT JOIN identity.verified_phones v ON v.user_id=u.user_id
+                       LEFT JOIN identity.staging_password_credentials sc ON sc.user_id=u.user_id
+                       WHERE s.token_hash=%s AND s.revoked_at IS NULL
+                         AND s.idle_expires_at>%s AND s.absolute_expires_at>%s
+                         AND u.account_status='active' AND u.is_synthetic=FALSE
+                         AND ((v.phone_e164=u.phone_e164 AND u.phone_e164 IS NOT NULL)
+                              OR (sc.user_id IS NOT NULL AND u.auth_subject='staging_invite'))
+                       FOR UPDATE OF s""",
+                    (token_hash, now, now),
+                ).fetchone()
+            elif allow_local_owner:
+                if allow_staging:
+                    row = conn.execute(
+                        """SELECT s.session_id, s.user_id, u.phone_e164,
+                                  CASE WHEN c.owner_id IS NOT NULL THEN 'local_owner'
+                                       WHEN sc.user_id IS NOT NULL THEN 'staging_invite' ELSE 'otp' END AS auth_method
+                           FROM identity.web_sessions s
+                           JOIN identity.users u ON u.user_id=s.user_id
+                           LEFT JOIN identity.verified_phones v ON v.user_id=u.user_id
+                           LEFT JOIN identity.local_owner_credentials c ON c.owner_id=u.user_id
+                           LEFT JOIN identity.staging_password_credentials sc ON sc.user_id=u.user_id
+                           WHERE s.token_hash=%s AND s.revoked_at IS NULL
+                             AND s.idle_expires_at>%s AND s.absolute_expires_at>%s
+                             AND u.account_status='active' AND u.is_synthetic=FALSE
+                             AND ((v.phone_e164=u.phone_e164 AND u.phone_e164 IS NOT NULL)
+                                  OR (c.owner_id IS NOT NULL AND u.auth_subject='local_owner')
+                                  OR (sc.user_id IS NOT NULL AND u.auth_subject='staging_invite'))
+                           FOR UPDATE OF s""",
+                        (token_hash, now, now),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
                     """SELECT s.session_id, s.user_id, u.phone_e164,
                               CASE WHEN c.owner_id IS NOT NULL THEN 'local_owner' ELSE 'otp' END AS auth_method
                        FROM identity.web_sessions s
@@ -381,8 +418,8 @@ class AuthRepository:
                          AND ((v.phone_e164=u.phone_e164 AND u.phone_e164 IS NOT NULL)
                               OR (c.owner_id IS NOT NULL AND u.auth_subject='local_owner'))
                        FOR UPDATE OF s""",
-                    (token_hash, now, now),
-                ).fetchone()
+                        (token_hash, now, now),
+                    ).fetchone()
             else:
                 row = conn.execute(
                     """SELECT s.session_id, s.user_id, u.phone_e164, 'otp' AS auth_method

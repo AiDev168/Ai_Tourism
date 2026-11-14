@@ -52,4 +52,30 @@ describe('OTP delivery failure UX', () => {
     expect(host.querySelector('#auth-code')).toBeNull();
     expect(host.textContent).not.toMatch(/rate limit|too many requests/i);
   });
+
+  it('uses invitation sign-in for staging and clearly states that SMS is unavailable', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ methods: ['otp', 'staging_invite'], otp_delivery: 'unavailable' }))
+      .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401))
+      .mockResolvedValueOnce(response({ user: { user_id: 'user-1', phone_e164: null,
+        phone_verified: null, auth_method: 'staging_invite' }, csrf_token: 'csrf' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => { root.render(<AuthPanel locale="en-US" />); });
+    await settle();
+    await act(async () => { (host.querySelector('button') as HTMLButtonElement).click(); });
+    expect(host.textContent).toContain('SMS delivery is not configured');
+    const email = host.querySelector<HTMLInputElement>('#auth-stage-email')!;
+    const password = host.querySelector<HTMLInputElement>('#auth-stage-password')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => {
+      setter?.call(email, 'traveler@example.test'); email.dispatchEvent(new Event('input', { bubbles: true }));
+      setter?.call(password, 'a-long-staging-password'); password.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await settle();
+    expect(fetchMock.mock.calls[2][0]).toContain('/staging/login');
+    expect(host.textContent).toContain('Private pilot sign in');
+  });
 });

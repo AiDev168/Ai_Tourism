@@ -132,6 +132,59 @@ def test_remote_adapter_allows_explicit_local_pilot_profile_only_when_enabled():
     assert len(calls) == 1
 
 
+def test_staging_chat_is_limited_to_private_host_vllm_and_exact_https_origin():
+    common = dict(
+        _env_file=None, database_password="test", app_env="staging",
+        auth_enabled=True, auth_sms_adapter="disabled", staging_auth_enabled=True,
+        staging_public_host="rahgard-staging.example.test", auth_cookie_secure=True,
+        auth_allowed_origins="https://rahgard-staging.example.test",
+        auth_otp_hmac_secret=SecretStr("a" * 32), auth_csrf_secret=SecretStr("b" * 32),
+        auth_rate_limit_secret=SecretStr("c" * 32), auth_session_idle_seconds=1800,
+        auth_session_absolute_seconds=43200, internal_chat_enabled=True,
+        internal_chat_endpoint="http://host.docker.internal:8000/v1/chat/completions",
+        internal_chat_model="Qwen3-VL-30B-A3B-Instruct", internal_chat_token=SecretStr("server-only"),
+    )
+    assert Settings(**common).staging_auth_enabled
+    for invalid in (
+        {"auth_local_owner_enabled": True},
+        {"auth_cookie_secure": False},
+        {"auth_allowed_origins": "https://rahgard-staging.example.test,https://other.test"},
+        {"internal_chat_endpoint": "https://host.docker.internal:8000/v1/chat/completions"},
+        {"internal_chat_endpoint": "http://example.test:8000/v1/chat/completions"},
+        {"internal_chat_endpoint": "http://host.docker.internal:4000/v1/chat/completions"},
+    ):
+        with pytest.raises(ValidationError):
+            Settings(**(common | invalid))
+
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop", "message": {"content": "برای چند روز سفر می‌کنید؟"},
+        }]})
+
+    remote = RemoteChatAdapter(
+        enabled=True, environment="staging",
+        endpoint="http://host.docker.internal:8000/v1/chat/completions",
+        model="Qwen3-VL-30B-A3B-Instruct", token=SecretStr("test-only"),
+        transport=httpx.MockTransport(handler),
+    )
+    result = asyncio.run(remote.invoke(ChatRequest(locale="fa-IR", text="برای شیراز سفر می‌خواهم")))
+    assert result.reply == "برای چند روز سفر می‌کنید؟"
+    assert len(requests) == 1
+    assert requests[0].url.host == "host.docker.internal"
+
+    for endpoint in ("http://example.invalid:8000/chat", "http://host.docker.internal:4000/chat"):
+        rejected = RemoteChatAdapter(
+            enabled=True, environment="staging", endpoint=endpoint,
+            model="model", token=SecretStr("test-only"), transport=httpx.MockTransport(handler),
+        )
+        with pytest.raises(AiCapabilityUnavailable):
+            asyncio.run(rejected.invoke(ChatRequest(locale="fa-IR", text="request")))
+    assert len(requests) == 1
+
+
 @pytest.mark.parametrize("content,expected_reply,expected_requirements", [
     ("برای انتخاب مقصد ابتدا بگویید چند روز وقت دارید؟",
      "برای انتخاب مقصد ابتدا بگویید چند روز وقت دارید؟", {}),

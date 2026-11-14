@@ -84,7 +84,7 @@ def _error(status: int, code: str) -> JSONResponse:
 
 def _chat_route_state(settings: Settings) -> str:
     """Report configured route readiness only; never probes or calls a model."""
-    if settings.app_env.lower() not in {'development', 'test', 'local_pilot'}:
+    if settings.app_env.lower() not in {'development', 'test', 'local_pilot', 'staging'}:
         return 'disabled'
     if settings.ai_provider_admin_enabled:
         if settings.ai_provider_vault_dir is None:
@@ -223,7 +223,7 @@ async def assistant_turn(
     gateway: Annotated[AiProviderGateway[ChatRequest, ChatReply], Depends(get_chat_gateway)],
 ):
     response.headers['Cache-Control'] = 'no-store'
-    if (not settings.internal_chat_enabled and not settings.ai_provider_admin_enabled) or settings.app_env.lower() not in {'development', 'test', 'local_pilot'}:
+    if (not settings.internal_chat_enabled and not settings.ai_provider_admin_enabled) or settings.app_env.lower() not in {'development', 'test', 'local_pilot', 'staging'}:
         return _error(503, 'assistant_unavailable')
     try:
         reservation = await run_in_threadpool(

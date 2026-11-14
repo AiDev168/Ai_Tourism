@@ -144,11 +144,17 @@ class RemoteChatAdapter:
 
     async def invoke(self, request: ChatRequest) -> ChatReply:
         parsed = urlsplit(self.endpoint)
-        if (not self.enabled or self.environment not in {"development", "test", "local_pilot"}
-                or parsed.scheme != "https" or not parsed.hostname
+        if (not self.enabled or self.environment not in {"development", "test", "local_pilot", "staging"}
+                or not parsed.hostname
                 or parsed.username or parsed.password or parsed.query or parsed.fragment
                 or not self.model or len(self.model) > 160 or self.token is None
                 or not self.token.get_secret_value().strip()):
+            raise AiCapabilityUnavailable()
+        if self.environment == "staging":
+            if (parsed.scheme != "http" or parsed.hostname != "host.docker.internal"
+                    or parsed.port != 8000):
+                raise AiCapabilityUnavailable()
+        elif parsed.scheme != "https":
             raise AiCapabilityUnavailable()
         payload = {
             "model": self.model,

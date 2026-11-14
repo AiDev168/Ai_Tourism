@@ -146,7 +146,12 @@ class AuthenticationService:
         if not raw_session or len(raw_session) > 128:
             return None
         token_hash = hashlib.sha256(raw_session.encode()).digest()
-        if self.settings.auth_local_owner_enabled:
+        if self.settings.staging_auth_enabled:
+            row = self.repository.resolve_session(
+                token_hash, datetime.now(UTC), self.settings.auth_session_idle_seconds or 0,
+                allow_local_owner=self.settings.auth_local_owner_enabled, allow_staging=True,
+            )
+        elif self.settings.auth_local_owner_enabled:
             row = self.repository.resolve_session(
                 token_hash, datetime.now(UTC), self.settings.auth_session_idle_seconds or 0,
                 allow_local_owner=True,

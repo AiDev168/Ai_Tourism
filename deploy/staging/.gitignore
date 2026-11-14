@@ -1,0 +1,7 @@
+.env
+secrets/
+state/
+backups/
+*.log
+release.tar
+.test-run/

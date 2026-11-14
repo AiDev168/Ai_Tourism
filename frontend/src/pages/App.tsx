@@ -209,7 +209,7 @@ export function App() {
         </div>
       </header>
       <AiProviderAdminPanel locale={locale} csrfToken={authSession?.csrf_token ?? ''}
-        authMethod={authSession?.user.auth_method} />
+        authMethod={authSession?.user.auth_method === 'staging_invite' ? undefined : authSession?.user.auth_method} />
     </>;
   }
 
