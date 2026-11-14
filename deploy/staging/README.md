@@ -53,7 +53,7 @@ or logs.
    dedicated DB service:
 
    ```bash
-   docker compose --env-file /opt/rahgard-staging/.env -f compose.yaml up -d db
+   docker compose --env-file /opt/rahgard-staging/.env -f compose.yaml up -d --build db
    ```
 
    Wait for its health check, then run `initialize-db.sh` exactly once. It
