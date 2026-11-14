@@ -17,7 +17,7 @@ create_secret() {
   # The API/PostgreSQL images use numeric GID 999. Their individual Compose
   # secret mounts need group-read, while the owner-only parent directory keeps
   # these files inaccessible to other host users.
-  sudo -n chgrp 999 "$target"
+  sudo -n chown "${RAHGARD_SECRET_OWNER_USER:-$(id -un)}:999" "$target"
   chmod 0640 "$target"
 }
 for key in pg_owner_password app_db_password auth_otp_hmac_secret auth_csrf_secret \
