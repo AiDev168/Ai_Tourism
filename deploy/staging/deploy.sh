@@ -7,6 +7,8 @@ sha="${1:-}"
 release="$root/releases/$sha"
 test "$(cat "$release/RELEASE_COMMIT")" = "$sha"
 test -s "$root/.env"
+build_images=$(sed -n 's/^RAHGARD_BUILD_IMAGES=//p' "$root/.env" | tail -1)
+build_images="${build_images:-true}"
 grep -q "^RAHGARD_RELEASE_SHA=$sha$" "$root/.env" || {
   sed -i "s/^RAHGARD_RELEASE_SHA=.*/RAHGARD_RELEASE_SHA=$sha/" "$root/.env"
   chmod 0600 "$root/.env"
@@ -36,7 +38,23 @@ rollback() {
   exit "$status"
 }
 trap rollback EXIT
-"${compose[@]}" build --pull=false
+case "$build_images" in
+  true|1|yes)
+    "${compose[@]}" build --pull=false
+    ;;
+  false|0|no)
+    for image in "rahgard-api:$sha" "rahgard-web:$sha" 'rahgard-postgres:17-postgis36-vector087'; do
+      docker image inspect "$image" >/dev/null 2>&1 || {
+        echo "Required prebuilt image is missing; release was not started: $image" >&2
+        exit 2
+      }
+    done
+    ;;
+  *)
+    echo 'RAHGARD_BUILD_IMAGES must be true or false.' >&2
+    exit 2
+    ;;
+esac
 "${compose[@]}" up -d db
 for _ in $(seq 1 60); do
   if "${compose[@]}" exec -T db pg_isready -U ai_tourism_owner -d rahgard_pilot_vps_staging >/dev/null 2>&1; then break; fi

@@ -56,6 +56,10 @@ or logs.
    docker compose --env-file /opt/rahgard-staging/.env -f compose.yaml up -d --build db
    ```
 
+   On a host without registry access, load the separately checksummed image
+   bundle first (`gzip -dc rahgard-images.tar.gz | docker load`), then omit
+   `--build` from the command above.
+
    Wait for its health check, then run `initialize-db.sh` exactly once. It
    refuses an existing/partial ledger, checks database name and PostgreSQL 17,
    creates an isolated marker, applies the baseline plus private migrations
@@ -64,10 +68,14 @@ or logs.
    destination view is empty. It does not publish the
    research/geo packet. If interrupted, do not rerun or recreate the volume;
    preserve the claim/ledger and investigate the exact partial state.
-6. Run `deploy.sh <tested-commit-sha>`. It builds from the exported source,
+6. By default, `deploy.sh <tested-commit-sha>` builds from the exported source,
    starts the API/PWA, and checks the loopback web response. It preserves the
    database volume and rolls the application symlink back on a failed health
-   check. Once the trusted origin certificate and Arvan HTTPS-origin/NAT route
+   check. On a host without registry access, first load a checksummed image
+   bundle containing `rahgard-api:<sha>`, `rahgard-web:<sha>`, and
+   `rahgard-postgres:17-postgis36-vector087`, then set
+   `RAHGARD_BUILD_IMAGES=false` in the private host config. The script checks
+   all exact image tags before starting. Once the trusted origin certificate and Arvan HTTPS-origin/NAT route
    are confirmed, run `install-nginx-vhost.sh` and verify
    `https://rahgard.hinaa.ir` from outside.
 7. Create a short-lived traveler invitation with
