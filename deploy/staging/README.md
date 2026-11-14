@@ -9,14 +9,20 @@ volumes are not changed by these scripts.
 
 ## Current access gate
 
-The candidate hostname `rahgard-staging.hinaa.ir` has not been confirmed to
-resolve to this VPS or to have a trusted Arvan HTTPS route. Do not install the
-Nginx vhost until the owner has configured that exact DNS/CDN route and the
-server presents a trusted certificate at `https://<host>`. Port 80 is not used.
-`install-nginx-vhost.sh` adds one new file only after it checks DNS, HTTPS, and
-Nginx configuration; it refuses to overwrite an existing file or server name.
-The configured origin is the existing port 63201. It must not be used as a
-cleartext public application URL.
+The owner-selected browser hostname is `rahgard.hinaa.ir`. The Arvan edge
+currently presents HTTPS but returns 502 because its origin route is not ready.
+The existing Nginx listener on port 63201 serves unrelated sites over HTTP and
+is directly Internet-reachable; Rahgard must never use that plaintext hop.
+Rahgard's origin listener is isolated on TLS port 63202, with a valid
+certificate for the exact host. Arvan must use HTTPS to the origin, and NAT
+must map its origin port to local 63202. Port 80 is not used.
+
+Before installing the Rahgard vhost, obtain and install a trusted certificate
+for `rahgard.hinaa.ir` using DNS-01 (the hostname resolves through Arvan, so
+HTTP-01 is unavailable). The operator helper refuses installation without a
+valid certificate whose SAN and key match the hostname. It adds one new vhost
+file, tests it, reloads Nginx, and verifies local origin TLS; existing vhosts
+are not replaced or modified.
 
 ## First install
 
@@ -27,7 +33,7 @@ or logs.
 
 1. `prepare-host.sh` creates the isolated directories and random runtime
    secrets. It does not change Nginx, start containers, or initialize a DB.
-2. Set `RAHGARD_PUBLIC_HOST` in `.env` to the exact owner-approved hostname.
+2. `RAHGARD_PUBLIC_HOST` in `.env` must be `rahgard.hinaa.ir`.
    Keep `RAHGARD_SECRET_DIR` and `RAHGARD_STATE_DIR` at their configured paths.
    Review whether the existing vLLM instance is reachable from Docker through
    `host.docker.internal:8000`; no other model endpoint is allowed by staging
@@ -61,8 +67,9 @@ or logs.
 6. Run `deploy.sh <tested-commit-sha>`. It builds from the exported source,
    starts the API/PWA, and checks the loopback web response. It preserves the
    database volume and rolls the application symlink back on a failed health
-   check. After an approved DNS/HTTPS route exists, run
-   `install-nginx-vhost.sh` and verify the exact HTTPS hostname.
+   check. Once the trusted origin certificate and Arvan HTTPS-origin/NAT route
+   are confirmed, run `install-nginx-vhost.sh` and verify
+   `https://rahgard.hinaa.ir` from outside.
 7. Create a short-lived traveler invitation with
    `/opt/rahgard-staging/current/deploy/staging/invite-traveler.sh`.
    It is single-use and printed once. Deliver it only over the owner's chosen

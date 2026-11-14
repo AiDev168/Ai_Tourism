@@ -39,10 +39,10 @@ trap rollback EXIT
 "${compose[@]}" build --pull=false
 "${compose[@]}" up -d db
 for _ in $(seq 1 60); do
-  if "${compose[@]}" exec -T db pg_isready -U rahgard_db_owner -d rahgard_pilot_vps_staging >/dev/null 2>&1; then break; fi
+  if "${compose[@]}" exec -T db pg_isready -U ai_tourism_owner -d rahgard_pilot_vps_staging >/dev/null 2>&1; then break; fi
   sleep 2
 done
-"${compose[@]}" exec -T db pg_isready -U rahgard_db_owner -d rahgard_pilot_vps_staging >/dev/null
+"${compose[@]}" exec -T db pg_isready -U ai_tourism_owner -d rahgard_pilot_vps_staging >/dev/null
 "${compose[@]}" up -d --remove-orphans
 "${compose[@]}" ps
 curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${RAHGARD_WEB_BIND_PORT:-18080}/" >/dev/null
