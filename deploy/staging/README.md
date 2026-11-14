@@ -53,8 +53,9 @@ or logs.
    Wait for its health check, then run `initialize-db.sh` exactly once. It
    refuses an existing/partial ledger, checks database name and PostgreSQL 17,
    creates an isolated marker, applies the baseline plus private migrations
-   0013–0016, checks every checksum, removes temporary migration grants, and
-   verifies the production destination view is empty. It does not publish the
+   0013 through 0016 (omitting owner-only admin/publication migrations), checks
+   every checksum, removes temporary grants, and verifies the production
+   destination view is empty. It does not publish the
    research/geo packet. If interrupted, do not rerun or recreate the volume;
    preserve the claim/ledger and investigate the exact partial state.
 6. Run `deploy.sh <tested-commit-sha>`. It builds from the exported source,
@@ -89,7 +90,7 @@ or logs.
   DB. Rehearse only against an isolated disposable copy before a real recovery.
 
 The current automatic DB initialization is for the initial empty staging
-volume only. Its verified ledger contains 15 rows: baseline 0000?0012, private
+volume only. Its verified ledger contains 15 rows: baseline 0000 through 0012, private
 geo boundary 0013, and staging invitation auth 0016. It does not install local
 owner or provider-admin schemas. The new migration 0016 adds invitation auth; no subsequent schema
 upgrade runner is included because no later migration is authorized. Future
