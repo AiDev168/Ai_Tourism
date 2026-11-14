@@ -106,7 +106,11 @@ services:
     image: rahgard-web:${RAHGARD_RELEASE_SHA:?Set tested RAHGARD_RELEASE_SHA}
     ports:
       - "127.0.0.1:${RAHGARD_WEB_BIND_PORT:-18080}:8080"
-    networks: [staging_private]
+    # Docker does not publish host ports for services attached only to an
+    # internal network on this host. Keep the API and database private, and
+    # attach only this reverse-proxy web container to a second bridge so its
+    # explicitly loopback-bound host port is available to the host TLS proxy.
+    networks: [staging_private, staging_frontend]
     depends_on:
       api: {condition: service_healthy}
     healthcheck:
@@ -121,6 +125,8 @@ services:
 networks:
   staging_private:
     internal: true
+  staging_frontend:
+    driver: bridge
 
 volumes:
   staging_pgdata:
