@@ -186,10 +186,16 @@ if command -v pg_restore >/dev/null 2>&1; then
   pg_restore --list "$work/extracted/database.dump" >/dev/null
 else
   restore_image="${RAHGARD_PG_RESTORE_IMAGE:-rahgard-postgres:17-postgis36-vector087}"
-  docker image inspect "$restore_image" >/dev/null 2>&1 || {
+  restore_docker=docker
+  if ! docker image inspect "$restore_image" >/dev/null 2>&1; then
+    # Windows Docker Desktop can be reachable from WSL through docker.exe even
+    # when its Linux integration is disabled for that distribution.
+    command -v docker.exe >/dev/null 2>&1 && restore_docker=docker.exe
+  fi
+  "$restore_docker" image inspect "$restore_image" >/dev/null 2>&1 || {
     echo 'pg_restore is unavailable and the configured PostgreSQL 17 restore image is not local.' >&2; exit 2;
   }
-  docker run --rm -i --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+  "$restore_docker" run --rm -i --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
     --cap-drop ALL --security-opt no-new-privileges:true --entrypoint pg_restore "$restore_image" \
     --list < "$work/extracted/database.dump" >/dev/null
 fi
