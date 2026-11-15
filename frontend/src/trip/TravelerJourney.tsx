@@ -294,6 +294,7 @@ export type TravelerJourneyProps = {
   online: boolean;
   requirements: TripRequirements | null;
   initialRemoteConsent?: boolean;
+  autoStartConversation?: boolean;
   travelerTimezone?: string;
   suggestedOrigin?: string;
   onSessionExpired: () => void;
@@ -301,7 +302,7 @@ export type TravelerJourneyProps = {
   onStartNewDraft: () => void;
 };
 
-export function TravelerJourney({ locale, session, online, requirements, initialRemoteConsent = false, travelerTimezone = 'Asia/Tehran', suggestedOrigin = '', onSessionExpired, onRestoreRequest, onStartNewDraft }: TravelerJourneyProps) {
+export function TravelerJourney({ locale, session, online, requirements, initialRemoteConsent = false, autoStartConversation = false, travelerTimezone = 'Asia/Tehran', suggestedOrigin = '', onSessionExpired, onRestoreRequest, onStartNewDraft }: TravelerJourneyProps) {
   const copy = journeyMessages[locale];
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversation, setActiveConversation] = useState<ConversationRecord | null>(null);
@@ -340,6 +341,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
   const [error, setError] = useState('');
   const [dirty, setDirty] = useState(false);
   const restoringRequestRef = useRef<string | null>(null);
+  const autoStartedRequestRef = useRef<string | null>(null);
   const resolutionSequenceRef = useRef(0);
   const catalogueBrowseSequenceRef = useRef(0);
 
@@ -655,6 +657,15 @@ export function TravelerJourney({ locale, session, online, requirements, initial
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
   };
+
+  useEffect(() => {
+    if (!requirements) { autoStartedRequestRef.current = null; return; }
+    if (!autoStartConversation || !session || !online || activeTrip || busy) return;
+    const key = `${session.user.user_id}:${requirements.requestText}`;
+    if (autoStartedRequestRef.current === key) return;
+    autoStartedRequestRef.current = key;
+    void persistDraft(); // One user submission => one saved conversation and one default AI turn.
+  }, [autoStartConversation, requirements, session?.user.user_id, online, activeTrip?.trip_id]);
 
   const restoreTrip = async (conversationId: string, tripId: string) => {
     if (requirements && !activeTrip && requirements.requestText.trim() && !window.confirm(copy.replaceDraftConfirm)) return;
