@@ -413,6 +413,7 @@ export function App() {
           online={online}
           requirements={requirements}
           initialRemoteConsent={initialRemoteConsent}
+          autoStartConversation
           travelerTimezone={travelerTimezone}
           suggestedOrigin={suggestedOrigin}
           onSessionExpired={() => setAuthSession(null)}
