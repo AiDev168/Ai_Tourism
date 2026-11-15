@@ -15,7 +15,7 @@ class JsonFormatter(logging.Formatter):
         for key in ("request_id", "result", "latency_ms", "route", "outcome",
                     "connection_open_ms", "credential_read_ms", "verification_and_limiter_ms",
                     "pbkdf2_ms", "limiter_check_ms", "limiter_update_ms", "session_issue_ms",
-                    "total_ms"):
+                    "total_ms", "error_type", "sqlstate", "phase"):
             if hasattr(record, key):
                 data[key] = getattr(record, key)
         return json.dumps(data, ensure_ascii=False)

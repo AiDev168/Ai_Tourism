@@ -242,18 +242,22 @@ def staging_login(
         return JSONResponse(status_code=401, content={"error": {"code": "unauthenticated"}})
     repository = StagingAuthRepository(settings)
     now = datetime.now(UTC)
+    phase = "login_name_limit"
     try:
         login_name = normalize_login(body.email)
         login_ok = repository.allow_attempt(
             dimension="login_name", digest=_staging_digest(settings, "login_name", login_name), now=now,
             maximum=10,
         )
+        phase = "global_limit"
         global_ok = repository.allow_attempt(
             dimension="global", digest=_staging_digest(settings, "global", "staging-auth"), now=now,
             maximum=300,
         )
+        phase = "credential_read"
         credential = repository.load_credential(login_name)
         salt = bytes(credential["salt"]) if credential else bytes.fromhex("a1" * 32)
+        phase = "password_verification"
         try:
             candidate = derive_password(body.password, salt)
             password_shape_valid = True
@@ -267,6 +271,7 @@ def staging_login(
                 and password_shape_valid and matched):
             return JSONResponse(status_code=401, content={"error": {"code": "unauthenticated"}})
         raw, csrf, token_hash, csrf_hash = _session_material(service)
+        phase = "session_issue"
         row = repository.create_session(
             user_id=credential["user_id"], expected_verifier=verifier, token_hash=token_hash,
             csrf_hash=csrf_hash, now=now, idle_seconds=settings.auth_session_idle_seconds or 0,
@@ -282,6 +287,7 @@ def staging_login(
         logger.warning("auth.staging_login_unavailable", extra={
             "error_type": type(error).__name__,
             "sqlstate": getattr(error, "sqlstate", None),
+            "phase": phase,
         })
         return _unavailable()
 
@@ -539,7 +545,12 @@ def authenticated_user(
     token = request.cookies.get(_cookie_name(settings))
     try:
         user = service.authenticate(token or "")
-    except (AuthenticationUnavailable, psycopg.Error):
+    except (AuthenticationUnavailable, psycopg.Error) as error:
+        logger.warning("auth.session_resolution_unavailable", extra={
+            "error_type": type(error).__name__,
+            "sqlstate": getattr(error, "sqlstate", None),
+            "phase": "session_resolution",
+        })
         raise AuthenticationUnavailable from None
     if user is None:
         raise HTTPException(status_code=401, detail="unauthenticated")
