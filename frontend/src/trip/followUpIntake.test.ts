@@ -44,6 +44,18 @@ describe('multi-turn traveler-only requirement integration', () => {
     expect(result.requirements.destinations.value).toEqual(['Shiraz']);
   });
 
+  it('accepts a Persian correction to the budget without changing its toman denomination', () => {
+    const first = initial('سفر ۱۵ روزه به شیراز با بودجهٔ ۲۰ میلیون تومان', 'fa-IR');
+    const result = apply(first, 'اصلاح نهایی: مدت سفر پانزده روز است و بودجه ۴۵ میلیون تومان؛ ما چهار نفر هستیم.');
+    expect(result.kind).toBe('ready');
+    if (result.kind === 'invalid') return;
+    expect(result.requirements.budget.value?.amount).toBe(45);
+    expect(result.requirements.budget.value?.currency).toBe('TOMAN');
+    expect(result.requirements.budget.value?.raw).toContain('تومان');
+    expect(result.requirements.durationDays.value).toBe(15);
+    expect(result.requirements.travelerCount.value).toBe(4);
+  });
+
   it('retains explicit mandatory wheelchair and hard constraints when the traveler revises duration', () => {
     const first = initial('Plan a 3-day trip to Shiraz; must have wheelchair access');
     expect(first.accessibility.value).toContain('wheelchair_access');

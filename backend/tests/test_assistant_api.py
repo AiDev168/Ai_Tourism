@@ -1,10 +1,11 @@
 """Offline assistant API contract: no network, database or paid calls."""
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
+import pytest
 
 from app.api.assistant import _candidate_profile, get_assistant_turn_repository, get_chat_gateway
 from app.api.auth import require_authenticated_csrf
@@ -120,17 +121,15 @@ def client(owner=OWNER, enabled=True):
 
 def body():
     return {'trip_id': str(TRIP), 'content': 'لطفاً برنامه سفر بده',
-            'idempotency_key': 'assistant-0001', 'expected_version': 1,
-            'remote_processing_consent': True}
+            'idempotency_key': 'assistant-0001', 'expected_version': 1}
 
 
-def test_explicit_consent_and_disabled_gateway_do_not_reserve():
+def test_authenticated_chat_does_not_require_redundant_ai_consent_checkbox():
     c, repo, gateway = client()
     try:
-        bad = body()
-        bad['remote_processing_consent'] = False
-        assert c.post(f'/api/v1/conversations/{CONV}/assistant-turns', json=bad).status_code == 422
-        assert repo.calls == 0 and not gateway.calls
+        result = c.post(f'/api/v1/conversations/{CONV}/assistant-turns', json=body())
+        assert result.status_code == 200, result.text
+        assert repo.calls == 1 and len(gateway.calls) == 1
     finally:
         c.app.dependency_overrides.clear()
     c, repo, gateway = client(enabled=False)
@@ -211,21 +210,181 @@ def test_assistant_status_reports_configuration_and_budget_without_invocation():
 
 
 def test_assistant_candidate_uses_trip_contract_and_only_accepts_exact_source_spans():
-    text = 'می‌خواهم چند روز از تهران به شیراز سفر کنم و hiking دوست دارم'
+    text = 'می‌خواهم چند روز از تهران به مناطق تاریخی شیراز سفر کنم و hiking دوست دارم'
     candidate = _candidate_profile(text, 'fa-IR', {
         'destination': 'شیراز', 'origin': 'تهران', 'interest': 'hiking',
     }, {'destination': 'شیراز', 'origin': 'تهران', 'interest': 'hiking'})
     assert candidate.contract_version == 'trip-requirements-v1'
     assert candidate.original_text == text
     assert candidate.fields.destination.value == 'شیراز'
-    assert candidate.fields.destination.source == 'traveler'
+    assert candidate.fields.destination.source == 'llm'
     assert candidate.fields.origin.source == 'llm'
     assert candidate.fields.origin.value == 'تهران'
     assert candidate.fields.origin.source == 'llm'
     assert candidate.fields.duration_days.status == 'missing'
-    assert candidate.fields.interests.value == ['hiking']
+    assert candidate.fields.interests.value == ['historical_attractions', 'hiking']
     assert candidate.fields.interests.source == 'llm'
     assert candidate.fields.destination.evidence_span.text == 'شیراز'
+
+
+def test_exact_quote_allows_semantic_refinement_of_a_fallback_destination():
+    text = 'Not Shiraz; Tehran instead.'
+    candidate = _candidate_profile(
+        text, 'en-US', {'destination': 'Tehran'},
+        {'destination': 'Not Shiraz; Tehran instead'},
+    )
+    # This remains an advisory candidate for traveler review. It does not
+    # modify the saved/confirmed profile.
+    assert candidate.fields.destination.value == 'Tehran'
+    assert candidate.fields.destination.source == 'llm'
+    assert candidate.fields.destination.evidence_span.text == 'Not Shiraz; Tehran instead'
+
+
+def test_unquoted_model_candidate_cannot_replace_a_supported_parser_value():
+    text = 'Plan a trip to Shiraz.'
+    candidate = _candidate_profile(
+        text, 'en-US', {'destination': 'Tehran'}, {'destination': 'Shiraz'},
+    )
+    assert candidate.fields.destination.value == 'Shiraz'
+    assert candidate.fields.destination.source == 'fallback'
+
+
+def test_budget_candidate_preserves_exact_unknown_currency_and_denomination():
+    text = 'I want a budget of 10 million.'
+    candidate = _candidate_profile(
+        text, 'en-US', {'budget_text': '10 million USD'},
+        {'budget_text': '10 million'},
+    )
+    budget = candidate.fields.budget.value
+    assert budget.amount == '10'
+    assert budget.scale == 'million'
+    assert budget.currency is None
+    assert budget.currency_status == 'unknown'
+    assert budget.raw == '10 million'
+
+
+def test_hard_constraint_candidate_cannot_paraphrase_traveler_safety_text():
+    text = 'I cannot use stairs.'
+    candidate = _candidate_profile(
+        text, 'en-US', {'hard_constraint': 'stairs are inconvenient'},
+        {'hard_constraint': 'cannot use stairs'},
+    )
+    assert candidate.fields.hard_constraints.status == 'known'
+    assert candidate.fields.hard_constraints.value == ['cannot use stairs']
+    assert candidate.fields.hard_constraints.source == 'fallback'
+
+
+def test_explicit_soft_preference_has_a_distinct_typed_candidate():
+    quote = 'ترجیح می‌دهم هتل آرام باشد'
+    candidate = _candidate_profile(
+        quote, 'fa-IR', {'soft_preference': quote}, {'soft_preference': quote},
+    )
+    assert candidate.fields.soft_preferences.status == 'known'
+    fallback = interpret_trip_requirements(quote, 'fa-IR').fields.soft_preferences.value
+    assert candidate.fields.soft_preferences.value == fallback
+    assert len(candidate.fields.soft_preferences.value) == 1
+    assert candidate.fields.soft_preferences.source == 'llm'
+    assert candidate.fields.hard_constraints.status == 'missing'
+
+
+def test_soft_preference_requires_explicit_preference_wording_and_cannot_be_paraphrased():
+    hard_wording = 'Do not use a boat.'
+    not_a_preference = _candidate_profile(
+        hard_wording, 'en-US', {'soft_preference': hard_wording},
+        {'soft_preference': hard_wording},
+    )
+    assert not_a_preference.fields.soft_preferences.status == 'missing'
+    quote = 'I prefer a quiet hotel.'
+    paraphrased = _candidate_profile(
+        quote, 'en-US', {'soft_preference': 'a quiet hotel'},
+        {'soft_preference': quote},
+    )
+    assert paraphrased.fields.soft_preferences.status == 'known'
+    assert paraphrased.fields.soft_preferences.value == ['a quiet hotel']
+    assert paraphrased.fields.soft_preferences.source == 'fallback'
+
+
+def test_candidate_accepts_only_an_explicit_complete_iso_date_pair():
+    text = 'Please travel on 2026-12-31 and return on 2027-01-02.'
+    candidate = _candidate_profile(
+        text, 'en-US', {
+            'travel_start': '2026-12-31', 'travel_end': '2027-01-02',
+        }, {
+            'travel_start': '2026-12-31', 'travel_end': '2027-01-02',
+        },
+    )
+    assert candidate.fields.travel_dates.status == 'known'
+    assert candidate.fields.travel_dates.value == {
+        'start': date(2026, 12, 31), 'end': date(2027, 1, 2),
+    }
+    assert candidate.fields.travel_dates.source == 'llm'
+
+
+def test_candidate_does_not_infer_or_accept_invalid_date_pair():
+    text = 'Please travel on 2026-12-31.'
+    one_endpoint = _candidate_profile(
+        text, 'en-US', {'travel_start': '2026-12-31'},
+        {'travel_start': '2026-12-31'},
+    )
+    assert one_endpoint.fields.travel_dates.status == 'missing'
+    reversed_pair = _candidate_profile(
+        'Return 2026-12-30 after departure 2026-12-31.', 'en-US',
+        {'travel_start': '2026-12-31', 'travel_end': '2026-12-30'},
+        {'travel_start': '2026-12-31', 'travel_end': '2026-12-30'},
+    )
+    assert reversed_pair.fields.travel_dates.status == 'missing'
+
+
+@pytest.mark.parametrize(
+    ('text', 'locale', 'field', 'key', 'value'),
+    [
+        ('4 days', 'en-US', 'duration_days', 'duration_days', 4),
+        ('make it 4 days', 'en-US', 'duration_days', 'duration_days', 4),
+        ('مدت سفر را ۴ روز کنید', 'fa-IR', 'duration_days', 'duration_days', 4),
+        ('اجعلها أربعة أيام', 'ar', 'duration_days', 'duration_days', 4),
+        ('there are five of us', 'en-US', 'travelers', 'traveler_count', 5),
+        ('ما ۴ نفریم', 'fa-IR', 'travelers', 'traveler_count', 4),
+        ('نحن خمسة أشخاص', 'ar', 'travelers', 'traveler_count', 5),
+    ],
+)
+def test_numeric_candidates_accept_exact_multilingual_number_with_field_context(
+    text, locale, field, key, value,
+):
+    candidate = _candidate_profile(
+        text, locale, {key: value}, {key: text},
+    )
+    parsed = getattr(candidate.fields, field)
+    assert parsed.status == 'known'
+    assert parsed.value == value
+    assert parsed.source == 'llm'
+    assert parsed.evidence_span.text == text
+
+
+def test_duration_correction_can_replace_only_fallback_value_with_exact_latest_evidence():
+    text = 'The trip was 3 days; actually make it 4 days.'
+    candidate = _candidate_profile(
+        text, 'en-US', {'duration_days': 4}, {'duration_days': text},
+    )
+    assert candidate.fields.duration_days.value == 4
+    assert candidate.fields.duration_days.source == 'llm'
+
+
+def test_numeric_candidate_rejects_relative_departure_as_trip_duration_and_wrong_counts():
+    relative = _candidate_profile(
+        'Travel in 4 days.', 'en-US', {'duration_days': 4},
+        {'duration_days': 'in 4 days'},
+    )
+    assert relative.fields.duration_days.status == 'missing'
+    relative_word = _candidate_profile(
+        'in four days', 'en-US', {'duration_days': 4},
+        {'duration_days': 'in four days'},
+    )
+    assert relative_word.fields.duration_days.status == 'missing'
+    wrong_count = _candidate_profile(
+        'There are five of us.', 'en-US', {'traveler_count': 4},
+        {'traveler_count': 'five of us'},
+    )
+    assert wrong_count.fields.travelers.status == 'missing'
 
 
 def test_completed_replay_does_not_invoke_provider_again():

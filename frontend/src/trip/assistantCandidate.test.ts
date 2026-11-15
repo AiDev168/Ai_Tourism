@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { reviewableAssistantCandidate } from './assistantCandidate';
+import { assistantMayReplaceField, reviewableAssistantCandidate } from './assistantCandidate';
 
 describe('reviewable assistant suggestions', () => {
+  it('allows AI to replace only fallback or missing fields, not traveler corrections or confirmed values', () => {
+    expect(assistantMayReplaceField('fallback', true, false, false)).toBe(true);
+    expect(assistantMayReplaceField('traveler', true, false, false)).toBe(false);
+    expect(assistantMayReplaceField('correction', true, false, false)).toBe(false);
+    expect(assistantMayReplaceField('llm', true, false, false)).toBe(false);
+    expect(assistantMayReplaceField(undefined, false, false, false)).toBe(true);
+    expect(assistantMayReplaceField('fallback', true, true, false)).toBe(false);
+    expect(assistantMayReplaceField('fallback', true, false, true)).toBe(false);
+  });
   it('accepts only bounded destination names and valid day counts', () => {
     expect(reviewableAssistantCandidate({ destination: '  کاشان  ', duration_days: 3 }))
       .toEqual({ destination: 'کاشان', durationDays: 3 });
@@ -22,6 +31,10 @@ describe('reviewable assistant suggestions', () => {
     expect(reviewableAssistantCandidate({ origin: 'bad\ncity', traveler_count: 0 })).toBeNull();
     expect(reviewableAssistantCandidate({ origin: 'bad\\ncity', traveler_count: 0 })).toBeNull();
     expect(reviewableAssistantCandidate({ origin: 'x'.repeat(101), traveler_count: 51 })).toBeNull();
+  });
+  it('keeps optional preferences separate from interests', () => {
+    expect(reviewableAssistantCandidate({ interest: 'history', soft_preference: 'quiet pace' }))
+      .toEqual({ destination: null, durationDays: null, interest: 'history', softPreferences: ['quiet pace'] });
   });
   it('accepts bounded exact budget, Gregorian date range, and a declared interest', () => {
     expect(reviewableAssistantCandidate({

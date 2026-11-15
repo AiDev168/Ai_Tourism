@@ -245,6 +245,7 @@ def main() -> None:
     import uvicorn
 
     import app.core.config as config
+    settings_dependency = config.get_settings
 
     settings = config.Settings(
         _env_file=None,
@@ -339,16 +340,27 @@ def main() -> None:
 
         async def invoke(self, request):
             self.call_count += 1
-            if not request.history or not request.text.strip():
-                raise RuntimeError("simulated_e2e_history_or_input_missing")
+            # The first traveler turn has no prior conversation history; its
+            # current text is the persisted initial request. Follow-up turns
+            # add history naturally. Requiring history here rejected a valid
+            # initial request before the simulated provider could respond.
+            if not request.text.strip():
+                raise RuntimeError("simulated_e2e_input_missing")
+            prompts = {
+                "fa-IR": ("\u0628\u0631\u0627\u06cc \u0633\u0641\u0631 2 \u0631\u0648\u0632 \u0633\u0641\u0631 \u0628\u0647 \u0634\u06cc\u0631\u0627\u0632 \u067e\u06cc\u0634\u0646\u0647\u0627\u062f \u0628\u062f\u0647.", "\u0634\u06cc\u0631\u0627\u0632", "2 \u0631\u0648\u0632 \u0633\u0641\u0631"),
+                "en-US": ("Please suggest a 2-day trip to Shiraz.", "Shiraz", "2-day trip"),
+                "ar": ("\u0627\u0642\u062a\u0631\u062d \u0631\u062d\u0644\u0629 \u0644\u0645\u062f\u0629 2 \u064a\u0648\u0645 \u0625\u0644\u0649 Shiraz.", "Shiraz", "\u0644\u0645\u062f\u0629 2 \u064a\u0648\u0645"),
+            }
+            _, destination, duration_quote = prompts[request.locale]
             replies = {
-                "fa-IR": "پیشنهاد آزمایشی: کاشان برای دو روز؛ ابتدا خودتان بررسی کنید.",
-                "en-US": "Simulated suggestion: Kashan for two days. Review it first.",
-                "ar": "اقتراح تجريبي: كاشان لمدة يومين. راجعه أولاً.",
+                "fa-IR": "\u067e\u06cc\u0634\u0646\u0647\u0627\u062f \u0622\u0632\u0645\u0627\u06cc\u0634\u06cc: \u0633\u0641\u0631 \u062f\u0648 \u0631\u0648\u0632\u0647 \u0628\u0647 \u0634\u06cc\u0631\u0627\u0632. \u0627\u0628\u062a\u062f\u0627 \u0622\u0646 \u0631\u0627 \u0628\u0631\u0631\u0633\u06cc \u06a9\u0646\u06cc\u062f.",
+                "en-US": "Simulated suggestion: a two-day trip to Shiraz. Review it first.",
+                "ar": "\u0627\u0642\u062a\u0631\u0627\u062d \u062a\u062c\u0631\u064a\u0628\u064a: \u0631\u062d\u0644\u0629 \u0644\u0645\u062f\u0629 \u064a\u0648\u0645\u064a\u0646 \u0625\u0644\u0649 Shiraz. \u0631\u0627\u062c\u0639\u0647\u0627 \u0623\u0648\u0644\u0627.",
             }
             return ChatReply(
                 reply=replies[request.locale],
-                requirements={"destination": "Kashan", "duration_days": 2},
+                requirements={"destination": destination, "duration_days": 2},
+                requirement_evidence={"destination": destination, "duration_days": duration_quote},
             )
 
     chat_gateway = SimulatedChatGateway()
@@ -445,7 +457,10 @@ def main() -> None:
         traveler_api.production_catalogue_bundle = guarded_catalogue_bundle
     adapter = FakeSmsAdapter()
     app.state.sms_adapter = adapter
-    app.dependency_overrides[config.get_settings] = lambda: settings
+    # Routers imported the original cached dependency function by reference.
+    # Override that exact callable; patching config.get_settings alone replaces
+    # only the module attribute and leaves route dependencies on defaults.
+    app.dependency_overrides[settings_dependency] = lambda: settings
     server = uvicorn.Server(uvicorn.Config(
         app, host="127.0.0.1", port=api_port, log_level="warning", access_log=False, log_config=None
     ))

@@ -152,6 +152,7 @@ def test_auth_method_exposes_traveler_otp_and_local_owner_as_separate_capabiliti
         assert response.json() == {
             "methods": ["otp", "local_owner"],
             "otp_delivery": "unavailable",
+                "staging_email_signup": False,
         }
         assert response.headers["cache-control"] == "no-store"
     finally:
@@ -176,6 +177,7 @@ def test_disabled_sms_reports_traveler_flow_but_never_fabricates_or_creates_a_ch
         assert method.json() == {
             "methods": ["otp", "local_owner"],
             "otp_delivery": "unavailable",
+                "staging_email_signup": False,
         }
         assert challenge.status_code == 503
         assert challenge.json() == {"error": {"code": "authentication_unavailable"}}

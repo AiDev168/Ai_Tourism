@@ -108,6 +108,14 @@ def _merge_extraction(previous: Any, latest: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(previous, Mapping):
         return latest
     merged = dict(previous)
+    # The initial request snapshot carries spans relative to its own text.
+    # After a later client-parsed follow-up, retaining that nested v1 snapshot
+    # makes restore prefer stale values over the newly merged fields. The
+    # original request and each correction remain in their immutable message
+    # metadata; let the current merged profile be read from the top-level
+    # values until the next server-issued v1 snapshot exists.
+    if "requirements_v1" in merged and "requirements_v1" not in latest:
+        merged.pop("requirements_v1", None)
     for key, new_value in latest.items():
         old_value = merged.get(key)
         if isinstance(old_value, Mapping) and isinstance(new_value, Mapping) and "value" in new_value:

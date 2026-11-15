@@ -66,7 +66,7 @@ describe('persisted traveler journey', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     await act(async () => root.render(<TravelerJourney locale="en-US" session={session} online requirements={parsed.requirements}
-      initialRemoteConsent autoStartConversation travelerTimezone="Asia/Tehran" onSessionExpired={() => undefined}
+      assistantConfigured autoStartConversation travelerTimezone="Asia/Tehran" onSessionExpired={() => undefined}
       onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
     await settle();
     await settle();

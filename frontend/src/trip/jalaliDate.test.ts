@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { isLeapJalaaliYear } from 'jalaali-js';
 import {
   formatJalaaliDate, isoToJalaali, jalaaliMonthDays, jalaaliToIso,
-  parseIsoCalendarDate,
+  parseIsoCalendarDate, deviceCalendarDate,
 } from './jalaliDate';
 
 describe('Jalali calendar and Gregorian storage contract', () => {
@@ -30,5 +30,10 @@ describe('Jalali calendar and Gregorian storage contract', () => {
     expect(parseIsoCalendarDate('2025-02-30')).toBeNull();
     expect(formatJalaaliDate('not-a-date')).toBe('');
     expect(formatJalaaliDate('2025-03-21', 'fa-IR')).toContain('فروردین');
+  });
+
+  it('uses the selected IANA civil date across midnight and the DST fall-back transition', () => {
+    expect(deviceCalendarDate('America/New_York', new Date('2026-11-01T03:30:00Z'))).toBe('2026-10-31');
+    expect(deviceCalendarDate('America/New_York', new Date('2026-11-01T06:30:00Z'))).toBe('2026-11-01');
   });
 });

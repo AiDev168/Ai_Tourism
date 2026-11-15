@@ -309,7 +309,8 @@ def test_malformed_or_overlong_chat_text_is_rejected_without_retry(content):
 def test_additional_trip_hints_are_bounded_and_remain_advisory():
     def handler(request):
         system = json.loads(request.content)["messages"][0]["content"]
-        assert "budget_text" in system and "travel_start" in system and "interest" in system
+        assert ("budget_text" in system and "travel_start" in system
+                and "interest" in system and "soft_preference" in system)
         return httpx.Response(200, json={"choices": [{
             "finish_reason": "stop",
             "message": {"content": json.dumps({
@@ -319,7 +320,11 @@ def test_additional_trip_hints_are_bounded_and_remain_advisory():
                     "travel_start": "2027-03-01",
                     "travel_end": "2027-03-04",
                     "interest": "باغ‌های تاریخی",
+                    "soft_preference": "ترجیح می‌دهم هتل آرام باشد",
                     "hard_constraint": "UNTRUSTED",
+                },
+                "requirement_evidence": {
+                    "soft_preference": "ترجیح می‌دهم هتل آرام باشد",
                 },
             }, ensure_ascii=False)},
         }]})
@@ -330,7 +335,11 @@ def test_additional_trip_hints_are_bounded_and_remain_advisory():
         "travel_start": "2027-03-01",
         "travel_end": "2027-03-04",
         "interest": "باغ‌های تاریخی",
+        "soft_preference": "ترجیح می‌دهم هتل آرام باشد",
         "hard_constraint": "UNTRUSTED",
+    }
+    assert result.requirement_evidence == {
+        "soft_preference": "ترجیح می‌دهم هتل آرام باشد",
     }
 
 

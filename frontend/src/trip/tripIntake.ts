@@ -1,6 +1,7 @@
 import type { Locale } from '../i18n/messages';
 
-export type Field<T> = { value: T | null; status: 'extracted' | 'unknown' | 'ambiguous'; evidence: string | null; candidates?: T[] };
+export type RequirementSource = 'traveler' | 'llm' | 'fallback' | 'correction';
+export type Field<T> = { value: T | null; status: 'extracted' | 'unknown' | 'ambiguous'; evidence: string | null; candidates?: T[]; source?: RequirementSource };
 export type TripRequirements = {
   requestText: string; locale: Locale; destinations: Field<string[]>; origin: Field<string>; durationDays: Field<number>;
   relativeStartDate: Field<{ offset_days: number; anchor_date: string | null; timezone: string | null }>;
@@ -10,9 +11,11 @@ export type TripRequirements = {
   interests: Field<string[]>; softPreferences: Field<string[]>; constraints: Field<string[]>; extractionStatus: 'ready' | 'needs_clarification';
   missingRequired: Array<'destination' | 'duration'>; ambiguousRequired: Array<'destination' | 'duration'>;
   clarificationFields?: string[]; confirmationRequired: string[]; destinationVerification: 'user_input_unverified';
+  /** Browser-derived projection metadata; intentionally omitted from server persistence. */
+  relativeDateResolution?: { referenceDate: string; timezone: string; start: string; end: string | null };
 };
 
-type RequirementEnvelope<T> = { status?: 'known' | 'missing' | 'ambiguous'; value?: T | null; evidence_span?: { start: number; end: number; text: string } | null; candidates?: T[] };
+type RequirementEnvelope<T> = { status?: 'known' | 'missing' | 'ambiguous'; source?: RequirementSource; value?: T | null; evidence_span?: { start: number; end: number; text: string } | null; candidates?: T[] };
 export type TripRequirementsV1 = {
   contract_version: 'trip-requirements-v1'; original_text: string; locale: Locale;
   fields: {
@@ -20,33 +23,48 @@ export type TripRequirementsV1 = {
     relative_start_date: RequirementEnvelope<{ offset_days: number; anchor_date: string | null; timezone: string | null }>;
     duration_days: RequirementEnvelope<number>; travel_dates: RequirementEnvelope<{ start: string; end: string }>;
     travelers: RequirementEnvelope<number>; budget: RequirementEnvelope<{ amount: string; scale: string | null; currency: string | null; currency_status: 'known' | 'unknown' | 'ambiguous'; raw: string }>;
-    interests: RequirementEnvelope<string[]>; hard_constraints: RequirementEnvelope<string[]>; accessibility: RequirementEnvelope<string[]>;
+    interests: RequirementEnvelope<string[]>; soft_preferences?: RequirementEnvelope<string[]>;
+    hard_constraints: RequirementEnvelope<string[]>; accessibility: RequirementEnvelope<string[]>;
   };
   clarification: { missing_fields: string[]; ambiguous_fields: string[]; question_fields: string[] };
 };
 
+/** Inclusive ISO end date, with calendar arithmetic performed in UTC. */
+export function inclusiveEndDate(start: string, durationDays: number): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(start) || !Number.isInteger(durationDays) || durationDays < 1 || durationDays > MAX_TRIP_DURATION_DAYS) return null;
+  const date = new Date(`${start}T12:00:00.000Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== start) return null;
+  date.setUTCDate(date.getUTCDate() + durationDays - 1);
+  return date.toISOString().slice(0, 10);
+}
+
 /** Resolve an explicit relative departure against a traveler/device calendar date, never server time. */
 export function resolveRelativeTripDates(requirements: TripRequirements, referenceDate: string, timezone: string): TripRequirements {
-  if (requirements.travelDates.value || !requirements.relativeStartDate.value) return requirements;
+  if (!requirements.relativeStartDate.value) return requirements;
+  const previousProjection = requirements.relativeDateResolution;
+  if (requirements.travelDates.value && !previousProjection) return requirements;
   const relative = requirements.relativeStartDate.value;
   const offset = relative.offset_days;
   if (!Number.isInteger(offset) || offset < 0 || offset > 365) return requirements;
-  const source = relative.anchor_date ?? referenceDate;
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/u.test(source)) return requirements;
+  const source = previousProjection ? referenceDate : (relative.anchor_date ?? referenceDate);
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(source)) return requirements;
   const reference = new Date(source + 'T12:00:00.000Z');
   if (!Number.isFinite(reference.getTime()) || reference.toISOString().slice(0, 10) !== source) return requirements;
-  if (!relative.anchor_date) reference.setUTCDate(reference.getUTCDate() + offset);
+  if (previousProjection || !relative.anchor_date) reference.setUTCDate(reference.getUTCDate() + offset);
   const start = reference.toISOString().slice(0, 10);
   const anchored = { ...requirements.relativeStartDate, value: { ...relative, anchor_date: start, timezone } };
   const duration = requirements.durationDays.value;
   if (!duration || !Number.isInteger(duration) || duration < 1 || duration > 365) {
-    return { ...requirements, relativeStartDate: anchored };
+    return { ...requirements, relativeStartDate: anchored, travelDates: { value: null, status: 'unknown', evidence: null },
+      relativeDateResolution: { referenceDate, timezone, start, end: null } };
   }
-  const endDate = new Date(start + 'T12:00:00.000Z');
-  endDate.setUTCDate(endDate.getUTCDate() + duration - 1);
+  const end = inclusiveEndDate(start, duration);
+  if (!end) return { ...requirements, relativeStartDate: anchored,
+    travelDates: { value: null, status: 'unknown', evidence: null },
+    relativeDateResolution: { referenceDate, timezone, start, end: null } };
   return { ...requirements, relativeStartDate: anchored, travelDates: {
-    value: { start, end: endDate.toISOString().slice(0, 10) }, status: 'extracted', evidence: anchored.evidence,
-  } };
+    value: { start, end }, status: 'extracted', evidence: anchored.evidence,
+  }, relativeDateResolution: { referenceDate, timezone, start, end } };
 }
 
 /** Convert the server-authoritative typed contract without reinterpreting text. */
@@ -55,6 +73,7 @@ export function tripRequirementsV1ToTripRequirements(value: TripRequirementsV1):
     value: field.value === undefined || field.value === null ? null : mapValue(field.value),
     status: field.status === 'known' ? 'extracted' : field.status === 'ambiguous' ? 'ambiguous' : 'unknown',
     evidence: field.evidence_span?.text ?? null,
+    ...(field.source ? { source: field.source } : {}),
     ...(field.candidates?.length ? { candidates: field.candidates.map(mapCandidates) } : {}),
   });
   const fields = value.fields;
@@ -73,11 +92,59 @@ export function tripRequirementsV1ToTripRequirements(value: TripRequirementsV1):
     durationDays: project(fields.duration_days),
     travelDates: project(fields.travel_dates), travelerCount: project(fields.travelers),
     accessibility: project(fields.accessibility) as TripRequirements['accessibility'],
-    budget, interests: project(fields.interests), softPreferences: { value: null, status: 'unknown', evidence: null },
+    budget, interests: project(fields.interests),
+    softPreferences: fields.soft_preferences ? project(fields.soft_preferences) : { value: null, status: 'unknown', evidence: null },
     constraints: project(fields.hard_constraints),
     extractionStatus: value.clarification.question_fields.length ? 'needs_clarification' : 'ready',
     missingRequired, ambiguousRequired, clarificationFields: value.clarification.question_fields,
     confirmationRequired: [], destinationVerification: 'user_input_unverified',
+  };
+}
+
+/** Keep valid server/LLM interpretations while using local rules only for missing fields. */
+export function mergeRequirementInterpretations(local: TripRequirements, interpreted: TripRequirements): TripRequirements {
+  const mergeField = <T,>(fallback: Field<T>, preferred: Field<T>): Field<T> => {
+    if (preferred.status === 'ambiguous') return preferred;
+    if (preferred.value !== null) return preferred;
+    if (fallback.value !== null && (preferred.source === 'fallback' || preferred.status === 'unknown')) return fallback;
+    return preferred;
+  };
+  const merged: TripRequirements = {
+    ...interpreted,
+    requestText: interpreted.requestText || local.requestText,
+    destinations: mergeField(local.destinations, interpreted.destinations),
+    origin: mergeField(local.origin, interpreted.origin),
+    relativeStartDate: mergeField(local.relativeStartDate, interpreted.relativeStartDate),
+    durationDays: mergeField(local.durationDays, interpreted.durationDays),
+    travelDates: mergeField(local.travelDates, interpreted.travelDates),
+    travelerCount: mergeField(local.travelerCount, interpreted.travelerCount),
+    accessibility: mergeField(local.accessibility, interpreted.accessibility),
+    budget: mergeField(local.budget, interpreted.budget),
+    interests: mergeField(local.interests, interpreted.interests),
+    softPreferences: mergeField(local.softPreferences, interpreted.softPreferences),
+    constraints: mergeField(local.constraints, interpreted.constraints),
+  };
+  const missingRequired: TripRequirements['missingRequired'] = [];
+  const ambiguousRequired: TripRequirements['ambiguousRequired'] = [];
+  for (const [name, field] of [['destination', merged.destinations], ['duration', merged.durationDays]] as const) {
+    if (field.value !== null) continue;
+    if (field.status === 'ambiguous') ambiguousRequired.push(name);
+    else missingRequired.push(name);
+  }
+  const questionFields = (interpreted.clarificationFields ?? []).filter(field => {
+    if (field === 'destination' && merged.destinations.value) return false;
+    if (field === 'duration_days' && merged.durationDays.value) return false;
+    if (field === 'origin' && merged.origin.value) return false;
+    if (field === 'travelers' && merged.travelerCount.value) return false;
+    if (field === 'travel_dates' && merged.travelDates.value) return false;
+    if (field === 'interests' && merged.interests.value?.length) return false;
+    if (field === 'soft_preferences' && merged.softPreferences.value?.length) return false;
+    if (field === 'budget.currency' && merged.budget.value?.currency) return false;
+    return true;
+  });
+  return {
+    ...merged, missingRequired, ambiguousRequired, clarificationFields: questionFields,
+    extractionStatus: missingRequired.length || ambiguousRequired.length || questionFields.length ? 'needs_clarification' : 'ready',
   };
 }
 const configuredDurationLimit = Number(import.meta.env?.VITE_MAX_TRIP_DURATION_DAYS);
@@ -108,7 +175,7 @@ export function extractDurationDays(requestText:string):number|null {
   if(vals.length&&new Set(vals).size===1)return vals[0];
   return null;
 }
-const durationSpans=(text:string)=>{const normalized=normalize(text);const spans=[...normalized.matchAll(durationRegex)].filter(m=>{const start=m.index??0;const end=start+m[0].length;const before=normalized.slice(Math.max(0,start-12),start);const after=normalized.slice(end,end+18);return !/(?:از\s*|\bin\s*)$/iu.test(before)&&!/^\s*(?:دیگه|دیگر|بعد|later|from\s+now)(?:\s|$)/iu.test(after);}).map(m=>({days:(numberValue(m[1])??0)*(/week|هفته|أسبوع|اسبوع/iu.test(m[2])?7:1),raw:m[0],index:m.index??0}));if(!spans.some(s=>/week|هفته|أسبوع|اسبوع/iu.test(s.raw))){const twoWeeks=normalized.match(/(?:^|\s)(?:أسبوعين|اسبوعين)(?:$|\s)/u);const oneWeek=normalized.match(/(?:^|\s)(?:أسبوع|اسبوع)(?:$|\s)/u);if(twoWeeks)spans.push({days:14,raw:twoWeeks[0],index:twoWeeks.index??0});else if(oneWeek)spans.push({days:7,raw:oneWeek[0],index:oneWeek.index??0});}return spans;};
+const durationSpans=(text:string)=>{const normalized=normalize(text);const spans=[...normalized.matchAll(durationRegex)].filter(m=>{const start=m.index??0;const end=start+m[0].length;const before=normalized.slice(Math.max(0,start-12),start);const after=normalized.slice(end,end+18);const arabicRelativePrefix=/\u0628\u0639\u062f\s*$/iu.test(before);return !arabicRelativePrefix&&!/(?:از\s*|\bin\s*)$/iu.test(before)&&!/^\s*(?:دیگه|دیگر|بعد|later|from\s+now)(?:\s|$)/iu.test(after);}).map(m=>({days:(numberValue(m[1])??0)*(/week|هفته|أسبوع|اسبوع/iu.test(m[2])?7:1),raw:m[0],index:m.index??0}));if(!spans.some(s=>/week|هفته|أسبوع|اسبوع/iu.test(s.raw))){const twoWeeks=normalized.match(/(?:^|\s)(?:أسبوعين|اسبوعين)(?:$|\s)/u);const oneWeek=normalized.match(/(?:^|\s)(?:أسبوع|اسبوع)(?:$|\s)/u);if(twoWeeks)spans.push({days:14,raw:twoWeeks[0],index:twoWeeks.index??0});else if(oneWeek)spans.push({days:7,raw:oneWeek[0],index:oneWeek.index??0});}return spans;};
 const cleanPlace=(s:string)=>s.replace(/^[\s,،؛:]+|[\s,،؛:.!?؟]+$/g,'').replace(/\s+/g,' ').trim();
 const genericPlace=/^(?:a city|the city|city|a town|town|somewhere|یک شهر|شهر|یه شهر|مدينة|مدينة ما|بلدة)$/iu;
 function extractPlaces(source:string, locale:Locale, spans:ReturnType<typeof durationSpans>):{places:Field<string[]>;origin:Field<string>} {
@@ -170,10 +237,16 @@ function explicitHardConstraints(text:string):Field<string[]> {
  const values:string[]=[];
  const hardMarkers=[
   /\b(?:must(?:\s+not)?|need(?:\s+to)?|required(?:\s+to)?|do\s+not)\s+(.+?)(?=\s+(?:but|however|during|for)\b|[.!?;]|$)/giu,
-  /(?:باید|ضروری(?:\s+است)?|نباید)\s+(.+?)(?=\s+(?:اما|ولی|برای)\s|[.!؟؛]|$)/gu,
-  /(?:يجب(?:\s+أن)?|ضروري|لا\s+(?:أريد|اريد))\s+(.+?)(?=\s+(?:لكن|لمدة|في)\s|[.!؟؛]|$)/gu,
+  /\b(?:i\s+)?(?:won't|will\s+not|can't|cannot|am\s+not\s+willing\s+to)\s+(.+?)(?=\s+(?:but|however|during|for)\b|[.!?;]|$)/giu,
+  /(?:\u0628\u0627\u06cc\u062f|\u0636\u0631\u0648\u0631\u06cc(?:\s+\u0627\u0633\u062a)?|\u0646\u0628\u0627\u06cc\u062f)\s+(.+?)(?=\s+(?:\u0627\u0645\u0627|\u0648\u0644\u06cc|\u0628\u0631\u0627\u06cc)\s|[.!\u061f\u061b]|$)/gu,
+  /(?:\u064a\u062c\u0628(?:\s+\u0623\u0646)?|\u0636\u0631\u0648\u0631\u064a|\u0644\u0627\s+(?:\u0623\u0631\u064a\u062f|\u0627\u0631\u064a\u062f))\s+(.+?)(?=\s+(?:\u0644\u0643\u0646|\u0644\u0645\u062f\u0629|\u0641\u064a)\s|[.!\u061f\u061b]|$)/gu,
+  /(?:\u0628\u0627|\u0627\u0632)\s+[^.!\u061f\u061b]{1,45}?\s+(?:\u0646\u0645\u06cc[\u200c\s]?(?:\u0631\u0648\u06cc\u0645|\u0631\u06cc\u0645|\u0631\u0648\u0645)|\u0646\u062e\u0648\u0627\u0647\u06cc\u0645\s+\u0631\u0641\u062a)/gu,
  ];
- for(const pattern of hardMarkers) for(const match of normalized.matchAll(pattern)) if(match[1]) values.push(cleanPlace(match[1]));
+ for(const pattern of hardMarkers) for(const match of normalized.matchAll(pattern)) {
+  const standaloneProhibition = pattern.source.includes("won't") || pattern.source.includes('\\u0646\\u0645');
+  const value = standaloneProhibition ? match[0] : match[1];
+  if(value) values.push(cleanPlace(value));
+ }
  const surface=/(paved\s+paths?|مسیرهای\s*سنگ\s*فرش|طرقا\s*معبدة)/giu;
  for(const match of normalized.matchAll(surface)) {
   const before=normalized.slice(Math.max(0,(match.index??0)-24),match.index??0);
@@ -186,12 +259,23 @@ function explicitHardConstraints(text:string):Field<string[]> {
  return unique.length?{value:unique,status:'extracted',evidence:unique.join(' / ')}:{value:null,status:'unknown',evidence:null};
 }
 function explicitRelativeStart(text:string):TripRequirements['relativeStartDate'] {
- const tomorrow=normalize(text).match(/(?:^|\\s)(?:برای\\s+)?(پس[\\s-]*فردا|فردا|day\\s+after\\s+tomorrow|tomorrow|بعد\\s+غد|غد(?:اً|ا)?)(?=\\s|$|[،,.!?؟])/iu);
+ const normalized = normalize(text);
+ const twoDay = normalized.match(/(?:^|\s)(?:day\s+after\s+tomorrow|\u0628\u0639\u062f\s+\u063a\u062f|\u067e\u0633[\s-]*\u0641\u0631\u062f\u0627)(?=\s|$|[\u060c,.!?\u061f])/iu);
+ if (twoDay) return { value: { offset_days: 2, anchor_date: null, timezone: null }, status: 'extracted', evidence: twoDay[0].trim() };
+ const oneDay = normalized.match(/(?:^|\s)(?:tomorrow|\u0641\u0631\u062f\u0627|\u063a\u062f(?:\u0627\u064b|\u0627)?)(?=\s|$|[\u060c,.!?\u061f])/iu);
+ if (oneDay) return { value: { offset_days: 1, anchor_date: null, timezone: null }, status: 'extracted', evidence: oneDay[0].trim() };
+ const tomorrow=normalize(text).match(/(?:^|\s)(?:برای\s+)?(پس[\s-]*فردا|فردا|day\s+after\s+tomorrow|tomorrow|بعد\s+غد|غد(?:اً|ا)?)(?=\s|$|[،,.!?؟])/iu);
  if(tomorrow) {
   const offset = /^(?:پس|day\\s+after|بعد)/iu.test(tomorrow[1]) ? 2 : 1;
   return {value:{offset_days:offset,anchor_date:null,timezone:null},status:'extracted',evidence:tomorrow[0].trim()};
  }
- const match=normalize(text).match(new RegExp(`(?:\\u0627\\u0632\\s*)?(${numPattern})\\s*(?:\\u0631\\u0648\\u0632|days?)\\s*(?:\\u062f\\u06cc\\u06af\\u0647|\\u062f\\u06cc\\u06af\\u0631|\\u0628\\u0639\\u062f|later|from\\s+now)`, 'iu'));
+ const relativeText = normalize(text);
+ const relativePatterns = [
+  new RegExp('(?:\\b(?:in|after)\\s+)?(' + numPattern + ')\\s*(?:days?|day)\\s*(?:later|from\\s+now)', 'iu'),
+  new RegExp('(' + numPattern + ')\\s*\\u0631\\u0648\\u0632\\s*(?:\\u062f\\u06cc\\u06af\\u0647|\\u062f\\u06cc\\u06af\\u0631|\\u0628\\u0639\\u062f)', 'iu'),
+  new RegExp('\\u0628\\u0639\\u062f\\s+(' + numPattern + ')\\s*(?:\\u0623\\u064a\\u0627\\u0645|\\u0627\\u064a\\u0627\\u0645|\\u064a\\u0648\\u0645)', 'iu'),
+ ];
+ const match = relativePatterns.map(pattern => relativeText.match(pattern)).find(Boolean);
  if(!match)return{value:null,status:'unknown',evidence:null};
  const offset=numberValue(match[1]);
  return offset!==null&&offset>=0&&offset<=365?{value:{offset_days:offset,anchor_date:null,timezone:null},status:'extracted',evidence:match[0]}:{value:null,status:'unknown',evidence:match[0]};
@@ -206,6 +290,13 @@ export function createTripRequirements(input:{requestText:string;locale:Locale;m
  const missingRequired:Array<'destination'|'duration'>=[];const ambiguousRequired:Array<'destination'|'duration'>=[];
  if(!places.value){(places.status==='ambiguous'?ambiguousRequired:missingRequired).push('destination');}if(!duration.value){(duration.status==='ambiguous'?ambiguousRequired:missingRequired).push('duration');}
  const interest=extractedText(text,/(?:interested in|love|enjoy|أحب|احب)\s+(.+?)(?:[.!؟؛،,;]|$)/iu);if(!interest.value){const historical=text.match(/(?:\u0645\u0646\u0627\u0637\u0642\s*\u062a\u0627\u0631\u06cc\u062e\u06cc|\u062c\u0627\u0647\u0627\u06cc\s*\u062a\u0627\u0631\u06cc\u062e\u06cc|\bhistorical\s+(?:areas|places|attractions)\b)/iu);if(historical)Object.assign(interest,{value:['historical_attractions'],status:'extracted',evidence:historical[0]});}{const end=text.indexOf(' علاقه دارم');const start=end>=0?text.lastIndexOf(' به ',end):-1;if(start>=0)Object.assign(interest,{value:[cleanPlace(text.slice(start+4,end))],status:'extracted',evidence:text.slice(start,end+12)});}
-  const requirements:TripRequirements={requestText:original,locale:input.locale,destinations:places,origin,relativeStartDate:explicitRelativeStart(text),durationDays:duration,travelDates:explicitDateRange(text),travelerCount:(()=>{const n=explicitCount(text);return n?{value:n,status:'extracted' as const,evidence:text.match(new RegExp(`${n}\\s*(?:people|travelers|travellers|نفر|مسافر|أشخاص|اشخاص|أفراد|افراد)`,'iu'))?.[0]??null}:{value:null,status:'unknown' as const,evidence:null};})(),accessibility,budget:parseBudget(text),interests:interest,softPreferences:explicitSoftPreferences(text),constraints:explicitHardConstraints(text),extractionStatus:missingRequired.length||ambiguousRequired.length?'needs_clarification':'ready',missingRequired,ambiguousRequired,confirmationRequired:[],destinationVerification:'user_input_unverified'};
+  const fallback = <T,>(field: Field<T>): Field<T> => ({ ...field, source: 'fallback' });
+  const requirements:TripRequirements={requestText:original,locale:input.locale,destinations:fallback(places),origin:fallback(origin),relativeStartDate:fallback(explicitRelativeStart(text)),durationDays:fallback(duration),travelDates:fallback(explicitDateRange(text)),travelerCount:fallback((()=>{const n=explicitCount(text);return n?{value:n,status:'extracted' as const,evidence:text.match(new RegExp(`${n}\\s*(?:people|travelers|travellers|نفر|مسافر|أشخاص|اشخاص|أفراد|افراد)`,'iu'))?.[0]??null}:{value:null,status:'unknown' as const,evidence:null};})()),accessibility:fallback(accessibility),budget:fallback(parseBudget(text)),interests:fallback(interest),softPreferences:fallback(explicitSoftPreferences(text)),constraints:fallback(explicitHardConstraints(text)),extractionStatus:missingRequired.length||ambiguousRequired.length?'needs_clarification':'ready',missingRequired,ambiguousRequired,confirmationRequired:[],destinationVerification:'user_input_unverified'};
  return requirements.extractionStatus==='ready'?{kind:'ready',requirements}:{kind:'clarification',requirements};
+}
+
+/** Strip UI-only resolution metadata before sending the persisted requirements payload. */
+export function requirementsForPersistence(value: TripRequirements): TripRequirements {
+  const { relativeDateResolution: _relativeDateResolution, ...persisted } = value;
+  return persisted;
 }

@@ -342,7 +342,6 @@ export const travelerApi = {
     content: string;
     idempotency_key: string;
     expected_version: number;
-    remote_processing_consent: true;
     extracted_requirements?: TripRequirements;
     existing_user_message_id?: string;
   }) => request<{

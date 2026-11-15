@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthSession } from '../auth/authApi';
 import { formatNumber, type Locale } from '../i18n/messages';
 import { journeyMessages, localizeRecommendationCode } from '../i18n/journeyMessages';
-import { createTripRequirements, type TripRequirements } from './tripIntake';
+import { createTripRequirements, inclusiveEndDate, requirementsForPersistence, type TripRequirements } from './tripIntake';
 import { integrateTripFollowUp } from './followUpIntake';
 import { normalizeDestinationName, resolveDestinationNames, confirmDestinationCandidate, type DestinationResolution, type ProductionDestinationCandidate } from './destinationResolution';
 import { ApiDestinationCatalogPort } from './destinationCatalogApi';
-import { reviewableAssistantCandidate } from './assistantCandidate';
+import { assistantMayReplaceField, reviewableAssistantCandidate } from './assistantCandidate';
 import { tripRequirementsV1ToTripRequirements, type TripRequirementsV1 } from './tripIntake';
 import { requirementClarificationMessages } from '../i18n/requirementClarificationMessages';
 import { TravelerGuidance } from './TravelerGuidance';
@@ -216,12 +216,14 @@ function consentFieldsForReviewedProfile(
   budget: string,
   dateStart: string,
   dateEnd: string,
+  softPreferences = '',
 ): RequirementFieldCode[] {
   const fields = unresolvedConsentFields(extracted);
   if (origin.trim() && !fields.includes('origin')) fields.push('origin');
   if (travelers.trim() && !fields.includes('traveler_count')) fields.push('traveler_count');
   if (budget.trim() && !fields.includes('budget')) fields.push('budget');
   if ((dateStart || dateEnd) && !fields.includes('travel_dates')) fields.push('travel_dates');
+  if (softPreferences.trim() && !fields.includes('soft_preference')) fields.push('soft_preference');
   return fields;
 }
 
@@ -293,16 +295,17 @@ export type TravelerJourneyProps = {
   session: AuthSession | null;
   online: boolean;
   requirements: TripRequirements | null;
-  initialRemoteConsent?: boolean;
   autoStartConversation?: boolean;
+  assistantConfigured?: boolean | null;
   travelerTimezone?: string;
-  suggestedOrigin?: string;
+  suggestedOrigin?: { approximateText: string; accuracyMeters: number } | null;
+  onManualDateOverride?: () => void;
   onSessionExpired: () => void;
   onRestoreRequest: (text: string, requirements: TripRequirements) => void;
   onStartNewDraft: () => void;
 };
 
-export function TravelerJourney({ locale, session, online, requirements, initialRemoteConsent = false, autoStartConversation = false, travelerTimezone = 'Asia/Tehran', suggestedOrigin = '', onSessionExpired, onRestoreRequest, onStartNewDraft }: TravelerJourneyProps) {
+export function TravelerJourney({ locale, session, online, requirements, autoStartConversation = false, assistantConfigured = true, travelerTimezone = 'Asia/Tehran', suggestedOrigin = null, onManualDateOverride, onSessionExpired, onRestoreRequest, onStartNewDraft }: TravelerJourneyProps) {
   const copy = journeyMessages[locale];
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversation, setActiveConversation] = useState<ConversationRecord | null>(null);
@@ -321,6 +324,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
   const [travelStartText, setTravelStartText] = useState('');
   const [travelEndText, setTravelEndText] = useState('');
   const [interestText, setInterestText] = useState('');
+  const [softPreferenceText, setSoftPreferenceText] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [requirementChoices, setRequirementChoices] = useState<Partial<Record<RequirementFieldCode, RequirementConsentDecision>>>({});
   const [advisoryAcknowledgements, setAdvisoryAcknowledgements] = useState<Partial<Record<RequirementFieldCode, boolean>>>({});
@@ -342,18 +346,26 @@ export function TravelerJourney({ locale, session, online, requirements, initial
   const [dirty, setDirty] = useState(false);
   const restoringRequestRef = useRef<string | null>(null);
   const autoStartedRequestRef = useRef<string | null>(null);
+  const draftInFlightRef = useRef<string | null>(null);
+  const completedDraftRef = useRef<string | null>(null);
+  const draftGenerationRef = useRef(0);
+  const manualProfileFieldsRef = useRef(new Set<string>());
+  const requestIdentityRef = useRef(requirements?.requestText ?? null);
   const resolutionSequenceRef = useRef(0);
   const catalogueBrowseSequenceRef = useRef(0);
 
   const extracted = useMemo(() => safeRequirements(activeTrip?.extracted_requirements, activeTrip?.locale ?? locale, activeTrip?.original_request), [activeTrip, locale]);
   const consentFields = useMemo(() => consentFieldsForReviewedProfile(
-    extracted, originText, travelerCountText, budgetText, travelStartText, travelEndText,
-  ), [extracted, originText, travelerCountText, budgetText, travelStartText, travelEndText]);
+    extracted, originText, travelerCountText, budgetText, travelStartText, travelEndText, softPreferenceText,
+  ), [extracted, originText, travelerCountText, budgetText, travelStartText, travelEndText, softPreferenceText]);
   const budgetValid = !budgetText.trim() || parseReviewedBudget(budgetText, locale) !== null;
   const datesValid = validTravelDates(travelStartText, travelEndText);
   const interests = parseInterests(interestText);
+  const softPreferences = parseInterests(softPreferenceText);
   const interestsValid = interestText.length <= 300 && interests.length <= 10
     && interests.every(value => value.length <= 100 && !/[\u0000-\u001f\u007f]/u.test(value));
+  const softPreferencesValid = softPreferenceText.length <= 300 && softPreferences.length <= 10
+    && softPreferences.every(value => value.length <= 100 && !/[\u0000-\u001f\u007f]/u.test(value));
   const travelerCountValid = travelerCountText.trim() === '' || (/^[0-9]{1,2}$/.test(travelerCountText.trim())
     && Number(travelerCountText) >= 1 && Number(travelerCountText) <= 50);
   const consentComplete = consentIsComplete(consentFields, requirementChoices, advisoryAcknowledgements);
@@ -367,6 +379,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
     setRecommendations(null);
     setItinerary(null);
   };
+  const markProfileFieldEdited = (field: string) => { manualProfileFieldsRef.current.add(field); };
   const chooseRequirement = (field: RequirementFieldCode, decision: RequirementConsentDecision) => {
     setRequirementChoices(current => ({ ...current, [field]: decision }));
     setAdvisoryAcknowledgements(current => ({ ...current, [field]: false }));
@@ -492,11 +505,23 @@ export function TravelerJourney({ locale, session, online, requirements, initial
   }, [session?.user.user_id, online]);
 
   useEffect(() => {
-    if (activeTrip && suggestedOrigin) setOriginText(current => current.trim() ? current : suggestedOrigin);
-  }, [suggestedOrigin, activeTrip?.trip_id]);
+    if (!requirements) {
+      requestIdentityRef.current = null;
+      manualProfileFieldsRef.current.clear();
+      return;
+    }
+    if (requestIdentityRef.current !== requirements.requestText) {
+      requestIdentityRef.current = requirements.requestText;
+      manualProfileFieldsRef.current.clear();
+    }
+  }, [requirements?.requestText]);
 
   useEffect(() => {
     if (requirements) {
+      if (requestIdentityRef.current !== requirements.requestText) {
+        requestIdentityRef.current = requirements.requestText;
+        manualProfileFieldsRef.current.clear();
+      }
       if (activeTrip && requirements.requestText !== activeTrip.original_request && restoringRequestRef.current !== requirements.requestText) {
         setDirty(true);
         setConfirmed(false);
@@ -507,14 +532,18 @@ export function TravelerJourney({ locale, session, online, requirements, initial
       // The restored, traveler-reviewed profile is authoritative for the form.
       // Do not overwrite it with the older parser extraction from the parent.
       if (!(restoring && activeTrip?.confirmed_requirements.confirmation_source === 'traveler_reviewed')) {
-        setDestinationNames(requirements.destinations.value ? [...requirements.destinations.value] : []);
-        setDurationText(requirements.durationDays.value === null ? '' : String(requirements.durationDays.value));
-        setOriginText(requirements.origin.value ?? '');
-        setTravelerCountText(requirements.travelerCount.value === null ? '' : String(requirements.travelerCount.value));
-        setBudgetText(requirements.budget.value?.raw ?? '');
-        setTravelStartText(requirements.travelDates.value?.start ?? requirements.relativeStartDate.value?.anchor_date ?? '');
-        setTravelEndText(requirements.travelDates.value?.end ?? '');
-        setInterestText(displayInterests(requirements.interests.value ?? [], locale));
+        if (!manualProfileFieldsRef.current.has('destination')) setDestinationNames(requirements.destinations.value ? [...requirements.destinations.value] : []);
+        if (!manualProfileFieldsRef.current.has('duration')) setDurationText(requirements.durationDays.value === null ? '' : String(requirements.durationDays.value));
+        if (!manualProfileFieldsRef.current.has('origin')) setOriginText(requirements.origin.value ?? '');
+        if (!manualProfileFieldsRef.current.has('travelers')) setTravelerCountText(requirements.travelerCount.value === null ? '' : String(requirements.travelerCount.value));
+        if (!manualProfileFieldsRef.current.has('budget')) setBudgetText(requirements.budget.value?.raw ?? '');
+        const manualDateOverride = manualProfileFieldsRef.current.has('travelStart') || manualProfileFieldsRef.current.has('travelEnd');
+        if (!manualDateOverride) {
+          setTravelStartText(requirements.travelDates.value?.start ?? requirements.relativeStartDate.value?.anchor_date ?? '');
+          setTravelEndText(requirements.travelDates.value?.end ?? '');
+        }
+        if (!manualProfileFieldsRef.current.has('interests')) setInterestText(displayInterests(requirements.interests.value ?? [], locale));
+        if (!manualProfileFieldsRef.current.has('softPreferences')) setSoftPreferenceText(displayInterests(requirements.softPreferences.value ?? [], locale));
         const suggestedDays = validDayCount(requirements.durationDays.value);
         if (!activeTrip?.latest_itinerary_id && suggestedDays !== null) setDayCount(suggestedDays);
         void resolveNames(requirements.destinations.value ?? []);
@@ -549,13 +578,17 @@ export function TravelerJourney({ locale, session, online, requirements, initial
 
   const persistDraft = async () => {
     if (!session || !requirements || !online) { if (!online) setError(copy.offline); return; }
+    if (assistantConfigured === null) { setError(assistantCopy[locale].unavailable); return; }
+    const draftKey = `${session.user.user_id}:${draftGenerationRef.current}:${requirements.requestText}`;
+    if (draftInFlightRef.current === draftKey || completedDraftRef.current === draftKey) return;
+    draftInFlightRef.current = draftKey;
     setBusy(true); setError(''); setStatus('');
     try {
       const destination_ids = choiceIds(resolution);
       const body = {
         locale,
         request_text: requirements.requestText,
-        extracted_requirements: requirements,
+        extracted_requirements: requirementsForPersistence(requirements),
         traveler_timezone: travelerTimezone,
         traveler_reference_date: deviceCalendarDate(travelerTimezone),
         destination_ids,
@@ -566,6 +599,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
         : await travelerApi.createConversation(csrf, body);
       let savedConversation = result.conversation;
       let savedTrip = result.trip;
+      completedDraftRef.current = draftKey;
       setActiveConversation(savedConversation);
       setActiveTrip(savedTrip);
       setDayCount(tripDayCount(savedTrip, requirements) ?? 1);
@@ -573,14 +607,13 @@ export function TravelerJourney({ locale, session, online, requirements, initial
       setDirty(false);
       
       setStatus(copy.saveSuccess);
-      if (initialRemoteConsent) {
+      if (assistantConfigured) {
         try {
           const firstReply = await travelerApi.assistantTurn(csrf, savedConversation.conversation_id, {
             trip_id: savedTrip.trip_id,
             content: requirements.requestText,
             idempotency_key: newIdempotencyKey(),
             expected_version: savedConversation.version,
-            remote_processing_consent: true,
             existing_user_message_id: result.initial_message.message_id,
           });
           savedConversation = firstReply.conversation;
@@ -588,9 +621,9 @@ export function TravelerJourney({ locale, session, online, requirements, initial
           setActiveConversation(savedConversation);
           setActiveTrip(savedTrip);
           setAssistantCandidate(firstReply.candidate_requirements);
-          // Prefer evidence-backed AI extraction for fields the fallback
-          // parser could not resolve. Never overwrite explicitly captured
-          // traveler values, and never silently confirm any AI suggestion.
+          // Evidence-backed AI extraction may correct a rule-based fallback,
+          // but never overwrites a field the traveler has edited. Profile
+          // confirmation remains an explicit traveler action.
           const interpreted = reviewableAssistantCandidate(firstReply.candidate_requirements);
           const typed = interpreted?.typedRequirements;
           const hasDirectEvidence = (field: keyof NonNullable<typeof typed>['fields']): boolean => {
@@ -600,27 +633,44 @@ export function TravelerJourney({ locale, session, online, requirements, initial
               && requirements.requestText.slice(span.start, span.end) === span.text);
           };
           let improved = false;
-          if (interpreted && typed) {
-            if (!requirements.destinations.value?.length && interpreted.destination && hasDirectEvidence('destination')) {
+          const candidateCanReplace = (fieldName: string, manualField: string) => {
+            const field = (requirements as unknown as Record<string, { source?: string; value?: unknown }>)[fieldName];
+            return assistantMayReplaceField(field?.source as 'traveler' | 'llm' | 'fallback' | 'correction' | undefined,
+              field?.value != null, manualProfileFieldsRef.current.has(manualField),
+              savedTrip.confirmed_requirements.confirmation_source === 'traveler_reviewed');
+          };
+          const canApply = (fieldName: string, manualField: string) => candidateCanReplace(fieldName, manualField);
+          if (interpreted && typed && typed.original_text === requirements.requestText) {
+            if (interpreted.destination && canApply('destinations', 'destination') && hasDirectEvidence('destination')) {
               setDestinationNames([interpreted.destination]); void resolveNames([interpreted.destination]); improved = true;
             }
-            if (!requirements.durationDays.value && interpreted.durationDays && hasDirectEvidence('duration_days')) {
+            if (interpreted.durationDays && canApply('durationDays', 'duration') && hasDirectEvidence('duration_days')) {
               setDurationText(String(interpreted.durationDays)); improved = true;
+              const relativeStart = requirements.relativeStartDate.value?.anchor_date;
+              const resolvedStart = travelStartText || relativeStart || requirements.relativeDateResolution?.start || '';
+              const hasExplicitDateRange = requirements.travelDates.value !== null;
+              if (resolvedStart && !hasExplicitDateRange && !manualProfileFieldsRef.current.has('travelEnd')) {
+                const endDate = inclusiveEndDate(resolvedStart, interpreted.durationDays);
+                if (endDate) setTravelEndText(endDate);
+              }
             }
-            if (!requirements.origin.value && !suggestedOrigin && interpreted.origin && hasDirectEvidence('origin')) {
+            if (interpreted.origin && canApply('origin', 'origin') && hasDirectEvidence('origin')) {
               setOriginText(interpreted.origin); improved = true;
             }
-            if (!requirements.travelerCount.value && interpreted.travelerCount && hasDirectEvidence('travelers')) {
+            if (interpreted.travelerCount && canApply('travelerCount', 'travelers') && hasDirectEvidence('travelers')) {
               setTravelerCountText(String(interpreted.travelerCount)); improved = true;
             }
-            if (!requirements.budget.value && interpreted.budgetText && hasDirectEvidence('budget')) {
+            if (interpreted.budgetText && canApply('budget', 'budget') && hasDirectEvidence('budget')) {
               setBudgetText(interpreted.budgetText); improved = true;
             }
-            if (!requirements.travelDates.value && interpreted.travelStart && interpreted.travelEnd && hasDirectEvidence('travel_dates')) {
+            if (interpreted.travelStart && interpreted.travelEnd && canApply('travelDates', 'travelStart') && canApply('travelDates', 'travelEnd') && hasDirectEvidence('travel_dates')) {
               setTravelStartText(interpreted.travelStart); setTravelEndText(interpreted.travelEnd); improved = true;
             }
-            if (!requirements.interests.value?.length && interpreted.interest && hasDirectEvidence('interests')) {
+            if (interpreted.interest && canApply('interests', 'interests') && hasDirectEvidence('interests')) {
               setInterestText(interpreted.interest); improved = true;
+            }
+            if (interpreted.softPreferences?.length && canApply('softPreferences', 'softPreferences') && hasDirectEvidence('soft_preferences')) {
+              setSoftPreferenceText(displayInterests(interpreted.softPreferences, locale)); improved = true;
             }
           }
           if (improved) { setDirty(true); invalidateConsent(); }
@@ -655,17 +705,22 @@ export function TravelerJourney({ locale, session, online, requirements, initial
       setConversations(history.items);
       requestAnimationFrame(() => document.getElementById('trip-follow-up')?.focus());
     } catch (value) { applyFailure(value); }
-    finally { setBusy(false); }
+    finally { if (draftInFlightRef.current === draftKey) draftInFlightRef.current = null; setBusy(false); }
   };
 
   useEffect(() => {
-    if (!requirements) { autoStartedRequestRef.current = null; return; }
-    if (!autoStartConversation || !session || !online || activeTrip || busy) return;
-    const key = `${session.user.user_id}:${requirements.requestText}`;
+    if (!requirements) {
+      autoStartedRequestRef.current = null;
+      completedDraftRef.current = null;
+      draftGenerationRef.current += 1;
+      return;
+    }
+    if (!autoStartConversation || !session || !online || activeTrip || busy || assistantConfigured === null) return;
+    const key = `${session.user.user_id}:${draftGenerationRef.current}:${requirements.requestText}`;
     if (autoStartedRequestRef.current === key) return;
     autoStartedRequestRef.current = key;
     void persistDraft(); // One user submission => one saved conversation and one default AI turn.
-  }, [autoStartConversation, requirements, session?.user.user_id, online, activeTrip?.trip_id]);
+  }, [autoStartConversation, requirements, session?.user.user_id, online, activeTrip?.trip_id, assistantConfigured]);
 
   const restoreTrip = async (conversationId: string, tripId: string) => {
     if (requirements && !activeTrip && requirements.requestText.trim() && !window.confirm(copy.replaceDraftConfirm)) return;
@@ -714,13 +769,18 @@ export function TravelerJourney({ locale, session, online, requirements, initial
       setTravelStartText(restoredStart);
       setTravelEndText(restoredEnd);
       setInterestText(displayInterests(restoredInterests, locale));
+      const savedSoftPreferences = trip.confirmed_requirements.soft_preferences;
+      const restoredSoftPreferences = hasReviewedProfile && Array.isArray(savedSoftPreferences)
+        && savedSoftPreferences.every(value => typeof value === 'string')
+        ? savedSoftPreferences as string[] : (parsed?.softPreferences.value ?? []);
+      setSoftPreferenceText(displayInterests(restoredSoftPreferences, locale));
       if (parsed) {
         restoringRequestRef.current = parsed.requestText;
         onRestoreRequest(parsed.requestText, parsed);
       }
       void resolveNames(restoredNames);
       const restoredConsentFields = consentFieldsForReviewedProfile(
-        parsed, restoredOrigin, restoredTravelerCount, restoredBudget, restoredStart, restoredEnd,
+        parsed, restoredOrigin, restoredTravelerCount, restoredBudget, restoredStart, restoredEnd, displayInterests(restoredSoftPreferences, locale),
       );
       const savedConsent = restoredConsent(trip, restoredConsentFields);
       setRequirementChoices(savedConsent?.decisions ?? {});
@@ -783,9 +843,13 @@ export function TravelerJourney({ locale, session, online, requirements, initial
         setOriginText(latest.origin.value ?? '');
         setTravelerCountText(latest.travelerCount.value === null ? '' : String(latest.travelerCount.value));
         setBudgetText(latest.budget.value?.raw ?? '');
-        setTravelStartText(latest.travelDates.value?.start ?? latest.relativeStartDate.value?.anchor_date ?? '');
-        setTravelEndText(latest.travelDates.value?.end ?? '');
+        const manualDateOverride = manualProfileFieldsRef.current.has('travelStart') || manualProfileFieldsRef.current.has('travelEnd');
+        if (!manualDateOverride) {
+          setTravelStartText(latest.travelDates.value?.start ?? latest.relativeStartDate.value?.anchor_date ?? '');
+          setTravelEndText(latest.travelDates.value?.end ?? '');
+        }
         setInterestText(displayInterests(latest.interests.value ?? [], locale));
+        setSoftPreferenceText(displayInterests(latest.softPreferences.value ?? [], locale));
         restoringRequestRef.current = latest.requestText;
         onRestoreRequest(latest.requestText, latest);
         void resolveNames(latest.destinations.value ?? []);
@@ -798,7 +862,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
     if (!session || !activeConversation || !activeTrip || !online) return;
     // When the status endpoint already reports no usable model, do not
     // reserve or charge an AI turn. Use existing local parsing instead.
-    if (assistantState === 'disabled' || assistantState === 'unavailable' || assistantState === 'quota_exhausted') {
+    if (assistantState === 'disabled' || assistantState === 'quota_exhausted') {
       if (messageText.trim()) await sendMessage();
       else setError(assistantCopy[locale].unavailable);
       return;
@@ -813,7 +877,6 @@ export function TravelerJourney({ locale, session, online, requirements, initial
         content,
         idempotency_key: newIdempotencyKey(),
         expected_version: activeConversation.version,
-        remote_processing_consent: true,
       });
       setActiveConversation(result.conversation);
       setActiveTrip(result.trip);
@@ -853,28 +916,39 @@ export function TravelerJourney({ locale, session, online, requirements, initial
   const applyAssistantCandidate = () => {
     if (!reviewedAssistantCandidate || !activeTrip) return;
     if (reviewedAssistantCandidate.destination !== null) {
+      markProfileFieldEdited('destination');
       const names = [reviewedAssistantCandidate.destination];
       setDestinationNames(names);
       void resolveNames(names); // Catalogue verification is separate from AI text.
     }
     if (reviewedAssistantCandidate.durationDays !== null) {
+      markProfileFieldEdited('duration');
       setDurationText(String(reviewedAssistantCandidate.durationDays));
     }
     if (reviewedAssistantCandidate.origin !== undefined) {
+      markProfileFieldEdited('origin');
       setOriginText(reviewedAssistantCandidate.origin);
     }
     if (reviewedAssistantCandidate.travelerCount !== undefined) {
+      markProfileFieldEdited('travelers');
       setTravelerCountText(String(reviewedAssistantCandidate.travelerCount));
     }
     if (reviewedAssistantCandidate.budgetText !== undefined) {
+      markProfileFieldEdited('budget');
       setBudgetText(reviewedAssistantCandidate.budgetText);
     }
     if (reviewedAssistantCandidate.travelStart !== undefined && reviewedAssistantCandidate.travelEnd !== undefined) {
+      markProfileFieldEdited('travelStart'); markProfileFieldEdited('travelEnd');
       setTravelStartText(reviewedAssistantCandidate.travelStart);
       setTravelEndText(reviewedAssistantCandidate.travelEnd);
     }
     if (reviewedAssistantCandidate.interest !== undefined) {
+      markProfileFieldEdited('interests');
       setInterestText(current => displayInterests(parseInterests([current, reviewedAssistantCandidate.interest!].filter(Boolean).join('، ')), locale));
+    }
+    if (reviewedAssistantCandidate.softPreferences?.length) {
+      markProfileFieldEdited('softPreferences');
+      setSoftPreferenceText(current => displayInterests(parseInterests([current, ...reviewedAssistantCandidate.softPreferences!].filter(Boolean).join('، ')), locale));
     }
     setDirty(true);
     invalidateConsent(); // Explicit profile confirmation remains mandatory.
@@ -883,7 +957,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
 
   const confirmProfile = async () => {
     if (!session || !activeTrip || !online || !consentComplete || !travelerCountValid
-        || !budgetValid || !datesValid || !interestsValid) {
+        || !budgetValid || !datesValid || !interestsValid || !softPreferencesValid) {
       if (!online) setError(copy.offline);
       else if (!travelerCountValid) setError(copy.profileTravelersInvalid);
       else if (!budgetValid) setError(copy.profileBudgetInvalid);
@@ -902,7 +976,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
       traveler_count: travelerCountText.trim() ? Number(travelerCountText.trim()) : null,
       accessibility: extracted?.accessibility?.value ?? [],
       budget: parseReviewedBudget(budgetText, locale) ?? extracted?.budget.value ?? null,
-      soft_preferences: extracted?.softPreferences.value ?? [],
+      soft_preferences: softPreferences.length ? softPreferences : (extracted?.softPreferences.value ?? []),
       interests: interests.length ? interests : (extracted?.interests.value ?? []),
       constraints: extracted?.constraints.value ?? [],
       confirmation_source: 'traveler_reviewed',
@@ -1048,7 +1122,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
         setBusy(true); setError('');
         try {
           const result = await travelerApi.appendMessage(csrf, activeConversation.conversation_id, {
-            trip_id: activeTrip.trip_id, content: requirements.requestText, extracted_requirements: requirements,
+            trip_id: activeTrip.trip_id, content: requirements.requestText, extracted_requirements: requirementsForPersistence(requirements),
             idempotency_key: newIdempotencyKey(), expected_version: activeConversation.version, replace_previous_request: true,
           });
           setActiveConversation(result.conversation); setActiveTrip(result.trip); setDirty(false); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null);
@@ -1182,6 +1256,10 @@ export function TravelerJourney({ locale, session, online, requirements, initial
                     <dt>{assistantCopy[locale].interest}</dt>
                     <dd dir="auto">{reviewedAssistantCandidate.interest}</dd>
                   </>}
+                  {reviewedAssistantCandidate.softPreferences?.length && <>
+                    <dt>{localizeRecommendationCode(locale, 'field:soft_preference')}</dt>
+                    <dd dir="auto">{reviewedAssistantCandidate.softPreferences.join('، ')}</dd>
+                  </>}
                 </dl>
                 <p>{assistantCopy[locale].unsaved}</p>
                 <button type="button" onClick={applyAssistantCandidate} disabled={busy}>{assistantCopy[locale].apply}</button>
@@ -1199,11 +1277,12 @@ export function TravelerJourney({ locale, session, online, requirements, initial
               {destinationNames.map((name, index) => <div className="destination-edit-row" key={index}>
                 <label htmlFor={`profile-destination-${index}`}>{copy.profileDestination} {formatNumber(locale, index + 1)}</label>
                 <input id={`profile-destination-${index}`} value={name} onChange={event => {
+                  markProfileFieldEdited('destination');
                   const next = destinationNames.slice(); next[index] = event.target.value; setDestinationNames(next); setDirty(true); invalidateConsent(); void resolveNames(next);
                 }} dir="auto" />
-                <button type="button" aria-label={`${copy.removeDestination}: ${name}`} onClick={() => { const next = destinationNames.filter((_, item) => item !== index); setDestinationNames(next); setDirty(true); invalidateConsent(); void resolveNames(next); }}>{copy.removeDestination}</button>
+                <button type="button" aria-label={`${copy.removeDestination}: ${name}`} onClick={() => { markProfileFieldEdited('destination'); const next = destinationNames.filter((_, item) => item !== index); setDestinationNames(next); setDirty(true); invalidateConsent(); void resolveNames(next); }}>{copy.removeDestination}</button>
               </div>)}
-              <button type="button" onClick={() => { const next = [...destinationNames, '']; setDestinationNames(next); setDirty(true); invalidateConsent(); setResolution(null); }}>{copy.profileDestination} +</button>
+              <button type="button" onClick={() => { markProfileFieldEdited('destination'); const next = [...destinationNames, '']; setDestinationNames(next); setDirty(true); invalidateConsent(); setResolution(null); }}>{copy.profileDestination} +</button>
               <button type="button" aria-expanded={catalogueOpen} aria-controls="approved-destination-browser"
                 onClick={() => { if (catalogueOpen) setCatalogueOpen(false); else void browseCatalogue(); }}
                 disabled={!online || catalogueLoading}>{copy.browseDestinations}</button>
@@ -1237,30 +1316,52 @@ export function TravelerJourney({ locale, session, online, requirements, initial
               {!destinationNames.length && <p>{copy.noDestination}</p>}
             </fieldset>
             <label htmlFor="profile-duration">{copy.profileDuration}</label>
-            <input id="profile-duration" type="number" min="1" max="365" value={durationText} onChange={event => { setDurationText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            <input id="profile-duration" type="number" min="1" max="365" value={durationText} onChange={event => { const value = event.target.value; markProfileFieldEdited('duration'); setDurationText(value); const duration = Number(value); const start = travelStartText || extracted?.relativeStartDate.value?.anchor_date || extracted?.relativeDateResolution?.start || ''; if (start && extracted?.relativeStartDate.value && !manualProfileFieldsRef.current.has('travelEnd')) { const end = inclusiveEndDate(start, duration); if (end) setTravelEndText(end); } setDirty(true); invalidateConsent(); }} />
             <label htmlFor="profile-origin">{copy.profileOrigin}</label>
             <input id="profile-origin" type="text" maxLength={100} dir="auto" value={originText}
-              onChange={event => { setOriginText(event.target.value); setDirty(true); invalidateConsent(); }} />
+              onChange={event => { markProfileFieldEdited('origin'); setOriginText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            {suggestedOrigin && <div className="approximate-origin-proposal" role="note">
+              <p>{locale === 'fa-IR'
+                ? `موقعیت تقریبی دستگاه: ${suggestedOrigin.approximateText} (دقت اعلام‌شده ±${Math.round(suggestedOrigin.accuracyMeters)} متر). این نقطه شهر یا ورودی مقصد نیست.`
+                : locale === 'ar'
+                  ? `موقعية الجهاز التقريبية: ${suggestedOrigin.approximateText} (الدقة المعلنة ±${Math.round(suggestedOrigin.accuracyMeters)} م). هذه ليست مدينة أو مدخلاً لمعلم.`
+                : `Approximate device point: ${suggestedOrigin.approximateText} (the point is coarsened to ~1 km; device reported ±${Math.round(suggestedOrigin.accuracyMeters)} m). It is not a city or attraction entrance.`}</p>
+              {locale !== 'en-US' && <small>{locale === 'fa-IR' ? 'مختصات پیشنهادی برای حفظ حریم خصوصی به حدود یک کیلومتر گرد شده‌اند.' : 'تم تقريب الإحداثيات المقترحة إلى نحو كيلومتر واحد لحماية الخصوصية.'}</small>}
+              <button type="button" disabled={Boolean(originText.trim())} onClick={() => {
+                if (originText.trim()) return;
+                markProfileFieldEdited('origin');
+                const label = locale === 'fa-IR' ? `موقعیت تقریبی GPS (${suggestedOrigin.approximateText})`
+                  : locale === 'ar' ? `موقع GPS تقريبي (${suggestedOrigin.approximateText})`
+                    : `Approximate GPS point (${suggestedOrigin.approximateText})`;
+                setOriginText(label); setDirty(true); invalidateConsent();
+              }}>{originText.trim()
+                ? (locale === 'fa-IR' ? 'مبدأ واردشده حفظ شده است' : locale === 'ar' ? 'تم الاحتفاظ بنقطة الانطلاق المدخلة' : 'Keep entered origin')
+                : (locale === 'fa-IR' ? 'استفاده از نقطهٔ تقریبی' : locale === 'ar' ? 'استخدم الموقع التقريبي' : 'Use approximate point')}</button>
+            </div>}
             <label htmlFor="profile-travelers">{copy.profileTravelers}</label>
             <input id="profile-travelers" type="number" min="1" max="50" step="1" value={travelerCountText}
-              aria-invalid={!travelerCountValid} onChange={event => { setTravelerCountText(event.target.value); setDirty(true); invalidateConsent(); }} />
+              aria-invalid={!travelerCountValid} onChange={event => { markProfileFieldEdited('travelers'); setTravelerCountText(event.target.value); setDirty(true); invalidateConsent(); }} />
             {!travelerCountValid && <p className="journey-error" role="alert">{copy.profileTravelersInvalid}</p>}
             <label htmlFor="profile-budget">{copy.profileBudget}</label>
             <input id="profile-budget" type="text" maxLength={100} dir="auto" value={budgetText}
-              onChange={event => { setBudgetText(event.target.value); setDirty(true); invalidateConsent(); }} />
+              onChange={event => { markProfileFieldEdited('budget'); setBudgetText(event.target.value); setDirty(true); invalidateConsent(); }} />
             {!budgetValid && <p className="journey-error" role="alert">{copy.profileBudgetInvalid}</p>}
             {extracted?.relativeStartDate?.value && !extracted.travelDates.value && <p className="profile-relative-date" role="note">{chatFlowCopy[locale].relativeDate}</p>}
             <JalaliDatePicker id="profile-travel-start" label={copy.profileTravelStart} locale={locale}
               value={travelStartText} timeZone={travelerTimezone}
-              onChange={value => { setTravelStartText(value); setDirty(true); invalidateConsent(); }} />
+              onChange={value => { markProfileFieldEdited('travelStart'); onManualDateOverride?.(); setTravelStartText(value); setDirty(true); invalidateConsent(); }} />
             <JalaliDatePicker id="profile-travel-end" label={copy.profileTravelEnd} locale={locale}
               value={travelEndText} timeZone={travelerTimezone}
-              onChange={value => { setTravelEndText(value); setDirty(true); invalidateConsent(); }} />
+              onChange={value => { markProfileFieldEdited('travelEnd'); onManualDateOverride?.(); setTravelEndText(value); setDirty(true); invalidateConsent(); }} />
             {!datesValid && <p className="journey-error" role="alert">{copy.profileDatesInvalid}</p>}
             <label htmlFor="profile-interests">{copy.profileInterests}</label>
             <textarea id="profile-interests" maxLength={300} rows={2} dir="auto" value={interestText}
-              onChange={event => { setInterestText(event.target.value); setDirty(true); invalidateConsent(); }} />
+              onChange={event => { markProfileFieldEdited('interests'); setInterestText(event.target.value); setDirty(true); invalidateConsent(); }} />
             {!interestsValid && <p className="journey-error" role="alert">{copy.profileInterestsInvalid}</p>}
+            <label htmlFor="profile-soft-preferences">{locale === 'fa-IR' ? 'ترجیح‌های اختیاری (جدا با ویرگول)' : locale === 'ar' ? 'التفضيلات الاختيارية (افصل بينها بفواصل)' : 'Optional preferences (comma-separated)'}</label>
+            <textarea id="profile-soft-preferences" maxLength={300} rows={2} dir="auto" value={softPreferenceText}
+              onChange={event => { markProfileFieldEdited('softPreferences'); setSoftPreferenceText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            {!softPreferencesValid && <p className="journey-error" role="alert">{copy.profileInterestsInvalid}</p>}
             {!!consentFields.length && <fieldset className="requirement-consent" aria-describedby="requirement-consent-intro">
               <legend>{copy.requirementConsentTitle}</legend>
               <p id="requirement-consent-intro">{copy.requirementConsentIntro}</p>

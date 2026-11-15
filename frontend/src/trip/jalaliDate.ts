@@ -47,11 +47,11 @@ export function formatJalaaliDate(value: string, locale: 'fa-IR' | 'en-US' | 'ar
   return `${new Intl.NumberFormat(numberLocale, { useGrouping: false }).format(date.jd)} ${JALALI_MONTHS_FA[date.jm - 1]} ${new Intl.NumberFormat(numberLocale, { useGrouping: false }).format(date.jy)}`;
 }
 
-export function deviceCalendarDate(timeZone?: string): string {
+export function deviceCalendarDate(timeZone?: string, instant: Date = new Date()): string {
   const zone = timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', calendar: 'gregory',
-  }).formatToParts(new Date());
+  }).formatToParts(instant);
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
 }

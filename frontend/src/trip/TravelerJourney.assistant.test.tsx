@@ -48,6 +48,7 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     let conversation = { conversation_id: 'conversation-15', locale: 'fa-IR' as const, version: 1,
       started_at: now, updated_at: now, last_message_at: now, trips: [trip], messages: [initialMessage] };
     let currentTrip = trip;
+    let assistantTurnCount = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); const method = init?.method ?? 'GET';
       if (url.endsWith('/conversations?limit=50')) return reply({ items: [], next_cursor: null });
@@ -64,7 +65,7 @@ describe('assistant suggestions and reviewed trip restoration', () => {
       }
       if (url === '/api/v1/conversations/conversation-15/assistant-turns' && method === 'POST') {
         const body = JSON.parse(String(init?.body));
-        const message = { message_id: 'assistant-reply-15', trip_id: trip.trip_id, role: 'assistant',
+        const message = { message_id: `assistant-reply-15-${++assistantTurnCount}`, trip_id: trip.trip_id, role: 'assistant',
           content: 'مدت سفر همان ۱۵ روز است؛ مقصد را خودتان مرور کنید.', created_at: now };
         conversation = { ...conversation, version: 3, messages: [...conversation.messages, message] };
         return reply({ conversation, trip: currentTrip, message,
@@ -83,6 +84,7 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     await act(async () => root.render(<Harness />)); await settle();
     await act(async () => host.querySelector<HTMLButtonElement>('.journey-action')!.click());
     await settle();
+    expect(fetchMock.mock.calls.filter(call => String(call[0]).endsWith('/assistant-turns'))).toHaveLength(1);
 
     expect(host.textContent).toContain(requestText);
     expect(host.textContent).toContain('مدت ثبت‌شدهٔ این سفر: ۱۵ روز.');
@@ -93,8 +95,8 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     expect(firstSuggestion).toBeTruthy();
     await act(async () => firstSuggestion!.click()); await settle();
     expect(host.querySelector<HTMLTextAreaElement>('#trip-follow-up')?.value).toBe(firstSuggestion!.textContent);
-    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/messages')
-      || String(call[0]).endsWith('/assistant-turns'))).toBe(false);
+    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/messages'))).toBe(false);
+    expect(fetchMock.mock.calls.filter(call => String(call[0]).endsWith('/assistant-turns'))).toHaveLength(1);
     expect(host.querySelector<HTMLInputElement>('#profile-duration')?.value).toBe('15');
 
     const textarea = host.querySelector<HTMLTextAreaElement>('#trip-follow-up')!;
@@ -108,7 +110,7 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     const localPayload = JSON.parse(String(localCall[1]?.body));
     expect(localPayload.content).toBe('ما چهار نفر هستیم');
     expect(localPayload.extracted_requirements.durationDays.value).toBe(15);
-    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/assistant-turns'))).toBe(false);
+    expect(fetchMock.mock.calls.filter(call => String(call[0]).endsWith('/assistant-turns'))).toHaveLength(1);
     expect(host.querySelector<HTMLInputElement>('#profile-duration')?.value).toBe('15');
 
     const remoteInput = host.querySelector<HTMLTextAreaElement>('#trip-follow-up')!;
@@ -120,9 +122,11 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     const remoteButton = [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === 'پرسش از دستیار سفر')!;
     expect(remoteButton.disabled).toBe(false);
     await act(async () => remoteButton.click()); await settle();
-    const remoteCall = fetchMock.mock.calls.find(call => String(call[0]).endsWith('/assistant-turns'))!;
+    const assistantCalls = fetchMock.mock.calls.filter(call => String(call[0]).endsWith('/assistant-turns'));
+    expect(assistantCalls).toHaveLength(2);
+    const remoteCall = assistantCalls[1];
     const remotePayload = JSON.parse(String(remoteCall[1]?.body));
-    expect(remotePayload.remote_processing_consent).toBe(true);
+    expect(remotePayload).not.toHaveProperty('remote_processing_consent');
     expect(remotePayload.content).toBe('لطفاً یک سؤال تکمیلی بپرس');
     expect(host.textContent).toContain('مدت ثبت‌شدهٔ این سفر: ۱۵ روز.');
     expect(host.querySelector<HTMLInputElement>('#profile-duration')?.value).toBe('15');
@@ -171,7 +175,7 @@ describe('assistant suggestions and reviewed trip restoration', () => {
           candidate_requirements: {
             destination: 'Kashan', duration_days: 1, origin: 'Tehran', traveler_count: 4,
             budget_text: '200000 toman', travel_start: '2027-03-01',
-            travel_end: '2027-03-04', interest: 'historic gardens',
+            travel_end: '2027-03-04', interest: 'historic gardens', soft_preference: 'quiet pace',
           },
           clarification: null, replayed: false });
       }
@@ -185,6 +189,7 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     function Harness() {
       const [requirements, setRequirements] = useState<TripRequirements | null>(null);
       return <TravelerJourney locale="en-US" session={session} online requirements={requirements}
+        suggestedOrigin={{ approximateText: '35.70, 51.40', accuracyMeters: 160 }}
         onSessionExpired={() => undefined} onRestoreRequest={(_text, value) => setRequirements(value)}
         onStartNewDraft={() => setRequirements(null)} />;
     }
@@ -220,11 +225,14 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     expect(host.querySelector<HTMLInputElement>('#profile-destination-0')?.value).toBe('Kashan');
     expect(host.querySelector<HTMLInputElement>('#profile-duration')?.value).toBe('1');
     expect(host.querySelector<HTMLInputElement>('#profile-origin')?.value).toBe('Tehran');
+    expect(host.textContent).toContain('Approximate device point: 35.70, 51.40');
+    expect([...host.querySelectorAll('button')].find(button => button.textContent?.includes('Keep entered origin'))?.disabled).toBe(true);
     expect(host.querySelector<HTMLInputElement>('#profile-travelers')?.value).toBe('4');
     expect(host.querySelector<HTMLInputElement>('#profile-budget')?.value).toBe('200000 toman');
     expect(host.querySelector<HTMLInputElement>('#profile-travel-start')?.value).toBe('2027-03-01');
     expect(host.querySelector<HTMLInputElement>('#profile-travel-end')?.value).toBe('2027-03-04');
     expect(host.querySelector<HTMLTextAreaElement>('#profile-interests')?.value).toBe('historic gardens');
+    expect(host.querySelector<HTMLTextAreaElement>('#profile-soft-preferences')?.value).toBe('quiet pace');
     expect(fetchMock.mock.calls.filter(call => call[1]?.method === 'PATCH')).toHaveLength(0);
     const saveButton = [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Save trip details');
     expect(saveButton?.disabled).toBe(true); // Unreviewed AI fields cannot silently change trip consent.
@@ -233,6 +241,8 @@ describe('assistant suggestions and reviewed trip restoration', () => {
       host.querySelector<HTMLInputElement>('#requirement-consent-traveler_count-must')!.click();
       host.querySelector<HTMLInputElement>('#requirement-consent-budget-must')!.click();
       host.querySelector<HTMLInputElement>('#requirement-consent-travel_dates-must')!.click();
+      host.querySelector<HTMLInputElement>('#requirement-consent-soft_preference-advisory')!.click();
+      host.querySelector<HTMLInputElement>('#requirement-consent-soft_preference-ack')!.click();
     });
     await settle();
     expect(saveButton?.disabled).toBe(false);
@@ -250,9 +260,11 @@ describe('assistant suggestions and reviewed trip restoration', () => {
       start: '2027-03-01', end: '2027-03-04',
     });
     expect(body.confirmed_requirements.interests).toEqual(['historic gardens']);
+    expect(body.confirmed_requirements.soft_preferences).toEqual(['quiet pace']);
     expect(body.requirement_consent.field_decisions).toEqual({
       origin: 'must_have', traveler_count: 'must_have',
       budget: 'must_have', travel_dates: 'must_have',
+      soft_preference: 'advisory',
     });
   });
 });

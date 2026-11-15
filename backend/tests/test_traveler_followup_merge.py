@@ -31,3 +31,20 @@ def test_ambiguous_correction_must_not_restore_prior_duration():
     assert merged["durationDays"] == followup["durationDays"]
     assert merged["destinations"] == previous["destinations"]
     assert previous["durationDays"]["value"] == 3
+
+
+def test_follow_up_does_not_restore_initial_typed_snapshot_over_a_corrected_profile():
+    previous = {
+        "requestText": "سفر ۱۵ روزه به شیراز با بودجهٔ ۲۰ میلیون تومان",
+        "budget": field({"amount": 20, "currency": "TOMAN", "unit": "million", "raw": "۲۰ میلیون تومان"}),
+        "requirements_v1": {"contract_version": "trip-requirements-v1", "fields": {"budget": field("20")}},
+    }
+    correction = {
+        "requestText": previous["requestText"],
+        "budget": field({"amount": 45, "currency": "TOMAN", "unit": "million", "raw": "۴۵ میلیون تومان"}),
+    }
+    corrected = _merge_extraction(previous, correction)
+    assert corrected["budget"]["value"]["amount"] == 45
+    assert "requirements_v1" not in corrected
+    later = _merge_extraction(corrected, {"requestText": previous["requestText"], "durationDays": field(15)})
+    assert later["budget"]["value"]["amount"] == 45

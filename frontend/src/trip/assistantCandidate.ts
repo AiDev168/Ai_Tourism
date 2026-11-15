@@ -1,5 +1,12 @@
 /** Only explicitly reviewed AI hints enter the editable trip form. */
 import { createTripRequirements, type TripRequirementsV1 } from './tripIntake';
+import type { RequirementSource } from './tripIntake';
+
+/** AI may replace deterministic guesses or missing values, never corrections or traveler choices. */
+export function assistantMayReplaceField(source: RequirementSource | undefined, hasValue: boolean,
+  manuallyEdited: boolean, confirmed: boolean): boolean {
+  return !manuallyEdited && !confirmed && (source === 'fallback' || !hasValue);
+}
 
 export type ReviewableAssistantCandidate = {
   destination: string | null;
@@ -10,6 +17,7 @@ export type ReviewableAssistantCandidate = {
   travelStart?: string;
   travelEnd?: string;
   interest?: string;
+  softPreferences?: string[];
   typedRequirements?: TripRequirementsV1;
 };
 
@@ -53,6 +61,9 @@ export function reviewableAssistantCandidate(raw: unknown): ReviewableAssistantC
     }
     const interests = known(fields.interests);
     if (Array.isArray(interests) && interests.length && interests.every(item => typeof item === 'string' && item.length <= 100)) candidate.interest = interests.join('، ');
+    const softPreferences = fields.soft_preferences ? known(fields.soft_preferences) : null;
+    if (Array.isArray(softPreferences) && softPreferences.length <= 10
+        && softPreferences.every(item => safeText(item, 100) !== null)) candidate.softPreferences = softPreferences.map(item => item.trim());
     return candidate;
   }
 
@@ -69,8 +80,10 @@ export function reviewableAssistantCandidate(raw: unknown): ReviewableAssistantC
   const parsedBudget = rawBudget ? createTripRequirements({ requestText: rawBudget, locale: 'fa-IR' }) : null;
   if (rawBudget && parsedBudget && parsedBudget.kind !== 'invalid' && parsedBudget.requirements.budget.value) candidate.budgetText = rawBudget;
   const interest = safeText(flat.interest, 100); if (interest) candidate.interest = interest;
+  const softPreference = safeText(flat.soft_preference ?? flat.soft_preferences, 100);
+  if (softPreference) candidate.softPreferences = [softPreference];
   const start = flat.travel_start, end = flat.travel_end;
   if (validIsoDay(start) && validIsoDay(end) && start <= end) { candidate.travelStart = start; candidate.travelEnd = end; }
   return candidate.destination === null && candidate.durationDays === null && !candidate.origin
-    && !candidate.travelerCount && !candidate.budgetText && !candidate.interest && !candidate.travelStart ? null : candidate;
+    && !candidate.travelerCount && !candidate.budgetText && !candidate.interest && !candidate.softPreferences && !candidate.travelStart ? null : candidate;
 }

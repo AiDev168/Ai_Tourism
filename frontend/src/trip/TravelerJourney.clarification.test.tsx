@@ -82,6 +82,7 @@ describe('visible traveler-only clarification flow', () => {
     function Harness() {
       const [requirements, setRequirements] = useState<TripRequirements | null>(initialTrip.extracted_requirements);
       return <TravelerJourney session={session} online locale="en-US" requirements={requirements}
+        assistantConfigured={false}
         onSessionExpired={() => undefined} onRestoreRequest={(_raw, updated) => setRequirements(updated)}
         onStartNewDraft={() => setRequirements(null)} />;
     }

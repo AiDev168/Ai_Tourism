@@ -67,7 +67,7 @@ class ChatReply(BaseModel):
             item = value.get(key)
             if type(item) is int and 1 <= item <= bound:
                 hints[key] = item
-        for key, limit in (("budget_text", 100), ("interest", 100),
+        for key, limit in (("budget_text", 100), ("interest", 100), ("soft_preference", 120),
                            ("hard_constraint", 120), ("accessibility", 120)):
             item = value.get(key)
             if (isinstance(item, str) and 0 < len(item.strip()) <= limit
@@ -94,7 +94,7 @@ class ChatReply(BaseModel):
     @classmethod
     def bounded_evidence(cls, value: dict[str, str]) -> dict[str, str]:
         allowed = {"destination", "origin", "duration_days", "traveler_count", "budget_text",
-                   "interest", "relative_start_date", "travel_start", "travel_end",
+                   "interest", "soft_preference", "relative_start_date", "travel_start", "travel_end",
                    "hard_constraint", "accessibility"}
         return {
             key: quote.strip()
@@ -171,6 +171,8 @@ class RemoteChatAdapter:
                     "travel_start and travel_end (BOTH ISO YYYY-MM-DD dates, only when "
                     "explicitly stated, without converting local calendars), and "
                 "interest (one explicitly stated interest, max 100 characters), "
+                "soft_preference (one explicitly advisory preference, max 120 characters; "
+                "retain its exact wording, and NEVER reclassify a safety/access need or prohibition as soft), "
                 "relative_start_date (integer offset-days 0..365), hard_constraint "
                 "and accessibility (short exact strings from the user). "
                 "Never return a field unless requirement_evidence contains its exact wording "

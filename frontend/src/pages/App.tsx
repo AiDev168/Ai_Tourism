@@ -3,7 +3,7 @@ import { formatNumber, type Locale } from '../i18n/messages';
 import { tripMessages } from '../i18n/tripMessages';
 import { requirementClarificationMessages } from '../i18n/requirementClarificationMessages';
 import { destinationResolutionMessages } from '../i18n/destinationResolutionMessages';
-import { createTripRequirements, MAX_TRIP_DURATION_DAYS, tripRequirementsV1ToTripRequirements, resolveRelativeTripDates, type TripRequirements } from '../trip/tripIntake';
+import { createTripRequirements, MAX_TRIP_DURATION_DAYS, mergeRequirementInterpretations, tripRequirementsV1ToTripRequirements, resolveRelativeTripDates, type TripRequirements } from '../trip/tripIntake';
 import { travelerApi } from '../trip/travelerApi';
 import { confirmDestinationCandidate, resolveDestinationNames, type DestinationResolution } from '../trip/destinationResolution';
 import { ApiDestinationCatalogPort } from '../trip/destinationCatalogApi';
@@ -76,8 +76,7 @@ export function App() {
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
   // Smart conversation is the default workflow; no separate opt-in checkbox.
-  const initialRemoteConsent = true;
-  const [suggestedOrigin, setSuggestedOrigin] = useState('');
+  const [suggestedOrigin, setSuggestedOrigin] = useState<{ approximateText: string; accuracyMeters: number } | null>(null);
   const [locationStatus, setLocationStatus] = useState('');
   const [travelerTimezone, setTravelerTimezone] = useState(() =>
     Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
@@ -95,8 +94,8 @@ export function App() {
           return;
         }
         // No third-party reverse geocoder and no background location tracking.
-        // Round to ~11m before proposing the GPS point as the departure origin.
-        setSuggestedOrigin(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+        // Coarsen to ~1km before offering a clearly approximate point.
+        setSuggestedOrigin({ approximateText: latitude.toFixed(2) + ', ' + longitude.toFixed(2), accuracyMeters: accuracy });
         const deviceTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
         setTravelerTimezone(deviceTimezone);
         setLocationStatus(locale === 'fa-IR' ? `نقطهٔ تقریبی مبدأ دریافت شد (دقت گزارش‌شده ±${Math.round(accuracy)} متر). شهر مبدأ را در فرم بررسی کنید.`
@@ -106,7 +105,7 @@ export function App() {
       () => setLocationStatus(locale === 'fa-IR' ? 'دسترسی به موقعیت رد شد یا موقعیت در دسترس نیست؛ می‌توانید مبدأ را دستی وارد کنید.'
         : locale === 'ar' ? 'لم يتوفر الموقع أو رُفض الإذن؛ يمكنك إدخال نقطة الانطلاق يدوياً.'
           : 'Location permission denied or unavailable. You can enter the origin manually.'),
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
     );
   };
   useEffect(() => {
@@ -121,6 +120,12 @@ export function App() {
   }, [authSession?.user.user_id]);
   const [assistantRouteState, setAssistantRouteState] = useState<'loading' | 'configured' | 'disabled' | 'unavailable' | 'quota_exhausted'>('loading');
   const [assistantRemaining, setAssistantRemaining] = useState<number | null>(null);
+  const manualDateOverrideRequestRef = useRef<string | null>(null);
+  useEffect(() => {
+    const today = deviceCalendarDate(travelerTimezone);
+    setRequirements(current => !current || manualDateOverrideRequestRef.current === current.requestText
+      ? current : resolveRelativeTripDates(current, today, travelerTimezone));
+  }, [travelerTimezone]);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const requestTextRef = useRef('');
   const catalogueRequestVersion = useRef(0);
@@ -181,6 +186,7 @@ export function App() {
     // text: FormData captures the exact values currently visible to the user.
     const formData = new FormData(event.currentTarget);
     const requestText = promptRef.current?.value ?? String(formData.get('requestText') ?? requestTextRef.current);
+    manualDateOverrideRequestRef.current = null;
     const result = createTripRequirements({ requestText, locale });
     if (result.kind === 'invalid') {
       catalogueRequestVersion.current += 1;
@@ -206,7 +212,7 @@ export function App() {
           request_text: requestText, locale, traveler_timezone: travelerTimezone,
           traveler_reference_date: deviceCalendarDate(travelerTimezone),
         });
-        interpreted = tripRequirementsV1ToTripRequirements(response.requirements);
+        interpreted = mergeRequirementInterpretations(result.requirements, tripRequirementsV1ToTripRequirements(response.requirements));
       } catch {
         // The on-device parser remains available if the service is unreachable.
         setError(locale === 'fa-IR' ? 'ارتباط با تحلیلگر سرور برقرار نشد؛ اطلاعات با روش قواعدمحور موقتاً استخراج شد.'
@@ -220,10 +226,14 @@ export function App() {
       loadDestinationResolution(interpreted.destinations.value, locale);
       setClarifications(interpreted.missingRequired);
       setAmbiguities(interpreted.ambiguousRequired);
-      return;
+      // Missing fields are a reason to clarify, not a reason to block the
+      // authenticated assistant. Persist the original request and let the
+      // first assistant turn ask for the missing information.
+      if (!authSession || !online) return;
+    } else {
+      setClarifications([]);
+      setAmbiguities([]);
     }
-    setClarifications([]);
-    setAmbiguities([]);
     setRequirements(interpreted);
     loadDestinationResolution(interpreted.destinations.value, locale);
   };
@@ -412,12 +422,14 @@ export function App() {
           session={authSession}
           online={online}
           requirements={requirements}
-          initialRemoteConsent={initialRemoteConsent}
           autoStartConversation
+          assistantConfigured={assistantRouteState === 'loading' ? null : assistantRouteState !== 'disabled' && assistantRouteState !== 'quota_exhausted'}
           travelerTimezone={travelerTimezone}
           suggestedOrigin={suggestedOrigin}
+          onManualDateOverride={() => { manualDateOverrideRequestRef.current = requestTextRef.current; }}
           onSessionExpired={() => setAuthSession(null)}
           onRestoreRequest={(text, restored) => {
+            manualDateOverrideRequestRef.current = text;
             requestTextRef.current = text;
             if (promptRef.current) promptRef.current.value = text;
             setRequirements(restored);
