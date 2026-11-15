@@ -276,8 +276,13 @@ def staging_login(
             return JSONResponse(status_code=401, content={"error": {"code": "unauthenticated"}})
         row.update(raw_session=raw, csrf_token=csrf)
         return _stage_session(settings, response, row)
-    except (AuthenticationUnavailable, psycopg.Error, ValueError, UnicodeError):
-        logger.warning("auth.staging_login_unavailable")
+    except (AuthenticationUnavailable, psycopg.Error, ValueError, UnicodeError) as error:
+        # Keep diagnostics useful without logging login names, request bodies,
+        # SQL parameters, verifier material, or session data.
+        logger.warning("auth.staging_login_unavailable", extra={
+            "error_type": type(error).__name__,
+            "sqlstate": getattr(error, "sqlstate", None),
+        })
         return _unavailable()
 
 
