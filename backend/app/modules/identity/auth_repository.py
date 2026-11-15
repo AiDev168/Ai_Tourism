@@ -381,9 +381,9 @@ class AuthRepository:
                          AND u.account_status='active' AND u.is_synthetic=FALSE
                          AND ((v.phone_e164=u.phone_e164 AND u.phone_e164 IS NOT NULL)
                               OR (sc.user_id IS NOT NULL AND
-                                  (u.auth_subject='staging_invite' OR u.auth_subject LIKE 'staging_invite:%')))
+                                  (u.auth_subject=%s OR u.auth_subject LIKE %s)))
                        FOR UPDATE OF s""",
-                    (token_hash, now, now),
+                    (token_hash, now, now, "staging_invite", "staging_invite:%"),
                 ).fetchone()
             elif allow_local_owner:
                 if allow_staging:
@@ -402,9 +402,9 @@ class AuthRepository:
                              AND ((v.phone_e164=u.phone_e164 AND u.phone_e164 IS NOT NULL)
                                   OR (c.owner_id IS NOT NULL AND u.auth_subject='local_owner')
                                   OR (sc.user_id IS NOT NULL AND
-                                      (u.auth_subject='staging_invite' OR u.auth_subject LIKE 'staging_invite:%')))
+                                      (u.auth_subject=%s OR u.auth_subject LIKE %s)))
                            FOR UPDATE OF s""",
-                        (token_hash, now, now),
+                        (token_hash, now, now, "staging_invite", "staging_invite:%"),
                     ).fetchone()
                 else:
                     row = conn.execute(

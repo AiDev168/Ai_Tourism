@@ -85,9 +85,10 @@ class StagingAuthRepository:
             row = conn.execute(
                 """SELECT u.user_id,u.email FROM identity.users u
                    JOIN identity.staging_password_credentials c ON c.user_id=u.user_id
-                   WHERE u.user_id=%s AND (u.auth_subject='staging_invite' OR u.auth_subject LIKE 'staging_invite:%')
+                   WHERE u.user_id=%s AND (u.auth_subject=%s OR u.auth_subject LIKE %s)
                      AND u.account_status='active' AND u.is_synthetic=FALSE
-                     AND c.verifier=%s FOR UPDATE OF u""", (user_id, expected_verifier),
+                     AND c.verifier=%s FOR UPDATE OF u""",
+                (user_id, "staging_invite", "staging_invite:%", expected_verifier),
             ).fetchone()
             if row is None:
                 return None
