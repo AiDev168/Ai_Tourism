@@ -433,6 +433,12 @@ describe('persisted traveler journey', () => {
       ...tripRecord(requestText, createTripRequirements({ requestText, locale: 'fa-IR' })),
       locale: 'fa-IR' as const,
       extracted_requirements: { requirements_v1: requirementsV1 },
+      confirmed_requirements: {
+        confirmation_source: 'traveler_reviewed',
+        duration_days: 5,
+        traveler_count: 5,
+        travel_dates: { start: '2026-11-17', end: '' },
+      },
       duration_days: 5,
       traveler_count: 5,
     };

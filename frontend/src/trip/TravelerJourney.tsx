@@ -763,7 +763,9 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
         && !Array.isArray(savedDates) ? savedDates as Record<string, unknown> : null;
       const restoredStart = typeof restoredDates?.start === 'string' ? restoredDates.start : (parsed?.travelDates.value?.start ?? parsed?.relativeStartDate.value?.anchor_date ?? '');
       const inferredEnd = restoredStart && restoredDays !== null ? inclusiveEndDate(restoredStart, restoredDays) : null;
-      const restoredEnd = typeof restoredDates?.end === 'string' ? restoredDates.end : (parsed?.travelDates.value?.end ?? inferredEnd ?? '');
+      const restoredEnd = typeof restoredDates?.end === 'string' && restoredDates.end.trim()
+        ? restoredDates.end
+        : (parsed?.travelDates.value?.end || inferredEnd || '');
       const savedInterests = trip.confirmed_requirements.interests;
       const restoredInterests = hasReviewedProfile && Array.isArray(savedInterests)
         && savedInterests.every(value => typeof value === 'string')
