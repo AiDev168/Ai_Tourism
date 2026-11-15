@@ -91,7 +91,7 @@ existing=$(docker exec "$target_container" psql -X -q -A -t -U "$db_owner" -d po
   -c "SELECT COALESCE(string_agg(datname,',' ORDER BY datname),'') FROM pg_database WHERE NOT datistemplate AND datname <> 'postgres'")
 [[ -z "$existing" ]] || { echo 'Target cluster contains an existing application database; refusing restore.' >&2; exit 2; }
 exists=$(docker exec "$target_container" psql -X -q -A -t -U "$db_owner" -d postgres \
-  -v target_db="$target_db" -c "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname=:'target_db')")
+  -c "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname='$target_db')")
 [[ "$exists" == f ]] || { echo 'Target database already exists; refusing to overwrite it.' >&2; exit 2; }
 
 # pg_dump does not contain cluster-global roles. Recreate only the minimum
