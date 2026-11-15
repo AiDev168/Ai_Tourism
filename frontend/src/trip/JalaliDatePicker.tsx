@@ -74,9 +74,12 @@ export function JalaliDatePicker({ id, label, locale, value, onChange, timeZone 
   }, [open]);
 
   useEffect(() => {
-    if (fa && selectedJalali) setView({ year: selectedJalali.jy, month: selectedJalali.jm });
-    if (!fa && selectedGregorian) setView({ year: selectedGregorian.gy, month: selectedGregorian.gm });
-  }, [value, locale]);
+    // Switching locale must switch calendar years even when no date is set.
+    const jalali = selectedJalali ?? todayJalali;
+    const gregorian = selectedGregorian ?? todayGregorian;
+    setView(fa ? { year: jalali.jy, month: jalali.jm }
+      : { year: gregorian.gy, month: gregorian.gm });
+  }, [value, locale, timeZone]);
 
   const days = useMemo(() => {
     const count = fa ? jalaaliMonthDays(view.year, view.month)
