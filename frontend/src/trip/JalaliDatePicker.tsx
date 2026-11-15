@@ -11,7 +11,6 @@ const copy = {
   ar: { choose: 'اختر تاريخاً ميلادياً', previous: 'الشهر السابق', next: 'الشهر التالي', gregorian: 'ميلادي', hijri: 'هجري', clear: 'مسح التاريخ' },
 } as const;
 
-const englishMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const weekdays = {
   'fa-IR': JALALI_WEEKDAYS_FA,
   'en-US': ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
@@ -53,9 +52,11 @@ export function JalaliDatePicker({ id, label, locale, value, onChange, timeZone 
   const selectedGregorian = parseIsoCalendarDate(value);
   const todayJalali = isoToJalaali(todayIso)!;
   const todayGregorian = parseIsoCalendarDate(todayIso)!;
-  const initialMonth = fa ? (selectedJalali ?? todayJalali) : (selectedGregorian ?? todayGregorian);
+  const initialView = fa
+    ? { year: (selectedJalali ?? todayJalali).jy, month: (selectedJalali ?? todayJalali).jm }
+    : { year: (selectedGregorian ?? todayGregorian).gy, month: (selectedGregorian ?? todayGregorian).gm };
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState({ year: fa ? 'jy' in initialMonth ? initialMonth.jy : todayJalali.jy : 'gy' in initialMonth ? initialMonth.gy : todayGregorian.gy, month: fa ? 'jm' in initialMonth ? initialMonth.jm : todayJalali.jm : 'gm' in initialMonth ? initialMonth.gm : todayGregorian.gm });
+  const [view, setView] = useState(initialView);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -112,9 +113,9 @@ export function JalaliDatePicker({ id, label, locale, value, onChange, timeZone 
     <button id={`${id}-picker`} className="jalali-date-trigger" type="button"
       aria-labelledby={`${id}-label ${id}-picker`} aria-haspopup="dialog" aria-expanded={open}
       onClick={() => {
-        const current = fa ? (selectedJalali ?? todayJalali) : (selectedGregorian ?? todayGregorian);
-        setView({ year: fa ? 'jy' in current ? current.jy : todayJalali.jy : 'gy' in current ? current.gy : todayGregorian.gy,
-          month: fa ? 'jm' in current ? current.jm : todayJalali.jm : 'gm' in current ? current.gm : todayGregorian.gm });
+        setView(fa
+          ? { year: (selectedJalali ?? todayJalali).jy, month: (selectedJalali ?? todayJalali).jm }
+          : { year: (selectedGregorian ?? todayGregorian).gy, month: (selectedGregorian ?? todayGregorian).gm });
         setOpen(value => !value);
       }}>
       <span>{selectedText}</span><span aria-hidden="true">▦</span>
