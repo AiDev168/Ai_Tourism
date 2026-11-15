@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createTripRequirements, extractDurationDays, tripRequirementsV1ToTripRequirements } from './tripIntake';
+import { createTripRequirements, extractDurationDays, tripRequirementsV1ToTripRequirements, resolveRelativeTripDates } from './tripIntake';
 
 const intake=(requestText:string,locale:'fa-IR'|'en-US'|'ar'='fa-IR')=>createTripRequirements({requestText,locale});
 describe('natural-language trip intake v2',()=>{
@@ -97,5 +97,33 @@ describe('natural-language trip intake v2',()=>{
   const result=intake('I use a wheelchair and want a 3-day trip to Shiraz','en-US');
   expect(result.kind).toBe('ready');
   if(result.kind==='ready')expect(result.requirements.accessibility.value).toBeNull();
+ });
+});
+
+
+describe('traveler-local relative dates', () => {
+ it.each([
+   ['فردا', 1], ['پس فردا', 2], ['پس‌فردا', 2],
+   ['tomorrow', 1], ['day after tomorrow', 2],
+   ['غداً', 1], ['بعد غد', 2],
+ ])('extracts %s with a %i-day offset', (phrase, days) => {
+   const locale = phrase.includes('tomorrow') ? 'en-US' : /غد/.test(phrase) ? 'ar' : 'fa-IR';
+   const result = createTripRequirements({ requestText: phrase, locale });
+   if (result.kind === 'invalid') throw new Error('Unexpected invalid phrase');
+   expect(result.requirements.relativeStartDate.value?.offset_days).toBe(days);
+ });
+ it('fills editable start/end from an explicit traveler timezone date without the server clock', () => {
+   const raw = createTripRequirements({ requestText: 'سفر ۳ روزه به شیراز از پس فردا', locale: 'fa-IR' });
+   if (raw.kind === 'invalid') throw new Error('Unexpected invalid phrase');
+   const normalized = resolveRelativeTripDates(raw.requirements, '2026-11-15', 'Asia/Tehran');
+   expect(normalized.relativeStartDate.value).toMatchObject({ offset_days: 2, anchor_date: '2026-11-17', timezone: 'Asia/Tehran' });
+   expect(normalized.travelDates.value).toEqual({ start: '2026-11-17', end: '2026-11-19' });
+ });
+ it('keeps the start date when duration is unknown, without inventing an end date', () => {
+   const raw = createTripRequirements({ requestText: 'از فردا به شیراز سفر می‌کنیم', locale: 'fa-IR' });
+   if (raw.kind === 'invalid') throw new Error('Unexpected invalid phrase');
+   const normalized = resolveRelativeTripDates(raw.requirements, '2026-11-15', 'Asia/Tehran');
+   expect(normalized.relativeStartDate.value?.anchor_date).toBe('2026-11-16');
+   expect(normalized.travelDates.value).toBeNull();
  });
 });
