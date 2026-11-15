@@ -45,9 +45,15 @@ writers=$("${compose[@]}" exec -T db psql -X -q -A -t -U "$db_owner" -d "$db_nam
 required_secrets=(pg_owner_password app_db_password geo_authorizer_password geo_publisher_password auth_otp_hmac_secret auth_csrf_secret auth_rate_limit_secret internal_chat_token sms_ir_production_api_key)
 for name in "${required_secrets[@]}"; do
   file="$root/secrets/$name"
-  [[ -f "$file" && ! -L "$file" && -s "$file" ]] || {
-    echo "Required runtime secret is missing or unsafe: $name" >&2; exit 2;
-  }
+  if [[ "$name" == sms_ir_production_api_key ]]; then
+    [[ -f "$file" && ! -L "$file" ]] || {
+      echo "Compose runtime placeholder/secret is missing or unsafe: $name" >&2; exit 2;
+    }
+  else
+    [[ -f "$file" && ! -L "$file" && -s "$file" ]] || {
+      echo "Required runtime secret is missing or unsafe: $name" >&2; exit 2;
+    }
+  fi
 done
 for path in "$root/state" "$root/releases/$sha"; do
   if find "$path" -type l -print -quit | grep -q .; then

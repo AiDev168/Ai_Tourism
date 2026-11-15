@@ -66,9 +66,11 @@ HMAC-SHA-256 (encrypt-then-MAC), checked before decryption. The SHA-256
 sidecar detects transfer corruption only and is **not** authenticity evidence.
 Transfer the archive, `.hmac`, and `.sha256` together; transfer both keys
 separately through approved protected channels. Neither key is in the bundle.
-Only the Compose runtime secret allowlist is packaged; the DB backup key, HMAC
-key, TLS keys and unrelated secrets are excluded. The bundle still contains
-active application/API credentials; handle it as highly sensitive data.
+Only the Compose runtime secret allowlist is packaged; the SMS key is optional
+and may be preserved as an empty placeholder while delivery is disabled. The
+DB backup key, HMAC key, TLS keys and unrelated secrets are excluded. The
+bundle still contains active application/API credentials; handle it as highly
+sensitive data.
 
 Stop the application services with the exact current Compose project (do not
 stop PostgreSQL), drain connections, create the freeze marker, and export:
