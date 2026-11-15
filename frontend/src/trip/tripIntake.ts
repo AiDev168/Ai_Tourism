@@ -25,6 +25,30 @@ export type TripRequirementsV1 = {
   clarification: { missing_fields: string[]; ambiguous_fields: string[]; question_fields: string[] };
 };
 
+/** Resolve an explicit relative departure against a traveler/device calendar date, never server time. */
+export function resolveRelativeTripDates(requirements: TripRequirements, referenceDate: string, timezone: string): TripRequirements {
+  if (requirements.travelDates.value || !requirements.relativeStartDate.value) return requirements;
+  const relative = requirements.relativeStartDate.value;
+  const offset = relative.offset_days;
+  if (!Number.isInteger(offset) || offset < 0 || offset > 365) return requirements;
+  const source = relative.anchor_date ?? referenceDate;
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/u.test(source)) return requirements;
+  const reference = new Date(source + 'T12:00:00.000Z');
+  if (!Number.isFinite(reference.getTime()) || reference.toISOString().slice(0, 10) !== source) return requirements;
+  if (!relative.anchor_date) reference.setUTCDate(reference.getUTCDate() + offset);
+  const start = reference.toISOString().slice(0, 10);
+  const anchored = { ...requirements.relativeStartDate, value: { ...relative, anchor_date: start, timezone } };
+  const duration = requirements.durationDays.value;
+  if (!duration || !Number.isInteger(duration) || duration < 1 || duration > 365) {
+    return { ...requirements, relativeStartDate: anchored };
+  }
+  const endDate = new Date(start + 'T12:00:00.000Z');
+  endDate.setUTCDate(endDate.getUTCDate() + duration - 1);
+  return { ...requirements, relativeStartDate: anchored, travelDates: {
+    value: { start, end: endDate.toISOString().slice(0, 10) }, status: 'extracted', evidence: anchored.evidence,
+  } };
+}
+
 /** Convert the server-authoritative typed contract without reinterpreting text. */
 export function tripRequirementsV1ToTripRequirements(value: TripRequirementsV1): TripRequirements {
   const project = <T, U = T>(field: RequirementEnvelope<T>, mapValue: (input: T) => U = (input => input as unknown as U), mapCandidates: (input: T) => U = mapValue): Field<U> => ({
@@ -162,8 +186,11 @@ function explicitHardConstraints(text:string):Field<string[]> {
  return unique.length?{value:unique,status:'extracted',evidence:unique.join(' / ')}:{value:null,status:'unknown',evidence:null};
 }
 function explicitRelativeStart(text:string):TripRequirements['relativeStartDate'] {
- const tomorrow=normalize(text).match(/(?:^|\s)(?:برای\s+)?(فردا)(?=\s|$|[،,.!?؟])/u);
- if(tomorrow)return{value:{offset_days:1,anchor_date:null,timezone:null},status:'extracted',evidence:tomorrow[0].trim()};
+ const tomorrow=normalize(text).match(/(?:^|\\s)(?:برای\\s+)?(پس[\\s-]*فردا|فردا|day\\s+after\\s+tomorrow|tomorrow|بعد\\s+غد|غد(?:اً|ا)?)(?=\\s|$|[،,.!?؟])/iu);
+ if(tomorrow) {
+  const offset = /^(?:پس|day\\s+after|بعد)/iu.test(tomorrow[1]) ? 2 : 1;
+  return {value:{offset_days:offset,anchor_date:null,timezone:null},status:'extracted',evidence:tomorrow[0].trim()};
+ }
  const match=normalize(text).match(new RegExp(`(?:\\u0627\\u0632\\s*)?(${numPattern})\\s*(?:\\u0631\\u0648\\u0632|days?)\\s*(?:\\u062f\\u06cc\\u06af\\u0647|\\u062f\\u06cc\\u06af\\u0631|\\u0628\\u0639\\u062f|later|from\\s+now)`, 'iu'));
  if(!match)return{value:null,status:'unknown',evidence:null};
  const offset=numberValue(match[1]);
