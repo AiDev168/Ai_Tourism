@@ -79,6 +79,8 @@ export function App() {
   const initialRemoteConsent = true;
   const [suggestedOrigin, setSuggestedOrigin] = useState('');
   const [locationStatus, setLocationStatus] = useState('');
+  const [travelerTimezone, setTravelerTimezone] = useState(() =>
+    Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const requestDeviceLocation = () => {
     if (!navigator.geolocation) {
       setLocationStatus(locale === 'fa-IR' ? 'مکان‌یابی این دستگاه پشتیبانی نمی‌شود.' : locale === 'ar' ? 'تحديد الموقع غير مدعوم على هذا الجهاز.' : 'Device location is unavailable.');
@@ -107,8 +109,6 @@ export function App() {
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
     );
   };
-  const [travelerTimezone, setTravelerTimezone] = useState(() =>
-    Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   useEffect(() => {
     // Auto-fill only when permission was already granted. Never trigger an
     // unrequested browser permission prompt; the visible button handles that.
