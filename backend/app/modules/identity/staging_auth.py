@@ -6,7 +6,7 @@ import hmac
 import secrets
 from datetime import datetime, timedelta
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.core.config import Settings
 from app.modules.identity.auth_repository import AuthRepository
@@ -85,7 +85,7 @@ class StagingAuthRepository:
             row = conn.execute(
                 """SELECT u.user_id,u.email FROM identity.users u
                    JOIN identity.staging_password_credentials c ON c.user_id=u.user_id
-                   WHERE u.user_id=%s AND u.auth_subject='staging_invite'
+                   WHERE u.user_id=%s AND (u.auth_subject='staging_invite' OR u.auth_subject LIKE 'staging_invite:%')
                      AND u.account_status='active' AND u.is_synthetic=FALSE
                      AND c.verifier=%s FOR UPDATE OF u""", (user_id, expected_verifier),
             ).fetchone()
@@ -116,14 +116,15 @@ class StagingAuthRepository:
                 """SELECT count(*) AS count
                    FROM identity.users u
                    JOIN identity.staging_password_credentials c ON c.user_id=u.user_id
-                   WHERE u.auth_subject='staging_invite' AND u.is_synthetic=FALSE""",
+                   WHERE u.is_synthetic=FALSE""",
             ).fetchone()
             if existing is not None or int(count["count"]) >= maximum_accounts:
                 return None
+            user_id = uuid4()
             user = conn.execute(
-                """INSERT INTO identity.users(auth_subject,email,account_status,is_synthetic)
-                   VALUES ('staging_invite',%s,'active',FALSE) RETURNING user_id""",
-                (login_name,),
+                """INSERT INTO identity.users(user_id,auth_subject,email,account_status,is_synthetic)
+                   VALUES (%s,%s,%s,'active',FALSE) RETURNING user_id""",
+                (user_id, f"staging_invite:{user_id}", login_name),
             ).fetchone()
             conn.execute(
                 """INSERT INTO identity.staging_password_credentials(user_id,login_name,salt,verifier,iterations)
@@ -149,9 +150,11 @@ class StagingAuthRepository:
             ).fetchone()
             if invite is None or invite["expires_at"] <= now or invite["consumed_at"] is not None:
                 return None
+            user_id = uuid4()
             user = conn.execute(
-                """INSERT INTO identity.users(auth_subject,email,account_status,is_synthetic)
-                   VALUES ('staging_invite',%s,'active',FALSE) RETURNING user_id""", (login_name,),
+                """INSERT INTO identity.users(user_id,auth_subject,email,account_status,is_synthetic)
+                   VALUES (%s,%s,%s,'active',FALSE) RETURNING user_id""",
+                (user_id, f"staging_invite:{user_id}", login_name),
             ).fetchone()
             conn.execute(
                 """INSERT INTO identity.staging_password_credentials(user_id,login_name,salt,verifier,iterations)
