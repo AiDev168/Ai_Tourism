@@ -79,3 +79,25 @@ def test_unselected_server_date_and_timezone_are_never_inferred():
     )
     assert result.fields.relative_start_date.value.anchor_date is None
     assert result.fields.relative_start_date.value.timezone is None
+
+
+@pytest.mark.parametrize(
+    ("phrase", "offset"), [
+        ("از فردا سفر می‌کنم", 1),
+        ("از پس فردا سفر می‌کنم", 2),
+        ("پس‌فردا می‌رویم", 2),
+        ("Travel tomorrow", 1),
+        ("Travel the day after tomorrow", 2),
+        ("السفر غداً", 1),
+        ("السفر بعد غد", 2),
+    ],
+)
+def test_relative_tomorrow_across_locales(phrase, offset):
+    locale = "en-US" if "Travel" in phrase else "ar" if "السفر" in phrase else "fa-IR"
+    result = interpret_trip_requirements(
+        phrase, locale,
+        traveler_timezone="Asia/Tehran", traveler_reference_date=date(2026, 11, 15),
+    )
+    relative = result.fields.relative_start_date.value
+    assert relative.offset_days == offset
+    assert relative.anchor_date == date(2026, 11, 15 + offset)
