@@ -586,6 +586,42 @@ export function TravelerJourney({ locale, session, online, requirements, initial
           setActiveConversation(savedConversation);
           setActiveTrip(savedTrip);
           setAssistantCandidate(firstReply.candidate_requirements);
+          // Prefer evidence-backed AI extraction for fields the fallback
+          // parser could not resolve. Never overwrite explicitly captured
+          // traveler values, and never silently confirm any AI suggestion.
+          const interpreted = reviewableAssistantCandidate(firstReply.candidate_requirements);
+          const typed = interpreted?.typedRequirements;
+          const hasDirectEvidence = (field: keyof NonNullable<typeof typed>['fields']): boolean => {
+            const span = typed?.fields[field]?.evidence_span;
+            return Boolean(typed?.original_text === requirements.requestText && span
+              && Number.isInteger(span.start) && Number.isInteger(span.end)
+              && requirements.requestText.slice(span.start, span.end) === span.text);
+          };
+          let improved = false;
+          if (interpreted && typed) {
+            if (!requirements.destinations.value?.length && interpreted.destination && hasDirectEvidence('destination')) {
+              setDestinationNames([interpreted.destination]); void resolveNames([interpreted.destination]); improved = true;
+            }
+            if (!requirements.durationDays.value && interpreted.durationDays && hasDirectEvidence('duration_days')) {
+              setDurationText(String(interpreted.durationDays)); improved = true;
+            }
+            if (!requirements.origin.value && !suggestedOrigin && interpreted.origin && hasDirectEvidence('origin')) {
+              setOriginText(interpreted.origin); improved = true;
+            }
+            if (!requirements.travelerCount.value && interpreted.travelerCount && hasDirectEvidence('travelers')) {
+              setTravelerCountText(String(interpreted.travelerCount)); improved = true;
+            }
+            if (!requirements.budget.value && interpreted.budgetText && hasDirectEvidence('budget')) {
+              setBudgetText(interpreted.budgetText); improved = true;
+            }
+            if (!requirements.travelDates.value && interpreted.travelStart && interpreted.travelEnd && hasDirectEvidence('travel_dates')) {
+              setTravelStartText(interpreted.travelStart); setTravelEndText(interpreted.travelEnd); improved = true;
+            }
+            if (!requirements.interests.value?.length && interpreted.interest && hasDirectEvidence('interests')) {
+              setInterestText(interpreted.interest); improved = true;
+            }
+          }
+          if (improved) { setDirty(true); invalidateConsent(); }
           setAssistantState('responded');
           setAssistantRemaining(value => value === null ? null : Math.max(0, value - 1));
           setStatus(locale === 'fa-IR' ? 'دستیار به درخواست شما پاسخ داد؛ پیشنهادهای استخراج‌شده هنوز تأیید نشده‌اند.'
