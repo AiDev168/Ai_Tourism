@@ -3,7 +3,7 @@ import { formatNumber, type Locale } from '../i18n/messages';
 import { tripMessages } from '../i18n/tripMessages';
 import { requirementClarificationMessages } from '../i18n/requirementClarificationMessages';
 import { destinationResolutionMessages } from '../i18n/destinationResolutionMessages';
-import { createTripRequirements, MAX_TRIP_DURATION_DAYS, tripRequirementsV1ToTripRequirements, type TripRequirements } from '../trip/tripIntake';
+import { createTripRequirements, MAX_TRIP_DURATION_DAYS, tripRequirementsV1ToTripRequirements, resolveRelativeTripDates, type TripRequirements } from '../trip/tripIntake';
 import { travelerApi } from '../trip/travelerApi';
 import { confirmDestinationCandidate, resolveDestinationNames, type DestinationResolution } from '../trip/destinationResolution';
 import { ApiDestinationCatalogPort } from '../trip/destinationCatalogApi';
@@ -75,9 +75,40 @@ export function App() {
   const [heroImageFailed, setHeroImageFailed] = useState(false);
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
-  const [initialRemoteConsent, setInitialRemoteConsent] = useState(false);
+  // Smart conversation is the default workflow; no separate opt-in checkbox.
+  const initialRemoteConsent = true;
+  const [suggestedOrigin, setSuggestedOrigin] = useState('');
+  const [locationStatus, setLocationStatus] = useState('');
+  const requestDeviceLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus(locale === 'fa-IR' ? 'مکان‌یابی این دستگاه پشتیبانی نمی‌شود.' : locale === 'ar' ? 'تحديد الموقع غير مدعوم على هذا الجهاز.' : 'Device location is unavailable.');
+      return;
+    }
+    setLocationStatus(locale === 'fa-IR' ? 'در حال دریافت موقعیت با اجازهٔ مرورگر…' : locale === 'ar' ? 'جارٍ تحديد الموقع بإذن المتصفح…' : 'Requesting device location permission…');
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const { latitude, longitude, accuracy } = coords;
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(accuracy)) {
+          setLocationStatus(locale === 'fa-IR' ? 'موقعیت معتبر دریافت نشد.' : locale === 'ar' ? 'تعذر الحصول على موقع صالح.' : 'No valid location returned.');
+          return;
+        }
+        // No third-party reverse geocoder and no background location tracking.
+        // Round to ~11m before proposing the GPS point as the departure origin.
+        setSuggestedOrigin(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+        const deviceTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        setTravelerTimezone(deviceTimezone);
+        setLocationStatus(locale === 'fa-IR' ? `نقطهٔ تقریبی مبدأ دریافت شد (دقت گزارش‌شده ±${Math.round(accuracy)} متر). شهر مبدأ را در فرم بررسی کنید.`
+          : locale === 'ar' ? `تم تحديد نقطة الانطلاق التقريبية (دقة ±${Math.round(accuracy)} متر). راجع نقطة الانطلاق.`
+            : `Approximate departure point detected (reported accuracy ±${Math.round(accuracy)} m). Review it in the trip form.`);
+      },
+      () => setLocationStatus(locale === 'fa-IR' ? 'دسترسی به موقعیت رد شد یا موقعیت در دسترس نیست؛ می‌توانید مبدأ را دستی وارد کنید.'
+        : locale === 'ar' ? 'لم يتوفر الموقع أو رُفض الإذن؛ يمكنك إدخال نقطة الانطلاق يدوياً.'
+          : 'Location permission denied or unavailable. You can enter the origin manually.'),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
+    );
+  };
   const [travelerTimezone, setTravelerTimezone] = useState(() =>
-    locale === 'fa-IR' ? 'Asia/Tehran' : (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'));
+    Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const [assistantRouteState, setAssistantRouteState] = useState<'loading' | 'configured' | 'disabled' | 'unavailable' | 'quota_exhausted'>('loading');
   const [assistantRemaining, setAssistantRemaining] = useState<number | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
@@ -167,13 +198,14 @@ export function App() {
         });
         interpreted = tripRequirementsV1ToTripRequirements(response.requirements);
       } catch {
-        setError(locale === 'fa-IR' ? 'برداشت نیازهای سفر در سرور انجام نشد. دوباره تلاش کنید.'
-          : locale === 'ar' ? 'تعذر تحليل متطلبات الرحلة على الخادم. حاول مرة أخرى.'
-            : 'The server could not interpret this trip request. Please try again.');
-        return;
+        // The on-device parser remains available if the service is unreachable.
+        setError(locale === 'fa-IR' ? 'ارتباط با تحلیلگر سرور برقرار نشد؛ اطلاعات با روش قواعدمحور موقتاً استخراج شد.'
+          : locale === 'ar' ? 'تعذر الاتصال بخادم التحليل؛ استُخدم التحليل المحلي الاحتياطي.'
+            : 'Server interpretation unavailable; using the local rule-based fallback.');
       }
     }
-    if (result.kind === 'clarification' || interpreted.clarificationFields?.length) {
+    interpreted = resolveRelativeTripDates(interpreted, deviceCalendarDate(travelerTimezone), travelerTimezone);
+    if (interpreted.missingRequired.length || interpreted.ambiguousRequired.length || interpreted.clarificationFields?.length) {
       setRequirements(interpreted);
       loadDestinationResolution(interpreted.destinations.value, locale);
       setClarifications(interpreted.missingRequired);
@@ -189,7 +221,6 @@ export function App() {
   const clearTripDraft = () => {
     catalogueRequestVersion.current += 1;
     if (promptRef.current) promptRef.current.value = '';
-    setInitialRemoteConsent(false);
     requestTextRef.current = '';
     setError(''); setClarifications([]); setAmbiguities([]); setRequirements(null); setDestinationResolution(null); setCatalogueLoading(false);
   };
@@ -254,22 +285,18 @@ export function App() {
                 rows={4}
                 maxLength={1200}
                 defaultValue=""
-                onInput={event => { catalogueRequestVersion.current += 1; requestTextRef.current = event.currentTarget.value; setInitialRemoteConsent(false); setRequirements(null); setClarifications([]); setAmbiguities([]); setDestinationResolution(null); setCatalogueLoading(false); setError(''); }}
+                onInput={event => { catalogueRequestVersion.current += 1; requestTextRef.current = event.currentTarget.value; setRequirements(null); setClarifications([]); setAmbiguities([]); setDestinationResolution(null); setCatalogueLoading(false); setError(''); }}
                 placeholder={tripCopy.placeholder}
                 aria-describedby={error ? 'form-error trip-prompt-help' : 'trip-prompt-help'}
                 aria-invalid={error ? true : undefined}
               />
               {authSession && <fieldset className="ai-processing-consent">
                 <legend>{locale === 'fa-IR' ? 'گفت‌وگوی هوشمند' : locale === 'ar' ? 'المحادثة الذكية' : 'AI conversation'}</legend>
-                <label htmlFor="initial-ai-consent">
-                  <input id="initial-ai-consent" type="checkbox" checked={initialRemoteConsent}
-                    onChange={event => setInitialRemoteConsent(event.currentTarget.checked)} />
-                  {locale === 'fa-IR'
-                    ? 'موافقم متن درخواست و پیام‌های سفر برای پاسخ‌گویی به سرویس هوش مصنوعی فعال ارسال شود.'
-                    : locale === 'ar'
-                      ? 'أوافق على إرسال نص الطلب ورسائل الرحلة إلى خدمة الذكاء الاصطناعي النشطة للرد.'
-                      : 'I agree to send this request and trip messages to the active AI service for replies.'}
-                </label>
+                <p className="assistant-action-help">
+                  {locale === 'fa-IR' ? 'گفت‌وگوی هوشمند به‌صورت پیش‌فرض فعال است؛ متن درخواست و پیام‌های سفر برای پاسخ به سرویس هوش مصنوعی تنظیم‌شده ارسال می‌شود. هنگام اختلال، تحلیل قواعدمحور در دسترس است.'
+                    : locale === 'ar' ? 'المحادثة الذكية مفعّلة افتراضياً. تُرسل رسائل الرحلة إلى خدمة الذكاء الاصطناعي المهيأة، مع تحليل احتياطي عند تعذر الاتصال.'
+                      : 'AI conversation is on by default. Trip messages are sent to the configured AI service; rule-based extraction is the fallback.'}
+                </p>
                 <p className="assistant-provider-state" role="status" data-provider-state={assistantRouteState}>
                   {assistantRouteState === 'loading' ? (locale === 'fa-IR' ? 'در حال بررسی وضعیت دستیار…' : locale === 'ar' ? 'جارٍ التحقق من حالة المساعد…' : 'Checking assistant status…')
                     : assistantRouteState === 'configured' ? (locale === 'fa-IR' ? 'مسیر دستیار تنظیم شده است؛ این وضعیت به‌تنهایی پاسخ موفق را ثابت نمی‌کند.' : locale === 'ar' ? 'مسار المساعد مُعدّ؛ وهذا لا يثبت وحده نجاح الرد.' : 'Assistant route is configured; this alone does not prove a successful reply.')
@@ -283,6 +310,10 @@ export function App() {
                   <option value="Asia/Tehran">Asia/Tehran</option>
                   <option value={Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}>{Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'} ({locale === 'fa-IR' ? 'دستگاه' : locale === 'ar' ? 'الجهاز' : 'device'})</option>
                 </select>
+                <button type="button" className="location-detect" onClick={requestDeviceLocation}>
+                  {locale === 'fa-IR' ? 'استفاده از موقعیت فعلی به‌عنوان مبدأ' : locale === 'ar' ? 'استخدم موقعي الحالي كنقطة انطلاق' : 'Use my current location as origin'}
+                </button>
+                {locationStatus && <p role="status" className="location-status">{locationStatus}</p>}
               </fieldset>}
               {error && <p id="form-error" className="form-error" role="alert">{error}</p>}
               <button type="submit" className="primary">
@@ -373,6 +404,7 @@ export function App() {
           requirements={requirements}
           initialRemoteConsent={initialRemoteConsent}
           travelerTimezone={travelerTimezone}
+          suggestedOrigin={suggestedOrigin}
           onSessionExpired={() => setAuthSession(null)}
           onRestoreRequest={(text, restored) => {
             requestTextRef.current = text;
