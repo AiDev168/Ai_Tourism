@@ -194,7 +194,7 @@ def _find_first(text: str, patterns: list[str]) -> tuple[re.Match[str] | None, s
 
 def _duration_field(text: str) -> tuple[RequirementValue[int], re.Match[str] | None]:
     patterns = [
-        rf"(?:\u0633\u0641\u0631|\u0645\u062f\u062a(?:\s+\u0633\u0641\u0631)?|\u0628\u0647\s*\u0645\u062f\u062a)\s*{_NUMBER}\s*[-\u200c\s]*(?:\u0631\u0648\u0632\u0647|\u0631\u0648\u0632)",
+        rf"(?:\u0633\u0641\u0631|\u0645\u062f\u062a(?:\s+\u0633\u0641\u0631)?|\u0628\u0647\s*\u0645\u062f\u062a|\u0628\u0631\u0627\u06cc)\s*{_NUMBER}\s*[-\u200c\s]*(?:\u0631\u0648\u0632\u0647|\u0631\u0648\u0632)",
         rf"{_NUMBER}\s*[-\u200c\s]*(?:\u0631\u0648\u0632\u0647|\u0631\u0648\u0632)\s*(?:\u0633\u0641\u0631|\u0627\u0642\u0627\u0645\u062a)",
         rf"(?:\u0644\u0645\u062f\u0629\s+)?(?:\u0631\u062d\u0644\u0629\s+)?\u0644\u0645\u062f\u0629\s*{_NUMBER}\s*(?:\u0623\u064a\u0627\u0645|\u0627\u064a\u0627\u0645|\u064a\u0648\u0645)",
         rf"(?:trip|stay|travel)\s+(?:for\s+)?{_NUMBER}\s+days?\b",

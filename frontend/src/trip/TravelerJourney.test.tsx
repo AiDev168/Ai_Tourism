@@ -414,6 +414,52 @@ describe('persisted traveler journey', () => {
     expect(host.textContent).not.toContain(journeyMessages['en-US'].findRecommendations);
   });
 
+  it('restores persisted relative start and duration to the correct inclusive date range', async () => {
+    vi.spyOn(ApiDestinationCatalogPort.prototype, 'load').mockResolvedValue({ kind: 'available', boundary: 'knowledge.production_destinations', destinations: [] });
+    const requestText = '\u0627\u0632 \u067e\u0633\u200c\u0641\u0631\u062f\u0627 \u0628\u0631\u0627\u06cc \u067e\u0646\u062c \u0631\u0648\u0632 \u0628\u0627 \u067e\u0646\u062c \u0646\u0641\u0631 \u0628\u0647 \u0634\u06cc\u0631\u0627\u0632';
+    const missing = { status: 'missing', value: null, source: 'fallback' };
+    const known = (value: unknown) => ({ status: 'known', value, evidence_span: null, source: 'fallback' });
+    const requirementsV1 = {
+      contract_version: 'trip-requirements-v1', original_text: requestText, locale: 'fa-IR',
+      fields: {
+        destination: known('Shiraz'), origin: missing,
+        relative_start_date: known({ offset_days: 2, anchor_date: '2026-11-17', timezone: 'Asia/Tehran' }),
+        duration_days: missing, travel_dates: missing, travelers: known(5), budget: missing,
+        interests: missing, soft_preferences: missing, hard_constraints: missing, accessibility: missing,
+      },
+      clarification: { missing_fields: [], ambiguous_fields: [], question_fields: [] },
+    };
+    const trip = {
+      ...tripRecord(requestText, createTripRequirements({ requestText, locale: 'fa-IR' })),
+      locale: 'fa-IR' as const,
+      extracted_requirements: { requirements_v1: requirementsV1 },
+      duration_days: 5,
+      traveler_count: 5,
+    };
+    const conversation = {
+      conversation_id: trip.conversation_id, locale: 'fa-IR', version: 1,
+      started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
+      trips: [trip], messages: [],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/conversations?limit=50')) return response({ items: [conversation], next_cursor: null });
+      if (url === '/api/v1/conversations/' + trip.conversation_id) return response(conversation);
+      if (url === '/api/v1/trips/' + trip.trip_id) return response(trip);
+      throw new Error('Unexpected request: ' + url);
+    }));
+    await act(async () => root.render(<TravelerJourney locale="fa-IR" session={session} online requirements={null}
+      onSessionExpired={() => undefined} onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
+    await settle();
+    await act(async () => { host.querySelector<HTMLButtonElement>('.history-trip[data-trip-id="' + trip.trip_id + '"] button')!.click(); });
+    await settle();
+
+    expect(host.querySelector<HTMLInputElement>('#profile-duration')?.value).toBe('5');
+    expect(host.querySelector<HTMLInputElement>('#profile-travelers')?.value).toBe('5');
+    expect(host.querySelector<HTMLInputElement>('#profile-travel-start')?.value).toBe('2026-11-17');
+    expect(host.querySelector<HTMLInputElement>('#profile-travel-end')?.value).toBe('2026-11-21');
+  });
+
   it('reopens both legacy extracted-requirement shapes without a blank page or data write', async () => {
     vi.spyOn(ApiDestinationCatalogPort.prototype, 'load').mockResolvedValue({ kind: 'available', boundary: 'knowledge.production_destinations', destinations: [] });
     const requests = ['Plan a trip to Shiraz', 'Plan a 10-day trip to Shiraz'];

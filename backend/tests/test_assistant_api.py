@@ -387,6 +387,43 @@ def test_numeric_candidate_rejects_relative_departure_as_trip_duration_and_wrong
     assert wrong_count.fields.travelers.status == 'missing'
 
 
+def test_llm_duration_candidate_cannot_reuse_traveler_or_budget_number():
+    text = (
+        'Tomorrow for 5 people, I want a budget of 5 million toman '
+        'to visit historical places in Shiraz.'
+    )
+    candidate = _candidate_profile(
+        text, 'en-US', {'duration_days': 5}, {'duration_days': text},
+    )
+    assert candidate.fields.duration_days.status == 'missing'
+    assert candidate.fields.duration_days.value is None
+    assert candidate.fields.duration_days.source == 'fallback'
+
+
+def test_llm_duration_candidate_cannot_reuse_relative_departure_number():
+    text = 'There are five of us. We will travel in five days and have a 5 million toman budget.'
+    candidate = _candidate_profile(
+        text, 'en-US', {'duration_days': 5}, {'duration_days': text},
+    )
+    assert candidate.fields.duration_days.status == 'missing'
+    assert candidate.fields.duration_days.value is None
+
+
+def test_llm_duration_candidate_cannot_reuse_persian_traveler_or_budget_number():
+    text = (
+        '\u0628\u0631\u0627\u06cc \u0641\u0631\u062f\u0627 \u0628\u0631\u0627\u06cc 5 \u0646\u0641\u0631 '
+        '\u0628\u0631\u0627\u06cc \u0628\u0627\u0632\u062f\u06cc\u062f \u0627\u0632 \u0645\u0646\u0627\u0637\u0642 '
+        '\u062a\u0627\u0631\u06cc\u062e\u06cc \u0634\u06cc\u0631\u0627\u0632 \u0628\u0631\u0646\u0627\u0645\u0647 \u0631\u06cc\u0632\u06cc '
+        '\u0633\u0641\u0631 \u06a9\u0646 \u0648 \u0647\u0632\u06cc\u0646\u0647 \u0627\u06cc \u06a9\u0647 \u0645\u06cc\u062e\u0648\u0627\u06cc\u0645 '
+        '\u0628\u06a9\u0646\u06cc\u0645 5 \u0645\u06cc\u0644\u06cc\u0648\u0646 \u062a\u0648\u0645\u0627\u0646 \u0627\u0633\u062a'
+    )
+    candidate = _candidate_profile(
+        text, 'fa-IR', {'duration_days': 5}, {'duration_days': text},
+    )
+    assert candidate.fields.duration_days.status == 'missing'
+    assert candidate.fields.duration_days.value is None
+
+
 def test_completed_replay_does_not_invoke_provider_again():
     c, repo, gateway = client()
     repo.status = 'completed'

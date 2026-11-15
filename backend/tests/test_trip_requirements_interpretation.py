@@ -65,6 +65,25 @@ def test_duration_parser_separates_trip_length_from_relative_departure(phrase, e
         assert result.fields.relative_start_date.status == "missing"
 
 
+def test_persian_for_five_days_after_day_after_tomorrow_is_duration_not_departure_offset():
+    text = (
+        "\u0627\u0632 \u067e\u0633\u200c\u0641\u0631\u062f\u0627 \u0628\u0631\u0627\u06cc "
+        "\u067e\u0646\u062c \u0631\u0648\u0632 \u0628\u0647 \u0634\u06cc\u0631\u0627\u0632 \u0645\u06cc\u200c\u0631\u0648\u0645"
+    )
+    result = interpret_trip_requirements(
+        text, "fa-IR", traveler_timezone="Asia/Tehran",
+        traveler_reference_date=date(2026, 11, 15),
+    )
+
+    assert result.original_text == text
+    assert result.fields.relative_start_date.value.offset_days == 2
+    assert result.fields.relative_start_date.value.anchor_date == date(2026, 11, 17)
+    assert result.fields.duration_days.value == 5
+    assert result.fields.duration_days.evidence_span.text == (
+        "\u0628\u0631\u0627\u06cc \u067e\u0646\u062c \u0631\u0648\u0632"
+    )
+
+
 def test_budget_parser_does_not_take_the_traveler_count_as_amount():
     result = interpret_trip_requirements(EXAMPLE, "fa-IR")
     assert result.fields.travelers.value == 4

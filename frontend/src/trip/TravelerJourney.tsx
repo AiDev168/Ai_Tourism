@@ -738,9 +738,10 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       const restoredNames = hasReviewedProfile && Array.isArray(storedNames)
         && storedNames.every(name => typeof name === 'string' && name.trim().length > 0 && name.length <= 100)
         ? storedNames as string[] : (parsed?.destinations.value ?? []);
+      const parsedDays = validDayCount(parsed?.durationDays.value) ?? validDayCount(trip.duration_days);
       const restoredDays = hasReviewedProfile
-        ? validDayCount(trip.confirmed_requirements.duration_days)
-        : (parsed?.durationDays.value ?? null);
+        ? validDayCount(trip.confirmed_requirements.duration_days) ?? parsedDays
+        : parsedDays;
       setDestinationNames(restoredNames.slice());
       setDurationText(restoredDays === null ? '' : String(restoredDays));
       const approvedOrigin = trip.confirmed_requirements.origin;
@@ -748,8 +749,9 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
         ? approvedOrigin : (parsed?.origin.value ?? '');
       const approvedCount = validDayCount(trip.confirmed_requirements.traveler_count);
       const restoredTravelerCount = hasReviewedProfile && approvedCount !== null && approvedCount <= 50
-        ? String(approvedCount) : (parsed?.travelerCount.value === null || parsed?.travelerCount.value === undefined
-          ? '' : String(parsed.travelerCount.value));
+        ? String(approvedCount) : (parsed?.travelerCount.value !== null && parsed?.travelerCount.value !== undefined
+          ? String(parsed.travelerCount.value)
+          : trip.traveler_count !== null ? String(trip.traveler_count) : '');
       setOriginText(restoredOrigin);
       setTravelerCountText(restoredTravelerCount);
       const savedBudget = trip.confirmed_requirements.budget;
@@ -760,7 +762,8 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       const restoredDates = hasReviewedProfile && savedDates && typeof savedDates === 'object'
         && !Array.isArray(savedDates) ? savedDates as Record<string, unknown> : null;
       const restoredStart = typeof restoredDates?.start === 'string' ? restoredDates.start : (parsed?.travelDates.value?.start ?? parsed?.relativeStartDate.value?.anchor_date ?? '');
-      const restoredEnd = typeof restoredDates?.end === 'string' ? restoredDates.end : (parsed?.travelDates.value?.end ?? '');
+      const inferredEnd = restoredStart && restoredDays !== null ? inclusiveEndDate(restoredStart, restoredDays) : null;
+      const restoredEnd = typeof restoredDates?.end === 'string' ? restoredDates.end : (parsed?.travelDates.value?.end ?? inferredEnd ?? '');
       const savedInterests = trip.confirmed_requirements.interests;
       const restoredInterests = hasReviewedProfile && Array.isArray(savedInterests)
         && savedInterests.every(value => typeof value === 'string')
