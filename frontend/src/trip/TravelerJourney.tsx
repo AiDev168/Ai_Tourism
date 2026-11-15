@@ -56,8 +56,8 @@ const assistantCopy: Record<Locale, {
     origin: 'شهر مبدأ پیشنهادی', travelerCount: 'تعداد مسافران پیشنهادی',
     budget: 'بودجهٔ پیشنهادی', dates: 'تاریخ‌های پیشنهادی (میلادی)', interest: 'علاقهٔ پیشنهادی',
     speaker: 'مشاور هوش مصنوعی', promptsTitle: 'برای ادامه می‌توانید از مشاور بخواهید:',
-    promptForAi: 'این عبارت یک درخواست از مشاور هوش مصنوعی است؛ برای ارسال، رضایت پردازش بیرونی را فعال و «پرسش از دستیار سفر» را انتخاب کنید.',
-    advisorActionHelp: 'پرسش از دستیار: فقط با رضایت شما، پیام و سابقهٔ مرتبط سفر به سرویس هوش مصنوعی ارسال می‌شود.',
+    promptForAi: 'این عبارت برای مشاور هوش مصنوعی است؛ برای ارسال «پرسش از دستیار سفر» را انتخاب کنید.',
+    advisorActionHelp: 'گفت‌وگوی هوشمند فعال است؛ پیام و سابقهٔ مرتبط سفر به سرویس تنظیم‌شده ارسال می‌شود.',
     promptHelp: 'انتخاب پرسش فقط پیش‌نویس را پر می‌کند؛ تا انتخاب یکی از اقدام‌های زیر چیزی ذخیره یا ارسال نمی‌شود.',
     saveWithoutAI: 'ثبت پاسخ بدون هوش مصنوعی',
     currentDuration: 'مدت ثبت‌شدهٔ این سفر: {days} روز.',
@@ -72,8 +72,8 @@ const assistantCopy: Record<Locale, {
     origin: 'Suggested departure city', travelerCount: 'Suggested travelers',
     budget: 'Suggested budget', dates: 'Suggested dates (Gregorian)', interest: 'Suggested interest',
     speaker: 'AI travel advisor', promptsTitle: 'Suggested follow-up questions:',
-    promptForAi: 'This prompt is intended for the AI advisor. Consent to external processing and select “Ask travel assistant” to send it.',
-    advisorActionHelp: 'Ask travel assistant sends the message and relevant trip history to the configured AI provider only with your consent.',
+    promptForAi: 'This prompt is intended for the AI advisor. Select “Ask travel assistant” to send it.',
+    advisorActionHelp: 'AI conversation is on by default. Messages and relevant trip history are sent to the configured provider.',
     promptHelp: 'Choosing a prompt only fills the draft. Nothing is saved or sent until you choose one of the actions below.',
     saveWithoutAI: 'Save reply without AI',
     currentDuration: 'Recorded trip length: {days} days.',
@@ -88,8 +88,8 @@ const assistantCopy: Record<Locale, {
     origin: 'مدينة المغادرة المقترحة', travelerCount: 'عدد المسافرين المقترح',
     budget: 'الميزانية المقترحة', dates: 'التواريخ المقترحة (ميلادي)', interest: 'الاهتمام المقترح',
     speaker: 'مستشار السفر بالذكاء الاصطناعي', promptsTitle: 'يمكنك متابعة المحادثة عبر:',
-    promptForAi: 'هذا طلب موجه إلى مستشار الذكاء الاصطناعي. وافق على المعالجة الخارجية ثم اختر «اسأل مساعد السفر».',
-    advisorActionHelp: 'عند اختيار مستشار السفر وبموافقتك، تُرسل الرسالة وسجل الرحلة المرتبط إلى خدمة الذكاء الاصطناعي.',
+    promptForAi: 'هذا طلب موجه إلى مستشار الذكاء الاصطناعي؛ اختر «اسأل مساعد السفر» لإرساله.',
+    advisorActionHelp: 'المحادثة الذكية مفعّلة افتراضياً، وتُرسل الرسالة وسجل الرحلة إلى خدمة الذكاء الاصطناعي المهيأة.',
     promptHelp: 'اختيار السؤال يملأ المسودة فقط؛ لا يُحفظ شيء ولا يُرسل حتى تختار أحد الإجراءين أدناه.',
     saveWithoutAI: 'احفظ الرد دون ذكاء اصطناعي',
     currentDuration: 'مدة الرحلة المسجلة: {days} يومًا.',
@@ -295,12 +295,13 @@ export type TravelerJourneyProps = {
   requirements: TripRequirements | null;
   initialRemoteConsent?: boolean;
   travelerTimezone?: string;
+  suggestedOrigin?: string;
   onSessionExpired: () => void;
   onRestoreRequest: (text: string, requirements: TripRequirements) => void;
   onStartNewDraft: () => void;
 };
 
-export function TravelerJourney({ locale, session, online, requirements, initialRemoteConsent = false, travelerTimezone = 'Asia/Tehran', onSessionExpired, onRestoreRequest, onStartNewDraft }: TravelerJourneyProps) {
+export function TravelerJourney({ locale, session, online, requirements, initialRemoteConsent = false, travelerTimezone = 'Asia/Tehran', suggestedOrigin = '', onSessionExpired, onRestoreRequest, onStartNewDraft }: TravelerJourneyProps) {
   const copy = journeyMessages[locale];
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversation, setActiveConversation] = useState<ConversationRecord | null>(null);
@@ -324,7 +325,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
   const [advisoryAcknowledgements, setAdvisoryAcknowledgements] = useState<Partial<Record<RequirementFieldCode, boolean>>>({});
   const [messageText, setMessageText] = useState('');
   const [assistantPromptSelected, setAssistantPromptSelected] = useState(false);
-  const [remoteConsent, setRemoteConsent] = useState(false);
+  // AI is available by default; the server/provider still enforces access and quotas.
   const [assistantState, setAssistantState] = useState<'loading' | 'configured' | 'disabled' | 'unavailable' | 'quota_exhausted' | 'responded'>('loading');
   const [assistantRemaining, setAssistantRemaining] = useState<number | null>(null);
   const [assistantCandidate, setAssistantCandidate] = useState<unknown>(null);
@@ -489,8 +490,8 @@ export function TravelerJourney({ locale, session, online, requirements, initial
   }, [session?.user.user_id, online]);
 
   useEffect(() => {
-    if (!activeTrip && requirements) setRemoteConsent(initialRemoteConsent);
-  }, [initialRemoteConsent, requirements?.requestText, activeTrip?.trip_id]);
+    if (activeTrip && suggestedOrigin) setOriginText(current => current.trim() ? current : suggestedOrigin);
+  }, [suggestedOrigin, activeTrip?.trip_id]);
 
   useEffect(() => {
     if (requirements) {
@@ -509,7 +510,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
         setOriginText(requirements.origin.value ?? '');
         setTravelerCountText(requirements.travelerCount.value === null ? '' : String(requirements.travelerCount.value));
         setBudgetText(requirements.budget.value?.raw ?? '');
-        setTravelStartText(requirements.travelDates.value?.start ?? '');
+        setTravelStartText(requirements.travelDates.value?.start ?? requirements.relativeStartDate.value?.anchor_date ?? '');
         setTravelEndText(requirements.travelDates.value?.end ?? '');
         setInterestText(displayInterests(requirements.interests.value ?? [], locale));
         const suggestedDays = validDayCount(requirements.durationDays.value);
@@ -568,7 +569,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
       setDayCount(tripDayCount(savedTrip, requirements) ?? 1);
       setConfirmed(false);
       setDirty(false);
-      setRemoteConsent(initialRemoteConsent);
+      
       setStatus(copy.saveSuccess);
       if (initialRemoteConsent) {
         try {
@@ -627,7 +628,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
       const trip = await travelerApi.getTrip(tripId);
       setActiveConversation(conversation);
       setAssistantCandidate(null);
-      setRemoteConsent(false);
+      
       const parsed = safeRequirements(trip.extracted_requirements, trip.locale, trip.original_request);
       setActiveTrip(trip);
       const hasReviewedProfile = trip.confirmed_requirements.confirmation_source === 'traveler_reviewed';
@@ -656,7 +657,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
       const savedDates = trip.confirmed_requirements.travel_dates;
       const restoredDates = hasReviewedProfile && savedDates && typeof savedDates === 'object'
         && !Array.isArray(savedDates) ? savedDates as Record<string, unknown> : null;
-      const restoredStart = typeof restoredDates?.start === 'string' ? restoredDates.start : (parsed?.travelDates.value?.start ?? '');
+      const restoredStart = typeof restoredDates?.start === 'string' ? restoredDates.start : (parsed?.travelDates.value?.start ?? parsed?.relativeStartDate.value?.anchor_date ?? '');
       const restoredEnd = typeof restoredDates?.end === 'string' ? restoredDates.end : (parsed?.travelDates.value?.end ?? '');
       const savedInterests = trip.confirmed_requirements.interests;
       const restoredInterests = hasReviewedProfile && Array.isArray(savedInterests)
@@ -735,7 +736,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
         setOriginText(latest.origin.value ?? '');
         setTravelerCountText(latest.travelerCount.value === null ? '' : String(latest.travelerCount.value));
         setBudgetText(latest.budget.value?.raw ?? '');
-        setTravelStartText(latest.travelDates.value?.start ?? '');
+        setTravelStartText(latest.travelDates.value?.start ?? latest.relativeStartDate.value?.anchor_date ?? '');
         setTravelEndText(latest.travelDates.value?.end ?? '');
         setInterestText(displayInterests(latest.interests.value ?? [], locale));
         restoringRequestRef.current = latest.requestText;
@@ -747,7 +748,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
   };
 
   const askAssistant = async () => {
-    if (!session || !activeConversation || !activeTrip || !remoteConsent || !online) return;
+    if (!session || !activeConversation || !activeTrip || !online) return;
     const content = messageText.trim() || assistantCopy[locale].initial;
     if (content.length > 1200) return;
     setBusy(true); setError(''); setStatus('');
@@ -1003,8 +1004,8 @@ export function TravelerJourney({ locale, session, online, requirements, initial
       })()} disabled={busy || !online}>{busy ? copy.saving : copy.updateTrip}</button>}
 
       {session && activeConversation && <div className="journey-new-actions">
-        <button type="button" onClick={() => { setActiveTrip(null); setAssistantCandidate(null); setRemoteConsent(false); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.createAnotherTrip}</button>
-        <button type="button" onClick={() => { setActiveConversation(null); setActiveTrip(null); setAssistantCandidate(null); setRemoteConsent(false); setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.startNewConversation}</button>
+        <button type="button" onClick={() => { setActiveTrip(null); setAssistantCandidate(null);  setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.createAnotherTrip}</button>
+        <button type="button" onClick={() => { setActiveConversation(null); setActiveTrip(null); setAssistantCandidate(null);  setConfirmed(false); setRequirementChoices({}); setAdvisoryAcknowledgements({}); setRecommendations(null); setItinerary(null); setDirty(false); setResolution(null); onStartNewDraft(); }}>{copy.startNewConversation}</button>
       </div>}
 
       {activeTrip && activeConversation && <div className="journey-columns">
@@ -1062,11 +1063,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
             <small>{copy.localSaveHelp}</small>
           </div>
           <div className="assistant-controls">
-            <label htmlFor="assistant-remote-consent">
-              <input id="assistant-remote-consent" type="checkbox" checked={remoteConsent}
-                onChange={event => setRemoteConsent(event.currentTarget.checked)} />
-              {assistantCopy[locale].consent}
-            </label>
+
             <p className="assistant-provider-state" role="status" data-provider-state={assistantState}>
               {assistantState === 'loading' ? (locale === 'fa-IR' ? 'در حال بررسی وضعیت دستیار…' : locale === 'ar' ? 'جارٍ التحقق من حالة المساعد…' : 'Checking assistant status…')
                 : assistantState === 'configured' ? (locale === 'fa-IR' ? 'مسیر دستیار تنظیم شده است؛ پاسخ موفق هنوز در این گفت‌وگو ثبت نشده.' : locale === 'ar' ? 'مسار المساعد مُعدّ؛ لم يُسجّل رد ناجح في هذه المحادثة بعد.' : 'Assistant route is configured; no successful reply is recorded in this conversation yet.')
@@ -1078,7 +1075,7 @@ export function TravelerJourney({ locale, session, online, requirements, initial
             </p>
             <p className="assistant-action-help">{assistantCopy[locale].advisorActionHelp}</p>
             <button className="primary" type="button" onClick={() => void askAssistant()}
-              disabled={busy || !online || !remoteConsent || messageText.length > 1200}>
+              disabled={busy || !online || messageText.length > 1200}>
               {assistantCopy[locale].send}
             </button>
             {reviewedAssistantCandidate &&
