@@ -43,6 +43,17 @@ to equalize code commits.
 
 ## Moving to a new server without losing traveler data
 
+To create one encrypted migration bundle, on the **source** Ubuntu host run
+`bash /opt/rahgard-staging/current/deploy/staging/export-portable.sh`.
+It exports a consistent PostgreSQL dump, exact release directory, private host
+environment, secrets and initialization state. Copy **both** `.tar.enc` and
+`.sha256` files off-host; store the encryption passphrase independently.
+Before cutover, on the isolated destination host run
+`bash inspect-portable.sh <bundle.tar.enc> <passphrase-file> <unused-private-directory>`
+to verify the archive, every bundled file checksum and the dump. This
+inspection **never restores** or overwrites a live database. The executable
+mode of newly created repository scripts is not assumed: invoke with `bash`.
+
 The existing `backup.sh` backs up **PostgreSQL only**. It does *not* package
 application secrets, `.env`, source/image releases, Nginx/TLS configuration,
 the external vLLM model, DNS/Arvan, or a separately hosted RAG index. Calling
@@ -87,8 +98,10 @@ and rollback criteria are satisfied.
 
 ## Open limitations
 
-This repository change only adds the read-only three-way checker and this
-migration procedure. It does not have interactive access to the user's
+This repository change adds the read-only three-way checker, encrypted
+portable export/isolated inspection helpers, and this migration procedure.
+It does not introduce an unattended destination restore because overwriting
+a live database or key directory automatically would be unsafe. It does not have interactive access to the user's
 Windows PC or VPS, cannot create a backup on those machines, and cannot
 claim a zero-data-loss migration until the procedure has been rehearsed.
 Browser GPS only returns coordinates; time zone currently comes from the
