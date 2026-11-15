@@ -191,7 +191,7 @@ else
   }
   docker run --rm -i --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
     --cap-drop ALL --security-opt no-new-privileges:true --entrypoint pg_restore "$restore_image" \
-    --list - < "$work/extracted/database.dump" >/dev/null
+    --list < "$work/extracted/database.dump" >/dev/null
 fi
 [[ ! -e "$destination" ]] || { echo 'Destination appeared during inspection; refusing to overwrite.' >&2; exit 2; }
 mv -T -n -- "$work/extracted" "$destination"

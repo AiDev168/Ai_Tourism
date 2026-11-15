@@ -78,7 +78,7 @@ if any(v for v in ports.values() if v): raise SystemExit("Target has a published
 env=c.get("Config",{}).get("Env") or []
 if any(e.startswith("APP_ENV=production") for e in env): raise SystemExit("Production environment is forbidden.")
 '
-docker exec -i "$target_container" pg_restore --list - < "$work/reverified/database.dump" >/dev/null
+docker exec -i "$target_container" pg_restore --list < "$work/reverified/database.dump" >/dev/null
 pg_version=$(docker exec "$target_container" sh -c 'cat "${PGDATA:-/var/lib/postgresql/data}/PG_VERSION"')
 [[ "$pg_version" == 17 ]] || { echo 'Target server is not PostgreSQL 17.' >&2; exit 2; }
 owner_is_superuser=$(docker exec "$target_container" psql -X -q -A -t -U "$db_owner" -d postgres \
@@ -122,7 +122,7 @@ SQL
 echo "Creating new isolated database $target_db in container $target_container."
 docker exec "$target_container" createdb -U "$db_owner" -O "$db_owner" "$target_db"
 docker exec -i "$target_container" pg_restore -U "$db_owner" -d "$target_db" \
-  --no-owner --exit-on-error --single-transaction - < "$work/reverified/database.dump"
+  --no-owner --exit-on-error --single-transaction < "$work/reverified/database.dump"
 restored_ledger=$(docker exec "$target_container" psql -X -q -A -t -U "$db_owner" -d "$target_db" \
   -c "SELECT migration_id||'|'||rtrim(sha256) FROM system.schema_migrations ORDER BY migration_id")
 source_ledger=$(cat "$work/reverified/database.migration-ledger.tsv")
