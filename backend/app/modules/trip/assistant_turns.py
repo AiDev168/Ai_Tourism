@@ -139,7 +139,7 @@ class AssistantTurnRepository:
                        (message_id,conversation_id,trip_id,role,content,message_type,metadata,is_synthetic)
                        VALUES (%s,%s,%s,'user',%s,'text',%s,FALSE)""",
                     (message_id, conversation_id, trip_id, content,
-                     Jsonb({'source': 'internal_chat', 'consent': 'explicit'})),
+                     Jsonb({'source': 'internal_chat', 'processing_mode': 'default_ai_chat'})),
                 )
             turn_id = uuid4()
             conn.execute(
