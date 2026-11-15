@@ -44,6 +44,19 @@ describe('JalaliDatePicker', () => {
     expect(selected).toEqual(['2025-03-21']);
   });
 
+  it('resets the calendar year after language switching without a selected date', () => {
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    act(() => root?.render(<JalaliDatePicker id="start" label="Start" locale="en-US"
+      value="" onChange={() => undefined} timeZone="UTC" />));
+    act(() => host?.querySelector<HTMLButtonElement>('#start-picker')?.click());
+    expect(host?.querySelector('.jalali-calendar-heading strong')?.textContent).toContain(String(new Date().getUTCFullYear()));
+    act(() => root?.render(<JalaliDatePicker id="start" label="تاریخ شروع" locale="fa-IR"
+      value="" onChange={() => undefined} timeZone="UTC" />));
+    expect(host?.querySelector('.jalali-calendar-heading strong')?.textContent).not.toContain(String(new Date().getUTCFullYear()));
+  });
+
   it('marks today separately from selected day in the traveler timezone', () => {
     host = document.createElement('div');
     document.body.append(host);
