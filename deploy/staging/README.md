@@ -115,6 +115,21 @@ owner or provider-admin schemas. The new migration 0016 adds invitation auth; no
 upgrade runner is included because no later migration is authorized. Future
 migrations require a reviewed, separately guarded upgrade procedure and backup.
 
+## Release synchronization and server portability
+
+For a verified three-way Windows/GitHub/VPS SHA comparison, use
+`scripts/Verify-RahgardRelease.ps1` on Windows. For encrypted migration
+exports of the database **plus** private runtime configuration and release
+files, invoke `bash deploy/staging/export-portable.sh` on the source host
+and `bash deploy/staging/inspect-portable.sh` on an isolated host.
+The migration archive must be transferred over an authenticated channel and
+its passphrase backed up separately. Inspection is intentionally read-only:
+the operator must prepare and verify a fresh server before any restoration.
+
+See `docs/operations/RAHGARD_RELEASE_SYNC_AND_PORTABLE_MIGRATION.md`.
+Do not run database initialization on existing volumes or allow simultaneous
+writes to old and new servers.
+
 ## Important boundaries
 
 ### Owner-authorized live SMS.ir OTP (staging only)
