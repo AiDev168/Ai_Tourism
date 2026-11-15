@@ -29,7 +29,10 @@ try {
     await page.goto(origin, { waitUntil: 'domcontentloaded' });
     await page.locator('#locale').selectOption(variant.locale);
     await page.waitForFunction(locale => document.documentElement.lang === locale, variant.locale);
-    await page.evaluate(() => document.fonts.ready);
+    await page.locator('.trip-form textarea').waitFor({ state: 'visible' });
+    await page.waitForFunction(() => document.body.innerText.length > 100
+      && (document.querySelector('#root')?.scrollHeight ?? 0) > 500);
+    await page.waitForTimeout(500);
     const layout = await page.evaluate(() => ({
       viewport: innerWidth,
       document: document.documentElement.scrollWidth,

@@ -1525,7 +1525,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
               {item.candidates.map(candidate => <label key={candidate.destinationId} dir="auto"><input type="radio" name={`traveler-choice-${index}`} checked={resolution.items[index]?.kind === 'confirmed' && resolution.items[index].destination.destinationId === candidate.destinationId} onChange={() => { resolutionSequenceRef.current += 1; setResolution(current => current ? confirmDestinationCandidate(current, index, candidate.destinationId) : current); }} />{candidate.localizedNames[locale] ?? candidate.canonicalName} · {candidate.provinceName}</label>)}
               <button type="button" onClick={() => { setError(copy.recommendationClarify); document.getElementById(`profile-destination-${index}`)?.focus(); }}>{copy.noneOfThese}</button>
             </fieldset> : item.kind === 'resolved' || item.kind === 'confirmed' ? <p key={index} role="status" dir="auto">{item.destination.localizedNames[locale] ?? item.destination.canonicalName} · {item.kind === 'resolved' ? copy.catalogueMatch : copy.selectedByYou}</p> : item.kind === 'not-found' ? <p key={index} role="status">{item.originalPhrase}: {copy.recommendationClarify}</p> : null)}
-            <button type="button" onClick={() => void confirmProfile()} disabled={busy || (!dirty && confirmed) || !online || !consentComplete || !travelerCountValid
+            <button type="button" className="primary profile-confirm-action" onClick={() => void confirmProfile()} disabled={busy || (!dirty && confirmed) || !online || !consentComplete || !travelerCountValid
               || !budgetValid || !datesValid || !interestsValid}>{copy.confirmProfile}</button>
           </div>}
           {confirmed && <div className="recommendation-controls">
@@ -1610,7 +1610,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                   onChange={event => setDayCount(event.currentTarget.value === '' ? 0 : event.currentTarget.valueAsNumber)} />
                 <p id="journey-day-count-help">{copy.dayCountHelp}</p>
                 {!dayCountValid && <p className="journey-error" role="alert">{copy.dayCountInvalid}</p>}
-                <button type="button" onClick={() => void createItinerary()} disabled={busy || !online || !dayCountValid}>{copy.createItinerary}</button>
+                <button type="button" className="primary itinerary-generate-action" onClick={() => void createItinerary()} disabled={busy || !online || !dayCountValid}>{copy.createItinerary}</button>
               </>}
               {itinerary && <p>{copy.itinerarySaved}</p>}
             </div>}
@@ -1653,7 +1653,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                     <button type="button" onClick={() => {
                       setEditableStops(stops => normalizeDayOrders(stops.filter(item => item.recommendation_id !== stop.recommendation_id), [day]));
                       setItineraryDirty(true);
-                    }}>{copy.removeStop}</button>
+                    }} className="danger">{copy.removeStop}</button>
                   </div>
                 </article>)}
               </div>
@@ -1667,7 +1667,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
             {recommendations.items.filter(item => !editableStops.some(stop => stop.recommendation_id === item.recommendation_id)).map(item => <option key={item.recommendation_id} value={item.recommendation_id}>{item.localized_names[locale] ?? item.canonical_name}</option>)}
           </select>
         </div>}
-        <button type="button" onClick={() => void saveItinerary()} disabled={busy || !online || editableStops.length > 1_000 || editableStops.some(stop => editableStops.filter(other => other.day_number === stop.day_number).length > 50)}>{copy.saveItinerary}</button>
+        <button type="button" className="primary itinerary-save-action" onClick={() => void saveItinerary()} disabled={busy || !online || editableStops.length > 1_000 || editableStops.some(stop => editableStops.filter(other => other.day_number === stop.day_number).length > 50)}>{copy.saveItinerary}</button>
       </section>}
 
       {provisionalItinerary && <section className="saved-itinerary provisional-itinerary" aria-labelledby="provisional-itinerary-title">
@@ -1716,9 +1716,9 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
         {loadingHistory ? <p role="status">{copy.saving}</p> : conversations.length === 0 ? <p>{copy.historyEmpty}</p> : conversations.map(conversation => <article className="history-conversation" data-conversation-id={conversation.conversation_id} key={conversation.conversation_id}>
           {(conversation.trips ?? []).map(trip => <div className="history-trip" data-trip-id={trip.trip_id} key={trip.trip_id}>
             <button type="button" onClick={() => void restoreTrip(conversation.conversation_id, trip.trip_id)} disabled={busy} dir="auto">{trip.original_request || copy.openTrip}</button>
-            <button type="button" onClick={() => void deleteTrip(trip)} disabled={busy}>{copy.deleteTrip}</button>
+            <button type="button" className="danger" onClick={() => void deleteTrip(trip)} disabled={busy}>{copy.deleteTrip}</button>
           </div>)}
-          <button type="button" onClick={() => void deleteConversation(conversation.conversation_id)} disabled={busy}>{copy.deleteConversation}</button>
+          <button type="button" className="danger" onClick={() => void deleteConversation(conversation.conversation_id)} disabled={busy}>{copy.deleteConversation}</button>
         </article>)}
       </section>}
     </section>
