@@ -29,12 +29,34 @@ describe('JalaliDatePicker', () => {
     expect(selected).toEqual(['2025-03-21']);
   });
 
-  it('keeps Gregorian native selection for English and Arabic', () => {
+  it.each(['en-US', 'ar'] as const)('renders a Gregorian calendar in %s', locale => {
+    const selected: string[] = [];
     host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);
+    act(() => root?.render(<JalaliDatePicker id="start" label="Start" locale={locale}
+      value="2025-03-21" onChange={value => selected.push(value)} timeZone="UTC" />));
+    act(() => host?.querySelector<HTMLButtonElement>('#start-picker')?.click());
+    expect(host?.querySelectorAll('[role="columnheader"]').length).toBe(7);
+    const chosen = host?.querySelector<HTMLButtonElement>('[aria-pressed="true"]');
+    expect(chosen).toBeTruthy();
+    act(() => chosen?.click());
+    expect(selected).toEqual(['2025-03-21']);
+  });
+
+  it('marks today separately from selected day in the traveler timezone', () => {
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    const today = new Date();
+    const iso = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' })
+      .formatToParts(today);
+    const components = Object.fromEntries(iso.map(item => [item.type, item.value]));
+    const todayIso = `${components.year}-${components.month}-${components.day}`;
     act(() => root?.render(<JalaliDatePicker id="start" label="Start" locale="en-US"
-      value="2025-03-21" onChange={() => undefined} />));
-    expect(host.querySelector('#start')?.getAttribute('type')).toBe('date');
+      value={todayIso} onChange={() => undefined} timeZone="UTC" />));
+    act(() => host?.querySelector<HTMLButtonElement>('#start-picker')?.click());
+    expect(host?.querySelectorAll('button[aria-current="date"]').length).toBe(1);
+    expect(host?.querySelector<HTMLButtonElement>('button[aria-current="date"]')?.getAttribute('aria-pressed')).toBe('true');
   });
 });
