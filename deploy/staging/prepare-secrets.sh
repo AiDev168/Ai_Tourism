@@ -20,9 +20,25 @@ create_secret() {
   sudo -n chown "${RAHGARD_SECRET_OWNER_USER:-$(id -un)}:999" "$target"
   chmod 0640 "$target"
 }
+create_optional_secret() {
+  local name="$1" tmp
+  local target="$dir/$name"
+  if [[ ! -e "$target" ]]; then
+    tmp=$(mktemp "$dir/.${name}.XXXXXXXX")
+    : > "$tmp"
+    chmod 0600 "$tmp"
+    mv -- "$tmp" "$target"
+  fi
+  [[ -f "$target" && ! -L "$target" ]] || { echo "Existing secret file is invalid: $name" >&2; exit 2; }
+  # An empty placeholder is mounted while live SMS remains disabled. When an
+  # owner-approved key is provisioned, upgrades preserve its bytes.
+  sudo -n chown "${RAHGARD_SECRET_OWNER_USER:-$(id -un)}:999" "$target"
+  chmod 0640 "$target"
+}
 for key in pg_owner_password app_db_password auth_otp_hmac_secret auth_csrf_secret \
            auth_rate_limit_secret internal_chat_token geo_authorizer_password geo_publisher_password \
            backup_encryption_passphrase; do
   create_secret "$key"
 done
+create_optional_secret sms_ir_production_api_key
 printf 'Private staging runtime secrets are present under %s; no values displayed.\n' "$dir"

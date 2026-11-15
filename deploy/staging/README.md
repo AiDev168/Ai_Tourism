@@ -117,6 +117,29 @@ migrations require a reviewed, separately guarded upgrade procedure and backup.
 
 ## Important boundaries
 
+### Owner-authorized live SMS.ir OTP (staging only)
+
+Live delivery is disabled by default. It can be enabled only with
+`APP_ENV=staging`, invitation staging auth enabled, the exact public HTTPS
+origin, a non-sandbox `RAHGARD_SMS_PRODUCTION_TEMPLATE_ID`, and the
+`sms_ir_live_staging` adapter. The API key is never stored in the deployment
+`.env`; it is mounted read-only from
+`/opt/rahgard-staging/secrets/sms_ir_production_api_key` and is read only when
+the live adapter is selected. Keep the SMS.ir Verify template parameter name
+`Code`, as expected by the existing OTP integration. The hard-coded Sandbox
+template `123456` is rejected by live mode.
+
+To provision the credential, send exactly one key line to
+`provision-sms-secret.sh` through an encrypted, non-echoing SSH channel using
+stdin. Do not put the value in a command, terminal history, environment file,
+image, log, or repository. The script refuses to replace an existing nonempty
+key, installs it with group GID `999` and mode `0640` inside the owner-only
+secret directory, and prints no credential. Keep `RAHGARD_SMS_ADAPTER=disabled`
+until the owner-supplied production template ID is configured and public HTTPS
+to the dedicated TLS origin is verified. Limit the first real delivery test to
+the owner's opted-in phone and at most three messages; invitation login remains
+available as the staging fallback.
+
 - No production/shared DB, Windows pilot database, public HTTP, admin routes,
   local-owner login, OTP debug route, SMS, paid model endpoint, RAG API, or
   unapproved destination publication is included.

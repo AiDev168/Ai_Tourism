@@ -16,7 +16,12 @@ from app.api.traveler import router as traveler_router
 from app.api.assistant import router as assistant_router
 from app.api.provider_admin import router as provider_admin_router
 from app.modules.identity.auth_service import AuthenticationUnavailable
-from app.modules.identity.sms import DisabledSmsAdapter, FakeSmsAdapter, SmsIrSandboxAdapter
+from app.modules.identity.sms import (
+    DisabledSmsAdapter,
+    FakeSmsAdapter,
+    SmsIrLiveStagingAdapter,
+    SmsIrSandboxAdapter,
+)
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -33,6 +38,22 @@ if settings.auth_sms_adapter == "fake":
 elif settings.auth_sms_adapter == "sms_ir_sandbox":
     # The key is server-only and Settings rejects Sandbox mode in production.
     app.state.sms_adapter = SmsIrSandboxAdapter(settings.sms_ir_sandbox_api_key.get_secret_value())
+elif settings.auth_sms_adapter == "sms_ir_live_staging":
+    # Only the staging Compose secret mount is read; the credential never enters
+    # application settings, logs, command arguments, or the PWA.
+    secret_file = settings.sms_ir_production_api_key_file
+    if secret_file is None:
+        raise RuntimeError("The private staging SMS provider secret is unavailable")
+    try:
+        api_key = secret_file.read_text(encoding="utf-8").rstrip("\r\n")
+    except (OSError, UnicodeError):
+        raise RuntimeError("The private staging SMS provider secret is unavailable") from None
+    if not api_key or api_key != api_key.strip() or "\r" in api_key or "\n" in api_key:
+        raise RuntimeError("The private staging SMS provider secret is invalid")
+    app.state.sms_adapter = SmsIrLiveStagingAdapter(
+        api_key,
+        settings.sms_ir_production_template_id,
+    )
 else:
     app.state.sms_adapter = DisabledSmsAdapter()
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")

@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     staging_auth_enabled: bool = False
     staging_public_host: str = ""
     sms_ir_sandbox_api_key: SecretStr | None = None
+    sms_ir_production_api_key_file: Path | None = None
+    sms_ir_production_template_id: int = Field(default=0, ge=0, le=2_147_483_647)
     auth_otp_hmac_secret: SecretStr | None = None
     auth_csrf_secret: SecretStr | None = None
     auth_rate_limit_secret: SecretStr | None = None
@@ -81,7 +83,8 @@ class Settings(BaseSettings):
             origin = urlsplit(self.auth_allowed_origins.strip())
             if (
                 environment != "staging" or not self.auth_enabled
-                or self.auth_local_owner_enabled or self.auth_sms_adapter != "disabled"
+                or self.auth_local_owner_enabled
+                or self.auth_sms_adapter not in {"disabled", "sms_ir_live_staging"}
                 or not self.auth_cookie_secure or not host or "/" in host or ":" in host
                 or "," in self.auth_allowed_origins
                 or origin.scheme != "https" or origin.hostname != host
@@ -159,8 +162,8 @@ class Settings(BaseSettings):
             rag_token = self.tourism_rag_api_token.get_secret_value()
             if not rag_token or rag_token != rag_token.strip() or "\r" in rag_token or "\n" in rag_token:
                 raise ValueError("TOURISM_RAG_API_TOKEN is invalid")
-        if self.auth_sms_adapter not in {"disabled", "fake", "sms_ir_sandbox"}:
-            raise ValueError("AUTH_SMS_ADAPTER must be disabled, fake, or sms_ir_sandbox")
+        if self.auth_sms_adapter not in {"disabled", "fake", "sms_ir_sandbox", "sms_ir_live_staging"}:
+            raise ValueError("AUTH_SMS_ADAPTER is not supported")
         if environment == "production":
             if self.auth_enabled:
                 raise ValueError("Authentication is disabled in production pending separate SMS authorization")
@@ -176,6 +179,14 @@ class Settings(BaseSettings):
             key = self.sms_ir_sandbox_api_key.get_secret_value()
             if not key or key != key.strip() or "\r" in key or "\n" in key:
                 raise ValueError("SMS_IR_SANDBOX_API_KEY is invalid for the SMS.ir Sandbox adapter")
+        if self.auth_sms_adapter == "sms_ir_live_staging":
+            if environment != "staging" or not self.auth_enabled or not self.staging_auth_enabled:
+                raise ValueError("Live SMS.ir is restricted to authenticated staging")
+            secret_path = self.sms_ir_production_api_key_file
+            if secret_path != Path("/run/secrets/sms_ir_production_api_key"):
+                raise ValueError("Live staging SMS must use its dedicated mounted secret file")
+            if self.sms_ir_production_template_id <= 0 or self.sms_ir_production_template_id == 123456:
+                raise ValueError("A non-sandbox SMS_IR_PRODUCTION_TEMPLATE_ID is required for live staging SMS")
         if self.auth_enabled:
             for name in ("auth_otp_hmac_secret", "auth_csrf_secret", "auth_rate_limit_secret"):
                 secret = getattr(self, name)

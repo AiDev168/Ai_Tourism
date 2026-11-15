@@ -13,10 +13,17 @@ const stagingCopy = {
   ar: { account: 'تسجيل دخول تجريبي خاص', email: 'البريد الإلكتروني', password: 'كلمة المرور (16 حرفًا على الأقل)', invite: 'رمز الدعوة', redeem: 'تفعيل الدعوة', switchToRedeem: 'لديك دعوة؟ إنشاء حساب', switchToLogin: 'العودة إلى تسجيل الدخول', invalid: 'بيانات الدخول أو الدعوة غير صالحة.', smsUnavailable: 'إرسال الرسائل النصية غير مُعدّ في هذه البيئة؛ لن يُرسل رمز تحقق.' },
 } as const;
 
+const stagingMethodCopy = {
+  'fa-IR': { useOtp: '\u0648\u0631\u0648\u062f \u0628\u0627 \u067e\u06cc\u0627\u0645\u06a9', useInvite: '\u0648\u0631\u0648\u062f \u0628\u0627 \u062f\u0639\u0648\u062a' },
+  'en-US': { useOtp: 'Use SMS sign-in', useInvite: 'Use invitation sign-in' },
+  ar: { useOtp: '\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0628\u0631\u0633\u0627\u0644\u0629 SMS', useInvite: '\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0628\u0631\u0645\u0632 \u0627\u0644\u062f\u0639\u0648\u0629' },
+} as const;
+
 export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessionChange?: (session: AuthSession | null) => void }) {
   const copy = authMessages[locale];
   const localCopy = localOwnerMessages[locale];
   const stageCopy = stagingCopy[locale];
+  const methodCopy = stagingMethodCopy[locale];
   const [session, setSession] = useState<AuthSession | null>(null);
   const [csrfToken, setCsrfToken] = useState('');
   const [phase, setPhase] = useState<Phase>('phone');
@@ -32,6 +39,7 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
   const [loginName, setLoginName] = useState('');
   const [password, setPassword] = useState('');
   const [stagingMode, setStagingMode] = useState<StagingMode>('login');
+  const [stagingFallback, setStagingFallback] = useState(false);
   const [stagingEmail, setStagingEmail] = useState('');
   const [stagingPassword, setStagingPassword] = useState('');
   const [inviteCode, setInviteCode] = useState('');
@@ -39,7 +47,10 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
   useEffect(() => {
     let active = true;
     void authApi.method().then(value => {
-      if (active) setCapabilities(value);
+      if (active) {
+        setCapabilities(value);
+        setStagingFallback(value.methods.includes('staging_invite') && value.otp_delivery !== 'available');
+      }
     }).catch(() => {
       if (active) setCapabilities({ methods: [], otp_delivery: 'unavailable' });
     });
@@ -164,9 +175,10 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
                 required minLength={1} maxLength={256} value={password} onChange={event => setPassword(event.target.value)} />
               <button type="submit" disabled={busy}>{busy ? copy.loading : copy.signIn}</button>
             </form>
-          ) : capabilities?.methods.includes('staging_invite') ? (
+          ) : capabilities?.methods.includes('staging_invite') && stagingFallback ? (
             <section aria-label={stageCopy.account}>
-              <p role="note">{stageCopy.smsUnavailable}</p>
+              {capabilities.otp_delivery !== 'available' && <p role="note">{stageCopy.smsUnavailable}</p>}
+              {capabilities.otp_delivery === 'available' && <button type="button" className="auth-owner-choice" onClick={() => { setStagingFallback(false); setStagingMode('login'); setPhase('phone'); setChallengeId(''); setCode(''); setError(''); setNotice(''); }}>{methodCopy.useOtp}</button>}
               <button type="button" className="auth-owner-choice" onClick={() => { setStagingMode(value => value === 'login' ? 'redeem' : 'login'); setError(''); setNotice(''); setStagingPassword(''); }}>
                 {stagingMode === 'login' ? stageCopy.switchToRedeem : stageCopy.switchToLogin}
               </button>
@@ -184,6 +196,7 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
               </form>
             </section>
           ) : capabilities?.methods.includes('otp') && phase === 'phone' ? (
+            <section aria-label={copy.travelerSignIn}>
             <form onSubmit={event => void submitPhone(event)}>
               <h2>{copy.travelerSignIn}</h2>
               <label htmlFor="auth-phone">{copy.phone}</label>
@@ -192,13 +205,18 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
               {capabilities.otp_delivery === 'unavailable' && <p role="status">{copy.smsUnavailable}</p>}
               <button type="submit" disabled={busy || capabilities.otp_delivery !== 'available'}>{busy ? copy.loading : copy.sendCode}</button>
             </form>
+            {capabilities.methods.includes('staging_invite') && capabilities.otp_delivery === 'available' && <button type="button" className="auth-owner-choice" onClick={() => { setStagingFallback(true); setStagingMode('login'); setPhase('phone'); setChallengeId(''); setCode(''); setError(''); setNotice(''); }}>{methodCopy.useInvite}</button>}
+            </section>
           ) : capabilities?.methods.includes('otp') ? (
+            <section aria-label={copy.travelerSignIn}>
             <form onSubmit={event => void submitCode(event)}>
               <label htmlFor="auth-code">{copy.code}</label>
               <input id="auth-code" name="code" type="text" autoComplete="one-time-code" inputMode="numeric" pattern="[0-9۰-۹٠-٩]{4,8}" required value={code} onChange={event => setCode(event.target.value)} />
               <button type="submit" disabled={busy}>{busy ? copy.loading : copy.verify}</button>
               <button className="auth-back" type="button" onClick={() => { setPhase('phone'); setCode(''); setChallengeId(''); }}>{copy.back}</button>
             </form>
+            {capabilities.methods.includes('staging_invite') && capabilities.otp_delivery === 'available' && <button type="button" className="auth-owner-choice" onClick={() => { setStagingFallback(true); setStagingMode('login'); setPhase('phone'); setChallengeId(''); setCode(''); setError(''); setNotice(''); }}>{methodCopy.useInvite}</button>}
+            </section>
           ) : <p role="status">{copy.requestUnavailable}</p>}
           {notice && <p role="status">{notice}</p>}
           {error && <p role="alert">{error}</p>}

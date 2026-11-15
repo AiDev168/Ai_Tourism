@@ -78,4 +78,26 @@ describe('OTP delivery failure UX', () => {
     expect(fetchMock.mock.calls[2][0]).toContain('/staging/login');
     expect(host.textContent).toContain('Private pilot sign in');
   });
+
+  it('keeps OTP as primary when live SMS is available and exposes invitation fallback', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ methods: ['otp', 'staging_invite'], otp_delivery: 'available' }))
+      .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401));
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => { root.render(<AuthPanel locale="en-US" />); });
+    await settle();
+    await act(async () => { (host.querySelector('button') as HTMLButtonElement).click(); });
+    expect(host.querySelector('#auth-phone')).not.toBeNull();
+    expect(host.querySelector('#auth-stage-email')).toBeNull();
+    expect(host.textContent).toContain('Use invitation sign-in');
+    expect(host.textContent).not.toContain('SMS delivery is not configured');
+
+    const buttons = [...host.querySelectorAll('button')];
+    await act(async () => { buttons.find(button => button.textContent === 'Use invitation sign-in')!.click(); });
+    expect(host.querySelector('#auth-stage-email')).not.toBeNull();
+    expect(host.textContent).toContain('Use SMS sign-in');
+    await act(async () => { [...host.querySelectorAll('button')].find(button => button.textContent === 'Use SMS sign-in')!.click(); });
+    expect(host.querySelector('#auth-phone')).not.toBeNull();
+    expect(host.querySelector('#auth-stage-email')).toBeNull();
+  });
 });

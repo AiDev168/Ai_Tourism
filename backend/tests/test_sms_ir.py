@@ -9,11 +9,13 @@ import pytest
 
 from scripts import sms_ir_sandbox_smoke
 from app.core.config import Settings
+from app.api.auth import authentication_method
 from app.modules.identity.sms import (
     FakeSmsAdapter,
     SmsDeliveryError,
     SmsFailureCategory,
     SmsIrSandboxAdapter,
+    SmsIrLiveStagingAdapter,
     SmsMessage,
     sms_ir_mobile_number,
 )
@@ -60,6 +62,38 @@ def test_sms_ir_serializes_exact_sandbox_verify_request_and_returns_safe_receipt
         '"parameters":[{"name":"Code","value":"123456"}]}'
     )
     assert receipt.provider_message_id == "sandbox-message-42"
+
+
+def test_live_staging_sms_uses_explicit_owner_template_and_existing_code_parameter():
+    captured = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return response()
+
+    adapter = SmsIrLiveStagingAdapter(
+        "staging-live-test-key",
+        987654321,
+        transport=httpx.MockTransport(handler),
+    )
+    adapter.send(message(), timeout_seconds=2.0)
+
+    request = captured[0]
+    payload = json.loads(request.read())
+    assert str(request.url) == SmsIrLiveStagingAdapter.endpoint
+    assert request.headers["X-API-KEY"] == "staging-live-test-key"
+    assert payload == {
+        "mobile": "9120000000",
+        "templateId": 987654321,
+        "parameters": [{"name": "Code", "value": "123456"}],
+    }
+
+
+@pytest.mark.parametrize("template_id", [0, -1, 123456, True, False, "1234"])
+def test_live_staging_sms_rejects_missing_or_sandbox_template_ids(template_id):
+    with pytest.raises(SmsDeliveryError) as error:
+        SmsIrLiveStagingAdapter("staging-live-test-key", template_id)
+    assert error.value.category is SmsFailureCategory.INVALID_CONFIGURATION
 
 
 @pytest.mark.parametrize(
@@ -241,6 +275,68 @@ def test_settings_reject_sandbox_adapter_in_production():
             auth_sms_adapter="sms_ir_sandbox",
             sms_ir_sandbox_api_key="sandbox-test-key",
         )
+
+
+def test_settings_allow_live_sms_only_for_staging_and_keep_invitation_auth_available():
+    settings = Settings(
+        _env_file=None,
+        database_password="test-only",
+        app_env="staging",
+        auth_enabled=True,
+        auth_sms_adapter="sms_ir_live_staging",
+        auth_local_owner_enabled=False,
+        staging_auth_enabled=True,
+        staging_public_host="rahgard.hinaa.ir",
+        auth_cookie_secure=True,
+        auth_allowed_origins="https://rahgard.hinaa.ir",
+        auth_otp_hmac_secret="a" * 32,
+        auth_csrf_secret="b" * 32,
+        auth_rate_limit_secret="c" * 32,
+        auth_session_idle_seconds=1800,
+        auth_session_absolute_seconds=43200,
+        sms_ir_production_api_key_file="/run/secrets/sms_ir_production_api_key",
+        sms_ir_production_template_id=987654321,
+    )
+    assert settings.auth_sms_adapter == "sms_ir_live_staging"
+    assert settings.staging_auth_enabled is True
+    methods = authentication_method(settings)
+    assert methods.methods == ["otp", "staging_invite"]
+    assert methods.otp_delivery == "available"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"app_env": "production"},
+        {"app_env": "development", "staging_auth_enabled": False},
+        {"sms_ir_production_template_id": 0},
+        {"sms_ir_production_template_id": 123456},
+        {"sms_ir_production_api_key_file": "/tmp/unrestricted-key"},
+        {"staging_auth_enabled": False},
+    ],
+)
+def test_settings_reject_live_sms_outside_guarded_staging_or_without_template(overrides):
+    values = {
+        "_env_file": None,
+        "database_password": "test-only",
+        "app_env": "staging",
+        "auth_enabled": True,
+        "auth_sms_adapter": "sms_ir_live_staging",
+        "staging_auth_enabled": True,
+        "staging_public_host": "rahgard.hinaa.ir",
+        "auth_cookie_secure": True,
+        "auth_allowed_origins": "https://rahgard.hinaa.ir",
+        "auth_otp_hmac_secret": "a" * 32,
+        "auth_csrf_secret": "b" * 32,
+        "auth_rate_limit_secret": "c" * 32,
+        "auth_session_idle_seconds": 1800,
+        "auth_session_absolute_seconds": 43200,
+        "sms_ir_production_api_key_file": "/run/secrets/sms_ir_production_api_key",
+        "sms_ir_production_template_id": 987654321,
+    }
+    values.update(overrides)
+    with pytest.raises(ValueError):
+        Settings(**values)
 
 
 def test_env_example_uses_disabled_mode_and_only_dummy_sandbox_placeholder():
