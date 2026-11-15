@@ -236,13 +236,12 @@ def interpret_trip_requirements(
         else:
             relative_field = _missing()
     else:
-        tomorrow_match = re.search(r"(?<!\w)(?:برای\s+)?فردا(?!\w)", request_text)
+        tomorrow_match = re.search(\n            r"(?<!\\w)(?:برای\\s+)?(پس[\\s\\u200c-]*فردا|فردا|day\\s+after\\s+tomorrow|tomorrow|بعد\\s+غد|غد(?:اً|ا)?)(?!\\w)",\n            request_text, re.IGNORECASE | re.UNICODE,\n        )
         if tomorrow_match:
             anchor = traveler_reference_date
             relative_field = _known(
                 RelativeStartDateValue(
-                    offset_days=1,
-                    anchor_date=anchor + timedelta(days=1) if anchor else None,
+                    offset_days=2 if re.search(r"پس|day\\s+after|بعد", tomorrow_match.group(0), re.I) else 1,\n                    anchor_date=(anchor + timedelta(days=(2 if re.search(r"پس|day\\s+after|بعد", tomorrow_match.group(0), re.I) else 1))) if anchor else None,
                     timezone=traveler_timezone,
                 ), _span(request_text, *tomorrow_match.span()),
             )
