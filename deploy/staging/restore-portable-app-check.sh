@@ -45,6 +45,7 @@ source_count=$(docker exec "$target_container" psql -X -q -A -t -U ai_tourism_ow
 
 run_suffix="${release_sha:0:8}-$$"
 image="rahgard-restore-check:${run_suffix}"
+source_image="rahgard-api:${release_sha}"
 app_name="rahgard-restore-api-${run_suffix}"
 secret_volume="rahgard-restore-secrets-${run_suffix}"
 [[ "$app_name" =~ ^rahgard-restore-api-[0-9a-f]{8}-[0-9]+$ \
@@ -55,13 +56,21 @@ volume_exists=$(docker volume ls -q --filter "name=^${secret_volume}$")
 [[ -z "$volume_exists" ]] || { echo 'Restore-check secret volume already exists; refusing reuse.' >&2; exit 2; }
 image_exists=$(docker image ls -q --filter "reference=$image")
 [[ -z "$image_exists" ]] || { echo 'Restore-check image tag already exists; refusing reuse.' >&2; exit 2; }
+image_created=false
 cleanup() {
   docker rm -f "$app_name" >/dev/null 2>&1 || true
   docker volume rm "$secret_volume" >/dev/null 2>&1 || true
-  docker image rm "$image" >/dev/null 2>&1 || true
+  if [[ "$image_created" == true ]]; then docker image rm "$image" >/dev/null 2>&1 || true; fi
 }
 trap cleanup EXIT
-docker build --pull=false -f "$bundle_dir/release/deploy/staging/Dockerfile.api" -t "$image" "$bundle_dir/release" >/dev/null
+if docker image inspect "$source_image" >/dev/null 2>&1; then
+  image="$source_image"
+  printf 'Using locally cached exact release API image %s.\n' "$image"
+else
+  docker build --pull=false -f "$bundle_dir/release/deploy/staging/Dockerfile.api" -t "$image" "$bundle_dir/release" >/dev/null
+  image_created=true
+  printf 'Built API image from archived source release %s.\n' "$release_sha"
+fi
 docker volume create "$secret_volume" >/dev/null
 app_uid=$(docker run --rm --entrypoint sh "$image" -c 'id -u rahgard')
 app_gid=$(docker run --rm --entrypoint sh "$image" -c 'id -g rahgard')
