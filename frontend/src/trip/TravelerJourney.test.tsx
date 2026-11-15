@@ -39,7 +39,7 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('persisted traveler journey', () => {
-  it('sends the consented first request to the assistant without duplicating the persisted user message', async () => {
+  it('automatically starts exactly one first AI turn without duplicating the initial user message', async () => {
     const requestText = 'Plan a trip to Shiraz for five people tomorrow';
     const parsed = createTripRequirements({ requestText, locale: 'en-US' });
     if (parsed.kind === 'invalid') throw new Error('Expected a valid request');
@@ -66,10 +66,9 @@ describe('persisted traveler journey', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     await act(async () => root.render(<TravelerJourney locale="en-US" session={session} online requirements={parsed.requirements}
-      initialRemoteConsent travelerTimezone="Asia/Tehran" onSessionExpired={() => undefined}
+      initialRemoteConsent autoStartConversation travelerTimezone="Asia/Tehran" onSessionExpired={() => undefined}
       onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
     await settle();
-    await act(async () => host.querySelector<HTMLButtonElement>('.journey-action')!.click());
     await settle();
     const create = calls.find(call => call.url === '/api/v1/conversations')!;
     const savedBody = JSON.parse(String(create.init?.body));
