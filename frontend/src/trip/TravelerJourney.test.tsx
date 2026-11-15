@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthSession } from '../auth/authApi';
 import { journeyMessages, localizeRecommendationCode } from '../i18n/journeyMessages';
-import { createTripRequirements } from './tripIntake';
+import { createTripRequirements, type TripRequirements } from './tripIntake';
 import { ApiDestinationCatalogPort } from './destinationCatalogApi';
 import { LocationReference, TravelerJourney } from './TravelerJourney';
 
@@ -433,12 +433,7 @@ describe('persisted traveler journey', () => {
       ...tripRecord(requestText, createTripRequirements({ requestText, locale: 'fa-IR' })),
       locale: 'fa-IR' as const,
       extracted_requirements: { requirements_v1: requirementsV1 },
-      confirmed_requirements: {
-        confirmation_source: 'traveler_reviewed',
-        duration_days: 5,
-        traveler_count: 5,
-        travel_dates: { start: '2026-11-17', end: '' },
-      },
+      confirmed_requirements: {},
       duration_days: 5,
       traveler_count: 5,
     };
@@ -454,8 +449,13 @@ describe('persisted traveler journey', () => {
       if (url === '/api/v1/trips/' + trip.trip_id) return response(trip);
       throw new Error('Unexpected request: ' + url);
     }));
-    await act(async () => root.render(<TravelerJourney locale="fa-IR" session={session} online requirements={null}
-      onSessionExpired={() => undefined} onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
+    function RestoreHarness() {
+      const [parentRequirements, setParentRequirements] = useState<TripRequirements | null>(null);
+      return <TravelerJourney locale="fa-IR" session={session} online requirements={parentRequirements}
+        onSessionExpired={() => undefined} onRestoreRequest={(_text, restored) => setParentRequirements(restored)}
+        onStartNewDraft={() => undefined} />;
+    }
+    await act(async () => root.render(<RestoreHarness />));
     await settle();
     await act(async () => { host.querySelector<HTMLButtonElement>('.history-trip[data-trip-id="' + trip.trip_id + '"] button')!.click(); });
     await settle();

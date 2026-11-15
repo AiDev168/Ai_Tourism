@@ -529,9 +529,9 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
         setItinerary(null);
       }
       const restoring = restoringRequestRef.current === requirements.requestText;
-      // The restored, traveler-reviewed profile is authoritative for the form.
-      // Do not overwrite it with the older parser extraction from the parent.
-      if (!(restoring && activeTrip?.confirmed_requirements.confirmation_source === 'traveler_reviewed')) {
+      // The restored server trip is authoritative, whether or not the traveler
+      // had already confirmed it. The parent can still hold an older extraction.
+      if (!restoring) {
         if (!manualProfileFieldsRef.current.has('destination')) setDestinationNames(requirements.destinations.value ? [...requirements.destinations.value] : []);
         if (!manualProfileFieldsRef.current.has('duration')) setDurationText(requirements.durationDays.value === null ? '' : String(requirements.durationDays.value));
         if (!manualProfileFieldsRef.current.has('origin')) setOriginText(requirements.origin.value ?? '');
