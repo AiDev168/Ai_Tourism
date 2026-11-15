@@ -70,9 +70,12 @@ image=c.get("Config",{}).get("Image","")
 if not (image.startswith("postgres:17") or "rahgard-postgres:17" in image):
     raise SystemExit("Target image is not PostgreSQL 17.")
 mounts=c.get("Mounts") or []
-if not any(m.get("Type")=="tmpfs" and m.get("Destination")=="/var/lib/postgresql/data" for m in mounts):
+host=c.get("HostConfig") or {}
+tmpfs=host.get("Tmpfs") or {}
+if "/var/lib/postgresql/data" not in tmpfs:
     raise SystemExit("PostgreSQL data directory is not mounted on tmpfs.")
-if any(m.get("Type")!="tmpfs" for m in mounts): raise SystemExit("Unexpected persistent/bind mount on target container.")
+if host.get("Binds") or host.get("Mounts"): raise SystemExit("Unexpected persistent/bind mount configuration on target container.")
+if any(m.get("Type")!="tmpfs" or m.get("Destination") not in tmpfs for m in mounts): raise SystemExit("Unexpected persistent/bind mount on target container.")
 ports=c.get("NetworkSettings",{}).get("Ports") or {}
 if any(v for v in ports.values() if v): raise SystemExit("Target has a published host port.")
 env=c.get("Config",{}).get("Env") or []

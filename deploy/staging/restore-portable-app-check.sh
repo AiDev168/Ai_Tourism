@@ -28,8 +28,14 @@ c=x[0]; labels=c.get("Config",{}).get("Labels") or {}
 if labels.get("rahgard.restore.target")!="isolated" or labels.get("rahgard.environment") not in {"restore-test","qa","test"}:
     raise SystemExit("Target lacks isolated restore labels.")
 if c.get("State",{}).get("Running") is not True: raise SystemExit("Target database is not running.")
-if not any(m.get("Type")=="tmpfs" and m.get("Destination")=="/var/lib/postgresql/data" for m in c.get("Mounts") or []):
+host=c.get("HostConfig") or {}
+tmpfs=host.get("Tmpfs") or {}
+if "/var/lib/postgresql/data" not in tmpfs:
     raise SystemExit("Target database does not use tmpfs.")
+if host.get("Binds") or host.get("Mounts"):
+    raise SystemExit("Target database has an unexpected persistent/bind mount configuration.")
+if any(m.get("Type")!="tmpfs" or m.get("Destination") not in tmpfs for m in c.get("Mounts") or []):
+    raise SystemExit("Target database has an unexpected persistent/bind mount.")
 if any(v for v in (c.get("NetworkSettings",{}).get("Ports") or {}).values() if v):
     raise SystemExit("Target database has a published port.")
 '
