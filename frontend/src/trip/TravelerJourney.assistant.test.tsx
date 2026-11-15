@@ -29,7 +29,7 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('assistant suggestions and reviewed trip restoration', () => {
-  it('keeps a Persian 15-day request visible and separates saved traveler notes from consented remote AI', async () => {
+  it('keeps a Persian 15-day request visible and separates saved traveler notes from default-on remote AI', async () => {
     const requestText = 'برای ۱۵ روز به شیراز سفر می‌کنیم';
     const parsed = createTripRequirements({ requestText, locale: 'fa-IR' });
     if (parsed.kind !== 'ready') throw new Error('Invalid Persian 15-day fixture');
@@ -87,7 +87,7 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     expect(host.textContent).toContain(requestText);
     expect(host.textContent).toContain('مدت ثبت‌شدهٔ این سفر: ۱۵ روز.');
     expect(host.querySelector<HTMLInputElement>('#profile-duration')?.value).toBe('15');
-    expect(host.querySelector<HTMLInputElement>('#assistant-remote-consent')?.checked).toBe(false);
+    expect(host.querySelector('#assistant-remote-consent')).toBeNull();
 
     const firstSuggestion = host.querySelector<HTMLButtonElement>('.assistant-prompt-suggestions button');
     expect(firstSuggestion).toBeTruthy();
@@ -118,8 +118,6 @@ describe('assistant suggestions and reviewed trip restoration', () => {
       remoteInput.dispatchEvent(new Event('input', { bubbles: true }));
     });
     const remoteButton = [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === 'پرسش از دستیار سفر')!;
-    expect(remoteButton.disabled).toBe(true);
-    await act(async () => host.querySelector<HTMLInputElement>('#assistant-remote-consent')!.click());
     expect(remoteButton.disabled).toBe(false);
     await act(async () => remoteButton.click()); await settle();
     const remoteCall = fetchMock.mock.calls.find(call => String(call[0]).endsWith('/assistant-turns'))!;
@@ -212,7 +210,6 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     );
     expect(localSave?.disabled).toBe(true);
     expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/assistant-turns'))).toBe(false);
-    await act(async () => { host.querySelector<HTMLInputElement>('#assistant-remote-consent')!.click(); });
     await act(async () => clickLabel('Ask travel assistant')); await settle();
     expect(host.textContent).toContain('Suggested destination');
     expect(host.textContent).toContain('Kashan');
