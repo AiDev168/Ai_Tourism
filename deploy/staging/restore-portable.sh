@@ -101,12 +101,12 @@ app_password_file="$bundle_dir/private/secrets/app_db_password"
 [[ -f "$app_password_file" && ! -L "$app_password_file" && -s "$app_password_file" ]] || {
   echo 'Authenticated bundle has no app DB password; refusing a runtime-incomplete restore.' >&2; exit 2;
 }
-docker cp "$app_password_file" "$target_container:/tmp/rahgard-restore-app-db-password"
+docker cp "$app_password_file" "$target_container:/root/.rahgard-restore-app-db-password"
 docker exec "$target_container" sh -ceu '
-  cleanup_secret() { unset RAHGARD_RESTORE_APP_DB_PASSWORD; rm -f -- /tmp/rahgard-restore-app-db-password; }
+  cleanup_secret() { unset RAHGARD_RESTORE_APP_DB_PASSWORD; rm -f -- /root/.rahgard-restore-app-db-password; }
   trap cleanup_secret EXIT HUP INT TERM
-  chmod 0600 /tmp/rahgard-restore-app-db-password
-  export RAHGARD_RESTORE_APP_DB_PASSWORD="$(cat /tmp/rahgard-restore-app-db-password)"
+  chmod 0600 /root/.rahgard-restore-app-db-password
+  export RAHGARD_RESTORE_APP_DB_PASSWORD="$(cat /root/.rahgard-restore-app-db-password)"
   psql -X -v ON_ERROR_STOP=1 -U "$1" -d postgres <<'"'"'SQL'"'"'
 \getenv app_password RAHGARD_RESTORE_APP_DB_PASSWORD
 SELECT format('CREATE ROLE ai_tourism_app LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', :'app_password')
