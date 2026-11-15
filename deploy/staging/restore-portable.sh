@@ -102,12 +102,13 @@ app_password_file="$bundle_dir/private/secrets/app_db_password"
   echo 'Authenticated bundle has no app DB password; refusing a runtime-incomplete restore.' >&2; exit 2;
 }
 docker cp "$app_password_file" "$target_container:/root/.rahgard-restore-app-db-password"
-docker exec -e RAHGARD_RESTORE_DB_OWNER="$db_owner" "$target_container" sh -ceu '
-  cleanup_secret() { unset RAHGARD_RESTORE_APP_DB_PASSWORD; rm -f -- /root/.rahgard-restore-app-db-password; }
-  trap cleanup_secret EXIT HUP INT TERM
-  chmod 0600 /root/.rahgard-restore-app-db-password
-  export RAHGARD_RESTORE_APP_DB_PASSWORD="$(cat /root/.rahgard-restore-app-db-password)"
-  psql -X -v ON_ERROR_STOP=1 -U "$RAHGARD_RESTORE_DB_OWNER" -d postgres <<'"'"'SQL'"'"'
+cat > "$work/create-runtime-roles.sh" <<'SH'
+set -eu
+cleanup_secret() { unset RAHGARD_RESTORE_APP_DB_PASSWORD; rm -f -- /root/.rahgard-restore-app-db-password; }
+trap cleanup_secret EXIT HUP INT TERM
+chmod 0600 /root/.rahgard-restore-app-db-password
+export RAHGARD_RESTORE_APP_DB_PASSWORD="$(cat /root/.rahgard-restore-app-db-password)"
+psql -X -v ON_ERROR_STOP=1 -U "$1" -d postgres <<'SQL'
 \getenv app_password RAHGARD_RESTORE_APP_DB_PASSWORD
 SELECT format('CREATE ROLE ai_tourism_app LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', :'app_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ai_tourism_app')
@@ -120,7 +121,8 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='rahgard_pilot_geo_migrat
 \gexec
 GRANT rahgard_pilot_geo_executor TO rahgard_pilot_geo_migrator;
 SQL
-'
+SH
+docker exec --user 0 -i "$target_container" sh -s "$db_owner" < "$work/create-runtime-roles.sh"
 
 echo "Creating new isolated database $target_db in container $target_container."
 docker exec "$target_container" createdb -U "$db_owner" -O "$db_owner" "$target_db"
