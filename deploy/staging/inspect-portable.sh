@@ -182,7 +182,17 @@ with open(os.path.join(root, "release/RELEASE_COMMIT"), "r", encoding="ascii") a
     if not re.fullmatch(r"[0-9a-f]{40}\n?", f.read()):
         raise SystemExit("Invalid release marker in archive.")
 PY
-pg_restore --list "$work/extracted/database.dump" >/dev/null
+if command -v pg_restore >/dev/null 2>&1; then
+  pg_restore --list "$work/extracted/database.dump" >/dev/null
+else
+  restore_image="${RAHGARD_PG_RESTORE_IMAGE:-rahgard-postgres:17-postgis36-vector087}"
+  docker image inspect "$restore_image" >/dev/null 2>&1 || {
+    echo 'pg_restore is unavailable and the configured PostgreSQL 17 restore image is not local.' >&2; exit 2;
+  }
+  docker run --rm -i --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+    --cap-drop ALL --security-opt no-new-privileges:true --entrypoint pg_restore "$restore_image" \
+    --list - < "$work/extracted/database.dump" >/dev/null
+fi
 [[ ! -e "$destination" ]] || { echo 'Destination appeared during inspection; refusing to overwrite.' >&2; exit 2; }
 mv -T -n -- "$work/extracted" "$destination"
 [[ ! -e "$work/extracted" ]] || { echo 'Destination appeared during inspection; refusing to overwrite.' >&2; exit 2; }

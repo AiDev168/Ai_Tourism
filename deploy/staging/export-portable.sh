@@ -77,7 +77,7 @@ cp -- "$freeze_marker" "$tmp/private/state/WRITE_FREEZE"
 
 "${compose[@]}" exec -T db pg_dump -U "$db_owner" -d "$db_name" -Fc > "$tmp/database.dump"
 test -s "$tmp/database.dump"
-pg_restore --list "$tmp/database.dump" >/dev/null
+"${compose[@]}" exec -T db pg_restore --list - < "$tmp/database.dump" >/dev/null
 "${compose[@]}" exec -T db psql -X -q -A -t -U "$db_owner" -d "$db_name" \
   -c "SELECT migration_id||'|'||rtrim(sha256) FROM system.schema_migrations ORDER BY migration_id" \
   > "$tmp/database.migration-ledger.tsv"

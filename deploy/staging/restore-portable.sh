@@ -44,7 +44,6 @@ diff -qr --no-dereference "$work/reverified" "$bundle_dir" >/dev/null || {
   cd -- "$work/reverified"
   sha256sum --check MANIFEST.sha256 >/dev/null
 )
-pg_restore --list "$work/reverified/database.dump" >/dev/null
 python3 - "$work/reverified/database.migration-ledger.tsv" <<'PY'
 import re, sys
 seen = set()
@@ -79,6 +78,7 @@ if any(v for v in ports.values() if v): raise SystemExit("Target has a published
 env=c.get("Config",{}).get("Env") or []
 if any(e.startswith("APP_ENV=production") for e in env): raise SystemExit("Production environment is forbidden.")
 '
+docker exec -i "$target_container" pg_restore --list - < "$work/reverified/database.dump" >/dev/null
 pg_version=$(docker exec "$target_container" sh -c 'cat "${PGDATA:-/var/lib/postgresql/data}/PG_VERSION"')
 [[ "$pg_version" == 17 ]] || { echo 'Target server is not PostgreSQL 17.' >&2; exit 2; }
 owner_is_superuser=$(docker exec "$target_container" psql -X -q -A -t -U "$db_owner" -d postgres \
