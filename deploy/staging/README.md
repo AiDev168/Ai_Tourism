@@ -110,12 +110,36 @@ or logs.
   this deployment's web/API containers, and restores only to the exact staging
   DB. Rehearse only against an isolated disposable copy before a real recovery.
 
-The current automatic DB initialization is for the initial empty staging
-volume only. Its verified ledger contains 15 rows: baseline 0000 through 0012, private
-geo boundary 0013, and staging invitation auth 0016. It does not install local
-owner or provider-admin schemas. The new migration 0016 adds invitation auth; no subsequent schema
-upgrade runner is included because no later migration is authorized. Future
-migrations require a reviewed, separately guarded upgrade procedure and backup.
+The automatic DB initialization is only for an initial empty staging volume.
+It must never be rerun against an existing database. The original verified
+ledger has 15 rows: baseline 0000 through 0012, private geo boundary 0013,
+and staging invitation auth 0016. Migration 0017 adds owner-scoped provisional
+itineraries; it does not publish catalogue records or modify existing trips.
+
+For an existing pilot, use the separate one-time `upgrade-017.sh` from the
+exact reviewed release. It refuses anything except the exact checksum-verified
+15-row ledger, the original persistent PostgreSQL 17 volume, and the protected
+pilot marker. Before DDL it creates a new encrypted database backup, verifies
+the SHA-256 and independent HMAC, decrypts into a mode-0600 temporary file, and
+checks the archive with `pg_restore --list`. It then applies only migration
+0017 and verifies a 16-row ledger, migration checksum, new table, and unchanged
+counts for users, conversations/messages, trips, canonical itineraries/stops,
+and published destinations. It never initializes, restores, recreates or
+deletes the database volume. If any precondition fails, stop and preserve the
+database and backup for review; do not retry initialization.
+
+Operator sequence for a reviewed release:
+
+1. Transfer and validate the release archive with `fetch-release.sh`.
+2. Run the new release's `deploy/staging/upgrade-017.sh` while the currently
+   deployed application is still serving. The runner uses the persistent DB
+   container and verifies a fresh authenticated backup before applying DDL.
+3. If the migration reports PASS, run `deploy.sh <tested-commit-sha>` to
+   activate the application release. Application deployment remains separate
+   from schema migration and preserves the named PostgreSQL volume.
+4. Verify status, readiness, the HTTPS homepage, and owner-scoped traveler
+   behavior. Roll back application code only if needed; migration 0017 is
+   additive and existing application rows are unchanged.
 
 ## Release synchronization and server portability
 

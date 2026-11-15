@@ -235,17 +235,8 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     expect(host.querySelector<HTMLTextAreaElement>('#profile-soft-preferences')?.value).toBe('quiet pace');
     expect(fetchMock.mock.calls.filter(call => call[1]?.method === 'PATCH')).toHaveLength(0);
     const saveButton = [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Save trip details');
-    expect(saveButton?.disabled).toBe(true); // Unreviewed AI fields cannot silently change trip consent.
-    await act(async () => {
-      host.querySelector<HTMLInputElement>('#requirement-consent-origin-must')!.click();
-      host.querySelector<HTMLInputElement>('#requirement-consent-traveler_count-must')!.click();
-      host.querySelector<HTMLInputElement>('#requirement-consent-budget-must')!.click();
-      host.querySelector<HTMLInputElement>('#requirement-consent-travel_dates-must')!.click();
-      host.querySelector<HTMLInputElement>('#requirement-consent-soft_preference-advisory')!.click();
-      host.querySelector<HTMLInputElement>('#requirement-consent-soft_preference-ack')!.click();
-    });
-    await settle();
-    expect(saveButton?.disabled).toBe(false);
+    expect(saveButton?.disabled).toBe(false); // A single explicit profile save confirms reviewed values.
+    expect(host.querySelector('.requirement-consent')).toBeNull();
     await act(async () => clickLabel('Save trip details')); await settle();
     const saved = fetchMock.mock.calls.find(call => call[1]?.method === 'PATCH');
     expect(saved).toBeDefined();
@@ -261,10 +252,7 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     });
     expect(body.confirmed_requirements.interests).toEqual(['historic gardens']);
     expect(body.confirmed_requirements.soft_preferences).toEqual(['quiet pace']);
-    expect(body.requirement_consent.field_decisions).toEqual({
-      origin: 'must_have', traveler_count: 'must_have',
-      budget: 'must_have', travel_dates: 'must_have',
-      soft_preference: 'advisory',
-    });
+    expect(body.requirement_consent.field_decisions).toEqual({});
+    expect(body.requirement_consent.advisory_acknowledged_fields).toEqual([]);
   });
 });

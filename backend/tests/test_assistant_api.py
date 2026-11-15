@@ -179,6 +179,113 @@ def test_authenticated_turn_persists_candidate_without_confirming_it():
         c.app.dependency_overrides.clear()
 
 
+def test_model_provisional_itinerary_is_returned_and_replayed_without_provider_retry():
+    c, repo, gateway = client()
+    itinerary = {
+        'status': 'provisional_unverified',
+        'days': [{'day_number': 1, 'stops': [{'name': 'Eram Garden', 'role': 'model_proposed'}]}],
+    }
+
+    async def response(request):
+        gateway.calls.append(request)
+        return ChatReply(reply='Draft only; verify details before travel.', provisional_itinerary=itinerary)
+
+    gateway.invoke = response
+    original_result = repo.result
+
+    def result(**kwargs):
+        value = original_result(**kwargs)
+        value['metadata']['provisional_itinerary'] = repo.finished.get('provisional_itinerary')
+        return value
+
+    repo.result = result
+    try:
+        first = c.post(f'/api/v1/conversations/{CONV}/assistant-turns', json=body())
+        assert first.status_code == 200, first.text
+        assert first.json()['provisional_itinerary'] == itinerary
+        assert repo.finished['provisional_itinerary'] == itinerary
+        assert first.json()['candidate_requirements']['original_text'] == body()['content']
+        assert first.json()['extraction_path'] == 'fallback'
+        repo.status = 'completed'
+        repo.is_replay = True
+        replay = c.post(f'/api/v1/conversations/{CONV}/assistant-turns', json=body())
+        assert replay.status_code == 200, replay.text
+        assert replay.json()['replayed'] is True
+        assert replay.json()['provisional_itinerary'] == itinerary
+        assert len(gateway.calls) == 1
+    finally:
+        c.app.dependency_overrides.clear()
+
+
+def test_assistant_turn_exposes_llm_extraction_path_and_typed_current_turn_evidence():
+    c, repo, gateway = client()
+    text = "\u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc\u062e\u0648\u0627\u0645 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632"
+
+    async def response(request):
+        gateway.calls.append(request)
+        return ChatReply(
+            reply='\u0628\u0631\u0627\u06cc \u0686\u0646\u062f \u0631\u0648\u0632 \u0645\u06cc\u200c\u0631\u0648\u06cc\u062f\u061f',
+            requirements={'origin': '\u0645\u0634\u0647\u062f', 'destination': '\u0634\u06cc\u0631\u0627\u0632'},
+            requirement_evidence={'origin': text, 'destination': text},
+        )
+
+    gateway.invoke = response
+    request_body = body() | {'content': text}
+    try:
+        result = c.post(f'/api/v1/conversations/{CONV}/assistant-turns', json=request_body)
+        assert result.status_code == 200, result.text
+        candidate = result.json()['candidate_requirements']
+        assert result.json()['extraction_path'] == 'llm'
+        assert candidate['original_text'] == text
+        assert candidate['fields']['origin']['value'] == '\u0645\u0634\u0647\u062f'
+        assert candidate['fields']['destination']['value'] == '\u0634\u06cc\u0631\u0627\u0632'
+        assert candidate['fields']['origin']['source'] == 'llm'
+        assert candidate['fields']['origin']['evidence_span']['text'] == text
+        assert repo.finished['requirements']['fields']['origin']['value'] == '\u0645\u0634\u0647\u062f'
+    finally:
+        c.app.dependency_overrides.clear()
+
+
+def test_assistant_turn_reuses_saved_local_date_context_without_server_clock():
+    c, _, gateway = client()
+    traveler = c.app.dependency_overrides[get_traveler_repository]()
+    original_trip = traveler.trip
+    saved = interpret_trip_requirements(
+        '\u0645\\0646 \u0641\u0631\u062f\u0627 \u0628\u0631\u0645', 'fa-IR',
+        traveler_timezone='Asia/Tehran', traveler_reference_date=date(2026, 11, 15),
+    ).model_dump(mode='json')
+
+    def trip_with_calendar_context(user_id, trip_id):
+        value = original_trip(user_id, trip_id)
+        value['extracted_requirements'] = {
+            '_traveler_context': {'timezone': 'Asia/Tehran', 'reference_date': '2026-11-20'},
+            'requirements_v1': saved,
+        }
+        return value
+
+    traveler.trip = trip_with_calendar_context
+    text = '\u0641\u0631\u062f\u0627 \u0628\u0631\u0645'
+    async def response(request):
+        gateway.calls.append(request)
+        return ChatReply(
+            reply='Please confirm the duration.',
+            requirements={'relative_start_date': 1},
+            requirement_evidence={'relative_start_date': text},
+        )
+
+    gateway.invoke = response
+    try:
+        result = c.post(f'/api/v1/conversations/{CONV}/assistant-turns', json=body() | {'content': text})
+        assert result.status_code == 200, result.text
+        assert gateway.calls[0].traveler_timezone == 'Asia/Tehran'
+        assert gateway.calls[0].traveler_reference_date == date(2026, 11, 20)
+        relative = result.json()['candidate_requirements']['fields']['relative_start_date']
+        assert relative['value']['anchor_date'] == '2026-11-21'
+        assert relative['value']['timezone'] == 'Asia/Tehran'
+    finally:
+        c.app.dependency_overrides.clear()
+
+
 def test_initial_persisted_request_can_be_reused_as_the_first_ai_turn():
     c, repo, gateway = client()
     request = body()
@@ -225,6 +332,137 @@ def test_assistant_candidate_uses_trip_contract_and_only_accepts_exact_source_sp
     assert candidate.fields.interests.value == ['historical_attractions', 'hiking']
     assert candidate.fields.interests.source == 'llm'
     assert candidate.fields.destination.evidence_span.text == 'شیراز'
+
+
+@pytest.mark.parametrize("text", [
+    "\u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc\u062e\u0648\u0627\u0645 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632",
+    "\u0645\u06cc\u200c\u062e\u0648\u0627\u0645 \u0627\u0632 \u0645\u0634\u0647\u062f \u0631\u0627\u0647\u06cc \u0634\u06cc\u0631\u0627\u0632 \u0628\u0634\u0645",
+    "\u0645\u0646 \u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc\u062e\u0648\u0627\u0647\u0645 \u0628\u0631\u0648\u0645 \u0634\u06cc\u0631\u0627\u0632",
+])
+def test_llm_semantics_populate_mashhad_origin_even_when_parser_does_not(text):
+    candidate = _candidate_profile(
+        text, 'fa-IR', {'origin': '\u0645\u0634\u0647\u062f', 'destination': '\u0634\u06cc\u0631\u0627\u0632'},
+        {'origin': text, 'destination': text},
+    )
+    assert candidate.original_text == text
+    assert candidate.fields.origin.value == '\u0645\u0634\u0647\u062f'
+    assert candidate.fields.destination.value == '\u0634\u06cc\u0631\u0627\u0632'
+    assert candidate.fields.origin.source == candidate.fields.destination.source == 'llm'
+    assert candidate.fields.origin.evidence_span.text == text
+
+
+def test_llm_ambiguity_is_preserved_instead_of_choosing_fallback_guess():
+    text = "\u0627\u0632 \u0645\u0634\u0647\u062f \u06cc\u0627 \u062a\u0628\u0631\u06cc\u0632 \u0645\u06cc\u062e\u0648\u0627\u0645 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632"
+    candidate = _candidate_profile(text, 'fa-IR', {}, {'origin': text}, {
+        'origin': ['\u0645\u0634\u0647\u062f', '\u062a\u0628\u0631\u06cc\u0632'],
+    })
+    assert candidate.fields.origin.status == 'ambiguous'
+    assert candidate.fields.origin.candidates == ['\u0645\u0634\u0647\u062f', '\u062a\u0628\u0631\u06cc\u0632']
+    assert candidate.fields.origin.source == 'llm'
+
+
+def test_relative_departure_keeps_stored_traveler_anchor_and_does_not_become_duration():
+    text = "\u0627\u0632 \u067e\u0633\u200c\u0641\u0631\u062f\u0627 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632"
+    candidate = _candidate_profile(
+        text, 'fa-IR', {'relative_start_date': 2}, {'relative_start_date': text},
+        traveler_timezone='Asia/Tehran', traveler_reference_date=date(2026, 11, 15),
+    )
+    relative = candidate.fields.relative_start_date.value
+    assert candidate.fields.relative_start_date.source == 'llm'
+    assert relative.offset_days == 2
+    assert relative.anchor_date == date(2026, 11, 17)
+    assert relative.timezone == 'Asia/Tehran'
+    assert candidate.fields.duration_days.status == 'missing'
+
+
+def test_p0_reference_request_accepts_llm_semantics_for_all_core_fields():
+    # The model supplies independently quoted field evidence. Deterministic
+    # extraction is not required to recognize this sentence structure.
+    text = (
+        "\u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc\u200c\u062e\u0648\u0627\u0645 "
+        "\u0627\u0632 \u067e\u0633\u200c\u0641\u0631\u062f\u0627 \u0628\u0631\u0627\u06cc "
+        "\u067e\u0646\u062c \u0631\u0648\u0632 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632. "
+        "\u067e\u0646\u062c \u0646\u0641\u0631 \u0647\u0633\u062a\u06cc\u0645 \u0648 "
+        "\u0628\u0648\u062f\u062c\u0647\u200c\u0645\u0648\u0646 \u06f3\u06f0 \u0645\u06cc\u0644\u06cc\u0648\u0646 "
+        "\u062a\u0648\u0645\u0646\u0647. \u0628\u06cc\u0634\u062a\u0631 \u062c\u0627\u0647\u0627\u06cc "
+        "\u062a\u0627\u0631\u06cc\u062e\u06cc \u0648 \u0628\u0627\u063a\u200c\u0647\u0627 \u0631\u0648 "
+        "\u062f\u0648\u0633\u062a \u062f\u0627\u0631\u06cc\u0645."
+    )
+    evidence = {
+        'origin': "\u0627\u0632 \u0645\u0634\u0647\u062f",
+        'destination': "\u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632",
+        'relative_start_date': "\u0627\u0632 \u067e\u0633\u200c\u0641\u0631\u062f\u0627",
+        'duration_days': "\u0628\u0631\u0627\u06cc \u067e\u0646\u062c \u0631\u0648\u0632",
+        'traveler_count': "\u067e\u0646\u062c \u0646\u0641\u0631 \u0647\u0633\u062a\u06cc\u0645",
+        'budget_text': "\u06f3\u06f0 \u0645\u06cc\u0644\u06cc\u0648\u0646 \u062a\u0648\u0645\u0646\u0647",
+        'interest': "\u062c\u0627\u0647\u0627\u06cc \u062a\u0627\u0631\u06cc\u062e\u06cc \u0648 \u0628\u0627\u063a\u200c\u0647\u0627",
+    }
+    candidate = _candidate_profile(
+        text, 'fa-IR', {
+            'origin': '\u0645\u0634\u0647\u062f', 'destination': '\u0634\u06cc\u0631\u0627\u0632',
+            'relative_start_date': 2, 'duration_days': 5, 'traveler_count': 5,
+            'budget_text': evidence['budget_text'],
+            'interest': evidence['interest'],
+        }, evidence, traveler_timezone='Asia/Tehran',
+        traveler_reference_date=date(2026, 11, 15),
+    )
+    assert candidate.original_text == text
+    assert candidate.fields.origin.value == '\u0645\u0634\u0647\u062f'
+    assert candidate.fields.destination.value == '\u0634\u06cc\u0631\u0627\u0632'
+    assert candidate.fields.relative_start_date.value.anchor_date == date(2026, 11, 17)
+    assert candidate.fields.duration_days.value == 5
+    assert candidate.fields.travelers.value == 5
+    budget = candidate.fields.budget.value
+    assert (budget.amount, budget.scale, budget.currency, budget.raw) == (
+        '30', 'million', 'TOMAN', evidence['budget_text'],
+    )
+    assert candidate.fields.interests.value == ['historical_attractions', evidence['interest']]
+    assert all(getattr(candidate.fields, name).source == 'llm' for name in (
+        'origin', 'destination', 'relative_start_date', 'duration_days',
+        'travelers', 'budget', 'interests',
+    ))
+    assert candidate.fields.duration_days.status == 'known'
+
+
+def test_llm_relative_date_overrides_a_different_deterministic_guess():
+    text = 'We should leave the morning after tomorrow.'
+    candidate = _candidate_profile(
+        text, 'en-US', {'relative_start_date': 2}, {'relative_start_date': text},
+        traveler_timezone='Asia/Tehran', traveler_reference_date=date(2026, 11, 15),
+    )
+    relative = candidate.fields.relative_start_date.value
+    assert relative.offset_days == 2
+    assert relative.anchor_date == date(2026, 11, 17)
+    assert candidate.fields.relative_start_date.source == 'llm'
+
+
+def test_llm_today_offset_zero_is_supported_without_inventing_reference_date():
+    candidate = _candidate_profile(
+        'Today, please.', 'en-US', {'relative_start_date': 0}, {'relative_start_date': 'Today'},
+        traveler_timezone='Asia/Tehran', traveler_reference_date=date(2026, 11, 15),
+    )
+    assert candidate.fields.relative_start_date.value.offset_days == 0
+    assert candidate.fields.relative_start_date.value.anchor_date == date(2026, 11, 15)
+
+
+def test_llm_semantic_duration_count_and_budget_do_not_require_parser_sentence_patterns():
+    text = "We'll be away for a week, traveling as a family of five; our ceiling is 5 million toman."
+    candidate = _candidate_profile(
+        text, 'en-US',
+        {'duration_days': 7, 'traveler_count': 5, 'budget_text': '5 million toman'},
+        {'duration_days': 'a week', 'traveler_count': 'family of five',
+         'budget_text': '5 million toman'},
+    )
+    assert candidate.fields.duration_days.value == 7
+    assert candidate.fields.duration_days.source == 'llm'
+    assert candidate.fields.travelers.value == 5
+    assert candidate.fields.travelers.source == 'llm'
+    budget = candidate.fields.budget.value
+    assert budget.amount == '5'
+    assert budget.scale == 'million'
+    assert budget.currency == 'TOMAN'
+    assert budget.raw == '5 million toman'
+    assert budget.currency_status == 'known'
 
 
 def test_exact_quote_allows_semantic_refinement_of_a_fallback_destination():
@@ -301,7 +539,7 @@ def test_soft_preference_requires_explicit_preference_wording_and_cannot_be_para
     )
     assert paraphrased.fields.soft_preferences.status == 'known'
     assert paraphrased.fields.soft_preferences.value == ['a quiet hotel']
-    assert paraphrased.fields.soft_preferences.source == 'fallback'
+    assert paraphrased.fields.soft_preferences.source == 'llm'
 
 
 def test_candidate_accepts_only_an_explicit_complete_iso_date_pair():

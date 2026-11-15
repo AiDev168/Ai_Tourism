@@ -16,11 +16,36 @@ import { JalaliDatePicker } from './JalaliDatePicker';
 import { deviceCalendarDate } from './jalaliDate';
 import {
   travelerApi, TravelerApiError, parseRetrievalEvidence, type ConversationRecord, type ConversationSummary,
-  type ItineraryRecord, type ItineraryStop, type RecommendationResult, type RequirementConsentDecision,
+  type ItineraryRecord, type ItineraryStop, type ProvisionalDay, type ProvisionalItinerary, type ProvisionalStop,
+  type RecommendationResult, type RequirementConsentDecision,
   type RequirementFieldCode, type TripRecord,
 } from './travelerApi';
 
 const catalog = new ApiDestinationCatalogPort();
+
+const provisionalText: Record<Locale, { title: string; heading: string; warning: string; save: string; saved: string; edit: string; name: string; note: string; move: string; remove: string; add: string; saveChanges: string; model: string; traveler: string }> = {
+  'fa-IR': {
+    title: 'پیش‌نویس برنامه سفر', heading: 'برنامه پیشنهادی موقت',
+    warning: 'این برنامه تأییدنشده است. نام مکان‌ها فقط پیشنهاد اولیه‌اند؛ ساعت کار، قیمت، مسیر، دسترسی و ایمنی بررسی نشده‌اند.',
+    save: 'ذخیره پیش‌نویس موقت', saved: 'پیش‌نویس موقت ذخیره شد.', edit: 'ویرایش برنامه موقت', name: 'نام مکان پیشنهادی',
+    note: 'یادداشت شما', move: 'انتقال به روز', remove: 'حذف', add: 'افزودن مکانِ واردشده توسط شما', saveChanges: 'ذخیره ویرایش‌ها',
+    model: 'پیشنهاد هوش مصنوعی؛ تأییدنشده', traveler: 'مکان واردشده توسط شما',
+  },
+  'en-US': {
+    title: 'Provisional trip draft', heading: 'Preliminary trip plan',
+    warning: 'This plan is unverified. Place names are preliminary suggestions; hours, prices, routes, access and safety have not been checked.',
+    save: 'Save provisional draft', saved: 'Provisional draft saved.', edit: 'Edit provisional plan', name: 'Suggested place name',
+    note: 'Your note', move: 'Move to day', remove: 'Remove', add: 'Add a place you provide', saveChanges: 'Save edits',
+    model: 'AI suggestion; unverified', traveler: 'Place provided by you',
+  },
+  ar: {
+    title: 'مسودة رحلة مؤقتة', heading: 'خطة أولية للرحلة',
+    warning: 'هذه الخطة غير موثقة. الأسماء اقتراحات أولية؛ ولم يتم التحقق من ساعات العمل أو الأسعار أو الطرق أو إمكانية الوصول أو السلامة.',
+    save: 'حفظ المسودة المؤقتة', saved: 'حُفظت المسودة المؤقتة.', edit: 'تعديل الخطة المؤقتة', name: 'اسم المكان المقترح',
+    note: 'ملاحظتك', move: 'النقل إلى اليوم', remove: 'حذف', add: 'إضافة مكان تحدده أنت', saveChanges: 'حفظ التعديلات',
+    model: 'اقتراح ذكاء اصطناعي غير موثق', traveler: 'مكان أدخلته أنت',
+  },
+};
 
 const chatFlowCopy: Record<Locale, { start: string; conversation: string; oneDay: string; twoDays: string; review: string; relativeDate: string }> = {
   'fa-IR': { start: 'ذخیرهٔ درخواست و شروع گفت‌وگو', conversation: 'گفت‌وگوی همین سفر', oneDay: 'یک روز', twoDays: 'دو روز', review: 'گام بعد: اطلاعات سفر را بررسی و تأیید کنید', relativeDate: 'گفتید حرکت فردا یا چند روز دیگر است. تاریخ شروع و پایان را بر اساس تقویم خودتان انتخاب و تأیید کنید؛ ما تاریخ را از ساعت سرور حدس نمی‌زنیم.' },
@@ -170,19 +195,11 @@ type RestoredRequirementConsent = {
 };
 
 function unresolvedConsentFields(value: TripRequirements | null): RequirementFieldCode[] {
-  if (!value) return [];
-  const explicit: Record<RequirementFieldCode, unknown> = {
-    budget: value.budget.value,
-    travel_dates: value.travelDates.value,
-    traveler_count: value.travelerCount.value,
-    origin: value.origin.value,
-    soft_preference: value.softPreferences.value,
-  };
-  return requirementFields.filter(field => {
-    const fieldValue = explicit[field];
-    return fieldValue !== null && fieldValue !== undefined
-      && (typeof fieldValue !== 'string' || fieldValue.trim().length > 0);
-  });
+  // Known traveler facts do not need consent to be treated as known merely
+  // because catalogue metadata cannot evaluate destination fit. Hard or
+  // unclassified constraints stay fail-closed in their dedicated review UI.
+  void value;
+  return [];
 }
 
 function parseReviewedBudget(text: string, locale: Locale): TripRequirements['budget']['value'] {
@@ -211,26 +228,15 @@ function displayInterests(values: readonly string[], locale: Locale): string {
 
 function consentFieldsForReviewedProfile(
   extracted: TripRequirements | null,
-  origin: string,
-  travelers: string,
-  budget: string,
-  dateStart: string,
-  dateEnd: string,
-  softPreferences = '',
 ): RequirementFieldCode[] {
-  const fields = unresolvedConsentFields(extracted);
-  if (origin.trim() && !fields.includes('origin')) fields.push('origin');
-  if (travelers.trim() && !fields.includes('traveler_count')) fields.push('traveler_count');
-  if (budget.trim() && !fields.includes('budget')) fields.push('budget');
-  if ((dateStart || dateEnd) && !fields.includes('travel_dates')) fields.push('travel_dates');
-  if (softPreferences.trim() && !fields.includes('soft_preference')) fields.push('soft_preference');
-  return fields;
+  return unresolvedConsentFields(extracted);
 }
 
 function restoredConsent(
   trip: TripRecord,
   fields: RequirementFieldCode[],
 ): RestoredRequirementConsent | null {
+  void fields; // Historical valid decisions remain readable after removing routine prompts.
   const raw = trip.confirmed_requirements.requirement_consent;
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const consent = raw as Record<string, unknown>;
@@ -241,17 +247,16 @@ function restoredConsent(
   if (!decisions || typeof decisions !== 'object' || Array.isArray(decisions)) return null;
   const decisionEntries = Object.entries(decisions as Record<string, unknown>);
   if (decisionEntries.some(([field, decision]) =>
-    !fields.includes(field as RequirementFieldCode)
+    !requirementFields.includes(field as RequirementFieldCode)
     || (decision !== 'must_have' && decision !== 'advisory'))
   ) return null;
   const acknowledgements = consent.advisory_acknowledged_fields;
   if (!Array.isArray(acknowledgements)
-      || acknowledgements.some(field => typeof field !== 'string' || !fields.includes(field as RequirementFieldCode))
+      || acknowledgements.some(field => typeof field !== 'string' || !requirementFields.includes(field as RequirementFieldCode))
       || new Set(acknowledgements).size !== acknowledgements.length) return null;
   const parsed: Partial<Record<RequirementFieldCode, RequirementConsentDecision>> = {};
-  for (const field of fields) {
-    const decision = (decisions as Record<string, unknown>)[field];
-    if (decision === 'must_have' || decision === 'advisory') parsed[field] = decision;
+  for (const [field, decision] of decisionEntries) {
+    if (decision === 'must_have' || decision === 'advisory') parsed[field as RequirementFieldCode] = decision;
   }
   const acknowledgedFields = acknowledgements as RequirementFieldCode[];
   if (acknowledgedFields.some(field => parsed[field] !== 'advisory')) return null;
@@ -334,7 +339,13 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const [assistantState, setAssistantState] = useState<'loading' | 'configured' | 'disabled' | 'unavailable' | 'quota_exhausted' | 'responded'>('loading');
   const [assistantRemaining, setAssistantRemaining] = useState<number | null>(null);
   const [assistantCandidate, setAssistantCandidate] = useState<unknown>(null);
+  const [extractionPath, setExtractionPath] = useState<'llm' | 'fallback' | 'user_override' | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationResult | null>(null);
+  const [provisionalCandidate, setProvisionalCandidate] = useState<{ days: Array<{ day_number: number; stops: Array<{ name: string; role: 'model_proposed' }> }> } | null>(null);
+  const [provisionalItinerary, setProvisionalItinerary] = useState<ProvisionalItinerary | null>(null);
+  const [provisionalDays, setProvisionalDays] = useState<ProvisionalDay[]>([]);
+  const [provisionalDirty, setProvisionalDirty] = useState(false);
+  const [newProvisionalStop, setNewProvisionalStop] = useState('');
   const [itinerary, setItinerary] = useState<ItineraryRecord | null>(null);
   const [editableStops, setEditableStops] = useState<ItineraryStop[]>([]);
   const [dayCount, setDayCount] = useState(1);
@@ -355,9 +366,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const catalogueBrowseSequenceRef = useRef(0);
 
   const extracted = useMemo(() => safeRequirements(activeTrip?.extracted_requirements, activeTrip?.locale ?? locale, activeTrip?.original_request), [activeTrip, locale]);
-  const consentFields = useMemo(() => consentFieldsForReviewedProfile(
-    extracted, originText, travelerCountText, budgetText, travelStartText, travelEndText, softPreferenceText,
-  ), [extracted, originText, travelerCountText, budgetText, travelStartText, travelEndText, softPreferenceText]);
+  const consentFields = useMemo(() => consentFieldsForReviewedProfile(extracted), [extracted]);
   const budgetValid = !budgetText.trim() || parseReviewedBudget(budgetText, locale) !== null;
   const datesValid = validTravelDates(travelStartText, travelEndText);
   const interests = parseInterests(interestText);
@@ -378,8 +387,12 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     setConfirmed(false);
     setRecommendations(null);
     setItinerary(null);
+    setProvisionalCandidate(null);
   };
-  const markProfileFieldEdited = (field: string) => { manualProfileFieldsRef.current.add(field); };
+  const markProfileFieldEdited = (field: string) => {
+    manualProfileFieldsRef.current.add(field);
+    setExtractionPath('user_override');
+  };
   const chooseRequirement = (field: RequirementFieldCode, decision: RequirementConsentDecision) => {
     setRequirementChoices(current => ({ ...current, [field]: decision }));
     setAdvisoryAcknowledgements(current => ({ ...current, [field]: false }));
@@ -621,6 +634,10 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
           setActiveConversation(savedConversation);
           setActiveTrip(savedTrip);
           setAssistantCandidate(firstReply.candidate_requirements);
+          setExtractionPath(firstReply.extraction_path ?? 'fallback');
+          if (firstReply.provisional_itinerary?.status === 'provisional_unverified') {
+            setProvisionalCandidate({ days: firstReply.provisional_itinerary.days });
+          }
           // Evidence-backed AI extraction may correct a rule-based fallback,
           // but never overwrites a field the traveler has edited. Profile
           // confirmation remains an explicit traveler action.
@@ -665,6 +682,21 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
             }
             if (interpreted.travelStart && interpreted.travelEnd && canApply('travelDates', 'travelStart') && canApply('travelDates', 'travelEnd') && hasDirectEvidence('travel_dates')) {
               setTravelStartText(interpreted.travelStart); setTravelEndText(interpreted.travelEnd); improved = true;
+            }
+            if (interpreted.relativeStartDate && !interpreted.travelStart
+                && canApply('relativeStartDate', 'travelStart')
+                && !manualProfileFieldsRef.current.has('travelStart')
+                && hasDirectEvidence('relative_start_date')
+                && interpreted.relativeStartDate.anchorDate) {
+              const start = interpreted.relativeStartDate.anchorDate;
+              setTravelStartText(start);
+              const effectiveDuration = interpreted.durationDays ?? Number(durationText);
+              if (!manualProfileFieldsRef.current.has('travelEnd') && Number.isInteger(effectiveDuration)
+                  && effectiveDuration >= 1 && effectiveDuration <= 365) {
+                const end = inclusiveEndDate(start, effectiveDuration);
+                if (end) setTravelEndText(end);
+              }
+              improved = true;
             }
             if (interpreted.interest && canApply('interests', 'interests') && hasDirectEvidence('interests')) {
               setInterestText(interpreted.interest); improved = true;
@@ -784,9 +816,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
         onRestoreRequest(parsed.requestText, parsed);
       }
       void resolveNames(restoredNames);
-      const restoredConsentFields = consentFieldsForReviewedProfile(
-        parsed, restoredOrigin, restoredTravelerCount, restoredBudget, restoredStart, restoredEnd, displayInterests(restoredSoftPreferences, locale),
-      );
+      const restoredConsentFields = consentFieldsForReviewedProfile(parsed);
       const savedConsent = restoredConsent(trip, restoredConsentFields);
       setRequirementChoices(savedConsent?.decisions ?? {});
       setAdvisoryAcknowledgements(Object.fromEntries(
@@ -798,6 +828,11 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       const latestRecs = trip.latest_recommendation_request_id
         ? await travelerApi.latestRecommendations(trip.trip_id).catch(() => null) : null;
       setRecommendations(latestRecs);
+      const restoredProvisional = await travelerApi.getProvisionalItinerary(trip.trip_id).catch(() => null);
+      setProvisionalItinerary(restoredProvisional);
+      setProvisionalDays(restoredProvisional?.days ?? []);
+      setProvisionalDirty(false);
+      setProvisionalCandidate(null);
       if (trip.latest_itinerary_id) {
         const saved = await travelerApi.getItinerary(trip.latest_itinerary_id);
         setItinerary(saved); setEditableStops(saved.stops.slice()); setDayCount(saved.day_count); setItineraryDirty(false);
@@ -886,6 +921,10 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       setActiveConversation(result.conversation);
       setActiveTrip(result.trip);
       setAssistantCandidate(result.candidate_requirements);
+      setExtractionPath(result.extraction_path ?? 'fallback');
+      if (result.provisional_itinerary?.status === 'provisional_unverified') {
+        setProvisionalCandidate({ days: result.provisional_itinerary.days });
+      }
       setAssistantState('responded');
       setAssistantRemaining(value => value === null ? null : Math.max(0, value - 1));
       setMessageText('');
@@ -1011,10 +1050,73 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     try {
       const result = await travelerApi.recommend(csrf, activeTrip.trip_id, selectedIds);
       setRecommendations(result); setItinerary(null);
+      if (result.status === 'empty' || result.status === 'needs_confirmation') {
+        const savedDraft = await travelerApi.getProvisionalItinerary(activeTrip.trip_id).catch(() => null);
+        if (savedDraft) { setProvisionalItinerary(savedDraft); setProvisionalDays(savedDraft.days); }
+      }
       const refreshed = await travelerApi.getTrip(activeTrip.trip_id);
       setActiveTrip(refreshed);
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
+  };
+
+  const saveProvisionalDraft = async () => {
+    if (!session || !activeTrip || !confirmed || !online) { if (!online) setError(copy.offline); return; }
+    const draftDayCount = requestedTripDays ?? dayCount;
+    if (!Number.isInteger(draftDayCount) || draftDayCount < 1 || draftDayCount > 365) { setError(copy.dayCountInvalid); return; }
+    const days: ProvisionalDay[] = Array.from({ length: draftDayCount }, (_, index) => ({
+      day_number: index + 1,
+      stops: (provisionalCandidate?.days.find(day => day.day_number === index + 1)?.stops ?? []).map((stop, stopIndex) => ({
+        name: stop.name, role: stop.role, day_number: index + 1, stop_order: stopIndex + 1, notes_by_locale: {},
+      })),
+    }));
+    setBusy(true); setError(''); setStatus('');
+    try {
+      const saved = await travelerApi.createProvisionalItinerary(csrf, activeTrip.trip_id, {
+        expected_trip_version: activeTrip.version,
+        day_count: draftDayCount,
+        locale,
+        title_by_locale: { [locale]: provisionalText[locale].title },
+        days: days.map(day => ({ day_number: day.day_number, stops: day.stops.map(stop => ({ name: stop.name, role: stop.role })) })),
+      });
+      setProvisionalItinerary(saved); setProvisionalDays(saved.days); setProvisionalDirty(false); setDayCount(saved.day_count);
+      setStatus(provisionalText[locale].saved);
+    } catch (value) { applyFailure(value); }
+    finally { setBusy(false); }
+  };
+
+  const saveProvisionalEdits = async () => {
+    if (!session || !provisionalItinerary || !online) { if (!online) setError(copy.offline); return; }
+    setBusy(true); setError(''); setStatus('');
+    try {
+      const saved = await travelerApi.updateProvisionalItinerary(csrf, provisionalItinerary.provisional_itinerary_id, {
+        expected_revision: provisionalItinerary.revision,
+        day_count: provisionalItinerary.day_count,
+        title_by_locale: { ...provisionalItinerary.title_by_locale, [locale]: provisionalText[locale].title },
+        days: provisionalDays.map(day => ({ day_number: day.day_number, stops: day.stops.map(stop => ({
+          name: stop.name, role: stop.role, ...(stop.destination_id ? { destination_id: stop.destination_id } : {}),
+          notes_by_locale: stop.notes_by_locale ?? {},
+        })) })),
+      });
+      setProvisionalItinerary(saved); setProvisionalDays(saved.days); setProvisionalDirty(false); setStatus(provisionalText[locale].saved);
+    } catch (value) { applyFailure(value); }
+    finally { setBusy(false); }
+  };
+
+  const editProvisionalStop = (dayNumber: number, index: number, update: Partial<ProvisionalStop>) => {
+    setProvisionalDays(days => days.map(day => day.day_number === dayNumber
+      ? { ...day, stops: day.stops.map((stop, stopIndex) => stopIndex === index ? { ...stop, ...update } : stop) }
+      : day));
+    setProvisionalDirty(true);
+  };
+
+  const addProvisionalStop = (dayNumber: number) => {
+    const name = newProvisionalStop.trim();
+    if (!name || name.length > 160) return;
+    setProvisionalDays(days => days.map(day => day.day_number === dayNumber
+      ? { ...day, stops: [...day.stops, { name, role: 'traveler_provided', day_number: dayNumber, stop_order: day.stops.length + 1, notes_by_locale: {} }] }
+      : day));
+    setNewProvisionalStop(''); setProvisionalDirty(true);
   };
 
   const createItinerary = async () => {
@@ -1056,7 +1158,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     setBusy(true); setError(''); setStatus('');
     try {
       await travelerApi.deleteTrip(csrf, trip.trip_id);
-      if (activeTrip?.trip_id === trip.trip_id) { setActiveTrip(null); setActiveConversation(null); setRecommendations(null); setItinerary(null); }
+      if (activeTrip?.trip_id === trip.trip_id) { setActiveTrip(null); setActiveConversation(null); setRecommendations(null); setItinerary(null); setProvisionalItinerary(null); setProvisionalDays([]); setProvisionalCandidate(null); }
       const history = await travelerApi.listConversations(50); setConversations(history.items); setStatus(copy.deleted);
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
@@ -1067,7 +1169,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     setBusy(true); setError(''); setStatus('');
     try {
       await travelerApi.deleteConversation(csrf, conversationId);
-      if (activeConversation?.conversation_id === conversationId) { setActiveConversation(null); setActiveTrip(null); setRecommendations(null); setItinerary(null); }
+      if (activeConversation?.conversation_id === conversationId) { setActiveConversation(null); setActiveTrip(null); setRecommendations(null); setItinerary(null); setProvisionalItinerary(null); setProvisionalDays([]); setProvisionalCandidate(null); }
       const history = await travelerApi.listConversations(50); setConversations(history.items); setStatus(copy.deleted);
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
@@ -1275,6 +1377,9 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
 
         <article className="recommend-panel journey-panel" id="journey-recommendations">
           <div className="panel-title"><span className="mini-icon" aria-hidden="true">↗</span>{copy.profileTitle}</div>
+          {import.meta.env.DEV && extractionPath && <small className="extraction-diagnostic" data-extraction-path={extractionPath} role="status">
+            {extractionPath === 'llm' ? 'Extraction: configured LLM' : extractionPath === 'user_override' ? 'Extraction: traveler correction' : 'Extraction: deterministic fallback'}
+          </small>}
           <p className="profile-next-step">{chatFlowCopy[locale].review}</p>
           {extracted && <div className="profile-editor">
             <fieldset>
@@ -1435,6 +1540,31 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                 </ul>}
               </>}
             </div>}
+            {(provisionalCandidate || provisionalItinerary) && recommendations?.status === 'empty' && <section className="provisional-plan-card" aria-labelledby="provisional-plan-title">
+              <span className="provisional-plan-badge">{provisionalText[locale].heading}</span>
+              <h4 id="provisional-plan-title">{provisionalText[locale].title}</h4>
+              <p>{provisionalText[locale].warning}</p>
+              {provisionalCandidate && !provisionalItinerary && <>
+                <div className="provisional-plan-preview">
+                  {Array.from({ length: requestedTripDays ?? dayCount }, (_, index) => {
+                    const number = index + 1;
+                    const day = provisionalCandidate.days.find(item => item.day_number === number);
+                    return <div key={number}><strong>{copy.day} {formatNumber(locale, number)}</strong>
+                      {day?.stops.length ? <ul>{day.stops.map((stop, stopIndex) => <li key={`${number}-${stopIndex}`} dir="auto">{stop.name} <small>· {provisionalText[locale].model}</small></li>)}</ul> : <p className="unplanned-day">{copy.unplannedDay}</p>}
+                    </div>;
+                  })}
+                </div>
+                <button className="primary" type="button" onClick={() => void saveProvisionalDraft()} disabled={busy || !online || !dayCountValid}>{busy ? copy.saving : provisionalText[locale].save}</button>
+              </>}
+              {provisionalItinerary && <p role="status">{provisionalText[locale].saved}</p>}
+            </section>}
+            {recommendations?.requirement_assessments?.some(item => item.field === 'soft_preference'
+              && item.status === 'known' && item.reason_code === 'known_fit_not_catalogue_verified')
+              && <div className="journey-alert not-evaluated-warning" role="status">
+                <strong>{copy.requirementNotEvaluatedTitle}</strong>
+                <p>{copy.requirementAdvisoryWarning}</p>
+                <p>{localizeRecommendationCode(locale, 'field:soft_preference')}</p>
+              </div>}
             {!!recommendations?.not_evaluated_fields?.length && <div className="journey-alert not-evaluated-warning" role="status">
               <strong>{copy.requirementNotEvaluatedTitle}</strong>
               <p>{copy.requirementAdvisoryWarning}</p>
@@ -1538,6 +1668,47 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
           </select>
         </div>}
         <button type="button" onClick={() => void saveItinerary()} disabled={busy || !online || editableStops.length > 1_000 || editableStops.some(stop => editableStops.filter(other => other.day_number === stop.day_number).length > 50)}>{copy.saveItinerary}</button>
+      </section>}
+
+      {provisionalItinerary && <section className="saved-itinerary provisional-itinerary" aria-labelledby="provisional-itinerary-title">
+        <span className="provisional-plan-badge">{provisionalText[locale].heading}</span>
+        <h3 id="provisional-itinerary-title">{provisionalText[locale].edit}</h3>
+        <p className="provisional-warning">{provisionalText[locale].warning}</p>
+        <div className="saved-itinerary-days">
+          {provisionalDays.map(day => <section className="itinerary-day" key={day.day_number} aria-labelledby={`provisional-day-${day.day_number}`}>
+            <h4 id={`provisional-day-${day.day_number}`}>{copy.day} {formatNumber(locale, day.day_number)}</h4>
+            {day.stops.length === 0 && <p className="unplanned-day" role="status">{copy.unplannedDay}</p>}
+            {day.stops.map((stop, index) => <article className="saved-stop provisional-stop" key={`${day.day_number}-${index}-${stop.name}`}>
+              <label htmlFor={`provisional-name-${day.day_number}-${index}`}>{provisionalText[locale].name}</label>
+              <input id={`provisional-name-${day.day_number}-${index}`} dir="auto" maxLength={160} value={stop.name}
+                onChange={event => editProvisionalStop(day.day_number, index, { name: event.target.value })} />
+              <small>{stop.role === 'traveler_provided' ? provisionalText[locale].traveler : provisionalText[locale].model}</small>
+              <label htmlFor={`provisional-note-${day.day_number}-${index}`}>{provisionalText[locale].note}</label>
+              <textarea id={`provisional-note-${day.day_number}-${index}`} dir="auto" maxLength={1000} value={stop.notes_by_locale?.[locale] ?? ''}
+                onChange={event => editProvisionalStop(day.day_number, index, { notes_by_locale: { ...stop.notes_by_locale, [locale]: event.target.value } })} />
+              <label htmlFor={`provisional-move-${day.day_number}-${index}`}>{provisionalText[locale].move}</label>
+              <select id={`provisional-move-${day.day_number}-${index}`} value={day.day_number} onChange={event => {
+                const targetDay = Number(event.target.value);
+                setProvisionalDays(days => days.map(item => {
+                  if (item.day_number === day.day_number) return { ...item, stops: item.stops.filter((_, stopIndex) => stopIndex !== index) };
+                  if (item.day_number === targetDay) return { ...item, stops: [...item.stops, { ...stop, day_number: targetDay, stop_order: item.stops.length + 1 }] };
+                  return item;
+                }));
+                setProvisionalDirty(true);
+              }}>{provisionalDays.map(item => <option key={item.day_number} value={item.day_number}>{copy.day} {formatNumber(locale, item.day_number)}</option>)}</select>
+              <button type="button" className="secondary" onClick={() => {
+                setProvisionalDays(days => days.map(item => item.day_number === day.day_number ? { ...item, stops: item.stops.filter((_, stopIndex) => stopIndex !== index) } : item));
+                setProvisionalDirty(true);
+              }}>{provisionalText[locale].remove}</button>
+            </article>)}
+            <div className="provisional-add-stop">
+              <label htmlFor={`provisional-add-${day.day_number}`}>{provisionalText[locale].add}</label>
+              <input id={`provisional-add-${day.day_number}`} dir="auto" maxLength={160} value={newProvisionalStop} onChange={event => setNewProvisionalStop(event.target.value)} />
+              <button type="button" className="secondary" onClick={() => addProvisionalStop(day.day_number)} disabled={!newProvisionalStop.trim()}>{provisionalText[locale].add}</button>
+            </div>
+          </section>)}
+        </div>
+        <button className="primary" type="button" onClick={() => void saveProvisionalEdits()} disabled={busy || !online || !provisionalDirty}>{busy ? copy.saving : provisionalText[locale].saveChanges}</button>
       </section>}
 
       {session && <section className="trip-history" aria-labelledby="trip-history-title">

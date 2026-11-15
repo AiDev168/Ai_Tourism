@@ -299,7 +299,7 @@ describe('persisted traveler journey', () => {
     }
   });
 
-  it('requires an explicit field choice and a separate advisory acknowledgement before saving consent', async () => {
+  it('keeps supplied planning values known without an extra consent gate', async () => {
     const requestText = 'Plan a 3-day trip to Shiraz with a budget of 100000 toman; I prefer paved paths';
     const parsed = createTripRequirements({ requestText, locale: 'en-US' });
     expect(parsed.kind).not.toBe('invalid');
@@ -329,10 +329,10 @@ describe('persisted traveler journey', () => {
       if (url === `/api/v1/trips/${trip.trip_id}` && method === 'PATCH') return response(savedTrip);
       if (url === `/api/v1/trips/${trip.trip_id}/recommendations` && method === 'POST') return response({
         recommendation_request_id: 'recommendation-request-1', status: 'empty', reason_code: 'no_eligible_candidates',
-        unresolved_fields: [], waived_fields: ['budget', 'soft_preference'], not_evaluated_fields: ['budget', 'soft_preference'],
+        unresolved_fields: [], waived_fields: [], not_evaluated_fields: [],
         requirement_assessments: [
-          { field: 'budget', decision: 'advisory', status: 'not_evaluated', reason_code: 'budget_unverifiable' },
-          { field: 'soft_preference', decision: 'advisory', status: 'not_evaluated', reason_code: 'preference_unverifiable' },
+          { field: 'budget', decision: null, status: 'known', reason_code: 'traveler_value_known' },
+          { field: 'soft_preference', decision: null, status: 'known', reason_code: 'traveler_value_known' },
         ],
         algorithm_version: 'structured-catalogue-ranking-v3', retrieval_version: 'approved-structured-catalogue-v2',
         trip_version: 2, items: [],
@@ -347,36 +347,23 @@ describe('persisted traveler journey', () => {
     await act(async () => { host.querySelector<HTMLButtonElement>('.journey-action')!.click(); }); await settle();
 
     const confirm = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].confirmProfile)!;
-    const must = host.querySelector<HTMLInputElement>('#requirement-consent-budget-must')!;
-    const advisory = host.querySelector<HTMLInputElement>('#requirement-consent-budget-advisory')!;
-    const softPreferenceAdvisory = host.querySelector<HTMLInputElement>('#requirement-consent-soft_preference-advisory')!;
-    expect(must.checked).toBe(false);
-    expect(advisory.checked).toBe(false);
-    expect(softPreferenceAdvisory.checked).toBe(false);
+    expect(host.querySelector('.requirement-consent')).toBeNull();
     expect(host.querySelector('.soft-preference-value')?.textContent).toContain('paved paths');
-    expect(confirm.disabled).toBe(true);
-    await act(async () => { advisory.click(); }); await settle();
-    expect(host.textContent).toContain(journeyMessages['en-US'].requirementAdvisoryWarning);
-    expect(confirm.disabled).toBe(true);
-    await act(async () => { host.querySelector<HTMLInputElement>('#requirement-consent-budget-ack')!.click(); }); await settle();
-    expect(confirm.disabled).toBe(true);
-    await act(async () => { softPreferenceAdvisory.click(); }); await settle();
-    await act(async () => { host.querySelector<HTMLInputElement>('#requirement-consent-soft_preference-ack')!.click(); }); await settle();
     expect(confirm.disabled).toBe(false);
     await act(async () => { confirm.click(); }); await settle();
     const patchCall = fetchMock.mock.calls.find(call => String(call[0]) === `/api/v1/trips/${trip.trip_id}` && (call[1] as RequestInit).method === 'PATCH')!;
     const patchBody = JSON.parse(String((patchCall[1] as RequestInit).body));
     expect(patchBody.requirement_consent).toEqual({
       contract_version: 'recommendation-consent-v1',
-      field_decisions: { budget: 'advisory', soft_preference: 'advisory' },
-      advisory_acknowledged_fields: ['budget', 'soft_preference'],
+      field_decisions: {},
+      advisory_acknowledged_fields: [],
     });
     expect(patchBody.confirmed_requirements.soft_preferences).toEqual(['paved paths']);
     await act(async () => {
       [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].findRecommendations)!.click();
     }); await settle();
-    expect(host.textContent).toContain(journeyMessages['en-US'].requirementNotEvaluatedTitle);
-    expect(host.textContent).toContain(journeyMessages['en-US'].requirementAdvisoryWarning);
+    expect(host.textContent).not.toContain(journeyMessages['en-US'].requirementNotEvaluatedTitle);
+    expect(host.textContent).not.toContain(journeyMessages['en-US'].requirementAdvisoryWarning);
     expect(host.textContent).toContain(journeyMessages['en-US'].recommendationEmpty);
   });
 

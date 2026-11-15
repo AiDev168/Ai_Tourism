@@ -3,7 +3,7 @@ import { formatNumber, type Locale } from '../i18n/messages';
 import { tripMessages } from '../i18n/tripMessages';
 import { requirementClarificationMessages } from '../i18n/requirementClarificationMessages';
 import { destinationResolutionMessages } from '../i18n/destinationResolutionMessages';
-import { createTripRequirements, MAX_TRIP_DURATION_DAYS, mergeRequirementInterpretations, tripRequirementsV1ToTripRequirements, resolveRelativeTripDates, type TripRequirements } from '../trip/tripIntake';
+import { createTripRequirements, MAX_TRIP_DURATION_DAYS, resolveRelativeTripDates, type TripRequirements } from '../trip/tripIntake';
 import { travelerApi } from '../trip/travelerApi';
 import { confirmDestinationCandidate, resolveDestinationNames, type DestinationResolution } from '../trip/destinationResolution';
 import { ApiDestinationCatalogPort } from '../trip/destinationCatalogApi';
@@ -15,8 +15,46 @@ import { PwaUpdateNotice } from '../pwa/PwaUpdateNotice';
 import { AiProviderAdminPanel } from '../admin/aiProviders/AiProviderAdminPanel';
 import { displayTripInterest } from '../trip/interestDisplay';
 import { deviceCalendarDate } from '../trip/jalaliDate';
+import { requestDeviceOrigin, withApproximateDeviceOrigin } from './locationOrigin';
 
 const destinationCatalog = new ApiDestinationCatalogPort();
+
+type LocationMessageKey = 'unsupported' | 'requesting' | 'denied' | 'timeout' | 'unavailable' | 'invalid' | 'stale' | 'accuracy';
+const locationMessages: Record<Locale, Record<LocationMessageKey, string> & { cityUnresolved: (accuracy: number) => string }> = {
+  'fa-IR': {
+    unsupported: '\u0627\u06cc\u0646 \u0645\u0631\u0648\u0631\u06af\u0631 \u0627\u0632 \u0645\u06a9\u0627\u0646\u200c\u06cc\u0627\u0628\u06cc \u067e\u0634\u062a\u06cc\u0628\u0627\u0646\u06cc \u0646\u0645\u06cc\u200c\u06a9\u0646\u062f.',
+    requesting: '\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0627\u062c\u0627\u0632\u0647\u0654 \u0645\u06a9\u0627\u0646\u06cc\u0627\u0628\u06cc \u0627\u0632 \u0645\u0631\u0648\u0631\u06af\u0631\u2026',
+    denied: '\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0645\u06a9\u0627\u0646 \u0631\u062f \u0634\u062f. \u0645\u06cc\u200c\u062a\u0648\u0627\u0646\u06cc\u062f \u0645\u0628\u062f\u0623 \u0631\u0627 \u062f\u0633\u062a\u06cc \u0648\u0627\u0631\u062f \u06a9\u0646\u06cc\u062f.',
+    timeout: '\u062f\u0631\u06cc\u0627\u0641\u062a \u0645\u06a9\u0627\u0646 \u0628\u0647 \u0645\u0647\u0644\u062a \u0646\u0631\u0633\u06cc\u062f. \u062f\u0648\u0628\u0627\u0631\u0647 \u0627\u0645\u062a\u062d\u0627\u0646 \u06a9\u0646\u06cc\u062f \u06cc\u0627 \u0645\u0628\u062f\u0623 \u0631\u0627 \u0648\u0627\u0631\u062f \u06a9\u0646\u06cc\u062f.',
+    unavailable: '\u0645\u06a9\u0627\u0646 \u062f\u0631 \u062f\u0633\u062a\u0631\u0633 \u0646\u06cc\u0633\u062a. \u0645\u06cc\u200c\u062a\u0648\u0627\u0646\u06cc\u062f \u0645\u0628\u062f\u0623 \u0631\u0627 \u062f\u0633\u062a\u06cc \u0648\u0627\u0631\u062f \u06a9\u0646\u06cc\u062f.',
+    invalid: '\u062f\u0633\u062a\u06af\u0627\u0647 \u0645\u0648\u0642\u0639\u06cc\u062a \u0645\u0639\u062a\u0628\u0631\u06cc \u0646\u0641\u0631\u0633\u062a\u0627\u062f. \u0645\u0628\u062f\u0623 \u0631\u0627 \u062f\u0633\u062a\u06cc \u0648\u0627\u0631\u062f \u06a9\u0646\u06cc\u062f.',
+    stale: '\u0645\u0648\u0642\u0639\u06cc\u062a \u062f\u0631\u06cc\u0627\u0641\u062a\u06cc \u0642\u062f\u06cc\u0645\u06cc \u0627\u0633\u062a. \u062f\u0648\u0628\u0627\u0631\u0647 \u0627\u0645\u062a\u062d\u0627\u0646 \u06a9\u0646\u06cc\u062f.',
+    accuracy: '\u062f\u0642\u062a \u0645\u06a9\u0627\u0646 \u0628\u0631\u0627\u06cc \u067e\u06cc\u0634\u0646\u0647\u0627\u062f \u0645\u0628\u062f\u0623 \u06a9\u0627\u0641\u06cc \u0646\u06cc\u0633\u062a. \u0645\u0628\u062f\u0623 \u0631\u0627 \u062f\u0633\u062a\u06cc \u0648\u0627\u0631\u062f \u06a9\u0646\u06cc\u062f.',
+    cityUnresolved: accuracy => `\u0646\u0642\u0637\u0647\u0654 \u0645\u0628\u062f\u0623 \u062a\u0642\u0631\u06cc\u0628\u06cc \u067e\u06cc\u0634\u0646\u0647\u0627\u062f \u0634\u062f (\u062f\u0642\u062a \u06af\u0632\u0627\u0631\u0634\u200c\u0634\u062f\u0647 \u062d\u062f\u0648\u062f \u00b1${accuracy} \u0645\u062a\u0631). \u0634\u0647\u0631 \u062a\u0634\u062e\u06cc\u0635 \u062f\u0627\u062f\u0647 \u0646\u0634\u062f\u0647\u061b \u0645\u0628\u062f\u0623 \u0631\u0627 \u062f\u0631 \u0641\u0631\u0645 \u0628\u0631\u0631\u0633\u06cc \u06a9\u0646\u06cc\u062f.`,
+  },
+  'en-US': {
+    unsupported: 'This browser does not support location. You can enter an origin manually.',
+    requesting: 'Requesting device location permission…',
+    denied: 'Location permission was denied. You can enter an origin manually.',
+    timeout: 'Location lookup timed out. Try again or enter an origin manually.',
+    unavailable: 'Device location is unavailable. You can enter an origin manually.',
+    invalid: 'The device returned an invalid position. Enter an origin manually.',
+    stale: 'The device position is too old. Try again.',
+    accuracy: 'The reported location is too imprecise to suggest an origin.',
+    cityUnresolved: accuracy => `Approximate departure point suggested (reported accuracy about ±${accuracy} m). City could not be verified; review this origin in the trip form.`,
+  },
+  ar: {
+    unsupported: '\u0647\u0630\u0627 \u0627\u0644\u0645\u062a\u0635\u0641\u062d \u0644\u0627 \u064a\u062f\u0639\u0645 \u062a\u062d\u062f\u064a\u062f \u0627\u0644\u0645\u0648\u0642\u0639. \u064a\u0645\u0643\u0646\u0643 \u0625\u062f\u062e\u0627\u0644 \u0645\u0646\u0637\u0644\u0642 \u064a\u062f\u0648\u064a\u0627\u064b.',
+    requesting: '\u062c\u0627\u0631\u064d \u0637\u0644\u0628 \u0625\u0630\u0646 \u0627\u0644\u0645\u0648\u0642\u0639 \u0645\u0646 \u0627\u0644\u0645\u062a\u0635\u0641\u062d\u2026',
+    denied: '\u0631\u064f\u0641\u0636 \u0625\u0630\u0646 \u0627\u0644\u0645\u0648\u0642\u0639. \u064a\u0645\u0643\u0646\u0643 \u0625\u062f\u062e\u0627\u0644 \u0645\u0646\u0637\u0644\u0642 \u064a\u062f\u0648\u064a\u0627\u064b.',
+    timeout: '\u0627\u0646\u062a\u0647\u0644\u062a \u0645\u0647\u0644\u0629 \u062a\u062d\u062f\u064a\u062f \u0627\u0644\u0645\u0648\u0642\u0639. \u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649 \u0623\u0648 \u0623\u062f\u062e\u0644 \u0645\u0646\u0637\u0644\u0642\u0627\u064b \u064a\u062f\u0648\u064a\u0627\u064b.',
+    unavailable: '\u0627\u0644\u0645\u0648\u0642\u0639 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d. \u064a\u0645\u0643\u0646\u0643 \u0625\u062f\u062e\u0627\u0644 \u0645\u0646\u0637\u0644\u0642 \u064a\u062f\u0648\u064a\u0627\u064b.',
+    invalid: '\u0623\u0631\u0633\u0644 \u0627\u0644\u062c\u0647\u0627\u0632 \u0645\u0648\u0642\u0639\u0627\u064b \u063a\u064a\u0631 \u0635\u0627\u0644\u062d. \u0623\u062f\u062e\u0644 \u0627\u0644\u0645\u0646\u0637\u0644\u0642 \u064a\u062f\u0648\u064a\u0627\u064b.',
+    stale: '\u0645\u0648\u0642\u0639 \u0627\u0644\u062c\u0647\u0627\u0632 \u0642\u062f\u064a\u0645. \u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649.',
+    accuracy: '\u062f\u0642\u0629 \u0627\u0644\u0645\u0648\u0642\u0639 \u063a\u064a\u0631 \u0643\u0627\u0641\u064a\u0629 \u0644\u0627\u0642\u062a\u0631\u0627\u062d \u0645\u0646\u0637\u0644\u0642.',
+    cityUnresolved: accuracy => `\u0627\u0642\u062a\u064f\u0631\u062d\u062a \u0646\u0642\u0637\u0629 \u0627\u0646\u0637\u0644\u0627\u0642 \u062a\u0642\u0631\u064a\u0628\u064a\u0629 (\u0627\u0644\u062f\u0642\u0629 \u0627\u0644\u0645\u0628\u0644\u0651\u063a \u0639\u0646\u0647\u0627 \u062d\u0648\u0627\u0644\u064a \u00b1${accuracy} \u0645\u062a\u0631). \u0644\u0645 \u064a\u064f\u062a\u062d\u0642\u0642 \u0645\u0646 \u0627\u0644\u0645\u062f\u064a\u0646\u0629\u061b \u0631\u0627\u062c\u0639 \u0627\u0644\u0645\u0646\u0637\u0644\u0642 \u0641\u064a \u0627\u0644\u0646\u0645\u0648\u0630\u062c.`,
+  },
+};
 
 const languageName: Record<Locale, string> = { 'fa-IR': 'فارسی', 'en-US': 'English', ar: 'العربية' };
 const plannerCopy: Record<Locale, { title: string; intro: string; next: string; budgetScope: string }> = {
@@ -82,31 +120,24 @@ export function App() {
     Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const requestDeviceLocation = () => {
     if (!navigator.geolocation) {
-      setLocationStatus(locale === 'fa-IR' ? 'مکان‌یابی این دستگاه پشتیبانی نمی‌شود.' : locale === 'ar' ? 'تحديد الموقع غير مدعوم على هذا الجهاز.' : 'Device location is unavailable.');
+      setLocationStatus(locationMessages[locale].unsupported);
       return;
     }
-    setLocationStatus(locale === 'fa-IR' ? 'در حال دریافت موقعیت با اجازهٔ مرورگر…' : locale === 'ar' ? 'جارٍ تحديد الموقع بإذن المتصفح…' : 'Requesting device location permission…');
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        const { latitude, longitude, accuracy } = coords;
-        if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(accuracy)) {
-          setLocationStatus(locale === 'fa-IR' ? 'موقعیت معتبر دریافت نشد.' : locale === 'ar' ? 'تعذر الحصول على موقع صالح.' : 'No valid location returned.');
-          return;
-        }
-        // No third-party reverse geocoder and no background location tracking.
-        // Coarsen to ~1km before offering a clearly approximate point.
-        setSuggestedOrigin({ approximateText: latitude.toFixed(2) + ', ' + longitude.toFixed(2), accuracyMeters: accuracy });
-        const deviceTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-        setTravelerTimezone(deviceTimezone);
-        setLocationStatus(locale === 'fa-IR' ? `نقطهٔ تقریبی مبدأ دریافت شد (دقت گزارش‌شده ±${Math.round(accuracy)} متر). شهر مبدأ را در فرم بررسی کنید.`
-          : locale === 'ar' ? `تم تحديد نقطة الانطلاق التقريبية (دقة ±${Math.round(accuracy)} متر). راجع نقطة الانطلاق.`
-            : `Approximate departure point detected (reported accuracy ±${Math.round(accuracy)} m). Review it in the trip form.`);
-      },
-      () => setLocationStatus(locale === 'fa-IR' ? 'دسترسی به موقعیت رد شد یا موقعیت در دسترس نیست؛ می‌توانید مبدأ را دستی وارد کنید.'
-        : locale === 'ar' ? 'لم يتوفر الموقع أو رُفض الإذن؛ يمكنك إدخال نقطة الانطلاق يدوياً.'
-          : 'Location permission denied or unavailable. You can enter the origin manually.'),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
-    );
+    setLocationStatus(locationMessages[locale].requesting);
+    void requestDeviceOrigin(navigator.geolocation).then(result => {
+      if (result.kind === 'rejected') {
+        setLocationStatus(locationMessages[locale][result.reason]);
+        return;
+      }
+      // No trusted offline city index is available. Only the coarse,
+      // explicitly approximate point enters application state.
+      setSuggestedOrigin(result.origin);
+      setRequirements(current => current
+        ? withApproximateDeviceOrigin(current, result.origin, locale)
+        : current);
+      setTravelerTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+      setLocationStatus(locationMessages[locale].cityUnresolved(result.origin.accuracyMeters));
+    });
   };
   useEffect(() => {
     // Auto-fill only when permission was already granted. Never trigger an
@@ -205,21 +236,9 @@ export function App() {
       return;
     }
     setError('');
+    // The local parse is a recoverable preview/fallback; the single persisted first assistant turn performs semantic LLM extraction and clarification together.
     let interpreted = result.requirements;
-    if (authSession && online) {
-      try {
-        const response = await travelerApi.interpretRequirements(authSession.csrf_token, {
-          request_text: requestText, locale, traveler_timezone: travelerTimezone,
-          traveler_reference_date: deviceCalendarDate(travelerTimezone),
-        });
-        interpreted = mergeRequirementInterpretations(result.requirements, tripRequirementsV1ToTripRequirements(response.requirements));
-      } catch {
-        // The on-device parser remains available if the service is unreachable.
-        setError(locale === 'fa-IR' ? 'ارتباط با تحلیلگر سرور برقرار نشد؛ اطلاعات با روش قواعدمحور موقتاً استخراج شد.'
-          : locale === 'ar' ? 'تعذر الاتصال بخادم التحليل؛ استُخدم التحليل المحلي الاحتياطي.'
-            : 'Server interpretation unavailable; using the local rule-based fallback.');
-      }
-    }
+    if (suggestedOrigin) interpreted = withApproximateDeviceOrigin(interpreted, suggestedOrigin, locale);
     interpreted = resolveRelativeTripDates(interpreted, deviceCalendarDate(travelerTimezone), travelerTimezone);
     if (interpreted.missingRequired.length || interpreted.ambiguousRequired.length || interpreted.clarificationFields?.length) {
       setRequirements(interpreted);

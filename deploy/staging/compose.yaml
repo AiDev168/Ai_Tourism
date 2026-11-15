@@ -24,6 +24,7 @@ services:
       - ../../database:/opt/rahgard/legacy:ro
       - ../../engineering/pilot/sql:/opt/rahgard/pilot-sql:ro
       - ../../engineering/pilot/sql/016_staging_invitation_auth.sql:/opt/rahgard/staging-sql/016_staging_invitation_auth.sql:ro
+      - ../../engineering/pilot/sql/017_provisional_itineraries.sql:/opt/rahgard/staging-sql/017_provisional_itineraries.sql:ro
     networks: [staging_private]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]

@@ -16,6 +16,7 @@ export type ReviewableAssistantCandidate = {
   budgetText?: string;
   travelStart?: string;
   travelEnd?: string;
+  relativeStartDate?: { offsetDays: number; anchorDate: string | null; timezone: string | null };
   interest?: string;
   softPreferences?: string[];
   typedRequirements?: TripRequirementsV1;
@@ -58,6 +59,15 @@ export function reviewableAssistantCandidate(raw: unknown): ReviewableAssistantC
     const dates = known(fields.travel_dates);
     if (dates && validIsoDay(dates.start) && validIsoDay(dates.end) && dates.start <= dates.end) {
       candidate.travelStart = dates.start; candidate.travelEnd = dates.end;
+    }
+    const relative = known(fields.relative_start_date);
+    if (relative && typeof relative === 'object' && Number.isInteger(relative.offset_days)
+        && relative.offset_days >= 0 && relative.offset_days <= 365
+        && (relative.anchor_date === null || validIsoDay(relative.anchor_date))
+        && (relative.timezone === null || (typeof relative.timezone === 'string' && relative.timezone.length <= 80))) {
+      candidate.relativeStartDate = {
+        offsetDays: relative.offset_days, anchorDate: relative.anchor_date, timezone: relative.timezone,
+      };
     }
     const interests = known(fields.interests);
     if (Array.isArray(interests) && interests.length && interests.every(item => typeof item === 'string' && item.length <= 100)) candidate.interest = interests.join('، ');

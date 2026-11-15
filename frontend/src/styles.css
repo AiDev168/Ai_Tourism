@@ -296,6 +296,42 @@ button { cursor: pointer; }
 .itinerary-coverage-partial, .unplanned-day { background: #fff4d8; }
 .unresolved-requirements { margin-block: 8px 0; padding-inline-start: 1.5rem; }
 .saved-stop { display: grid; gap: 10px; }
+.traveler-workspace button:not(.text-button):not(.jalali-clear-date) {
+  min-height: 42px; padding: 9px 16px; border: 1px solid rgba(23, 74, 62, .16); border-radius: 12px;
+  color: var(--forest-deep); background: #fffdf8; font-weight: 700;
+  box-shadow: 0 3px 10px rgba(29, 48, 43, .06);
+  transition: transform .16s ease, box-shadow .16s ease, background-color .16s ease, border-color .16s ease;
+}
+.traveler-workspace button:not(:disabled):not(.text-button):not(.jalali-clear-date):hover {
+  transform: translateY(-1px); border-color: rgba(23, 74, 62, .38); box-shadow: 0 7px 16px rgba(29, 48, 43, .10);
+}
+.traveler-workspace button:active:not(:disabled) { transform: translateY(0); }
+.traveler-workspace button:disabled { cursor: not-allowed; opacity: .58; box-shadow: none; }
+.traveler-workspace button.primary, .traveler-workspace button.journey-action {
+  border-color: var(--forest); color: #fffdf7; background: var(--forest); box-shadow: 0 8px 18px rgba(23, 74, 62, .16);
+}
+.traveler-workspace button.primary:hover:not(:disabled), .traveler-workspace button.journey-action:hover:not(:disabled) { background: var(--forest-deep); }
+.traveler-workspace button.secondary { color: var(--forest); background: #edf3ed; }
+.provisional-plan-card { display: grid; gap: 12px; margin-block: 16px; padding: clamp(16px, 3vw, 24px); border: 1px solid #d7c69c; border-radius: 18px; background: linear-gradient(145deg, #fffaf0, #f3ead8); box-shadow: 0 12px 30px rgba(73, 57, 28, .08); }
+.provisional-plan-card h4 { margin: 0; color: var(--forest-deep); font-size: 1.15rem; }
+.provisional-plan-card > p, .provisional-warning { margin: 0; color: #614e2f; line-height: 1.8; }
+.provisional-plan-badge { width: fit-content; padding: 5px 10px; border: 1px solid #b58a3d; border-radius: 999px; color: #63440f; background: #fff4d9; font-size: .78rem; font-weight: 800; }
+.provisional-plan-preview { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; }
+.provisional-plan-preview > div { min-width: 0; padding: 12px; border: 1px solid #e1d5bc; border-radius: 12px; background: rgba(255,255,255,.72); }
+.provisional-plan-preview ul { margin-block: 8px 0; padding-inline-start: 1.2rem; }
+.provisional-plan-preview small, .provisional-stop > small { color: #725d38; font-size: .78rem; }
+.provisional-stop { margin-block: 12px; padding: 14px; border: 1px solid #e4dccb; border-radius: 14px; background: var(--surface); }
+.provisional-stop input, .provisional-stop textarea, .provisional-add-stop input { width: 100%; min-width: 0; min-height: 42px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
+.provisional-add-stop { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-block-start: 12px; }
+.provisional-add-stop label { grid-column: 1 / -1; }
+.provisional-add-stop input { grid-column: 1; }
+.provisional-add-stop button { grid-column: 2; }
+.provisional-itinerary { border: 1px solid #d7c69c; background: #fbf7ed; }
+.extraction-diagnostic { display: block; margin-block: 8px; color: #48594c; font-size: .75rem; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) {
+  .traveler-workspace button { transition: none; }
+  .traveler-workspace button:not(:disabled):not(.text-button):not(.jalali-clear-date):hover { transform: none; }
+}
 .stop-actions { justify-content: flex-start; flex-wrap: wrap; }
 .history-trip { align-items: stretch; margin-block: 8px; }
 .history-trip > button:first-child { flex: 1; text-align: start; overflow-wrap: anywhere; }

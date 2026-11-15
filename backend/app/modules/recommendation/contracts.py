@@ -72,7 +72,7 @@ class RequirementAssessment(BaseModel):
 
     field: str = Field(min_length=1, max_length=64)
     decision: Literal["must_have", "advisory"] | None
-    status: Literal["satisfied", "not_evaluated", "unresolved"]
+    status: Literal["known", "satisfied", "not_evaluated", "unresolved"]
     reason_code: str = Field(min_length=1, max_length=64)
 
 

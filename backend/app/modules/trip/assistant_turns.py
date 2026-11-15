@@ -222,7 +222,8 @@ class AssistantTurnRepository:
                     for row in ordered]
 
     def complete(self, *, user_id: UUID, turn_id: UUID, reply: str,
-                 requirements: dict[str, Any], clarification: str | None) -> None:
+                 requirements: dict[str, Any], clarification: str | None,
+                 provisional_itinerary: dict[str, Any] | None = None) -> None:
         with self.traveler.connection() as conn, conn.transaction():
             turn = conn.execute(
                 """SELECT turn_id,conversation_id,trip_id,status FROM conversation.assistant_turns
@@ -236,7 +237,8 @@ class AssistantTurnRepository:
                    (message_id,conversation_id,trip_id,role,content,message_type,metadata,is_synthetic)
                    VALUES (%s,%s,%s,'assistant',%s,'text',%s,FALSE)""",
                 (message_id, turn['conversation_id'], turn['trip_id'], reply,
-                 Jsonb({'requirements_candidate': requirements, 'clarification': clarification})),
+                 Jsonb({'requirements_candidate': requirements, 'clarification': clarification,
+                        'provisional_itinerary': provisional_itinerary})),
             )
             conn.execute(
                 """UPDATE conversation.assistant_turns

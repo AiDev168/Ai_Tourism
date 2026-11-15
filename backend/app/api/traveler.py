@@ -39,6 +39,13 @@ from app.modules.trip.repository import (
     TravelerRepository,
     localized_recommendation_explanation,
 )
+from app.modules.trip.provisional_itinerary import (
+    ProvisionalItineraryConflict,
+    ProvisionalItineraryInvalid,
+    ProvisionalItineraryNotFound,
+    ProvisionalItineraryProfileNotConfirmed,
+    ProvisionalItineraryRepository,
+)
 from app.modules.trip.requirements_interpretation import (
     TripInterpretationRequest,
     TripInterpretationResponse,
@@ -55,12 +62,15 @@ from app.modules.trip.schemas import (
     CreateRecommendationRequest,
     ItineraryResponse,
     MessageAppendResponse,
+    CreateProvisionalItineraryRequest,
+    ProvisionalItineraryResponse,
     RecommendationResponse,
     StartConversationRequest,
     StartConversationResponse,
     TripDeleteResponse,
     TripResponse,
     UpdateItineraryRequest,
+    UpdateProvisionalItineraryRequest,
 )
 
 logger = logging.getLogger("ai_tourism.traveler")
@@ -95,6 +105,12 @@ def interpret_requirements(
 
 def get_traveler_repository(settings: Annotated[Settings, Depends(get_settings)]) -> TravelerRepository:
     return TravelerRepository(settings)
+
+
+def get_provisional_itinerary_repository(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ProvisionalItineraryRepository:
+    return ProvisionalItineraryRepository(settings)
 
 
 def get_owner_retrieval_port(
@@ -174,15 +190,21 @@ def create_conversation(
 ):
     _mark_no_store(response)
     try:
+        stored_requirements = trip_requirements_storage_view(interpret_trip_requirements(
+            body.request_text, body.locale,
+            traveler_timezone=body.traveler_timezone,
+            traveler_reference_date=body.traveler_reference_date,
+        ))
+        stored_requirements["_traveler_context"] = {
+            "timezone": body.traveler_timezone,
+            "reference_date": body.traveler_reference_date.isoformat()
+            if body.traveler_reference_date else None,
+        }
         conversation_id, trip_id, message_id, _created = repository.create_conversation(
             user_id=principal.user_id,
             locale=body.locale,
             request_text=body.request_text,
-            extracted_requirements=trip_requirements_storage_view(interpret_trip_requirements(
-                body.request_text, body.locale,
-                traveler_timezone=body.traveler_timezone,
-                traveler_reference_date=body.traveler_reference_date,
-            )),
+            extracted_requirements=stored_requirements,
             # Extraction and resolver output are untrusted until the traveler
             # reviews and submits the explicit profile-confirmation request.
             confirmed_requirements={},
@@ -879,6 +901,101 @@ def update_itinerary(
         return _error(409, "version_conflict")
     except TravelerInvalidState:
         return _error(409, "itinerary_item_not_eligible")
+    except Exception:
+        return _database_unavailable()
+
+
+@router.post(
+    "/trips/{trip_id}/provisional-itineraries",
+    response_model=ProvisionalItineraryResponse,
+    status_code=201,
+)
+def create_provisional_itinerary(
+    trip_id: UUID,
+    body: CreateProvisionalItineraryRequest,
+    response: Response,
+    principal: Annotated[Principal, Depends(get_principal)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    repository: Annotated[
+        ProvisionalItineraryRepository, Depends(get_provisional_itinerary_repository)
+    ],
+):
+    """Persist a clearly unverified traveler draft, separate from catalogue itineraries."""
+    _mark_no_store(response)
+    try:
+        result, created = repository.create(
+            user_id=principal.user_id,
+            trip_id=trip_id,
+            expected_trip_version=body.expected_trip_version,
+            day_count=body.day_count,
+            locale=body.locale,
+            title_by_locale=body.title_by_locale,
+            days=[day.model_dump(mode="json") for day in body.days],
+        )
+        response.status_code = 201 if created else 200
+        return result
+    except ProvisionalItineraryNotFound:
+        return _owner_missing()
+    except ProvisionalItineraryConflict:
+        return _error(409, "version_conflict")
+    except ProvisionalItineraryProfileNotConfirmed:
+        return _error(409, "trip_profile_not_confirmed")
+    except ProvisionalItineraryInvalid:
+        return _error(409, "provisional_itinerary_exceeds_confirmed_duration")
+    except Exception:
+        return _database_unavailable()
+
+
+@router.get(
+    "/trips/{trip_id}/provisional-itineraries",
+    response_model=ProvisionalItineraryResponse,
+)
+def get_provisional_itinerary(
+    trip_id: UUID,
+    response: Response,
+    principal: Annotated[Principal, Depends(get_principal)],
+    repository: Annotated[
+        ProvisionalItineraryRepository, Depends(get_provisional_itinerary_repository)
+    ],
+):
+    _mark_no_store(response)
+    try:
+        result = repository.get_latest(user_id=principal.user_id, trip_id=trip_id)
+    except Exception:
+        return _database_unavailable()
+    return result if result is not None else _owner_missing()
+
+
+@router.put(
+    "/provisional-itineraries/{itinerary_id}",
+    response_model=ProvisionalItineraryResponse,
+)
+def update_provisional_itinerary(
+    itinerary_id: UUID,
+    body: UpdateProvisionalItineraryRequest,
+    response: Response,
+    principal: Annotated[Principal, Depends(get_principal)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    repository: Annotated[
+        ProvisionalItineraryRepository, Depends(get_provisional_itinerary_repository)
+    ],
+):
+    _mark_no_store(response)
+    try:
+        return repository.update(
+            user_id=principal.user_id,
+            itinerary_id=itinerary_id,
+            expected_revision=body.expected_revision,
+            day_count=body.day_count,
+            title_by_locale=body.title_by_locale,
+            days=[day.model_dump(mode="json") for day in body.days],
+        )
+    except ProvisionalItineraryNotFound:
+        return _owner_missing()
+    except ProvisionalItineraryConflict:
+        return _error(409, "version_conflict")
+    except ProvisionalItineraryInvalid:
+        return _error(409, "provisional_itinerary_exceeds_confirmed_duration")
     except Exception:
         return _database_unavailable()
 

@@ -83,6 +83,55 @@ class BudgetValue(_StrictModel):
     raw: str = Field(min_length=1, max_length=120)
 
 
+def parse_explicit_budget_text(raw: str) -> BudgetValue | None:
+    """Parse an already semantically identified budget string without conversion.
+
+    The LLM chooses whether a quoted phrase is a budget; this helper validates
+    only its bounded numeric/unit/currency syntax. It does not require the
+    deterministic parser to recognize surrounding wording such as "our limit
+    is" or "we can spend".
+    """
+    if not raw or len(raw) > 120 or any(ord(char) < 32 or ord(char) == 127 for char in raw):
+        return None
+    normalized = raw.translate(_DIGIT_TRANSLATION).strip()
+    amount_words = "|".join(re.escape(value) for value in sorted(_NUMBER_WORDS, key=len, reverse=True))
+    pattern = re.compile(
+        rf"(?P<amount>\d{{1,3}}(?:[,٬]\d{{3}})+(?:\.\d+)?|\d+(?:\.\d+)?|{amount_words})"
+        rf"(?:\s*(?P<scale>million|billion|thousand|میلیون|مليون|میلیارد|هزار))?"
+        rf"(?:\s*(?P<currency>TOMAN|IRR|USD|EUR|AED|ریال|ريال|تومان|تومنه?|دلار|یورو|درهم))?",
+        re.IGNORECASE | re.UNICODE,
+    )
+    match = pattern.fullmatch(normalized)
+    if match is None:
+        return None
+    amount_token = match.group("amount").replace(",", "").replace("٬", "")
+    if amount_token.replace(".", "", 1).isdecimal():
+        amount = amount_token
+    else:
+        number = _number(amount_token)
+        if number is None:
+            return None
+        amount = str(number)
+    scale_token = (match.group("scale") or "").casefold()
+    scale = (
+        "million" if scale_token in {"million", "میلیون", "مليون"} else
+        "billion" if scale_token in {"billion", "میلیارد"} else
+        "thousand" if scale_token in {"thousand", "هزار"} else "unit"
+    )
+    currency_token = (match.group("currency") or "").casefold()
+    currency = (
+        "TOMAN" if currency_token in {"toman", "تومان", "تومن", "تومنه"} else
+        "IRR" if currency_token in {"irr", "ریال", "ريال"} else
+        "USD" if currency_token in {"usd", "دلار"} else
+        "EUR" if currency_token in {"eur", "یورو"} else
+        "AED" if currency_token in {"aed", "درهم"} else None
+    )
+    return BudgetValue(
+        amount=amount, scale=scale, currency=currency,
+        currency_status="known" if currency else "unknown", raw=raw.strip(),
+    )
+
+
 class TripRequirementFields(_StrictModel):
     destination: RequirementValue[str]
     origin: RequirementValue[str]
