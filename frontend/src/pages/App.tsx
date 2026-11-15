@@ -109,6 +109,16 @@ export function App() {
   };
   const [travelerTimezone, setTravelerTimezone] = useState(() =>
     Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  useEffect(() => {
+    // Auto-fill only when permission was already granted. Never trigger an
+    // unrequested browser permission prompt; the visible button handles that.
+    let active = true;
+    if (!authSession || !navigator.permissions?.query) return;
+    void navigator.permissions.query({ name: 'geolocation' }).then(permission => {
+      if (active && permission.state === 'granted') requestDeviceLocation();
+    }).catch(() => { /* Browsers may not support querying geolocation permissions. */ });
+    return () => { active = false; };
+  }, [authSession?.user.user_id]);
   const [assistantRouteState, setAssistantRouteState] = useState<'loading' | 'configured' | 'disabled' | 'unavailable' | 'quota_exhausted'>('loading');
   const [assistantRemaining, setAssistantRemaining] = useState<number | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
