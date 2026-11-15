@@ -25,6 +25,7 @@ def staging_settings(**overrides):
         "auth_enabled": True, "auth_sms_adapter": "disabled", "staging_auth_enabled": True,
         "staging_public_host": "rahgard-staging.example.test", "auth_cookie_secure": True,
         "auth_allowed_origins": "https://rahgard-staging.example.test",
+        "staging_email_signup_enabled": False,
         "auth_otp_hmac_secret": SecretStr("a" * 32), "auth_csrf_secret": SecretStr("b" * 32),
         "auth_rate_limit_secret": SecretStr("c" * 32), "auth_session_idle_seconds": 1800,
         "auth_session_absolute_seconds": 43200,
@@ -52,6 +53,16 @@ class MemoryStagingRepository:
         assert kwargs["user_id"] == self.user_id
         assert kwargs["expected_verifier"] == self.verifier
         assert len(kwargs["token_hash"]) == len(kwargs["csrf_hash"]) == 32
+        return {"user_id": self.user_id, "email": self.login_name, "session_id": uuid4()}
+
+    def register_email_account(self, **kwargs):
+        if kwargs["login_name"] == self.login_name:
+            return None
+        self.user_id = uuid4()
+        self.login_name = kwargs["login_name"]
+        self.salt = kwargs["salt"]
+        self.verifier = kwargs["verifier"]
+        assert kwargs["maximum_accounts"] >= 1
         return {"user_id": self.user_id, "email": self.login_name, "session_id": uuid4()}
 
     def redeem_invite(self, **kwargs):
@@ -108,3 +119,47 @@ def test_staging_login_uses_exact_origin_secure_cookie_and_one_time_invite(monke
             assert forwarded_host.status_code == 401
     finally:
         api_test_app.dependency_overrides.clear()
+
+
+def test_staging_email_registration_is_explicitly_gated_rate_limited_and_issues_secure_session(monkeypatch):
+    password = "A secure staging password 2026"
+    settings = staging_settings(staging_email_signup_enabled=True)
+    repository = MemoryStagingRepository("existing@example.test", password)
+    attempts = []
+
+    def allow_attempt(**kwargs):
+        attempts.append(kwargs)
+        return True
+
+    repository.allow_attempt = allow_attempt
+    monkeypatch.setattr(auth_api, "StagingAuthRepository", lambda _settings: repository)
+    service = AuthenticationService(settings, DisabledSmsAdapter())
+    api_test_app.dependency_overrides[get_settings] = lambda: settings
+    api_test_app.dependency_overrides[get_auth_service] = lambda: service
+    headers = {"Origin": "https://rahgard-staging.example.test", "Host": "rahgard-staging.example.test",
+               "X-Forwarded-Proto": "https"}
+    try:
+        with TestClient(api_test_app, base_url="https://rahgard-staging.example.test") as client:
+            methods = client.get("/api/v1/auth/method").json()
+            assert methods["staging_email_signup"] is True
+            response = client.post("/api/v1/auth/staging/register", headers=headers,
+                                   json={"email": " New.Traveler@example.test ", "password": password})
+            assert response.status_code == 200
+            assert response.json()["user"]["auth_method"] == "staging_invite"
+            assert response.headers["set-cookie"].startswith("__Host-rahgard_session=")
+            assert "secure" in response.headers["set-cookie"].lower()
+            assert [item["dimension"] for item in attempts] == ["invite", "global"]
+            assert repository.load_credential("new.traveler@example.test") is not None
+            disabled = staging_settings(staging_email_signup_enabled=False)
+            api_test_app.dependency_overrides[get_settings] = lambda: disabled
+            rejected = client.post("/api/v1/auth/staging/register", headers=headers,
+                                   json={"email": "other@example.test", "password": password})
+            assert rejected.status_code == 401
+    finally:
+        api_test_app.dependency_overrides.clear()
+
+
+def test_email_registration_cannot_be_enabled_outside_staging():
+    with pytest.raises(ValueError, match="restricted to authenticated staging"):
+        staging_settings(app_env="development", staging_auth_enabled=False,
+                         auth_cookie_secure=False, staging_email_signup_enabled=True)

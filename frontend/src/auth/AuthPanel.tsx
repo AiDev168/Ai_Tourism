@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { Locale } from '../i18n/messages';
 import { AuthApiError, authApi, type AuthCapabilities, type AuthSession } from './authApi';
 import { authMessages } from './authMessages';
 import { localOwnerMessages } from './localOwnerMessages';
 
 type Phase = 'phone' | 'code';
-type StagingMode = 'login' | 'redeem';
+type StagingMode = 'login' | 'register' | 'redeem';
 
 const stagingCopy = {
   'fa-IR': { account: 'ورود آزمایشی', email: 'ایمیل', password: 'گذرواژه (حداقل ۱۶ نویسه)', invite: 'کد دعوت', redeem: 'فعال‌سازی دعوت', switchToRedeem: 'کد دعوت دارید؟ ایجاد حساب', switchToLogin: 'بازگشت به ورود', invalid: 'ورود یا کد دعوت معتبر نیست.', smsUnavailable: 'ارسال پیامک در این محیط تنظیم نشده است؛ کد ورود پیامکی ارسال نمی‌شود.' },
@@ -19,11 +20,39 @@ const stagingMethodCopy = {
   ar: { useOtp: '\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0628\u0631\u0633\u0627\u0644\u0629 SMS', useInvite: '\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0628\u0631\u0645\u0632 \u0627\u0644\u062f\u0639\u0648\u0629' },
 } as const;
 
+const stagingEmailCopy = {
+  'fa-IR': {
+    login: '\u0648\u0631\u0648\u062f \u0628\u0627 \u0627\u06cc\u0645\u06cc\u0644',
+    register: '\u0627\u06cc\u062c\u0627\u062f \u062d\u0633\u0627\u0628 \u0622\u0632\u0645\u0627\u06cc\u0634\u06cc \u0628\u0627 \u0627\u06cc\u0645\u06cc\u0644',
+    invite: '\u0648\u0631\u0648\u062f \u0628\u0627 \u062f\u0639\u0648\u062a',
+    registerTitle: '\u0627\u06cc\u062c\u0627\u062f \u062d\u0633\u0627\u0628 \u0622\u0632\u0645\u0627\u06cc\u0634\u06cc',
+    unverified: '\u0627\u06cc\u0645\u06cc\u0644 \u062a\u0623\u06cc\u06cc\u062f \u0646\u0645\u06cc\u200c\u0634\u0648\u062f\u061b \u0646\u0634\u0627\u0646\u06cc \u0627\u06cc\u0645\u06cc\u0644 \u062a\u0623\u06cc\u06cc\u062f\u0646\u0634\u062f\u0647 \u0628\u0627\u0642\u06cc \u0645\u06cc\u200c\u0645\u0627\u0646\u062f.',
+    failed: '\u062d\u0633\u0627\u0628 \u0622\u0632\u0645\u0627\u06cc\u0634\u06cc \u0633\u0627\u062e\u062a\u0647 \u0646\u0634\u062f. \u0648\u0631\u0648\u062f\u06cc\u200c\u0647\u0627 \u0631\u0627 \u0628\u0631\u0631\u0633\u06cc \u06a9\u0646\u06cc\u062f \u0648 \u062f\u0648\u0628\u0627\u0631\u0647 \u0628\u06a9\u0648\u0634\u06cc\u062f.',
+    close: '\u0628\u0633\u062a\u0646',
+  },
+  'en-US': {
+    login: 'Email sign in', register: 'Create a pilot email account', invite: 'Use an invitation',
+    registerTitle: 'Create a pilot account',
+    unverified: 'No verification email is sent. This address remains unverified.',
+    failed: 'The pilot account could not be created. Check the entries and try again.', close: 'Close',
+  },
+  ar: {
+    login: '\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0628\u0627\u0644\u0628\u0631\u064a\u062f \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a',
+    register: '\u0625\u0646\u0634\u0627\u0621 \u062d\u0633\u0627\u0628 \u062a\u062c\u0631\u064a\u0628\u064a \u0628\u0627\u0644\u0628\u0631\u064a\u062f',
+    invite: '\u0627\u0644\u062f\u062e\u0648\u0644 \u0628\u062f\u0639\u0648\u0629',
+    registerTitle: '\u0625\u0646\u0634\u0627\u0621 \u062d\u0633\u0627\u0628 \u062a\u062c\u0631\u064a\u0628\u064a',
+    unverified: '\u0644\u0627 \u062a\u064f\u0631\u0633\u0644 \u0631\u0633\u0627\u0644\u0629 \u062a\u0623\u0643\u064a\u062f. \u0633\u064a\u0628\u0642\u0649 \u0627\u0644\u0628\u0631\u064a\u062f \u063a\u064a\u0631 \u0645\u0624\u0643\u062f.',
+    failed: '\u062a\u0639\u0630\u0631 \u0625\u0646\u0634\u0627\u0621 \u0627\u0644\u062d\u0633\u0627\u0628. \u062a\u062d\u0642\u0642 \u0645\u0646 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a \u0648\u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649.',
+    close: '\u0625\u063a\u0644\u0627\u0642',
+  },
+} as const;
+
 export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessionChange?: (session: AuthSession | null) => void }) {
   const copy = authMessages[locale];
   const localCopy = localOwnerMessages[locale];
   const stageCopy = stagingCopy[locale];
   const methodCopy = stagingMethodCopy[locale];
+  const emailCopy = stagingEmailCopy[locale];
   const [session, setSession] = useState<AuthSession | null>(null);
   const [csrfToken, setCsrfToken] = useState('');
   const [phase, setPhase] = useState<Phase>('phone');
@@ -52,7 +81,7 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
         setStagingFallback(value.methods.includes('staging_invite') && value.otp_delivery !== 'available');
       }
     }).catch(() => {
-      if (active) setCapabilities({ methods: [], otp_delivery: 'unavailable' });
+      if (active) setCapabilities({ methods: [], otp_delivery: 'unavailable', staging_email_signup: false });
     });
     void authApi.me().then(value => {
       if (!active) return;
@@ -67,6 +96,20 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
     });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!open || session) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open, session]);
 
   const submitPhone = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setBusy(true); setError(''); setNotice('');
@@ -110,12 +153,16 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
     try {
       const value = stagingMode === 'login'
         ? await authApi.stagingLogin(stagingEmail, stagingPassword)
-        : await authApi.redeemStagingInvite(inviteCode, stagingEmail, stagingPassword);
+        : stagingMode === 'register'
+          ? await authApi.registerStagingEmail(stagingEmail, stagingPassword)
+          : await authApi.redeemStagingInvite(inviteCode, stagingEmail, stagingPassword);
       setSession(value); setCsrfToken(value.csrf_token); setStagingPassword(''); setInviteCode(''); setOpen(false);
       onSessionChange?.(value);
     } catch (errorValue) {
       setStagingPassword('');
-      setError(errorValue instanceof AuthApiError && errorValue.status === 401 ? stageCopy.invalid : copy.genericError);
+      setError(stagingMode === 'register'
+        ? emailCopy.failed
+        : errorValue instanceof AuthApiError && errorValue.status === 401 ? stageCopy.invalid : copy.genericError);
     } finally { setBusy(false); }
   };
 
@@ -156,8 +203,10 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
         </div>
       ) : <button type="button" aria-expanded={open} disabled={capabilities === null || capabilities.methods.length === 0}
         onClick={() => setOpen(value => !value)}>{open ? copy.close : copy.signIn}</button>}
-      {open && !session && (
-        <section className="auth-panel" aria-label={copy.signIn}>
+      {open && !session && createPortal((
+        <div className="auth-overlay" onMouseDown={event => { if (event.target === event.currentTarget) setOpen(false); }}>
+        <section className="auth-panel" role="dialog" aria-modal="true" aria-label={copy.signIn}>
+          <button type="button" className="auth-dialog-close" onClick={() => setOpen(false)} aria-label={emailCopy.close}>×</button>
           {capabilities?.methods.includes('local_owner') && (
             <button type="button" className="auth-owner-choice" aria-pressed={ownerMode}
               onClick={() => { setOwnerMode(value => !value); setError(''); setNotice(''); }}>
@@ -177,13 +226,18 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
             </form>
           ) : capabilities?.methods.includes('staging_invite') && stagingFallback ? (
             <section aria-label={stageCopy.account}>
-              {capabilities.otp_delivery !== 'available' && <p role="note">{stageCopy.smsUnavailable}</p>}
+              {capabilities.otp_delivery !== 'available' && !capabilities.staging_email_signup && <p role="note">{stageCopy.smsUnavailable}</p>}
               {capabilities.otp_delivery === 'available' && <button type="button" className="auth-owner-choice" onClick={() => { setStagingFallback(false); setStagingMode('login'); setPhase('phone'); setChallengeId(''); setCode(''); setError(''); setNotice(''); }}>{methodCopy.useOtp}</button>}
-              <button type="button" className="auth-owner-choice" onClick={() => { setStagingMode(value => value === 'login' ? 'redeem' : 'login'); setError(''); setNotice(''); setStagingPassword(''); }}>
+              {capabilities.staging_email_signup ? <nav className="auth-mode-switch" aria-label={stageCopy.account}>
+                <button type="button" aria-pressed={stagingMode === 'login'} onClick={() => { setStagingMode('login'); setError(''); setStagingPassword(''); }}>{emailCopy.login}</button>
+                <button type="button" aria-pressed={stagingMode === 'register'} onClick={() => { setStagingMode('register'); setError(''); setStagingPassword(''); }}>{emailCopy.register}</button>
+                <button type="button" aria-pressed={stagingMode === 'redeem'} onClick={() => { setStagingMode('redeem'); setError(''); setStagingPassword(''); }}>{emailCopy.invite}</button>
+              </nav> : <button type="button" className="auth-owner-choice" onClick={() => { setStagingMode(value => value === 'login' ? 'redeem' : 'login'); setError(''); setNotice(''); setStagingPassword(''); }}>
                 {stagingMode === 'login' ? stageCopy.switchToRedeem : stageCopy.switchToLogin}
-              </button>
+              </button>}
               <form onSubmit={event => void submitStaging(event)}>
-                <h2>{stagingMode === 'login' ? stageCopy.account : stageCopy.redeem}</h2>
+                <h2>{stagingMode === 'register' ? emailCopy.registerTitle : stagingMode === 'login' ? stageCopy.account : stageCopy.redeem}</h2>
+                {stagingMode === 'register' && <p role="note">{emailCopy.unverified}</p>}
                 {stagingMode === 'redeem' && <>
                   <label htmlFor="auth-stage-invite">{stageCopy.invite}</label>
                   <input id="auth-stage-invite" name="invite_code" autoComplete="one-time-code" required minLength={32} maxLength={128} value={inviteCode} onChange={event => setInviteCode(event.target.value)} />
@@ -192,7 +246,7 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
                 <input id="auth-stage-email" name="email" type="email" autoComplete="email" required maxLength={254} value={stagingEmail} onChange={event => setStagingEmail(event.target.value)} />
                 <label htmlFor="auth-stage-password">{stageCopy.password}</label>
                 <input id="auth-stage-password" name="password" type="password" autoComplete={stagingMode === 'login' ? 'current-password' : 'new-password'} required minLength={stagingMode === 'login' ? 1 : 16} maxLength={256} value={stagingPassword} onChange={event => setStagingPassword(event.target.value)} />
-                <button type="submit" disabled={busy}>{busy ? copy.loading : stagingMode === 'login' ? copy.signIn : stageCopy.redeem}</button>
+                <button type="submit" disabled={busy}>{busy ? copy.loading : stagingMode === 'login' ? copy.signIn : stagingMode === 'register' ? emailCopy.registerTitle : stageCopy.redeem}</button>
               </form>
             </section>
           ) : capabilities?.methods.includes('otp') && phase === 'phone' ? (
@@ -221,7 +275,8 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
           {notice && <p role="status">{notice}</p>}
           {error && <p role="alert">{error}</p>}
         </section>
-      )}
+        </div>
+      ), document.body)}
     </div>
   );
 }

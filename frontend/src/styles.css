@@ -55,14 +55,23 @@ button { cursor: pointer; }
 }
 .auth-signed-in { display: flex; align-items: center; gap: 8px; font-size: 11px; }
 .auth-signed-in span { max-width: 118px; overflow: hidden; text-overflow: ellipsis; }
-.auth-panel {
-  position: absolute; inset-block-start: calc(100% + 12px); inset-inline-end: 0; z-index: 20;
-  width: min(330px, calc(100vw - 32px)); padding: 18px; border: 1px solid var(--line);
-  border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); text-align: start;
+.auth-overlay {
+  position: fixed; inset: 0; z-index: 1000; display: flex; align-items: flex-start; justify-content: flex-end;
+  overflow-y: auto; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 16px max(16px, env(safe-area-inset-left));
+  background: rgba(18, 35, 29, .42); overscroll-behavior: contain;
 }
+.auth-panel {
+  position: relative; flex: 0 1 420px; width: min(420px, 100%); min-width: 0; max-height: calc(100dvh - max(32px, env(safe-area-inset-top) + 16px));
+  overflow-x: hidden; overflow-y: auto; margin-block-start: 6px; padding: 54px 20px 20px; border: 1px solid var(--line);
+  border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); text-align: start; overscroll-behavior: contain;
+}
+.auth-dialog-close { position: absolute; inset-block-start: 10px; inset-inline-end: 10px; width: 38px; min-height: 38px !important; padding: 0 !important; border-radius: 50% !important; font-size: 24px; line-height: 1; }
+.auth-mode-switch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-block-end: 14px; }
+.auth-mode-switch button { min-width: 0; min-height: 42px; padding: 7px 5px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--ink); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.auth-mode-switch button[aria-pressed="true"] { border-color: var(--forest); background: var(--soft-green); color: var(--forest-deep); }
 .auth-panel form { display: grid; gap: 10px; }
 .auth-panel label { font-size: 13px; font-weight: 750; }
-.auth-panel input { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.auth-panel input { display: block; max-width: 100%; min-width: 0; width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: white; }
 .auth-panel p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.8; }
 .auth-panel button { min-height: 42px; padding: 9px 14px; border: 0; border-radius: 11px; background: var(--forest); color: white; font-weight: 700; }
 .auth-panel .auth-back { border: 1px solid var(--line); background: transparent; color: var(--ink); }
@@ -89,8 +98,8 @@ button { cursor: pointer; }
 }
 .sun { color: var(--saffron); font-size: 19px; }
 .hero h1 {
-  margin: 0 0 20px; color: var(--forest-deep); font-size: clamp(40px, 5.1vw, 70px);
-  line-height: 1.28; font-weight: 820; letter-spacing: 0;
+  max-width: 18ch; margin: 0 0 20px; color: var(--forest-deep); font-size: clamp(34px, 4.6vw, 60px);
+  line-height: 1.4; font-weight: 820; letter-spacing: 0; text-wrap: balance;
 }
 .hero-body { max-width: 490px; margin: 0 0 28px; color: #5f6b64; font-size: 15px; line-height: 2.05; }
 .trip-form {
@@ -111,7 +120,7 @@ button { cursor: pointer; }
 .travel-date-label { color: var(--ink); font-size: 14px; font-weight: 750; }
 .jalali-date-trigger { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: space-between; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: white; color: var(--ink); text-align: start; }
 .jalali-gregorian-equivalent { color: var(--muted); font-size: 12px; }
-.jalali-calendar { position: absolute; z-index: 20; inset-block-start: calc(100% + 4px); inset-inline: 0; width: min(340px, 100%); padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: 0 12px 34px #172a221f; }
+.jalali-calendar { position: absolute; z-index: 20; inset-block-start: calc(100% + 4px); inset-inline: 0; width: min(340px, 100%, calc(100vw - 32px)); max-height: min(72dvh, 560px); overflow-y: auto; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: 0 12px 34px #172a221f; }
 .jalali-calendar-heading { display: flex; align-items: center; justify-content: space-between; margin-block-end: 8px; }
 .jalali-calendar-heading button { min-width: 40px; min-height: 40px; border: 0; border-radius: 8px; background: #f2f4f1; color: var(--ink); font-size: 22px; }
 .jalali-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; text-align: center; }
@@ -374,7 +383,8 @@ html[dir="ltr"] .hero-body, html[dir="ltr"] .trip-form { text-align: left; }
   .auth-signed-in button { min-height: 34px; padding: 6px 8px; font-size: 9px; }
   .hero { grid-template-columns: minmax(0, 1fr); padding: 24px 18px 42px; gap: 22px; }
   .hero-art { grid-row: 1; min-height: 0; height: auto; aspect-ratio: 1.22 / 1; border-radius: 22px; }
-  .hero h1 { font-size: clamp(38px, 11vw, 48px); }
+  .hero h1 { max-width: 20ch; margin-inline: auto; margin-block-end: 16px; font-size: clamp(27px, 7.8vw, 34px); line-height: 1.55; text-align: center; text-wrap: balance; }
+  .hero-copy > .eyebrow { justify-content: center; }
   .hero-body { font-size: 13px; line-height: 1.95; }
   .trip-form { padding: 15px; border-radius: 17px; }
   .section { padding: 36px 18px 48px; }
@@ -402,6 +412,11 @@ html[dir="ltr"] .hero-body, html[dir="ltr"] .trip-form { text-align: left; }
   .day-num { min-width: 43px; }
   .day-card p { margin: 4px 0; }
   footer { padding: 19px 18px; font-size: 9px; }
+  .auth-overlay { align-items: flex-start; justify-content: center; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+  .auth-panel { flex: 0 1 auto; width: min(100%, 460px); max-height: calc(100dvh - max(24px, env(safe-area-inset-top) + env(safe-area-inset-bottom) + 24px)); margin: 0; padding: 54px 16px 16px; border-radius: 16px; }
+  .auth-panel form { min-width: 0; }
+  .auth-panel button { max-width: 100%; overflow-wrap: anywhere; }
+  .auth-mode-switch button { font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

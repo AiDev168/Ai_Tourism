@@ -60,6 +60,7 @@ class ChallengeResponse(BaseModel):
 class AuthMethodResponse(BaseModel):
     methods: list[Literal["otp", "local_owner", "staging_invite"]]
     otp_delivery: Literal["available", "unavailable"]
+    staging_email_signup: bool = False
 
 
 class LocalOwnerLoginRequest(BaseModel):
@@ -87,6 +88,17 @@ class StagingLoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str = Field(min_length=5, max_length=254)
     password: str = Field(min_length=1, max_length=256)
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, value: str) -> str:
+        return normalize_login(value)
+
+
+class StagingEmailRegistrationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(min_length=5, max_length=254)
+    password: str = Field(min_length=16, max_length=256)
 
     @field_validator("email")
     @classmethod
@@ -179,6 +191,7 @@ def authentication_method(settings: Annotated[Settings, Depends(get_settings)]):
     return AuthMethodResponse(
         methods=methods,
         otp_delivery="available" if settings.auth_sms_adapter != "disabled" else "unavailable",
+        staging_email_signup=settings.staging_auth_enabled and settings.staging_email_signup_enabled,
     )
 
 
@@ -265,6 +278,52 @@ def staging_login(
         return _stage_session(settings, response, row)
     except (AuthenticationUnavailable, psycopg.Error, ValueError, UnicodeError):
         logger.warning("auth.staging_login_unavailable")
+        return _unavailable()
+
+
+@router.post("/staging/register", response_model=SessionResponse)
+def staging_email_register(
+    body: StagingEmailRegistrationRequest, request: Request, response: Response,
+    settings: Annotated[Settings, Depends(get_settings)],
+    service: Annotated[AuthenticationService, Depends(get_auth_service)],
+):
+    if (not settings.auth_enabled or not settings.staging_auth_enabled
+            or not settings.staging_email_signup_enabled
+            or not _valid_staging_origin(request, settings)):
+        return JSONResponse(status_code=401, content={"error": {"code": "unauthenticated"}})
+    repository = StagingAuthRepository(settings)
+    now = datetime.now(UTC)
+    try:
+        login_name = normalize_login(body.email)
+        client_ip = request.client.host if request.client else "unknown"
+        ip_ok = repository.allow_attempt(
+            dimension="invite",
+            digest=_staging_digest(settings, "signup-ip", client_ip), now=now,
+            maximum=settings.staging_email_signup_ip_limit,
+        )
+        global_ok = repository.allow_attempt(
+            dimension="global",
+            digest=_staging_digest(settings, "signup-global", "private-staging"), now=now,
+            maximum=settings.staging_email_signup_global_limit,
+        )
+        if not (ip_ok and global_ok):
+            return JSONResponse(status_code=429, content={"error": {"code": "registration_unavailable"}})
+        salt, verifier = password_material(body.password)
+        raw, csrf, token_hash, csrf_hash = _session_material(service)
+        row = repository.register_email_account(
+            login_name=login_name, salt=salt, verifier=verifier,
+            token_hash=token_hash, csrf_hash=csrf_hash, now=now,
+            idle_seconds=settings.auth_session_idle_seconds or 0,
+            absolute_seconds=settings.auth_session_absolute_seconds or 0,
+            maximum_accounts=settings.staging_email_signup_account_limit,
+        )
+        if row is None:
+            # Use one response for duplicate addresses and the pilot account cap.
+            return JSONResponse(status_code=409, content={"error": {"code": "registration_unavailable"}})
+        row.update(raw_session=raw, csrf_token=csrf)
+        return _stage_session(settings, response, row)
+    except (AuthenticationUnavailable, psycopg.Error, ValueError, UnicodeError):
+        logger.warning("auth.staging_email_registration_unavailable")
         return _unavailable()
 
 

@@ -8,6 +8,7 @@ export type AuthSession = { user: AuthUser; csrf_token: string };
 export type AuthCapabilities = {
   methods: Array<'otp' | 'local_owner' | 'staging_invite'>;
   otp_delivery: 'available' | 'unavailable';
+  staging_email_signup: boolean;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -36,6 +37,9 @@ export const authApi = {
   ),
   stagingLogin: (email: string, password: string) => request<AuthSession>(
     '/staging/login', { method: 'POST', body: JSON.stringify({ email, password }) },
+  ),
+  registerStagingEmail: (email: string, password: string) => request<AuthSession>(
+    '/staging/register', { method: 'POST', body: JSON.stringify({ email, password }) },
   ),
   redeemStagingInvite: (invite_code: string, email: string, password: string) => request<AuthSession>(
     '/staging/redeem', { method: 'POST', body: JSON.stringify({ invite_code, email, password }) },

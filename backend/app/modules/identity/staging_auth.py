@@ -100,6 +100,45 @@ class StagingAuthRepository:
             ).fetchone()
             return {"user_id": user_id, "email": row["email"], "session_id": session["session_id"]}
 
+    def register_email_account(self, *, login_name: str, salt: bytes, verifier: bytes,
+                               token_hash: bytes, csrf_hash: bytes, now: datetime,
+                               idle_seconds: int, absolute_seconds: int,
+                               maximum_accounts: int):
+        """Create a bounded, unverified private-pilot account and its session atomically."""
+        with self._auth.connection() as conn, conn.transaction():
+            # Serialize registrations so parallel requests cannot exceed the pilot cap.
+            conn.execute("SELECT pg_advisory_xact_lock(%s)", (0x52414847415244,))
+            existing = conn.execute(
+                """SELECT 1 FROM identity.staging_password_credentials WHERE login_name=%s""",
+                (login_name,),
+            ).fetchone()
+            count = conn.execute(
+                """SELECT count(*) AS count
+                   FROM identity.users u
+                   JOIN identity.staging_password_credentials c ON c.user_id=u.user_id
+                   WHERE u.auth_subject='staging_invite' AND u.is_synthetic=FALSE""",
+            ).fetchone()
+            if existing is not None or int(count["count"]) >= maximum_accounts:
+                return None
+            user = conn.execute(
+                """INSERT INTO identity.users(auth_subject,email,account_status,is_synthetic)
+                   VALUES ('staging_invite',%s,'active',FALSE) RETURNING user_id""",
+                (login_name,),
+            ).fetchone()
+            conn.execute(
+                """INSERT INTO identity.staging_password_credentials(user_id,login_name,salt,verifier,iterations)
+                   VALUES (%s,%s,%s,%s,%s)""",
+                (user["user_id"], login_name, salt, verifier, _ITERATIONS),
+            )
+            session = conn.execute(
+                """INSERT INTO identity.web_sessions
+                   (token_hash,user_id,csrf_hash,created_at,last_seen_at,idle_expires_at,absolute_expires_at)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING session_id""",
+                (token_hash, user["user_id"], csrf_hash, now, now,
+                 now + timedelta(seconds=idle_seconds), now + timedelta(seconds=absolute_seconds)),
+            ).fetchone()
+            return {"user_id": user["user_id"], "email": login_name, "session_id": session["session_id"]}
+
     def redeem_invite(self, *, token_digest: bytes, login_name: str, salt: bytes, verifier: bytes,
                       token_hash: bytes, csrf_hash: bytes, now: datetime,
                       idle_seconds: int, absolute_seconds: int):

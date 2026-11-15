@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     auth_sms_adapter: str = "disabled"
     auth_local_owner_enabled: bool = False
     staging_auth_enabled: bool = False
+    staging_email_signup_enabled: bool = False
+    staging_email_signup_ip_limit: int = Field(default=5, ge=1, le=20)
+    staging_email_signup_global_limit: int = Field(default=30, ge=1, le=200)
+    staging_email_signup_account_limit: int = Field(default=25, ge=1, le=200)
     staging_public_host: str = ""
     sms_ir_sandbox_api_key: SecretStr | None = None
     sms_ir_production_api_key_file: Path | None = None
@@ -92,6 +96,10 @@ class Settings(BaseSettings):
                 or origin.path or origin.query or origin.fragment
             ):
                 raise ValueError("Staging invitation authentication requires one exact HTTPS public origin")
+        if self.staging_email_signup_enabled and (
+            environment != "staging" or not self.auth_enabled or not self.staging_auth_enabled
+        ):
+            raise ValueError("Staging email registration is restricted to authenticated staging")
         if self.ai_provider_admin_enabled:
             if self.app_env.lower() != "local_pilot" or not self.auth_enabled or not self.auth_cookie_secure:
                 raise ValueError("AI provider administration is restricted to authenticated local pilot")

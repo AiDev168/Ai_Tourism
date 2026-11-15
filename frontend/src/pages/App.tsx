@@ -242,7 +242,7 @@ export function App() {
         <section className={authSession ? 'hero hero-planner' : 'hero'}>
           <div className="hero-copy">
             <p className="eyebrow"><span className="sun">✳</span>{t('heroEyebrow')}</p>
-            <h1>{authSession ? plannerCopy[locale].title : t('heroTitle').split('\n').map((line, index) => <span key={index}>{line}<br /></span>)}</h1>
+            <h1>{authSession ? plannerCopy[locale].title : t('heroTitle')}</h1>
             <p className="hero-body">{authSession ? plannerCopy[locale].intro : t('heroBody')}</p>
             <form className="trip-form" onSubmit={submit} noValidate>
               <label htmlFor="trip-prompt">{tripCopy.requestLabel}</label>
