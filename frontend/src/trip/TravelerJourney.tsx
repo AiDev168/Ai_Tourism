@@ -39,14 +39,14 @@ export function LocationReference({ coordinate, locale }: { coordinate?: Product
 }
 
 const assistantCopy: Record<Locale, {
-  consent: string; send: string; review: string; initial: string; unavailable: string;
+  send: string; review: string; initial: string; unavailable: string;
   destination: string; duration: string; apply: string; dismiss: string; unsaved: string; reviewSaved: string;
   speaker: string; promptsTitle: string; prompts: readonly string[];
   promptForAi: string; advisorActionHelp: string; promptHelp: string;
   saveWithoutAI: string; currentDuration: string;
   origin: string; travelerCount: string; budget: string; dates: string; interest: string;
 }> = {
-  'fa-IR': { consent: 'با ارسال این پیام و تاریخچهٔ گفت‌وگوی سفر به سرویس هوش مصنوعی موافقم.',
+  'fa-IR': {
     send: 'پرسش از دستیار سفر', review: 'پیشنهاد مدل؛ پیش از تأیید سفر بررسی کنید:',
     initial: 'لطفاً برای سفر شرح‌داده‌شده سؤال تکمیلی مناسب بپرس.',
     unavailable: 'دستیار در حال حاضر در دسترس نیست؛ همچنان می‌توانید سفر را بدون آن ثبت کنید.',
@@ -62,7 +62,7 @@ const assistantCopy: Record<Locale, {
     saveWithoutAI: 'ثبت پاسخ بدون هوش مصنوعی',
     currentDuration: 'مدت ثبت‌شدهٔ این سفر: {days} روز.',
     prompts: ['دربارهٔ علایق و سبک سفرم یک سؤال تکمیلی بپرس.', 'برای روشن شدن بودجه و تعداد همراهانم سؤال بپرس.', 'محدودیت‌های ضروری سفرم را مرور کن و موارد مبهم را بپرس.'] },
-  'en-US': { consent: 'I consent to sending this message and prior trip conversation to the AI service.',
+  'en-US': {
     send: 'Ask travel assistant', review: 'AI suggestions — review before confirming:',
     initial: 'Please ask a useful clarification about the trip described above.',
     unavailable: 'The assistant is unavailable. You can still save your trip.',
@@ -78,7 +78,7 @@ const assistantCopy: Record<Locale, {
     saveWithoutAI: 'Save reply without AI',
     currentDuration: 'Recorded trip length: {days} days.',
     prompts: ['Ask me about my interests and travel style.', 'Clarify my budget and number of travelers.', 'Review my essential constraints and ask what is unclear.'] },
-  ar: { consent: 'أوافق على إرسال هذه الرسالة وسجل محادثة الرحلة إلى خدمة الذكاء الاصطناعي.',
+  ar: {
     send: 'اسأل مساعد السفر', review: 'اقتراحات النموذج — راجعها قبل التأكيد:',
     initial: 'يرجى طرح سؤال توضيحي مناسب عن الرحلة المذكورة أعلاه.',
     unavailable: 'المساعد غير متاح حاليًا. يمكنك حفظ الرحلة بدونه.',
@@ -785,6 +785,13 @@ export function TravelerJourney({ locale, session, online, requirements, initial
 
   const askAssistant = async () => {
     if (!session || !activeConversation || !activeTrip || !online) return;
+    // When the status endpoint already reports no usable model, do not
+    // reserve or charge an AI turn. Use existing local parsing instead.
+    if (assistantState === 'disabled' || assistantState === 'unavailable' || assistantState === 'quota_exhausted') {
+      if (messageText.trim()) await sendMessage();
+      else setError(assistantCopy[locale].unavailable);
+      return;
+    }
     const content = messageText.trim() || assistantCopy[locale].initial;
     if (content.length > 1200) return;
     setBusy(true); setError(''); setStatus('');
