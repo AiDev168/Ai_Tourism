@@ -702,7 +702,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
               improved = true;
             }
             if (interpreted.interest && canApply('interests', 'interests') && hasDirectEvidence('interests')) {
-              setInterestText(interpreted.interest); improved = true;
+              setInterestText(displayInterests(reviewedTripInterests(interpreted.interest), locale)); improved = true;
             }
             if (interpreted.softPreferences?.length && canApply('softPreferences', 'softPreferences') && hasDirectEvidence('soft_preferences')) {
               setSoftPreferenceText(displayInterests(interpreted.softPreferences, locale)); improved = true;

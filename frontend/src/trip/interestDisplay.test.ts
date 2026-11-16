@@ -15,4 +15,9 @@ describe('reviewed interest labels', () => {
     expect(displayTripInterest('gardens', 'ar')).toBe('الحدائق');
     expect(reviewedTripInterests('جاهای تاریخی، باغ‌ها')).toEqual(['historical_attractions', 'gardens']);
   });
+
+  it('renders assistant-returned internal interest codes as traveler-language labels', () => {
+    const values = reviewedTripInterests('historical_attractions, gardens');
+    expect(values.map(value => displayTripInterest(value, 'fa-IR'))).toEqual(['جاهای تاریخی', 'باغ‌ها']);
+  });
 });
