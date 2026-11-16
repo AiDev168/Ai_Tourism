@@ -363,6 +363,22 @@ def test_known_budget_is_not_mislabeled_missing_and_explicit_missing_budget_bloc
     assert next(item for item in missing.requirement_assessments if item.field == "budget").decision == "must_have"
 
 
+def test_colloquial_persian_toman_unit_remains_known_without_conversion() -> None:
+    result = recommend_trip(
+        requirements=requirements(budget={
+            "amount": "30", "currency": "TOMAN", "unit": "میلیون تومن",
+            "raw": "۳۰ میلیون تومن",
+        }),
+        selected_destination_ids=["1"], catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]}, locale="fa-IR", profile_version=4,
+    )
+
+    assert result.status == "available"
+    budget_assessment = next(item for item in result.requirement_assessments if item.field == "budget")
+    assert budget_assessment.status == "known"
+    assert budget_assessment.reason_code == "known_fit_not_catalogue_verified"
+
+
 def test_explicit_version_bound_advisory_is_not_evaluated_or_scored() -> None:
     profile = requirements(budget={"amount": 50, "currency": None, "unit": "million toman"})
     profile["requirement_consent"] = {

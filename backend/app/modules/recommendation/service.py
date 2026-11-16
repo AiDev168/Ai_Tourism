@@ -188,6 +188,9 @@ def _validate_budget(value: object) -> bool:
     normalized_unit = normalized_unit.replace("\u0645\u0644\u06cc\u0648\u0646", "\u0645\u06cc\u0644\u06cc\u0648\u0646")
     normalized_unit = re.sub(r"[\u064b-\u065f\u0670]", "", normalized_unit)
     normalized_unit = " ".join(normalized_unit.split())
+    # Colloquial Persian spellings are validation aliases for the same Toman
+    # denomination; the original unit/raw text remains unchanged in storage.
+    normalized_unit = re.sub(r"تومن(?:ه)?$", "تومان", normalized_unit)
     unit_currency = {
         "rial": "IRR", "irr": "IRR", "million rial": "IRR", "million irr": "IRR",
         "ریال": "IRR", "میلیون ریال": "IRR",
