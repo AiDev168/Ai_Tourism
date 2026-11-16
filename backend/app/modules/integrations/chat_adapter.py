@@ -287,7 +287,9 @@ class RemoteChatAdapter:
             raise AiCapabilityUnavailable()
         payload = {
             "model": self.model,
-            "max_tokens": 800,
+            # Five-day provisional plans need a bounded but larger completion
+            # budget than a short clarification turn. Keep all calls capped.
+            "max_tokens": 1600,
             "messages": [
                 {"role": "system", "content": (
                 "Return one JSON object with reply (string), requirements (object), "
@@ -301,7 +303,7 @@ class RemoteChatAdapter:
                     "budget_text (exact stated amount WITH currency/denomination), "
                     "travel_start and travel_end (BOTH ISO YYYY-MM-DD dates, only when "
                     "explicitly stated, without converting local calendars), and "
-                "interest (one explicitly stated interest, max 100 characters), "
+                "interest (all explicitly stated interests in one concise exact-wording string, max 100 characters), "
                 "soft_preference (one explicitly advisory preference, max 120 characters; "
                 "retain its exact wording, and NEVER reclassify a safety/access need or prohibition as soft), "
                 "relative_start_date (integer offset-days 0..365), hard_constraint "
@@ -356,8 +358,10 @@ class RemoteChatAdapter:
                                 raise AiCapabilityUnavailable()
             envelope = json.loads(data)
             choices = envelope["choices"]
-            if len(choices) != 1 or choices[0].get("finish_reason") != "stop":
-                logger.warning("chat.response.incomplete")
+            finish_reason = choices[0].get("finish_reason") if len(choices) == 1 else "other"
+            if len(choices) != 1 or finish_reason != "stop":
+                safe_finish_reason = finish_reason if finish_reason in {"stop", "length", "content_filter", "tool_calls"} else "other"
+                logger.warning("chat.response.incomplete choice_count=%s finish_reason=%s", len(choices), safe_finish_reason)
                 raise AiCapabilityUnavailable()
             return _parse_provider_content(choices[0]["message"]["content"])
         except Exception as error:
