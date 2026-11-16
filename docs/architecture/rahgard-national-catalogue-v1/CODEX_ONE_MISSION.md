@@ -36,3 +36,13 @@
 Return **one** outcome report with branch and commit SHAs; migration list and scope; actual destination candidate/import/published counts; evidence of source-review process; screenshots for admin/partner/traveler journeys; UI and API E2E checks; tenant-isolation negative tests; whether live VPS was modified; and precise remaining **external** blockers, not a list of newly invented phases.
 
 **Definition of done:** operator can stage/review/publish source-supported national POIs; traveler can find and plan with those published POIs and persist/reopen a journey; verified partner can enter/manage own services in isolated/tested environment. Nothing unpublished leaks into public search or RAG.
+
+## Owner-provided exact local dataset path (2026-11-16)
+
+The authoritative owner-supplied input archive for local Codex execution is:
+
+```text
+C:\Users\coole\Downloads\Tourism_Database\دیتابیس - توریسم.zip
+```
+
+Read this file directly from the owner's Windows filesystem when Codex runs on that PC. Verify it is present and compare its SHA-256 against the previously audited archive checksum documented in `engineering/database-reconciliation/stage-1/OWNER_ARCHIVE_RECHECK_2026-11-16.md`. Do **not** ask the owner to reupload it, download it from GitHub, or commit the archive to the public repository. Use a disposable PostgreSQL instance first; no automatic publication or live VPS writes.
