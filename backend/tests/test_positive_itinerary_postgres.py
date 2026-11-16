@@ -175,12 +175,15 @@ def test_positive_fifteen_day_itinerary_api_persists_edits_and_reopens(monkeypat
         # The recommendation endpoint calls the injected RetrievalPort with
         # an exact approved-projection key and canonical name, never raw trip
         # text. The explicit no_evidence result does not become a false hit.
-        assert len(owner_retrieval.requests) == 1
-        retrieval_request = owner_retrieval.requests[0]
-        assert retrieval_request.corpus == "spatial_destinations"
-        assert retrieval_request.filters.canonical_entity_key.startswith("QA-TEST-ONLY-")
-        assert retrieval_request.query == fake_items[0].localized_names["fa-IR"]
-        assert len(retrieval_request.query) < 80
+        assert len(owner_retrieval.requests) == 3
+        assert all(request.corpus == "spatial_destinations" for request in owner_retrieval.requests)
+        assert [request.filters.canonical_entity_key for request in owner_retrieval.requests] == [
+            "QA-TEST-ONLY-1", "QA-TEST-ONLY-2", "QA-TEST-ONLY-3",
+        ]
+        assert [request.query for request in owner_retrieval.requests] == [
+            item.localized_names["fa-IR"] for item in fake_items[:3]
+        ]
+        assert all(len(request.query) < 80 for request in owner_retrieval.requests)
         assert all(
             "example.invalid/qa-only" in item["evidence"][0]["source_url"]
             for item in recommendation["items"]

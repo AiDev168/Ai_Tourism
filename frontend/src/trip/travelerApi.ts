@@ -42,7 +42,7 @@ export type RequirementConsent = {
 export type RequirementAssessment = {
   field: string;
   decision: RequirementConsentDecision | null;
-  status: 'satisfied' | 'not_evaluated' | 'unresolved';
+  status: 'known' | 'satisfied' | 'not_evaluated' | 'unresolved';
   reason_code: string | null;
 };
 
@@ -255,6 +255,30 @@ export type ItineraryRecord = {
   updated_at: string;
 };
 
+export type ProvisionalStopRole = 'model_proposed' | 'map_reviewed_candidate' | 'traveler_provided';
+export type ProvisionalStop = {
+  name: string;
+  role: ProvisionalStopRole;
+  destination_id?: string | null;
+  verification_status?: 'unverified';
+  notes_by_locale?: Partial<Record<Locale, string>>;
+  day_number?: number;
+  stop_order?: number;
+};
+export type ProvisionalDay = { day_number: number; stops: ProvisionalStop[] };
+export type ProvisionalItinerary = {
+  provisional_itinerary_id: string;
+  trip_id: string;
+  revision: number;
+  day_count: number;
+  locale: Locale;
+  title_by_locale: Partial<Record<Locale, string>>;
+  status: 'provisional_unverified';
+  days: ProvisionalDay[];
+  unplanned_days: number[];
+  updated_at: string;
+};
+
 export class TravelerApiError extends Error {
   constructor(readonly code: string, readonly status: number) {
     super(code);
@@ -342,7 +366,6 @@ export const travelerApi = {
     content: string;
     idempotency_key: string;
     expected_version: number;
-    remote_processing_consent: true;
     extracted_requirements?: TripRequirements;
     existing_user_message_id?: string;
   }) => request<{
@@ -350,7 +373,12 @@ export const travelerApi = {
     trip: TripRecord;
     message: ConversationMessage;
     candidate_requirements: TripRequirementsV1 | Record<string, string | number | null>;
+    extraction_path?: 'llm' | 'fallback';
     clarification: string | null;
+    provisional_itinerary?: {
+      status: 'provisional_unverified';
+      days: Array<{ day_number: number; stops: Array<{ name: string; role: 'model_proposed' }> }>;
+    } | null;
     replayed: boolean;
   }>(`/conversations/${encodeURIComponent(conversationId)}/assistant-turns`, csrf, json('POST', body)),
   confirmTripProfile: (csrf: string, tripId: string, body: {
@@ -366,6 +394,20 @@ export const travelerApi = {
     `/trips/${encodeURIComponent(tripId)}/recommendations`, csrf, json('POST', { selected_destination_ids }),
   ),
   latestRecommendations: (tripId: string) => request<RecommendationResult>(`/trips/${encodeURIComponent(tripId)}/recommendations`, undefined),
+  createProvisionalItinerary: (csrf: string, tripId: string, body: {
+    expected_trip_version: number;
+    day_count: number;
+    locale: Locale;
+    title_by_locale?: Partial<Record<Locale, string>>;
+    days: Array<{ day_number: number; stops: Array<{ name: string; role: ProvisionalStopRole; destination_id?: string | null; notes_by_locale?: Partial<Record<Locale, string>> }> }>;
+  }) => request<ProvisionalItinerary>(`/trips/${encodeURIComponent(tripId)}/provisional-itineraries`, csrf, json('POST', body)),
+  getProvisionalItinerary: (tripId: string) => request<ProvisionalItinerary>(`/trips/${encodeURIComponent(tripId)}/provisional-itineraries`, undefined),
+  updateProvisionalItinerary: (csrf: string, itineraryId: string, body: {
+    expected_revision: number;
+    day_count: number;
+    title_by_locale?: Partial<Record<Locale, string>>;
+    days: Array<{ day_number: number; stops: Array<{ name: string; role: ProvisionalStopRole; destination_id?: string | null; notes_by_locale?: Partial<Record<Locale, string>> }> }>;
+  }) => request<ProvisionalItinerary>(`/provisional-itineraries/${encodeURIComponent(itineraryId)}`, csrf, json('PUT', body)),
   createItinerary: (csrf: string, tripId: string, body: {
     recommendation_request_id: string;
     day_count: number;

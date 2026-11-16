@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Locale } from '../i18n/messages';
 import {
-  deviceCalendarDate, formatJalaaliDate, isoToJalaali, jalaaliMonthDays,
+  deviceCalendarDate, formatJalaaliDate, isoToJalaali, jalaaliMonthDays, parseIsoCalendarDate,
   jalaaliToIso, jalaaliWeekStartOffset, JALALI_MONTHS_FA, JALALI_WEEKDAYS_FA,
 } from './jalaliDate';
 
@@ -11,7 +11,6 @@ const copy = {
   ar: { choose: 'اختر تاريخاً ميلادياً', previous: 'الشهر السابق', next: 'الشهر التالي', gregorian: 'ميلادي', hijri: 'هجري', clear: 'مسح التاريخ' },
 } as const;
 
-const englishMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const weekdays = {
   'fa-IR': JALALI_WEEKDAYS_FA,
   'en-US': ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
@@ -48,12 +47,16 @@ export function JalaliDatePicker({ id, label, locale, value, onChange, timeZone 
   const fa = locale === 'fa-IR';
   const messages = copy[locale];
   const displayLocale = locale;
+  const todayIso = deviceCalendarDate(timeZone ?? (fa ? 'Asia/Tehran' : undefined));
   const selectedJalali = fa ? isoToJalaali(value) : null;
-  const todayJalali = isoToJalaali(deviceCalendarDate(timeZone ?? (fa ? 'Asia/Tehran' : undefined)))
-    ?? isoToJalaali(new Date().toISOString().slice(0, 10))!;
-  const initialMonth = selectedJalali ?? todayJalali;
+  const selectedGregorian = parseIsoCalendarDate(value);
+  const todayJalali = isoToJalaali(todayIso)!;
+  const todayGregorian = parseIsoCalendarDate(todayIso)!;
+  const initialView = fa
+    ? { year: (selectedJalali ?? todayJalali).jy, month: (selectedJalali ?? todayJalali).jm }
+    : { year: (selectedGregorian ?? todayGregorian).gy, month: (selectedGregorian ?? todayGregorian).gm };
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState({ year: initialMonth.jy, month: initialMonth.jm });
+  const [view, setView] = useState(initialView);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -71,13 +74,18 @@ export function JalaliDatePicker({ id, label, locale, value, onChange, timeZone 
   }, [open]);
 
   useEffect(() => {
-    if (selectedJalali) setView({ year: selectedJalali.jy, month: selectedJalali.jm });
-  }, [value]);
+    // Switching locale must switch calendar years even when no date is set.
+    const jalali = selectedJalali ?? todayJalali;
+    const gregorian = selectedGregorian ?? todayGregorian;
+    setView(fa ? { year: jalali.jy, month: jalali.jm }
+      : { year: gregorian.gy, month: gregorian.gm });
+  }, [value, locale, timeZone]);
 
   const days = useMemo(() => {
-    if (!fa) return [];
-    const count = jalaaliMonthDays(view.year, view.month);
-    const offset = jalaaliWeekStartOffset(view.year, view.month);
+    const count = fa ? jalaaliMonthDays(view.year, view.month)
+      : new Date(Date.UTC(view.year, view.month, 0)).getUTCDate();
+    const offset = fa ? jalaaliWeekStartOffset(view.year, view.month)
+      : new Date(Date.UTC(view.year, view.month - 1, 1)).getUTCDay();
     return Array.from({ length: 42 }, (_, index) => {
       const day = index - offset + 1;
       return day >= 1 && day <= count ? day : null;
@@ -87,37 +95,35 @@ export function JalaliDatePicker({ id, label, locale, value, onChange, timeZone 
   const selectedText = value
     ? (fa ? formatJalaaliDate(value, locale) : gregorianDateLabel(value, locale))
     : messages.choose;
+  const gregorianMonthLabel = new Intl.DateTimeFormat(locale, {
+    month: 'long', year: 'numeric', calendar: 'gregory', timeZone: 'UTC',
+  }).format(new Date(Date.UTC(view.year, view.month - 1, 15)));
   const monthTitle = fa
     ? `${JALALI_MONTHS_FA[view.month - 1]} ${new Intl.NumberFormat('fa-IR', { useGrouping: false }).format(view.year)}`
-    : `${englishMonths[view.month - 1]} ${view.year}`;
-
-  if (!fa) {
-    return <div className="travel-date-field">
-      <label htmlFor={id}>{label}</label>
-      <input id={id} type="date" value={value} onChange={event => onChange(event.currentTarget.value)} />
-    </div>;
-  }
+    : gregorianMonthLabel;
 
   const chooseDay = (day: number) => {
-    const iso = jalaaliToIso({ jy: view.year, jm: view.month, jd: day });
+    const iso = fa ? jalaaliToIso({ jy: view.year, jm: view.month, jd: day })
+      : `${String(view.year).padStart(4, '0')}-${String(view.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     if (iso) onChange(iso);
     setOpen(false);
   };
   const number = (value: number) => new Intl.NumberFormat(displayLocale, { useGrouping: false }).format(value);
 
-  return <div className="travel-date-field jalali-date-field" ref={rootRef} dir="rtl">
+  return <div className="travel-date-field jalali-date-field" ref={rootRef} dir={fa ? 'rtl' : locale === 'ar' ? 'rtl' : 'ltr'}>
     <span className="travel-date-label" id={`${id}-label`}>{label}</span>
     <input type="hidden" id={id} value={value} readOnly />
     <button id={`${id}-picker`} className="jalali-date-trigger" type="button"
       aria-labelledby={`${id}-label ${id}-picker`} aria-haspopup="dialog" aria-expanded={open}
       onClick={() => {
-        const current = selectedJalali ?? todayJalali;
-        setView({ year: current.jy, month: current.jm });
+        setView(fa
+          ? { year: (selectedJalali ?? todayJalali).jy, month: (selectedJalali ?? todayJalali).jm }
+          : { year: (selectedGregorian ?? todayGregorian).gy, month: (selectedGregorian ?? todayGregorian).gm });
         setOpen(value => !value);
       }}>
       <span>{selectedText}</span><span aria-hidden="true">▦</span>
     </button>
-    {value && <small className="jalali-gregorian-equivalent">{messages.gregorian}: {gregorianDateLabel(value, locale)} · {messages.hijri}: {hijriDateLabel(value)}</small>}
+    {fa && value && <small className="jalali-gregorian-equivalent">{messages.gregorian}: {gregorianDateLabel(value, locale)} · {messages.hijri}: {hijriDateLabel(value)}</small>}
     {open && <div className="jalali-calendar" role="dialog" aria-modal="false" aria-label={monthTitle}>
       <div className="jalali-calendar-heading">
         <button type="button" aria-label={messages.previous} onClick={() => setView(current => moveMonth(current.year, current.month, -1))}>‹</button>
@@ -125,12 +131,17 @@ export function JalaliDatePicker({ id, label, locale, value, onChange, timeZone 
         <button type="button" aria-label={messages.next} onClick={() => setView(current => moveMonth(current.year, current.month, 1))}>›</button>
       </div>
       <div className="jalali-calendar-grid" role="grid" aria-label={monthTitle}>
-        {weekdays['fa-IR'].map((weekday, index) => <span role="columnheader" key={`${weekday}-${index}`}>{weekday}</span>)}
+        {weekdays[locale].map((weekday, index) => <span role="columnheader" key={`${weekday}-${index}`}>{weekday}</span>)}
         {days.map((day, index) => day === null
           ? <span aria-hidden="true" role="gridcell" key={`empty-${index}`} />
           : <button role="gridcell" type="button" key={day}
-            aria-label={`${JALALI_WEEKDAYS_FA[index % 7]} ${number(day)} ${JALALI_MONTHS_FA[view.month - 1]} ${number(view.year)}`}
-            aria-pressed={Boolean(selectedJalali && selectedJalali.jy === view.year && selectedJalali.jm === view.month && selectedJalali.jd === day)}
+            aria-label={`${weekdays[locale][index % 7]} ${number(day)} ${monthTitle}`}
+            aria-current={fa
+              ? (todayJalali.jy === view.year && todayJalali.jm === view.month && todayJalali.jd === day ? 'date' : undefined)
+              : (todayGregorian.gy === view.year && todayGregorian.gm === view.month && todayGregorian.gd === day ? 'date' : undefined)}
+            aria-pressed={fa
+              ? Boolean(selectedJalali && selectedJalali.jy === view.year && selectedJalali.jm === view.month && selectedJalali.jd === day)
+              : Boolean(selectedGregorian && selectedGregorian.gy === view.year && selectedGregorian.gm === view.month && selectedGregorian.gd === day)}
             onClick={() => chooseDay(day)}>{number(day)}</button>)}
       </div>
       {value && <button className="jalali-clear-date" type="button" onClick={() => { onChange(''); setOpen(false); }}>{messages.clear}</button>}

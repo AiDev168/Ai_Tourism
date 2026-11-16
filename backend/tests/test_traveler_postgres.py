@@ -13,6 +13,10 @@ from app.api.auth import get_settings
 from app.core.config import Settings
 from app.main import app
 from app.modules.identity.sms import FakeSmsAdapter
+from app.modules.trip.requirements_interpretation import (
+    interpret_trip_requirements,
+    trip_requirements_storage_view,
+)
 from test_auth_postgres import connect, make_settings
 
 pytestmark = pytest.mark.skipif(
@@ -90,6 +94,7 @@ def test_real_app_persists_owner_scoped_trip_and_deletes_all_content():
     app.state.sms_adapter = sms
     client_a = TestClient(app)
     client_b = TestClient(app)
+    test_external_link_id = None
     try:
         user_a, csrf_a = _sign_in(client_a, sms, TEST_PHONES[0])
         user_b, csrf_b = _sign_in(client_b, sms, TEST_PHONES[1])
@@ -228,19 +233,13 @@ def test_real_app_persists_owner_scoped_trip_and_deletes_all_content():
             assert _count(connection, "travel.itineraries", "trip_id", trip_id) == 0
 
         # Explicit conversation deletion also removes its nested trip and text.
-        budget_profile = {
-            "value": {
-                "amount": 20,
-                "currency": None,
-                "unit": "میلیون تومان",
-                "raw": "20 میلیون تومان",
-            },
-            "status": "extracted",
-            "evidence": "20 میلیون تومان",
-        }
+        second_request_text = "Please plan a trip with a budget of 20 million toman."
+        budget_profile = trip_requirements_storage_view(
+            interpret_trip_requirements(second_request_text, "en-US")
+        )["budget"]
         second_request = {
             **request_body,
-            "request_text": "Please plan a trip with a budget of 20 million toman.",
+            "request_text": second_request_text,
             "extracted_requirements": {
                 **request_body["extracted_requirements"],
                 "budget": budget_profile,
@@ -352,12 +351,13 @@ def test_real_app_persists_owner_scoped_trip_and_deletes_all_content():
             app.dependency_overrides[get_settings] = previous_settings
         app.state.sms_adapter = previous_sms
         _clean_test_records(settings)
-        with connect(settings) as connection, connection.transaction():
-            connection.execute(
-                "DELETE FROM integration.outbound_clicks WHERE external_link_id=%s",
-                (test_external_link_id,),
-            )
-            connection.execute(
-                "DELETE FROM integration.external_links WHERE external_link_id=%s",
-                (test_external_link_id,),
-            )
+        if test_external_link_id is not None:
+            with connect(settings) as connection, connection.transaction():
+                connection.execute(
+                    "DELETE FROM integration.outbound_clicks WHERE external_link_id=%s",
+                    (test_external_link_id,),
+                )
+                connection.execute(
+                    "DELETE FROM integration.external_links WHERE external_link_id=%s",
+                    (test_external_link_id,),
+                )

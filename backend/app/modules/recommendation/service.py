@@ -109,6 +109,15 @@ _FIELD_REASON_CODES = {
     "duration_days": "requirements_incomplete",
     "destination_resolution": "requirements_incomplete", "trip_profile": "requirements_incomplete",
 }
+_KNOWN_FIELD_REASON_CODES = {
+    "destination": "requested_destination_identity_unresolved",
+    "interests": "interest_match_not_catalogue_verified",
+    "origin": "known_fit_not_catalogue_verified",
+    "travel_dates": "known_fit_not_catalogue_verified",
+    "traveler_count": "known_fit_not_catalogue_verified",
+    "budget": "known_fit_not_catalogue_verified",
+    "soft_preference": "known_fit_not_catalogue_verified",
+}
 
 
 def _unwrap(requirements: Mapping[str, object], key: str) -> object:
@@ -179,6 +188,9 @@ def _validate_budget(value: object) -> bool:
     normalized_unit = normalized_unit.replace("\u0645\u0644\u06cc\u0648\u0646", "\u0645\u06cc\u0644\u06cc\u0648\u0646")
     normalized_unit = re.sub(r"[\u064b-\u065f\u0670]", "", normalized_unit)
     normalized_unit = " ".join(normalized_unit.split())
+    # Colloquial Persian spellings are validation aliases for the same Toman
+    # denomination; the original unit/raw text remains unchanged in storage.
+    normalized_unit = re.sub(r"تومن(?:ه)?$", "تومان", normalized_unit)
     unit_currency = {
         "rial": "IRR", "irr": "IRR", "million rial": "IRR", "million irr": "IRR",
         "ریال": "IRR", "میلیون ریال": "IRR",
@@ -290,7 +302,7 @@ def _canonical_list(value: object) -> list[str]:
 
 def _assess_requirements(
     requirements: Mapping[str, object],
-) -> tuple[int | None, tuple[str, ...], tuple[str, ...], tuple[str, ...], bool]:
+) -> tuple[int | None, tuple[str, ...], tuple[str, ...], tuple[str, ...], bool, tuple[str, ...]]:
     unknown_keys = set(requirements) - _ALLOWED_REQUIREMENT_KEYS
     if unknown_keys:
         raise _InvalidRequirements
@@ -329,6 +341,7 @@ def _assess_requirements(
     confirmation_codes = _canonical_list(confirmation)
 
     unresolved: list[str] = [*missing_codes, *ambiguous_codes, *confirmation_codes]
+    known_fields: list[str] = []
     if extraction_status == "needs_clarification":
         unresolved.append("trip_profile")
     for key in requirements:
@@ -345,37 +358,42 @@ def _assess_requirements(
         unresolved.append("duration_days")
     elif isinstance(duration, bool) or not isinstance(duration, int) or not 1 <= duration <= MAX_DURATION_DAYS:
         raise _InvalidRequirements
+    else:
+        known_fields.append("duration_days")
 
-    # Optional fields are never treated as satisfied merely because they were
-    # parsed. Until the approved catalogue exposes matching facts, explicit
-    # values require confirmation. Their original values remain in the trip
-    # profile and are not converted or discarded here.
+    # A supplied traveler value is known even if the destination catalogue
+    # cannot evaluate destination-dependent fit. Keep that distinction in the
+    # assessment; only missing/ambiguous values and hard constraints block.
     origin = _unwrap(requirements, "origin")
-    if origin is not None and (not isinstance(origin, str) or origin.strip()):
+    if origin is not None:
         if not isinstance(origin, str):
             raise _InvalidRequirements
-        unresolved.append("origin")
+        if origin.strip():
+            known_fields.append("origin")
 
     dates = _unwrap_aliases(requirements, "travelDates", "travel_dates")
     if _validate_dates(dates):
-        unresolved.append("travel_dates")
+        known_fields.append("travel_dates")
 
     travelers = _unwrap_aliases(requirements, "travelerCount", "traveler_count")
     if travelers is not None:
         if isinstance(travelers, bool) or not isinstance(travelers, int) or not 1 <= travelers <= 100:
             raise _InvalidRequirements
-        unresolved.append("traveler_count")
+        known_fields.append("traveler_count")
 
     if _validate_budget(_unwrap(requirements, "budget")):
-        unresolved.append("budget")
+        known_fields.append("budget")
 
     soft_preferences = _string_list(_unwrap(requirements, "soft_preferences"), field="soft_preferences")
     if soft_preferences:
-        unresolved.append("soft_preference")
+        # The traveler's preference is known. Its fit is not measured by the
+        # current approved catalogue, so it must neither block planning nor
+        # enter ranking as a match.
+        known_fields.append("soft_preference")
 
     for key in ("budget_range", "max_budget"):
         if key in requirements and _validate_budget(_unwrap(requirements, key)):
-            unresolved.append("budget")
+            known_fields.append("budget")
 
     for key in ("access", "accessibility", "access_modes", "accessModes", "visitor_access"):
         if key in requirements and _explicit_strings(_unwrap(requirements, key)):
@@ -419,7 +437,7 @@ def _assess_requirements(
 
     for key in ("date_range", "dates"):
         if key in requirements and _validate_dates(_unwrap(requirements, key)):
-            unresolved.append("travel_dates")
+            known_fields.append("travel_dates")
     if "flexible_dates" in requirements and _explicit_strings(_unwrap(requirements, "flexible_dates")):
         unresolved.append("travel_dates")
 
@@ -428,7 +446,7 @@ def _assess_requirements(
             count = _unwrap(requirements, key)
             if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 100:
                 raise _InvalidRequirements
-            unresolved.append("traveler_count")
+            known_fields.append("traveler_count")
     for key in ("party_composition", "group"):
         if key in requirements and _explicit_strings(_unwrap(requirements, key)):
             unresolved.append("party_composition")
@@ -443,6 +461,10 @@ def _assess_requirements(
 
     destinations = _string_list(_unwrap(requirements, "destinations"), field="destinations")
     interests = _string_list(_unwrap(requirements, "interests"), field="interests")
+    if destinations:
+        known_fields.append("destination")
+    if interests:
+        known_fields.append("interests")
     profile_destination_ids = requirements.get("destination_ids")
     if profile_destination_ids is not None:
         normalized_profile_ids = _string_list(profile_destination_ids, field="destination_ids")
@@ -453,11 +475,15 @@ def _assess_requirements(
 
     has_destination_text = bool(destinations)
     unique_unresolved = tuple(dict.fromkeys(unresolved))
-    return duration, interests, unique_unresolved, normalized_profile_ids, has_destination_text
+    return (
+        duration, interests, unique_unresolved, normalized_profile_ids,
+        has_destination_text, tuple(dict.fromkeys(known_fields)),
+    )
 
 
 def _requirement_consent(
-    requirements: Mapping[str, object], unresolved: tuple[str, ...], profile_version: int | None,
+    requirements: Mapping[str, object], unresolved: tuple[str, ...],
+    known_fields: tuple[str, ...], profile_version: int | None,
 ) -> tuple[list[RequirementAssessment], list[str], list[str]]:
     """Validate version-bound explicit choices and classify unresolved fields.
 
@@ -488,7 +514,7 @@ def _requirement_consent(
                for field, decision in raw_decisions.items()):
             raise _InvalidRequirements
         decisions = raw_decisions
-        if not set(decisions).issubset(set(unresolved)):
+        if not set(decisions).issubset(set(unresolved) | set(known_fields)):
             raise _InvalidRequirements
         if any(
             decision == "advisory" and field not in _WAIVABLE_FIELDS
@@ -508,7 +534,13 @@ def _requirement_consent(
         if set(raw_acknowledgements) != advisory_fields:
             raise _InvalidRequirements
 
-    assessments: list[RequirementAssessment] = []
+    assessments: list[RequirementAssessment] = [
+        RequirementAssessment(
+            field=field, decision=None, status="known",
+            reason_code=_KNOWN_FIELD_REASON_CODES.get(field, "traveler_value_known"),
+        )
+        for field in known_fields
+    ]
     blockers: list[str] = []
     waived: list[str] = []
     for field in unresolved:
@@ -555,12 +587,15 @@ def recommend_trip(
     requirements_for_assessment = dict(requirements)
     consent_value = requirements_for_assessment.pop(_CONSENT_KEY, None)
     try:
-        duration_days, interests, unresolved, profile_destination_ids, has_destination_text = _assess_requirements(requirements_for_assessment)
+        (
+            duration_days, interests, unresolved, profile_destination_ids,
+            has_destination_text, known_fields,
+        ) = _assess_requirements(requirements_for_assessment)
         consent_input = dict(requirements_for_assessment)
         if consent_value is not None:
             consent_input[_CONSENT_KEY] = consent_value
         assessments, blocking_fields, waived_fields = _requirement_consent(
-            consent_input, unresolved, profile_version
+            consent_input, unresolved, known_fields, profile_version
         )
     except _StaleRequirementConsent:
         return RecommendationOutcome(
@@ -751,6 +786,8 @@ def recommend_trip(
         scope_raw = 1.0 if hit.scope_match == "explicit_identity" else 0.7
         unknown = list(UNKNOWN_FACT_FIELDS)
         warnings = ["ranking_is_structured_match_not_quality_score"]
+        if "soft_preference" in known_fields:
+            warnings.append("preference_fit_not_evaluated")
         if interests:
             unknown.append("interest_match")
             warnings.append("interest_tags_not_locale_typed_unmatched")
@@ -770,8 +807,8 @@ def recommend_trip(
                     + [f"interest:{term}" for term in matched_interests]
                 ),
                 unknown_fields=unknown,
-                warnings=warnings + (["requirements_not_evaluated"] if waived_fields else []),
-                not_evaluated_fields=waived_fields,
+                warnings=warnings + (["requirements_not_evaluated"] if consent_metadata["not_evaluated_fields"] else []),
+                not_evaluated_fields=consent_metadata["not_evaluated_fields"],
                 explanation_key=(
                     "explicit_destination_match" if hit.scope_match == "explicit_identity"
                     else "published_area_candidate"

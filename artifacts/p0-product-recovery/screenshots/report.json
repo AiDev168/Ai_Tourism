@@ -1,0 +1,33 @@
+{
+  "mode": "anonymous PWA shell; API requests locally stubbed to 503 and not forwarded",
+  "browser": "Chromium 157.0.8103.40",
+  "source_sha": "uncommitted working tree",
+  "results": [
+    {
+      "name": "fa-IR-mobile",
+      "locale": "fa-IR",
+      "width": 390,
+      "height": 844,
+      "viewport": 390,
+      "document": 390,
+      "direction": "rtl",
+      "language": "fa-IR",
+      "horizontalOverflow": false,
+      "pageErrors": [],
+      "screenshot": "C:/Projects/Ai_Tourism/artifacts/p0-product-recovery/screenshots/fa-IR-mobile.png"
+    },
+    {
+      "name": "fa-IR-desktop",
+      "locale": "fa-IR",
+      "width": 1440,
+      "height": 1000,
+      "viewport": 1440,
+      "document": 1440,
+      "direction": "rtl",
+      "language": "fa-IR",
+      "horizontalOverflow": false,
+      "pageErrors": [],
+      "screenshot": "C:/Projects/Ai_Tourism/artifacts/p0-product-recovery/screenshots/fa-IR-desktop.png"
+    }
+  ]
+}

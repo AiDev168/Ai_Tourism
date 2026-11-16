@@ -178,17 +178,26 @@ def test_invalid_requirement_types_fail_closed_and_explicit_unverifiable_fields_
         selected_destination_ids=["1"], catalogue=[selected],
         evidence_by_destination=evidence, locale="en-US",
     )
-    assert unverified.status == "needs_confirmation"
-    assert set(unverified.unresolved_fields) == {"traveler_count", "budget", "travel_dates"}
-    assert unverified.items == []
+    assert unverified.status == "available"
+    assert unverified.unresolved_fields == []
+    assert unverified.not_evaluated_fields == []
+    assert {item.field for item in unverified.requirement_assessments if item.status == "known"} == {
+        "duration_days", "traveler_count", "budget", "travel_dates",
+    }
+    assert all(
+        item.reason_code == "known_fit_not_catalogue_verified"
+        for item in unverified.requirement_assessments
+        if item.field in {"traveler_count", "budget", "travel_dates"}
+    )
 
     zero_budget = recommend_trip(
         requirements=requirements(budget={"value": {"amount": 0, "currency": "IRR", "unit": "rial"}}),
         selected_destination_ids=["1"], catalogue=[selected],
         evidence_by_destination=evidence, locale="en-US",
     )
-    assert zero_budget.status == "needs_confirmation"
-    assert zero_budget.unresolved_fields == ["budget"]
+    assert zero_budget.status == "available"
+    assert zero_budget.unresolved_fields == []
+    assert zero_budget.not_evaluated_fields == []
 
 
 def test_documented_hard_requirement_keys_have_stable_unresolved_codes() -> None:
@@ -203,7 +212,6 @@ def test_documented_hard_requirement_keys_have_stable_unresolved_codes() -> None
         "radius": (5, "radius"),
         "season": ("spring", "season"),
         "time_window": ({"start": "09:00", "end": "12:00"}, "time_window"),
-        "party_size": (4, "traveler_count"),
         "party_composition": (["children"], "party_composition"),
         "transport": ("rail", "transport"),
         "travel_style": ("slow travel", "travel_style"),
@@ -218,6 +226,15 @@ def test_documented_hard_requirement_keys_have_stable_unresolved_codes() -> None
         assert result.status == "needs_confirmation", key
         assert result.unresolved_fields == [field_code], key
         assert result.items == [], key
+
+    party_size = recommend_trip(
+        requirements=requirements(party_size={"value": 4, "status": "confirmed"}),
+        selected_destination_ids=["1"], catalogue=[selected],
+        evidence_by_destination=evidence, locale="en-US",
+    )
+    assert party_size.status == "available"
+    assert party_size.unresolved_fields == []
+    assert next(item for item in party_size.requirement_assessments if item.field == "traveler_count").status == "known"
 
 
 def test_malformed_status_and_unknown_missing_field_codes_fail_closed_without_type_errors() -> None:

@@ -18,6 +18,10 @@ const apiPort = Number(process.env.E2E_API_PORT || 8811);
 const webOrigin = `http://127.0.0.1:${webPort}`;
 const apiTarget = `http://127.0.0.1:${apiPort}`;
 
+const containsFortyFive = value => /(?:45|۴۵|٤٥)/u.test(String(value ?? ''));
+const containsToman = value => /(?:تومان|toman)/iu.test(String(value ?? ''));
+const containsMillion = value => /(?:million|میلیون|مليون)/iu.test(String(value ?? ''));
+
 function requireEnv(name) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`missing_${name.toLowerCase()}`);
@@ -171,8 +175,12 @@ async function startApi() {
   // Python only emits stable exception class labels to stderr. Retain a small
   // bounded buffer internally; never print a Python traceback or credentials.
   let safeErrorType = '';
+  let safeAssistantFailure = '';
   child.stderr.on('data', chunk => {
-    const match = chunk.toString('utf8').match(/E2E server failed closed: ([A-Za-z]+Error)/);
+    const safeChunk = chunk.toString('utf8');
+    const assistantMatch = safeChunk.match(/assistant\.turn\.failed phase=([a-z_]+) error_type=([A-Za-z]+)/);
+    if (assistantMatch) safeAssistantFailure = `${assistantMatch[1]}_${assistantMatch[2]}`;
+    const match = safeChunk.match(/E2E server failed closed: ([A-Za-z]+Error)/);
     if (match) safeErrorType = match[1].toLowerCase();
   });
   child.on('error', () => { safeErrorType = 'process_spawn_error'; });
@@ -188,7 +196,8 @@ async function startApi() {
     child.kill();
     throw new Error('guarded_api_start_failed_' + (safeErrorType || ready?.event || 'unknown'));
   }
-  return { child, pipe, controlPort, controlToken, ownerRagEnabled: ownerRag.enabled };
+  return { child, pipe, controlPort, controlToken, ownerRagEnabled: ownerRag.enabled,
+    safeAssistantFailure: () => safeAssistantFailure };
 }
 
 async function startWeb() {
@@ -303,7 +312,7 @@ const localeCopy = {
     createPlan: 'أنشئ مسودة خطة',
     deleteTrip: 'احذف الرحلة',
     deleteConversation: 'احذف المحادثة وكل رحلاتها',
-    prompt: 'رحلة لمدة ١٠ أيام إلى شيراز بميزانية ٢٠ مليون درهم؛ أفضل المسارات المعبدة؛ إمكانية الوصول بالكراسي المتحركة ضرورية؛ يجب تجنب الطرق الوعرة.',
+    prompt: '\u0631\u062d\u0644\u0629 \u0644\u0645\u062f\u0629 10 \u0623\u064a\u0627\u0645 \u0625\u0644\u0649 Shiraz \u0628\u0645\u064a\u0632\u0627\u0646\u064a\u0629 20 \u0645\u0644\u064a\u0648\u0646 \u062f\u0631\u0647\u0645؛ \u0623\u0641\u0636\u0644 \u0627\u0644\u0645\u0633\u0627\u0631\u0627\u062a \u0627\u0644\u0645\u0639\u0628\u062f\u0629؛ \u0627\u062d\u062a\u064a\u0627\u062c\u0627\u062a \u062d\u0631\u0643\u064a\u0629 \u0636\u0631\u0648\u0631\u064a\u0629؛ \u064a\u062c\u0628 \u062a\u062c\u0646\u0628 \u0627\u0644\u0637\u0631\u0642 \u0627\u0644\u0648\u0639\u0631\u0629.' ,
     accessLabel: 'إمكانية الوصول',
     softPreference: 'المسارات المعبدة',
   },
@@ -488,7 +497,7 @@ async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshot
     throw new Error('isolated_four_destination_fixture_missing');
   }
   try {
-    const requestText = 'درخواست آزمایشی برای برنامه پانزده روزه';
+    const requestText = '\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0622\u0632\u0645\u0627\u06cc\u0634\u06cc: \u0633\u0641\u0631 15 \u0631\u0648\u0632\u0647';
     const started = await requestBrowserJson(page, '/api/v1/conversations', 'POST', csrf, {
       locale,
       request_text: requestText,
@@ -1015,10 +1024,19 @@ async function appendPersianFollowUp(page, conversationId, tripId, content) {
   await page.locator('.conversation-local-action button').click();
   const response = await responsePending;
   const body = await response.json();
+  const submitted = response.request().postDataJSON()?.extracted_requirements;
   if (response.status() !== 201 || !response.headers()['cache-control']?.includes('no-store')
       || body.trip?.original_request !== localeCopy['fa-IR'].prompt
       || body.message?.content !== content) {
     throw new Error('persian_follow_up_not_persisted_or_original_request_changed');
+  }
+  if (/(?:45|۴۵)\s*میلیون/u.test(content)
+      && Number(submitted?.budget?.value?.amount) !== 45) {
+    throw new Error(`persian_budget_correction_not_extracted_amount=${submitted?.budget?.value?.amount ?? 'missing'}`);
+  }
+  if (/(?:45|۴۵)\s*میلیون/u.test(content)
+      && Number(body.trip?.extracted_requirements?.budget?.value?.amount) !== 45) {
+    throw new Error(`persian_budget_correction_not_persisted_amount=${body.trip?.extracted_requirements?.budget?.value?.amount ?? 'missing'}`);
   }
   return body;
 }
@@ -1026,38 +1044,31 @@ async function appendPersianFollowUp(page, conversationId, tripId, content) {
 async function verifySimulatedAssistant(page, api, locale, conversationId, tripId, csrf, expectedTripVersion, expectedConversationVersion, expectedDuration) {
   const before = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
   const assistantButton = page.locator('.assistant-controls > button');
-  if (await assistantButton.isEnabled()) throw new Error('assistant_without_remote_consent_enabled');
-  const noConsentStatus = await apiStatus(page,
-    '/api/v1/conversations/' + conversationId + '/assistant-turns', 'POST',
-    { 'X-CSRF-Token': csrf }, {
-      trip_id: tripId, content: 'Unauthorized provider processing',
-      idempotency_key: randomUUID(), expected_version: expectedConversationVersion,
-      remote_processing_consent: false,
-    });
-  if (noConsentStatus !== 422) throw new Error('assistant_without_consent_api_not_rejected');
-  const afterNoConsent = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
-  if (afterNoConsent.count !== before.count) throw new Error('assistant_gateway_called_without_consent');
+  if (!(await assistantButton.isEnabled())) throw new Error('assistant_blocked_without_redundant_ai_consent');
+  const destinationByLocale = { 'fa-IR': '\u0634\u06cc\u0631\u0627\u0632', 'en-US': 'Shiraz', ar: 'Shiraz' };
   const prompt = {
-    'fa-IR': 'برای این سفر یک پیشنهاد آزمایشی بده.',
-    'en-US': 'Give an example suggestion for this trip.',
-    ar: 'أعطني اقتراحا تجريبيا لهذه الرحلة.',
+    'fa-IR': '\u0628\u0631\u0627\u06cc \u0633\u0641\u0631 2 \u0631\u0648\u0632 \u0633\u0641\u0631 \u0628\u0647 \u0634\u06cc\u0631\u0627\u0632 \u067e\u06cc\u0634\u0646\u0647\u0627\u062f \u0628\u062f\u0647.',
+    'en-US': 'Please suggest a 2-day trip to Shiraz.',
+    ar: '\u0627\u0642\u062a\u0631\u062d \u0631\u062d\u0644\u0629 \u0644\u0645\u062f\u0629 2 \u064a\u0648\u0645 \u0625\u0644\u0649 Shiraz.',
   }[locale];
+  const expectedCandidateDestination = destinationByLocale[locale];
   await page.locator('#trip-follow-up').fill(prompt);
-  await page.locator('#assistant-remote-consent').check();
   const path = '/api/v1/conversations/' + conversationId + '/assistant-turns';
   const responsePending = page.waitForResponse(response =>
     new URL(response.url()).pathname === path && response.request().method() === 'POST');
   await assistantButton.click();
   const response = await responsePending;
   const body = await response.json();
+  const candidateFields = body.candidate_requirements?.fields;
   if (response.status() !== 200 || !response.headers()['cache-control']?.includes('no-store')
-      || body.replayed || body.candidate_requirements?.destination !== 'Kashan'
-      || body.candidate_requirements?.duration_days !== 2
+      || body.replayed || body.candidate_requirements?.contract_version !== 'trip-requirements-v1'
+      || candidateFields?.destination?.value !== expectedCandidateDestination
+      || candidateFields?.duration_days?.value !== 2
       || body.trip?.version !== expectedTripVersion
       || Object.keys(body.trip?.confirmed_requirements ?? {}).length !== 0) {
-    throw new Error('simulated_assistant_endpoint_or_trip_invariant_failed_' + locale);
+    throw new Error(`simulated_assistant_endpoint_or_trip_invariant_failed_${locale}_status=${response.status()}_no_store=${response.headers()['cache-control']?.includes('no-store')}_replayed=${body.replayed}_candidate_version=${body.candidate_requirements?.contract_version}_candidate_destination=${candidateFields?.destination?.value}_candidate_duration=${candidateFields?.duration_days?.value}_trip_version=${body.trip?.version}_expected_trip_version=${expectedTripVersion}_confirmed_keys=${Object.keys(body.trip?.confirmed_requirements ?? {}).length}`);
   }
-  await page.locator('.saved-message-assistant p').waitFor({ state: 'visible' });
+  await page.locator('.saved-message-assistant p').first().waitFor({ state: 'visible' });
   await page.locator('.assistant-candidate').waitFor({ state: 'visible' });
   if (await page.locator('#profile-duration').inputValue() !== String(expectedDuration)) {
     throw new Error('assistant_changed_profile_without_confirmation_' + locale);
@@ -1065,11 +1076,12 @@ async function verifySimulatedAssistant(page, api, locale, conversationId, tripI
   const stored = await page.request.get(webOrigin + '/api/v1/conversations/' + conversationId);
   const conversation = await stored.json();
   const saved = conversation.messages?.filter(m => m.role === 'assistant' && m.trip_id === tripId);
-  if (stored.status() !== 200 || saved?.length !== 1
-      || saved[0].candidate_requirements?.destination !== 'Kashan'
-      || saved[0].candidate_requirements?.duration_days !== 2
-      || 'metadata' in saved[0]) {
-    throw new Error('assistant_advisory_not_reopenable_or_metadata_exposed_' + locale);
+  const savedAssistantTurn = saved?.find(m => m.message_id === body.message?.message_id);
+  if (stored.status() !== 200 || !savedAssistantTurn
+      || savedAssistantTurn.candidate_requirements?.fields?.destination?.value !== expectedCandidateDestination
+      || savedAssistantTurn.candidate_requirements?.fields?.duration_days?.value !== 2
+      || 'metadata' in savedAssistantTurn) {
+    throw new Error(`assistant_advisory_not_reopenable_or_metadata_exposed_${locale}_status=${stored.status()}_saved=${saved?.length}_destination=${savedAssistantTurn?.candidate_requirements?.fields?.destination?.value}_duration=${savedAssistantTurn?.candidate_requirements?.fields?.duration_days?.value}_metadata=${'metadata' in (savedAssistantTurn ?? {})}`);
   }
   // Same idempotency key must replay durable state, not call the simulated
   // gateway again or create another assistant message.
@@ -1096,12 +1108,10 @@ async function verifySimulatedAssistant(page, api, locale, conversationId, tripI
     throw new Error('assistant_suggestion_dismissal_mutated_profile_' + locale);
   }
 
-  // A second explicitly consented simulated turn provides a bounded candidate
+  // A second simulated turn provides a bounded candidate
   // that the traveler applies only to the editable draft; confirmation remains
   // gated until the profile and requirement decisions are reviewed.
-  const secondPrompt = locale === 'fa-IR'
-    ? 'این پیشنهاد را فقط برای بررسی نشان بده و اطلاعات قطعی سفر را تغییر نده.'
-    : 'Show another suggestion for review without changing confirmed trip details.';
+  const secondPrompt = prompt;
   await page.locator('#trip-follow-up').fill(secondPrompt);
   const secondPending = page.waitForResponse(response =>
     new URL(response.url()).pathname === path && response.request().method() === 'POST');
@@ -1109,7 +1119,7 @@ async function verifySimulatedAssistant(page, api, locale, conversationId, tripI
   const secondResponse = await secondPending;
   const secondBody = await secondResponse.json();
   if (secondResponse.status() !== 200 || secondBody.trip?.version !== expectedTripVersion
-      || secondBody.candidate_requirements?.duration_days !== 2) {
+      || secondBody.candidate_requirements?.fields?.duration_days?.value !== 2) {
     throw new Error('second_simulated_assistant_turn_invalid_' + locale);
   }
   await page.locator('.assistant-candidate button').first().click(); // Apply only as an editable suggestion.
@@ -1118,13 +1128,12 @@ async function verifySimulatedAssistant(page, api, locale, conversationId, tripI
     throw new Error('applied_ai_suggestion_bypassed_profile_review_' + locale);
   }
   await page.locator('#profile-duration').fill(String(expectedDuration));
-  const destinationByLocale = { 'fa-IR': 'شیراز', 'en-US': 'Shiraz', ar: 'شيراز' };
   await page.locator('#profile-destination-0').fill(destinationByLocale[locale]);
   if (locale === 'fa-IR') {
     if (await page.locator('#profile-duration').inputValue() !== '15'
         || await page.locator('#profile-travelers').inputValue() !== '4'
-        || !((await page.locator('#profile-budget').inputValue()).includes('45'))
-        || !(await page.locator('#profile-budget').inputValue()).includes('تومان')
+        || !containsFortyFive(await page.locator('#profile-budget').inputValue())
+        || !containsToman(await page.locator('#profile-budget').inputValue())
         || await confirmButton.isEnabled()) {
       throw new Error('traveler_correction_or_confirmation_gate_failed_fa-IR');
     }
@@ -1139,6 +1148,7 @@ async function verifySimulatedAssistant(page, api, locale, conversationId, tripI
 
 async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
   const copy = localeCopy[locale];
+  const assistantCallsBeforeLocale = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
   const phones = [syntheticPhone(), syntheticPhone()];
   let safeToCleanup = false;
   let contextA;
@@ -1208,15 +1218,15 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       throw new Error(`credential_in_browser_storage_${locale}`);
     }
 
+    const initialPersist = pageA.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'POST' && response.status() === 201);
+    const automaticAssistant = pageA.waitForResponse(response =>
+      new URL(response.url()).pathname.endsWith('/assistant-turns') && response.request().method() === 'POST');
     await pageA.locator('#trip-prompt').fill(copy.prompt);
     const inputDirection = await pageA.locator('#trip-prompt').evaluate(element => getComputedStyle(element).direction);
     if (inputDirection !== (locale === 'en-US' ? 'ltr' : 'rtl')) throw new Error(`locale_input_direction_${locale}`);
     await pageA.locator('.trip-form button[type="submit"]').click();
-    await pageA.locator('.journey-action').waitFor({ state: 'visible' });
-    const persist = pageA.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
-      && response.request().method() === 'POST');
-    await pageA.locator('.journey-action').click();
-    const persisted = await persist;
+    const persisted = await initialPersist;
     firstTripResponseBody = await persisted.json();
     tripId = firstTripResponseBody?.trip?.trip_id;
     conversationId = firstTripResponseBody?.conversation?.conversation_id;
@@ -1228,6 +1238,24 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     const initialDuration = locale === 'fa-IR' ? 15 : 10;
     let assistantTripVersion = firstTripResponseBody.trip.version;
     let assistantConversationVersion = firstTripResponseBody.conversation.version;
+    const initialAssistant = await automaticAssistant;
+    const initialAssistantBody = await initialAssistant.json();
+    if (initialAssistant.status() !== 200) {
+      const safeCode = typeof initialAssistantBody?.error?.code === 'string' ? initialAssistantBody.error.code : 'unknown';
+      throw new Error(`automatic_initial_assistant_turn_failed_${locale}_${initialAssistant.status()}_${safeCode}_${api.safeAssistantFailure() || 'no_safe_failure_log'}`);
+    }
+    if (!initialAssistantBody.message?.content || initialAssistantBody.trip?.trip_id !== tripId
+        || initialAssistantBody.trip?.original_request !== copy.prompt) {
+      throw new Error(`automatic_initial_assistant_result_not_persisted_${locale}`);
+    }
+    assistantTripVersion = initialAssistantBody.trip.version;
+    assistantConversationVersion = initialAssistantBody.conversation.version;
+    conversationVersion = assistantConversationVersion;
+    await pageA.locator('.saved-message-assistant p').first().waitFor({ state: 'visible' });
+    const initialAssistantCallCount = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
+    if (initialAssistantCallCount.count !== assistantCallsBeforeLocale.count + 1) {
+      throw new Error(`initial_request_did_not_use_exactly_one_assistant_turn_${locale}`);
+    }
     const initialTripRead = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
     const initialTripRecord = await initialTripRead.json();
     if (initialTripRead.status() !== 200
@@ -1256,20 +1284,20 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       const persistedMessages = await persistedConversation.json();
       if (correctedTripRead.status() !== 200 || correctedTrip.original_request !== copy.prompt
           || extracted?.durationDays?.value !== 15 || extracted?.travelerCount?.value !== 4
-          || !budget?.raw?.includes('45') || !budget.raw.includes('تومان')
-          || !budget.unit?.includes('تومان') || budget.currency !== null
+          || Number(budget?.amount) !== 45 || !containsToman(budget?.raw)
+          || !containsMillion(budget?.unit) || budget.currency !== 'TOMAN'
           || !accessibility.includes('wheelchair_access')
           || !constraints.some(value => /rough|terrain|ناهموار/iu.test(value))
           || persistedConversation.status() !== 200
           || persistedMessages.messages?.filter(message => message.role === 'user').length < 13
           || latest?.trip?.extracted_requirements?.durationDays?.value !== 15) {
-        throw new Error('persian_15_day_corrections_or_long_history_not_persisted');
+        throw new Error(`persian_15_day_corrections_or_long_history_not_persisted_status=${correctedTripRead.status()}_duration=${extracted?.durationDays?.value}_travelers=${extracted?.travelerCount?.value}_budget_amount=${budget?.amount}_budget_currency=${budget?.currency}_budget_toman=${containsToman(budget?.raw)}_budget_raw_length=${String(budget?.raw ?? '').length}_budget_unit=${budget?.unit || 'missing'}_accessibility=${accessibility.length}_constraints=${constraints.length}_conversation=${persistedConversation.status()}_user_messages=${persistedMessages.messages?.filter(message => message.role === 'user').length ?? -1}_latest_duration=${latest?.trip?.extracted_requirements?.durationDays?.value}`);
       }
       correctedPersistedDurationDays = extracted.durationDays.value;
       if (await pageA.locator('#profile-duration').inputValue() !== '15'
           || await pageA.locator('#profile-travelers').inputValue() !== '4'
-          || !(await pageA.locator('#profile-budget').inputValue()).includes('45')
-          || !(await pageA.locator('#profile-budget').inputValue()).includes('تومان')) {
+          || !containsFortyFive(await pageA.locator('#profile-budget').inputValue())
+          || !containsToman(await pageA.locator('#profile-budget').inputValue())) {
         throw new Error('persian_corrected_profile_not_visible');
       }
       assistantTripVersion = correctedTrip.version;
@@ -1282,6 +1310,12 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       assistantTripVersion, assistantConversationVersion, initialDuration,
     );
     await pageA.locator('#requirement-consent-budget-advisory').waitFor({ state: 'visible' });
+    if (await pageA.locator('.requirement-accessibility-mandatory').count() === 0) {
+      const diagnosticResponse = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
+      const diagnosticTrip = await diagnosticResponse.json();
+      const diagnosticFields = diagnosticTrip.extracted_requirements?.accessibility;
+      throw new Error(`mandatory_accessibility_not_rendered_${locale}_trip=${diagnosticResponse.status()}_field_status=${diagnosticFields?.status}_values=${JSON.stringify(diagnosticFields?.value ?? [])}`);
+    }
     await pageA.locator('.requirement-accessibility-mandatory').waitFor({ state: 'visible' });
     if (await pageA.locator('#requirement-consent-accessibility-must, #requirement-consent-accessibility-advisory').count() !== 0) {
       throw new Error(`mandatory_access_field_was_offered_consent_downgrade_${locale}`);
@@ -1336,8 +1370,9 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       const reviewedBudget = reviewed.budget;
       if (reviewed.duration_days !== 15 || reviewed.traveler_count !== 4
           || reviewed.confirmation_source !== 'traveler_reviewed'
-          || !reviewedBudget?.raw?.includes('45') || !reviewedBudget.raw.includes('تومان')
-          || !reviewedBudget.unit?.includes('تومان') || reviewedBudget.currency !== null) {
+          || Number(reviewedBudget?.amount) !== 45 || !containsToman(reviewedBudget?.raw)
+          || !containsMillion(reviewedBudget?.unit)
+          || reviewedBudget.currency !== 'TOMAN') {
         throw new Error('confirmed_persian_15_day_profile_or_budget_denomination_changed');
       }
     }
@@ -1433,7 +1468,9 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     }
     await pageA.locator('.saved-message-assistant button').first().click();
     await pageA.locator('.assistant-candidate').waitFor({ state: 'visible' });
-    if (!(await pageA.locator('.assistant-candidate').textContent())?.includes('Kashan')) {
+    const restoredCandidateText = await pageA.locator('.assistant-candidate').textContent();
+    const expectedDestination = locale === 'fa-IR' ? '\u0634\u06cc\u0631\u0627\u0632' : 'Shiraz';
+    if (!restoredCandidateText?.includes(expectedDestination)) {
       throw new Error('restored_assistant_candidate_missing_' + locale);
     }
     await pageA.locator('.assistant-candidate button').last().click();
@@ -1489,7 +1526,6 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       { 'X-CSRF-Token': csrfB }, {
         trip_id: tripId, content: 'Cross-owner assistant probe',
         idempotency_key: randomUUID(), expected_version: conversationVersion,
-        remote_processing_consent: true,
       });
     const conversationDeleteDenied = await apiStatus(pageB, `/api/v1/conversations/${conversationId}`, 'DELETE', {
       'X-CSRF-Token': csrfB,
@@ -1518,11 +1554,9 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     await pageA.locator('.journey-new-actions button').first().click();
     const secondPrompt = `${copy.prompt} — ${locale === 'en-US' ? 'second draft' : locale === 'ar' ? 'مسودة ثانية' : 'پیش‌نویس دوم'}`;
     await pageA.locator('#trip-prompt').fill(secondPrompt);
-    await pageA.locator('.trip-form button[type="submit"]').click();
-    await pageA.locator('.journey-action').waitFor({ state: 'visible' });
     const secondPersist = pageA.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/conversations/${conversationId}/trips`
       && response.request().method() === 'POST' && response.status() === 201);
-    await pageA.locator('.journey-action').click();
+    await pageA.locator('.trip-form button[type="submit"]').click();
     const secondResponse = await secondPersist;
     const secondTrip = await secondResponse.json();
     if (!secondTrip?.trip?.trip_id || secondTrip.conversation.conversation_id !== conversationId) {

@@ -9,13 +9,11 @@ volumes are not changed by these scripts.
 
 ## Current access gate
 
-The owner-selected browser hostname is `rahgard.hinaa.ir`. The Arvan edge
-currently presents HTTPS but returns 502 because its origin route is not ready.
-The existing Nginx listener on port 63201 serves unrelated sites over HTTP and
-is directly Internet-reachable; Rahgard must never use that plaintext hop.
-Rahgard's origin listener is isolated on TLS port 63202, with a valid
-certificate for the exact host. Arvan must use HTTPS to the origin, and NAT
-must map its origin port to local 63202. Port 80 is not used.
+The owner-selected browser hostname is `rahgard.hinaa.ir`. The dedicated
+origin listener uses TLS on port 63202; Arvan must use HTTPS to that origin,
+and NAT must map its origin port to local 63202. Port 80 is not used. The
+current public homepage was independently checked over HTTPS and returned
+HTTP 200 on 2026-11-15. This does not prove authenticated traveler acceptance.
 
 Before installing the Rahgard vhost, obtain and install a trusted certificate
 for `rahgard.hinaa.ir` using DNS-01 (the hostname resolves through Arvan, so
@@ -100,20 +98,76 @@ or logs.
   The operator must verify old-code compatibility with the present migration
   ledger before confirming. It does not revert the database.
 - `backup.sh` makes a custom-format `pg_dump`, encrypts it with AES-256-CBC and
-  PBKDF2 using a host-only passphrase, then writes a SHA-256 sidecar. Copy both
-  files off-host through an approved protected channel. Keep the passphrase
-  independently backed up; losing it makes backups unrecoverable.
+  PBKDF2 using `backup_encryption_passphrase`, and creates an HMAC-SHA-256
+  encrypt-then-MAC sidecar using the independent
+  `portable_bundle_hmac_key`. It also writes a SHA-256 transfer-check sidecar;
+  SHA alone is not authenticity evidence. Keep both keys outside the backup
+  and independently protected. `restore.sh` authenticates HMAC before
+  decryption. Historical backups without `.hmac` remain on disk but this
+  guarded restore refuses them.
 - `restore.sh <encrypted-backup> rahgard_pilot_vps_staging` verifies/decrypts
   and checks the dump, makes a fresh encrypted pre-restore backup, stops only
   this deployment's web/API containers, and restores only to the exact staging
   DB. Rehearse only against an isolated disposable copy before a real recovery.
 
-The current automatic DB initialization is for the initial empty staging
-volume only. Its verified ledger contains 15 rows: baseline 0000 through 0012, private
-geo boundary 0013, and staging invitation auth 0016. It does not install local
-owner or provider-admin schemas. The new migration 0016 adds invitation auth; no subsequent schema
-upgrade runner is included because no later migration is authorized. Future
-migrations require a reviewed, separately guarded upgrade procedure and backup.
+The automatic DB initialization is only for an initial empty staging volume.
+It must never be rerun against an existing database. The original verified
+ledger has 15 rows: baseline 0000 through 0012, private geo boundary 0013,
+and staging invitation auth 0016. Migration 0017 adds owner-scoped provisional
+itineraries; it does not publish catalogue records or modify existing trips.
+
+For an existing pilot, use the separate one-time `upgrade-017.sh` from the
+exact reviewed release. It refuses anything except the exact checksum-verified
+15-row ledger, the original persistent PostgreSQL 17 volume, and the protected
+pilot marker. Before DDL it creates a new encrypted database backup, verifies
+the SHA-256 and independent HMAC, decrypts into a mode-0600 temporary file, and
+checks the archive with `pg_restore --list`. It then applies only migration
+0017 and verifies a 16-row ledger, migration checksum, new table, and unchanged
+counts for users, conversations/messages, trips, canonical itineraries/stops,
+and published destinations. It never initializes, restores, recreates or
+deletes the database volume. If any precondition fails, stop and preserve the
+database and backup for review; do not retry initialization.
+
+Operator sequence for a reviewed release:
+
+1. Transfer and validate the release archive with `fetch-release.sh`.
+2. Run the new release's `deploy/staging/upgrade-017.sh` while the currently
+   deployed application is still serving. The runner uses the persistent DB
+   container and verifies a fresh authenticated backup before applying DDL.
+3. If the migration reports PASS, run `deploy.sh <tested-commit-sha>` to
+   activate the application release. Application deployment remains separate
+   from schema migration and preserves the named PostgreSQL volume.
+4. Verify status, readiness, the HTTPS homepage, and owner-scoped traveler
+   behavior. Roll back application code only if needed; migration 0017 is
+   additive and existing application rows are unchanged.
+
+## Release synchronization and server portability
+
+For a machine-readable release snapshot, use
+`scripts/Verify-RahgardRelease.ps1 -VpsSshTarget <operator@host> -ManifestPath <private-report-path>`.
+It records local/GitHub/VPS source SHAs, Compose digest, running image IDs and
+the exact migration ledger. This is not a restore/data-equivalence proof.
+
+The portable export is a write-frozen cutover snapshot. Stop writes, create
+`/opt/rahgard-staging/state/WRITE_FREEZE`, stop only this Compose project's
+`api` and `web`, then run:
+`bash deploy/staging/export-portable.sh --cutover-frozen`.
+The encrypted archive uses an independent HMAC key; `.sha256` alone is not
+authenticity evidence. Keep encryption and HMAC keys off-bundle and transfer
+them separately. Inspect with the passphrase file, HMAC-key file, and a new
+destination path, then use the guarded `restore-portable.sh` only with a fresh
+PostgreSQL 17 `tmpfs` container and bootstrap role `ai_tourism_owner`. The
+restore compares the exact migration ledger and privacy-safe counts for users,
+conversations/messages, trips/itineraries/stops, and published destinations.
+Follow it with `restore-portable-app-check.sh` to build and start the archived
+API release against the restored isolated database, verify readiness and
+catalogue count, then clean only its own containers, image and secret volume.
+These commands do not exercise interactive authentication or change the live
+stack; see the portable migration runbook for complete acceptance.
+
+See `docs/operations/RAHGARD_RELEASE_SYNC_AND_PORTABLE_MIGRATION.md`.
+Do not run database initialization on existing volumes or allow simultaneous
+writes to old and new servers.
 
 ## Important boundaries
 

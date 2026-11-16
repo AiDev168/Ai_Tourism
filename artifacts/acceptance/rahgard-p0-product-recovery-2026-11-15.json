@@ -1,0 +1,93 @@
+{
+    "checks":  [
+                   {
+                       "result":  "pass",
+                       "name":  "backend focused",
+                       "skipped":  0,
+                       "failed":  0,
+                       "passed":  110
+                   },
+                   {
+                       "result":  "pass",
+                       "name":  "frontend vitest",
+                       "skipped":  0,
+                       "failed":  0,
+                       "passed":  177
+                   },
+                   {
+                       "result":  "pass",
+                       "name":  "frontend production build",
+                       "exit_code":  0
+                   },
+                   {
+                       "result":  "pass",
+                       "name":  "PWA build test",
+                       "skipped":  0,
+                       "failed":  0,
+                       "passed":  2
+                   },
+                   {
+                       "result":  "pass",
+                       "name":  "Ruff focused",
+                       "exit_code":  0
+                   },
+                   {
+                       "result":  "pass",
+                       "name":  "PostgreSQL 17 isolated migration 0017",
+                       "exit_code":  0
+                   },
+                   {
+                       "result":  "pass",
+                       "name":  "git diff check",
+                       "exit_code":  0
+                   },
+                   {
+                       "locales":  [
+                                       "fa-IR"
+                                   ],
+                       "result":  "pass",
+                       "name":  "Chromium static shell",
+                       "viewports":  [
+                                         "390x844",
+                                         "1440x1000"
+                                     ],
+                       "api_stubbed":  true
+                   },
+                   {
+                       "result":  "fail",
+                       "name":  "visual-qa legacy script",
+                       "reason":  "stale .itinerary .outline selector"
+                   },
+                   {
+                       "result":  "not_run",
+                       "name":  "live vLLM browser journey"
+                   },
+                   {
+                       "result":  "blocked",
+                       "name":  "VPS backup/restore and deployment",
+                       "reason":  "SSH authentication unavailable"
+                   }
+               ],
+    "branch":  "fix/rahgard-default-ai-relative-dates-gps-v1",
+    "base_sha":  "5e2bd06a37f55c752a2705393c2a61b9e0586890",
+    "provider_live_calls":  0,
+    "deployment_performed":  false,
+    "date":  "2026-11-15",
+    "decision":  "NO-GO",
+    "screenshots":  [
+                        "artifacts/p0-product-recovery/screenshots/before-fa-IR-exact-intake-360.png",
+                        "artifacts/p0-product-recovery/screenshots/fa-IR-mobile.png",
+                        "artifacts/p0-product-recovery/screenshots/fa-IR-desktop.png",
+                        "artifacts/p0-product-recovery/screenshots/report.json"
+                    ],
+    "database_live_modified":  false,
+    "ssh_key_value_exposed":  false,
+    "ssh_connection_attempted":  true,
+    "ssh_authenticated":  false,
+    "live_https":  {
+                       "sha_verified":  false,
+                       "status":  200,
+                       "url":  "https://rahgard.hinaa.ir",
+                       "tls_verify":  0
+                   }
+}
