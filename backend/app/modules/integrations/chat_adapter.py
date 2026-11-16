@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from datetime import date
 from typing import Literal
@@ -18,6 +19,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.config import Settings
 from app.modules.integrations.ai_gateway import AiCapability, AiCapabilityUnavailable, AiProviderGateway
+
+logger = logging.getLogger("ai_tourism.chat_adapter")
 
 
 class ChatHistoryMessage(BaseModel):
@@ -192,14 +195,63 @@ def _parse_provider_content(content: object) -> ChatReply:
     # advice. Never surface truncated provider control data as a chat answer.
     if value.startswith(("{", "[")):
         parsed = json.loads(value)
-        if isinstance(parsed, dict) and "provisional_itinerary" in parsed:
+        if not isinstance(parsed, dict):
+            raise AiCapabilityUnavailable()
+        if "provisional_itinerary" in parsed:
             try:
                 ProvisionalItinerary.model_validate(parsed["provisional_itinerary"])
             except ValidationError:
                 # A bad optional proposal must not discard a valid chat turn or
                 # its independently validated requirement extraction.
-                parsed.pop("provisional_itinerary", None)
-        return ChatReply.model_validate(parsed)
+                parsed["provisional_itinerary"] = None
+
+        # Providers sometimes add harmless envelope fields or return malformed
+        # optional hints. Ignore those fields so a usable traveler-facing reply
+        # is not discarded. Only the explicit contract below reaches domain
+        # validation; accepted requirement hints remain subject to evidence
+        # checks in the assistant service.
+        allowed = {
+            "reply", "requirements", "requirement_evidence",
+            "ambiguous_requirements", "clarification", "provisional_itinerary",
+        }
+        candidate = {key: parsed[key] for key in allowed if key in parsed}
+        if not isinstance(candidate.get("requirements"), dict):
+            candidate["requirements"] = {}
+        else:
+            permitted_requirement_keys = {
+                "destination", "origin", "duration_days", "traveler_count", "budget_text",
+                "interest", "soft_preference", "relative_start_date", "travel_start",
+                "travel_end", "hard_constraint", "accessibility",
+            }
+            candidate["requirements"] = {
+                key: item for key, item in candidate["requirements"].items()
+                if key in permitted_requirement_keys
+                and (item is None or isinstance(item, str) or type(item) is int)
+            }
+        if not isinstance(candidate.get("requirement_evidence"), dict):
+            candidate["requirement_evidence"] = {}
+        else:
+            candidate["requirement_evidence"] = {
+                key: item for key, item in candidate["requirement_evidence"].items()
+                if isinstance(key, str) and isinstance(item, str) and 0 < len(item.strip()) <= 200
+            }
+        if not isinstance(candidate.get("ambiguous_requirements"), dict):
+            candidate["ambiguous_requirements"] = {}
+        else:
+            candidate["ambiguous_requirements"] = {
+                key: items for key, items in candidate["ambiguous_requirements"].items()
+                if key in {"origin", "destination"} and isinstance(items, list)
+                and 2 <= len(items) <= 5
+                and all(isinstance(item, str) and 0 < len(item.strip()) <= 100 for item in items)
+            }
+        if candidate.get("clarification") is not None and not isinstance(candidate["clarification"], str):
+            candidate["clarification"] = None
+        try:
+            return ChatReply.model_validate(candidate)
+        except ValidationError as error:
+            fields = sorted({str(item["loc"][0]) for item in error.errors() if item.get("loc")})
+            logger.warning("chat.response.invalid fields=%s", ",".join(fields[:8]) or "unknown")
+            raise
     if len(value) > 2000:
         raise AiCapabilityUnavailable()
     return ChatReply(reply=value)
@@ -291,6 +343,7 @@ class RemoteChatAdapter:
                         headers={"Authorization": f"Bearer {self.token.get_secret_value()}"},
                     ) as response:
                         if response.status_code != 200:
+                            logger.warning("chat.upstream.unavailable status_code=%s", response.status_code)
                             raise AiCapabilityUnavailable()
                         data = bytearray()
                         async for chunk in response.aiter_bytes():
@@ -300,9 +353,11 @@ class RemoteChatAdapter:
             envelope = json.loads(data)
             choices = envelope["choices"]
             if len(choices) != 1 or choices[0].get("finish_reason") != "stop":
+                logger.warning("chat.response.incomplete")
                 raise AiCapabilityUnavailable()
             return _parse_provider_content(choices[0]["message"]["content"])
-        except Exception:
+        except Exception as error:
+            logger.warning("chat.upstream.failed error_type=%s", type(error).__name__)
             raise AiCapabilityUnavailable() from None
 
 

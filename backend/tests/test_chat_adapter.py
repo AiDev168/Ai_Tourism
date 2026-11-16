@@ -8,7 +8,12 @@ from pydantic import SecretStr, ValidationError
 
 from app.core.config import Settings
 from app.modules.integrations.ai_gateway import AiCapability, AiCapabilityUnavailable, AiProviderGateway
-from app.modules.integrations.chat_adapter import ChatReply, ChatRequest, RemoteChatAdapter
+from app.modules.integrations.chat_adapter import (
+    ChatReply,
+    ChatRequest,
+    RemoteChatAdapter,
+    _parse_provider_content,
+)
 
 
 def adapter(handler, *, enabled=True):
@@ -323,6 +328,27 @@ def test_provisional_itinerary_is_bounded_and_bad_optional_proposal_does_not_dro
     if expected:
         assert reply.provisional_itinerary.status == "provisional_unverified"
         assert reply.provisional_itinerary.days[0].stops[0].role == "model_proposed"
+
+
+def test_provider_envelope_noise_and_invalid_optional_hints_do_not_discard_reply():
+    reply = _parse_provider_content(json.dumps({
+        "reply": "برای تکمیل برنامه، مقصد و مدت سفر را تأیید کنید.",
+        "requirements": {
+            "duration_days": 5,
+            "origin": {"city": "مشهد"},
+            "internal_chain_of_thought": "must not be forwarded",
+        },
+        "requirement_evidence": {"duration_days": "برای پنج روز", "origin": ["مشهد"]},
+        "ambiguous_requirements": {"destination": "شیراز"},
+        "clarification": {"question": "کجا؟"},
+        "provider_metadata": {"unrecognized": True},
+    }, ensure_ascii=False))
+
+    assert reply.reply.startswith("برای تکمیل")
+    assert reply.requirements == {"duration_days": 5}
+    assert reply.requirement_evidence == {"duration_days": "برای پنج روز"}
+    assert reply.ambiguous_requirements == {}
+    assert reply.clarification is None
 
 @pytest.mark.parametrize("unsafe_origin", ["bad\ncity", "bad\\ncity", "bad\\tcity"])
 def test_real_control_chars_and_escaped_backslashes_do_not_enter_candidate(unsafe_origin):
