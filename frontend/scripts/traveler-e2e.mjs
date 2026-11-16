@@ -782,7 +782,7 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
   const roles = ['representative_point', 'representative_point',
     'representative_point', 'property_reference'];
   const prompts = {
-    'fa-IR': 'برنامه پانزده روزه شیراز، حافظیه، باغ ارم، بازار وکیل و تخت جمشید',
+    'fa-IR': 'برای ۱۵ روز سفر به شیراز، حافظیه، باغ ارم، بازار وکیل و تخت جمشید',
     'en-US': '15-day Fars QA visit to Hafezieh, Eram Garden, Vakil Bazaar, Persepolis',
     ar: 'رحلة تجريبية لمدة ١٥ يوماً إلى حافظية وحديقة إرم وسوق وكيل وبرسبوليس',
   };
@@ -817,7 +817,7 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
     const selectedIds = selected.map(item => item.destination_id);
     const names = selected.map(item => item.canonical_name);
     const requestText = browseScenario
-      ? 'سفر پانزده روزه با مقصدی که هنوز انتخاب نشده است'
+      ? 'برای ۱۵ روز سفر با مقصدی که هنوز انتخاب نشده است'
       : prompts[locale];
     const extracted = fixtureRequirements(requestText, locale);
     extracted.destinations = browseScenario
@@ -830,8 +830,12 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
     }, trace);
     const trip = started.trip;
     const conversationId = started.conversation?.conversation_id;
-    if (!conversationId || !trip?.trip_id || trip.duration_days !== 15) {
-      throw new Error('qa_real_geo_conversation_not_persisted');
+    // Intake is advisory until explicit profile confirmation, so the legacy
+    // confirmed trip.duration_days column is correctly NULL at creation time.
+    // Assert the persisted extracted requirement instead of treating it as a
+    // confirmed value prematurely.
+    if (!conversationId || !trip?.trip_id || trip.extracted_requirements?.durationDays?.value !== 15) {
+      throw new Error(`qa_real_geo_conversation_not_persisted_trip_${Boolean(trip?.trip_id)}_conversation_${Boolean(conversationId)}_duration_${String(trip?.extracted_requirements?.durationDays?.value ?? 'null')}`);
     }
     const tripPath = '/api/v1/trips/' + trip.trip_id;
     if (!browseScenario) {

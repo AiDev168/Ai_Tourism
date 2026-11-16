@@ -2,228 +2,96 @@ import { useEffect, useState } from 'react';
 import type { Locale } from '../../i18n/messages';
 
 type Candidate = {
-  candidate_id: string;
-  candidate_kind: 'destination_identity' | 'discovery_lead';
-  raw_record: Record<string, unknown>;
-  raw_name: string | null;
-  raw_province: string | null;
-  raw_city: string | null;
-  raw_coordinate_role: string | null;
-  proposed_name_fa: string | null;
-  proposed_destination_type: string | null;
-  proposed_latitude: number | null;
-  proposed_longitude: number | null;
-  candidate_status: string;
-  source_record_key: string;
+  candidate_id: string; candidate_kind: 'destination_identity'|'discovery_lead'; raw_record: Record<string,unknown>;
+  raw_name: string|null; raw_province: string|null; raw_city: string|null; raw_coordinate_role: string|null;
+  proposed_name_fa: string|null; proposed_destination_type: string|null; proposed_latitude: number|null;
+  proposed_longitude: number|null; candidate_status: string; source_record_key: string;
 };
-type SourceCandidate = {
-  source_candidate_id: string; proposed_source_key: string | null; proposed_source_name: string | null;
-  proposed_publisher: string | null; proposed_source_type: string | null; proposed_url: string | null;
-  proposed_license: string | null; raw_record: Record<string, unknown>; candidate_status: string;
-};
-type IdentityRelation = 'same_entity' | 'part_of_or_within' | 'nearby_distinct' | 'unresolved';
-type Decision = 'accept' | 'approve_new_identity' | 'reject' | 'defer' | 'request_evidence';
+type SourceCandidate = { source_candidate_id:string; proposed_source_key:string|null; proposed_source_name:string|null;
+  proposed_publisher:string|null; proposed_source_type:string|null; proposed_url:string|null; proposed_license:string|null;
+  raw_record:Record<string,unknown>; candidate_status:string };
+type PendingSource = { source_id:number; proposed_source_name:string; proposed_publisher:string|null; proposed_url:string; proposed_license:string|null };
+type VerifiedSource = { source_id:number; source_name:string; source_type:string; url:string; publisher:string; page_title:string };
+type Evidence = { evidence_id:string; source_id:number; field_key:string; claim_value:string; source_url:string; source_name:string; verification_status:string };
+type ApprovedCandidate = { candidate_id:string; proposed_destination_key:string|null; proposed_name_fa:string; raw_coordinate_role:string|null; evidence_fields:string[]; evidence_count:number };
+type Tab = 'places'|'sources'|'publication';
+const words = {
+  'en-US': {title:'Catalogue review and publication',note:'Source registration, claim review, identity approval and publication are separate steps.',places:'Candidates',sources:'Sources',publication:'Publication queue',upload:'Stage owner ZIP',search:'Search',reload:'Reload',empty:'No records in this queue.',province:'Province',city:'City',coords:'Candidate coordinates',kind:'Kind',raw:'Raw archive row',reason:'Decision reason',evidence:'Field evidence',field:'Field',coordinates:'Coordinates',claim:'Reviewed claim value',excerpt:'Direct source excerpt (max 25 words)',source:'Verified source',add:'Add evidence',identity:'Identity',description:'Description',accept:'Approve new identity',reject:'Reject',defer:'Defer',verify:'Verify source inspection',publisher:'Publisher',titleField:'Page title',register:'Register pending source',pending:'Pending verification',fields:'Evidence fields',key:'Destination key',role:'Coordinate role',property:'Property reference (not an entrance)',representative:'Representative point',publish:'Publish destination',back:'Back',error:'Request failed. Check reviewer access and required grants.',warning:'Source verification does not automatically verify destination claims.',registerDirect:'Register source for inspection',sourceName:'Source name',sourceType:'Source type',sourceUrl:'HTTPS page URL',license:'License note',registrationNote:'Why this source is relevant',pendingExplanation:'A registered source stays pending; registration does not verify it or its claims.'},
+  'fa-IR': {title:'بازبینی و انتشار فهرست',note:'ثبت منبع، بررسی ادعا، تأیید هویت و انتشار گام‌های جداگانه‌اند.',places:'مکان‌ها',sources:'منابع',publication:'صف انتشار',upload:'بارگذاری ZIP مالک',search:'جستجو',reload:'بارگذاری دوباره',empty:'موردی در این صف نیست.',province:'استان',city:'شهر',coords:'مختصات نامزد',kind:'نوع',raw:'ردیف خام آرشیو',reason:'دلیل تصمیم',evidence:'شواهد فیلدی',field:'فیلد',coordinates:'مختصات',claim:'مقدار ادعای بررسی‌شده',excerpt:'بخش کوتاه منبع (حداکثر ۲۵ واژه)',source:'منبع تأییدشده',add:'افزودن شاهد',identity:'هویت',description:'توضیحات',accept:'تأیید هویت جدید',reject:'رد',defer:'تعویق',verify:'تأیید بررسی منبع',publisher:'ناشر',titleField:'عنوان صفحه',register:'ثبت منبع در انتظار بررسی',pending:'در انتظار بررسی',fields:'فیلدهای شاهد',key:'کلید مقصد',role:'نقش مختصات',property:'مرجع محدوده (نه ورودی)',representative:'نقطه نماینده',publish:'انتشار مقصد',back:'بازگشت',error:'درخواست انجام نشد. دسترسی بازبین و مجوزهای لازم را بررسی کنید.',warning:'تأیید منبع، ادعاهای مقصد را خودکار تأیید نمی‌کند.',registerDirect:'ثبت منبع برای بررسی',sourceName:'نام منبع',sourceType:'نوع منبع',sourceUrl:'نشانی HTTPS صفحه',license:'یادداشت مجوز',registrationNote:'ارتباط این منبع با بررسی',pendingExplanation:'منبع ثبت‌شده تا بررسی مستقیم در وضعیت انتظار می‌ماند.'},
+  ar: {title:'مراجعة الفهرس ونشره',note:'تسجيل المصدر والتحقق من الادعاء واعتماد الهوية والنشر خطوات منفصلة.',places:'الأماكن',sources:'المصادر',publication:'قائمة النشر',upload:'رفع ملف ZIP المالك',search:'بحث',reload:'إعادة التحميل',empty:'لا توجد عناصر في هذه القائمة.',province:'المحافظة',city:'المدينة',coords:'إحداثيات المرشح',kind:'النوع',raw:'السجل الخام في الأرشيف',reason:'سبب القرار',evidence:'أدلة الحقول',field:'الحقل',coordinates:'الإحداثيات',claim:'القيمة التي تمت مراجعتها',excerpt:'مقتطف قصير من المصدر (25 كلمة كحد أقصى)',source:'مصدر موثّق',add:'إضافة دليل',identity:'الهوية',description:'الوصف',accept:'اعتماد هوية جديدة',reject:'رفض',defer:'تأجيل',verify:'تأكيد مراجعة المصدر',publisher:'الناشر',titleField:'عنوان الصفحة',register:'تسجيل مصدر بانتظار المراجعة',pending:'بانتظار المراجعة',fields:'حقول الأدلة',key:'مفتاح الوجهة',role:'دور الإحداثيات',property:'مرجع للموقع (ليس مدخلاً)',representative:'نقطة تمثيلية',publish:'نشر الوجهة',back:'عودة',error:'تعذر تنفيذ الطلب. تحقق من صلاحية المراجع والمنح المطلوبة.',warning:'توثيق المصدر لا يوثق ادعاءات الوجهة تلقائياً.',registerDirect:'تسجيل مصدر للفحص',sourceName:'اسم المصدر',sourceType:'نوع المصدر',sourceUrl:'رابط HTTPS للصفحة',license:'ملاحظة الترخيص',registrationNote:'سبب صلة المصدر بالمراجعة',pendingExplanation:'يبقى المصدر المسجل قيد الانتظار حتى فحصه مباشرة.'},
+} as const;
 
-const reviewLabels = {
-    title: 'Catalogue candidate review', note: 'Records stay private and unpublished until source review and publication.',
-    upload: 'Upload ZIP for review', reload: 'Reload queue', empty: 'No candidates to review.',
-    name: 'Raw name', province: 'Province', city: 'City/county', coords: 'Proposed coordinates (unverified)',
-    relation: 'Identity relation', target: 'Existing destination ID', reason: 'Decision reason', evidence: 'Evidence IDs/URLs, one per line',
-    accept: 'Accept identity match', newIdentity: 'Explicitly approve as new identity', reject: 'Reject', defer: 'Defer',
-    request: 'Request evidence', unresolved: 'Unresolved', same: 'Same entity', part: 'Part of / within',
-    nearby: 'Nearby but distinct', kind: 'Record kind', identity: 'Canonical identity', lead: 'National lead',
-    loadMore: 'Load more', back: 'Back', error: 'Request failed; check reviewer access.',
-    placesTab: 'Place candidates', sourcesTab: 'Sources', sourceName: 'Source name', publisher: 'Publisher', sourceType: 'Source type', sourceUrl: 'Source URL', license: 'Stated license', registerPending: 'Register source as pending', status: 'Status', search: 'Search', all: 'All', rawRecord: 'Raw record',
-  };
-const faLabels: typeof reviewLabels = {
-  title: 'بازبینی نامزدهای کاتالوگ', note: 'رکوردها تا پایان بررسی منبع و انتشار، خصوصی و منتشرنشده می‌مانند.',
-  upload: 'بارگذاری ZIP برای بررسی', reload: 'بارگذاری دوباره', empty: 'نامزدی برای بررسی نیست.',
-  name: 'نام خام', province: 'استان', city: 'شهر/شهرستان', coords: 'مختصات پیشنهادی (تأییدنشده)',
-  relation: 'رابطه هویتی', target: 'شناسه مقصد موجود', reason: 'دلیل تصمیم', evidence: 'شناسه یا نشانی مدرک، هر مورد در یک خط',
-  accept: 'تأیید تطبیق هویت', newIdentity: 'تأیید صریح هویت جدید', reject: 'رد', defer: 'تعویق',
-  request: 'درخواست مدرک', unresolved: 'نامشخص', same: 'همان موجودیت', part: 'بخشی از / درون',
-  nearby: 'نزدیک اما متمایز', kind: 'نوع رکورد', identity: 'هویت کانونی', lead: 'سرنخ ملی',
-  loadMore: 'موارد بیشتر', back: 'بازگشت', error: 'درخواست انجام نشد؛ دسترسی بازبین را بررسی کنید.',
-  placesTab: 'نامزدهای مکان', sourcesTab: 'منابع', sourceName: 'نام منبع', publisher: 'ناشر', sourceType: 'نوع منبع', sourceUrl: 'نشانی منبع', license: 'مجوز اعلام‌شده', registerPending: 'ثبت منبع در انتظار بررسی', status: 'وضعیت', search: 'جست‌وجو', all: 'همه', rawRecord: 'رکورد خام',
-};
-const arLabels: typeof reviewLabels = {
-  title: 'مراجعة مرشحي الدليل', note: 'تبقى السجلات خاصة وغير منشورة إلى أن تكتمل مراجعة المصدر والنشر.',
-  upload: 'تحميل ZIP للمراجعة', reload: 'إعادة تحميل القائمة', empty: 'لا توجد عناصر للمراجعة.',
-  name: 'الاسم الخام', province: 'المحافظة', city: 'المدينة/القضاء', coords: 'إحداثيات مقترحة (غير متحققة)',
-  relation: 'علاقة الهوية', target: 'معرّف الوجهة الموجودة', reason: 'سبب القرار', evidence: 'معرّفات أو روابط الأدلة، واحد في كل سطر',
-  accept: 'قبول تطابق الهوية', newIdentity: 'اعتماد صريح كهوية جديدة', reject: 'رفض', defer: 'تأجيل',
-  request: 'طلب أدلة', unresolved: 'غير محسوم', same: 'الكيان نفسه', part: 'جزء من / ضمن',
-  nearby: 'قريب لكنه متميز', kind: 'نوع السجل', identity: 'هوية أساسية', lead: 'مرشح وطني',
-  loadMore: 'تحميل المزيد', back: 'عودة', error: 'فشل الطلب؛ تحقق من صلاحية المراجع.',
-  placesTab: 'مرشحو الأماكن', sourcesTab: 'المصادر', sourceName: 'اسم المصدر', publisher: 'الناشر', sourceType: 'نوع المصدر', sourceUrl: 'عنوان المصدر', license: 'الترخيص المعلن', registerPending: 'تسجيل المصدر بحالة معلّقة', status: 'الحالة', search: 'بحث', all: 'الكل', rawRecord: 'السجل الخام',
-};
-const labels: Record<Locale, typeof reviewLabels> = { 'fa-IR': faLabels, 'en-US': reviewLabels, ar: arLabels };
-
-function CandidateCard({
-  item, locale, busy, onDecision,
-}: {
-  item: Candidate; locale: Locale; busy: boolean;
-  onDecision: (item: Candidate, decision: Decision, relation: IdentityRelation, target: string, reason: string, evidence: string[]) => Promise<void>;
-}) {
-  const t = labels[locale];
-  const [target, setTarget] = useState('');
-  const [reason, setReason] = useState('');
-  const [evidence, setEvidence] = useState('');
-  const [relation, setRelation] = useState<IdentityRelation>('unresolved');
-  const evidenceRefs = evidence.split('\n').map(value => value.trim()).filter(Boolean);
-  const ready = !busy && reason.trim().length > 0;
-  const submit = (decision: Decision) => void onDecision(item, decision, relation, target, reason, evidenceRefs);
+function CandidateCard({item,locale,csrfToken,sources,onChanged}: {item:Candidate;locale:Locale;csrfToken:string;sources:VerifiedSource[];onChanged:()=>void}) {
+  const t=words[locale]; const [field,setField]=useState<'identity'|'province'|'city'|'coordinates'|'description'>('identity');
+  const [sourceId,setSourceId]=useState(''); const [claim,setClaim]=useState(''); const [excerpt,setExcerpt]=useState('');
+  const [reason,setReason]=useState(''); const [evidence,setEvidence]=useState<Evidence[]>([]); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+  const call=async(path:string,body?:unknown)=>{const r=await fetch(`/api/v1/catalogue-review${path}`,{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json',...(body?{'Content-Type':'application/json','X-CSRF-Token':csrfToken}:{})},...(body?{body:JSON.stringify(body)}:{})});if(!r.ok)throw new Error('request_failed');return r.json();};
+  const loadEvidence=async()=>{const r=await call(`/candidates/${item.candidate_id}/evidence`);setEvidence(r.items);};
+  useEffect(()=>{void loadEvidence().catch(()=>{});},[item.candidate_id]);
+  const add=async()=>{setBusy(true);setError('');try{await call(`/candidates/${item.candidate_id}/evidence`,{source_id:Number(sourceId),field_key:field,claim_value:claim,evidence_excerpt:excerpt,retrieved_at:new Date().toISOString()});setClaim('');setExcerpt('');await loadEvidence();onChanged();}catch{setError(t.error);}finally{setBusy(false);}};
+  const decide=async(decision:'approve_new_identity'|'reject'|'defer')=>{setBusy(true);setError('');try{await call(`/candidates/${item.candidate_id}/decision`,{decision,identity_relation:'unresolved',target_destination_id:null,reason:reason||'Identity reviewed against directly inspected source evidence.',evidence_refs:evidence.map(e=>e.evidence_id),policy_version:'archive-candidate-review-v1'});onChanged();}catch{setError(t.error);}finally{setBusy(false);}};
+  const eligible=evidence.length>=4&&['identity','province','coordinates','description'].every(k=>evidence.some(e=>e.field_key===k));
   return <article className="partner-card candidate-review-card" data-candidate-id={item.candidate_id}>
-    <h2>{item.proposed_name_fa || item.raw_name || item.source_record_key}</h2>
-    <p>{t.kind}: {item.candidate_kind === 'destination_identity' ? t.identity : t.lead} - {item.candidate_status}</p>
-    <p>{t.name}: {item.raw_name || 'unknown'}</p>
-    <p>{t.province}: {item.raw_province || 'unknown'} - {t.city}: {item.raw_city || 'unknown'}</p>
-    <p>{t.coords}: {item.proposed_latitude ?? 'unknown'}, {item.proposed_longitude ?? 'unknown'} - {item.raw_coordinate_role || 'unknown'}</p>
-    <details><summary>{t.rawRecord}</summary>
-      <pre>{JSON.stringify(item.raw_record, null, 2)}</pre></details>
-    <label>{t.relation}<select value={relation} onChange={event => setRelation(event.target.value as IdentityRelation)}>
-      <option value="unresolved">{t.unresolved}</option><option value="same_entity">{t.same}</option>
-      <option value="part_of_or_within">{t.part}</option><option value="nearby_distinct">{t.nearby}</option>
-    </select></label>
-    <label>{t.target}<input inputMode="numeric" value={target} onChange={event => setTarget(event.target.value.replace(/\D/g, ''))} /></label>
-    <label>{t.reason}<input value={reason} onChange={event => setReason(event.target.value)} maxLength={2000} /></label>
-    <label>{t.evidence}<textarea value={evidence} onChange={event => setEvidence(event.target.value)} maxLength={3000} /></label>
-    <div className="candidate-review-actions">
-      <button className="primary" disabled={!ready || relation === 'unresolved' || !target || !evidenceRefs.length}
-        onClick={() => submit('accept')}>{t.accept}</button>
-      <button disabled={!ready || relation !== 'unresolved' || !!target || !evidenceRefs.length}
-        onClick={() => submit('approve_new_identity')}>{t.newIdentity}</button>
-      <button disabled={!ready || !!target} onClick={() => submit('reject')}>{t.reject}</button>
-      <button disabled={!ready || !!target} onClick={() => submit('defer')}>{t.defer}</button>
-      <button disabled={!ready || !!target} onClick={() => submit('request_evidence')}>{t.request}</button>
-    </div>
+    <h2>{item.proposed_name_fa||item.raw_name||item.source_record_key}</h2><p>{t.kind}: {item.candidate_kind} · {item.candidate_status}</p>
+    <p>{t.province}: {item.raw_province||'unknown'} · {t.city}: {item.raw_city||'unknown'}</p>
+    <p>{t.coords}: {item.proposed_latitude??'unknown'}, {item.proposed_longitude??'unknown'} · {item.raw_coordinate_role||'unknown'}</p>
+    <details><summary>{t.raw}</summary><pre>{JSON.stringify(item.raw_record,null,2)}</pre></details>
+    <h3>{t.evidence}</h3><p>{t.warning}</p>
+    <label>{t.source}<select value={sourceId} onChange={e=>setSourceId(e.target.value)}><option value="">—</option>{sources.map(s=><option key={s.source_id} value={s.source_id}>{s.source_name} ({s.publisher})</option>)}</select></label>
+    <label>{t.field}<select value={field} onChange={e=>setField(e.target.value as typeof field)}>{(['identity','province','city','coordinates','description'] as const).map(k=><option key={k} value={k}>{t[k]}</option>)}</select></label>
+    <label>{t.claim}<input value={claim} onChange={e=>setClaim(e.target.value)} maxLength={8000}/></label>
+    <label>{t.excerpt}<textarea value={excerpt} onChange={e=>setExcerpt(e.target.value)} maxLength={600}/></label>
+    <button type="button" disabled={busy||!sourceId||!claim.trim()||!excerpt.trim()} onClick={()=>void add()}>{t.add}</button>
+    <ul>{evidence.map(e=><li key={e.evidence_id}>{t[e.field_key as keyof typeof t]||e.field_key}: {e.claim_value} — {e.source_name} ({e.verification_status})</li>)}</ul>
+    <label>{t.reason}<input value={reason} onChange={e=>setReason(e.target.value)} maxLength={2000}/></label>
+    {error&&<p role="alert">{error}</p>}
+    <div className="candidate-review-actions"><button className="primary" type="button" disabled={busy||!eligible||!reason.trim()} onClick={()=>void decide('approve_new_identity')}>{t.accept}</button><button type="button" disabled={busy||!reason.trim()} onClick={()=>void decide('reject')}>{t.reject}</button><button type="button" disabled={busy} onClick={()=>void decide('defer')}>{t.defer}</button></div>
   </article>;
 }
 
-function SourceCandidateCard({
-  item, locale, busy, onDecision,
-}: {
-  item: SourceCandidate; locale: Locale; busy: boolean;
-  onDecision: (item: SourceCandidate, decision: 'register_pending' | 'reject' | 'defer' | 'request_evidence', reason: string, evidence: string[]) => Promise<void>;
-}) {
-  const t = labels[locale]; const [reason, setReason] = useState(''); const [evidence, setEvidence] = useState('');
-  const refs = evidence.split('\n').map(value => value.trim()).filter(Boolean);
-  const submit = (decision: 'register_pending' | 'reject' | 'defer' | 'request_evidence') => void onDecision(item, decision, reason, refs);
-  return <article className="partner-card candidate-review-card" data-source-candidate-id={item.source_candidate_id}>
-    <h2>{item.proposed_source_name || item.proposed_source_key || item.proposed_url || item.source_candidate_id}</h2>
-    <p>{t.publisher}: {item.proposed_publisher || '—'} · {t.sourceType}: {item.proposed_source_type || '—'}</p>
-    <p>{t.sourceUrl}: <code dir="ltr">{item.proposed_url || '—'}</code></p>
-    <p>{t.license}: {item.proposed_license || '—'}</p>
-    <p>{t.status}: {item.candidate_status}</p>
-    <details><summary>{locale === 'fa-IR' ? 'رکورد خام' : locale === 'ar' ? 'السجل الخام' : 'Raw record'}</summary><pre>{JSON.stringify(item.raw_record,null,2)}</pre></details>
-    <label>{t.reason}<input value={reason} onChange={event=>setReason(event.target.value)} maxLength={2000}/></label>
-    <label>{t.evidence}<textarea value={evidence} onChange={event=>setEvidence(event.target.value)} maxLength={3000}/></label>
-    <div className="candidate-review-actions">
-      <button className="primary" disabled={busy||!reason.trim()||!refs.length||!item.proposed_source_name||!item.proposed_url}
-        onClick={()=>submit('register_pending')}>{t.registerPending}</button>
-      <button disabled={busy||!reason.trim()} onClick={()=>submit('reject')}>{t.reject}</button>
-      <button disabled={busy||!reason.trim()} onClick={()=>submit('defer')}>{t.defer}</button>
-      <button disabled={busy||!reason.trim()} onClick={()=>submit('request_evidence')}>{t.request}</button>
-    </div>
-  </article>;
+function SourceCandidateCard({item,locale,csrfToken,onChanged}:{item:SourceCandidate;locale:Locale;csrfToken:string;onChanged:()=>void}) {
+  const t=words[locale];const[busy,setBusy]=useState(false);const[error,setError]=useState('');
+  const register=async()=>{setBusy(true);try{const r=await fetch(`/api/v1/catalogue-review/sources/${item.source_candidate_id}/decision`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},body:JSON.stringify({decision:'register_pending',reason:'Source candidate queued for direct human inspection.',evidence_refs:['archive source-register row'],policy_version:'archive-source-review-v1'})});if(!r.ok)throw new Error();onChanged();}catch{setError(t.error);}finally{setBusy(false);}};
+  return <article className="partner-card candidate-review-card"><h3>{item.proposed_source_name||item.proposed_source_key}</h3><p>{item.proposed_publisher||'—'} · {item.candidate_status}</p><a href={item.proposed_url||'#'} target="_blank" rel="noreferrer">{item.proposed_url}</a><p>{item.proposed_license||'License not stated'}</p>{error&&<p role="alert">{error}</p>}<button type="button" disabled={busy||!item.proposed_source_name||!item.proposed_url} onClick={()=>void register()}>{t.register}</button></article>;
+}
+
+function PendingSourceCard({item,locale,csrfToken,onChanged}:{item:PendingSource;locale:Locale;csrfToken:string;onChanged:()=>void}) {
+  const t=words[locale];const[publisher,setPublisher]=useState(item.proposed_publisher||'');const[title,setTitle]=useState('');const[excerpt,setExcerpt]=useState('');const[busy,setBusy]=useState(false);const[error,setError]=useState('');
+  const verify=async()=>{setBusy(true);try{const r=await fetch(`/api/v1/catalogue-review/sources/${item.source_id}/verification`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},body:JSON.stringify({publisher,page_title:title,evidence_excerpt:excerpt,inspected_at:new Date().toISOString(),policy_version:'direct-source-page-review-v1'})});if(!r.ok)throw new Error();onChanged();}catch{setError(t.error);}finally{setBusy(false);}};
+  return <article className="partner-card"><h3>{item.proposed_source_name}</h3><p>{t.pending}: {item.proposed_url}</p><label>{t.publisher}<input value={publisher} onChange={e=>setPublisher(e.target.value)}/></label><label>{t.titleField}<input value={title} onChange={e=>setTitle(e.target.value)}/></label><label>{t.excerpt}<textarea value={excerpt} onChange={e=>setExcerpt(e.target.value)} maxLength={600}/></label>{error&&<p role="alert">{error}</p>}<button className="primary" type="button" disabled={busy||!publisher.trim()||!title.trim()||!excerpt.trim()} onClick={()=>void verify()}>{t.verify}</button></article>;
+}
+
+function PublicationCard({item,locale,csrfToken,onChanged}:{item:ApprovedCandidate;locale:Locale;csrfToken:string;onChanged:()=>void}) {
+  const t=words[locale];const[key,setKey]=useState(item.proposed_destination_key||item.candidate_id.replaceAll('-','').slice(0,20));const[role,setRole]=useState(item.raw_coordinate_role==='property_reference'?'property_reference':'representative_point');const[busy,setBusy]=useState(false);const[error,setError]=useState('');
+  const publish=async()=>{setBusy(true);try{const r=await fetch(`/api/v1/catalogue-review/candidates/${item.candidate_id}/publish`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},body:JSON.stringify({destination_key:key,coordinate_role:role,policy_version:'reviewed-archive-publication-v1'})});if(!r.ok)throw new Error();onChanged();}catch{setError(t.error);}finally{setBusy(false);}};
+  return <article className="partner-card"><h3>{item.proposed_name_fa}</h3><p>{t.fields}: {item.evidence_fields.join(', ')} ({item.evidence_count})</p><label>{t.key}<input value={key} onChange={e=>setKey(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g,''))}/></label><label>{t.role}<select value={role} onChange={e=>setRole(e.target.value)}><option value="property_reference">{t.property}</option><option value="representative_point">{t.representative}</option></select></label>{error&&<p role="alert">{error}</p>}<button className="primary" type="button" disabled={busy||item.evidence_count<4} onClick={()=>void publish()}>{t.publish}</button></article>;
+}
+
+function DirectSourceForm({locale,csrfToken,onChanged}:{locale:Locale;csrfToken:string;onChanged:()=>void}) {
+  const t=words[locale]; const [sourceName,setSourceName]=useState(''); const [sourceType,setSourceType]=useState('official_tourism');
+  const [publisher,setPublisher]=useState(''); const [title,setTitle]=useState(''); const [url,setUrl]=useState('');
+  const [license,setLicense]=useState(''); const [note,setNote]=useState(''); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+  const submit=async()=>{setBusy(true);setError('');try{const r=await fetch('/api/v1/catalogue-review/sources/register',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},body:JSON.stringify({source_name:sourceName,source_type:sourceType,publisher,page_title:title,url,license_note:license||null,registration_note:note,policy_version:'direct-source-registration-v1'})});if(!r.ok)throw new Error();setSourceName('');setPublisher('');setTitle('');setUrl('');setLicense('');setNote('');onChanged();}catch{setError(t.error);}finally{setBusy(false);}};
+  return <article className="partner-card"><h2>{t.registerDirect}</h2><p>{t.pendingExplanation}</p><label>{t.sourceName}<input value={sourceName} onChange={e=>setSourceName(e.target.value)} maxLength={500}/></label><label>{t.sourceType}<input value={sourceType} onChange={e=>setSourceType(e.target.value)} maxLength={80}/></label><label>{t.publisher}<input value={publisher} onChange={e=>setPublisher(e.target.value)} maxLength={240}/></label><label>{t.titleField}<input value={title} onChange={e=>setTitle(e.target.value)} maxLength={500}/></label><label>{t.sourceUrl}<input type="url" value={url} onChange={e=>setUrl(e.target.value)} maxLength={2048} dir="ltr"/></label><label>{t.license}<input value={license} onChange={e=>setLicense(e.target.value)} maxLength={500}/></label><label>{t.registrationNote}<textarea value={note} onChange={e=>setNote(e.target.value)} maxLength={1000}/></label>{error&&<p role="alert">{error}</p>}<button className="primary" type="button" disabled={busy||!sourceName.trim()||!publisher.trim()||!title.trim()||!url.startsWith('https://')||!note.trim()} onClick={()=>void submit()}>{t.register}</button></article>;
 }
 
 export function CatalogueReviewPanel({ locale, csrfToken }: { locale: Locale; csrfToken: string }) {
-  const t = labels[locale];
-  const [items, setItems] = useState<Candidate[]>([]);
-  const [sourceItems, setSourceItems] = useState<SourceCandidate[]>([]);
-  const [error, setError] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [kind, setKind] = useState('');
-  const [search, setSearch] = useState('');
-  const [tab, setTab] = useState<'places'|'sources'>('places');
-  const [sourceCursor, setSourceCursor] = useState<string | null>(null);
-  const call = async (path: string, init: RequestInit = {}) => {
-    const response = await fetch(`/api/v1/catalogue-review${path}`, {
-      ...init, credentials: 'same-origin', cache: 'no-store',
-      headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), 'X-CSRF-Token': csrfToken, ...init.headers },
-    });
-    if (!response.ok) throw new Error('request rejected');
-    return response.json();
-  };
-  const load = async (after?: string, append = false) => {
-    try {
-      setError('');
-      const params = new URLSearchParams({ limit: '50' });
-      if (after) params.set('after', after);
-      if (kind) params.set('kind', kind);
-      if (search.trim()) params.set('q', search.trim().slice(0, 120));
-      const result = await call(`/candidates?${params}`);
-      setItems(current => append ? [...current, ...result.items] : result.items);
-      setNextCursor(result.next_cursor);
-    } catch { setError(t.error); }
-  };
-  const loadSources = async (after?: string, append = false) => {
-    try {
-      setError(''); const params = new URLSearchParams({limit:'50'});
-      if(after)params.set('after',after); if(search.trim())params.set('q',search.trim().slice(0,120));
-      const result=await call(`/sources?${params}`);
-      setSourceItems(current=>append?[...current,...result.items]:result.items); setSourceCursor(result.next_cursor);
-    } catch { setError(t.error); }
-  };
-  useEffect(() => { void load(); }, [kind]);
-  useEffect(() => { if(tab==='sources')void loadSources(); }, [tab]);
-  const upload = async () => {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const result = await fetch('/api/v1/catalogue-review/archives', {
-        method: 'POST', credentials: 'same-origin', cache: 'no-store',
-        headers: { 'Content-Type': 'application/zip', 'X-Archive-Filename': file.name, 'X-CSRF-Token': csrfToken }, body: file,
-      });
-      if (!result.ok) throw new Error('upload rejected');
-      await load(); setFile(null);
-    } catch { setError(t.error); } finally { setBusy(false); }
-  };
-  const decide = async (item: Candidate, decision: Decision, relation: IdentityRelation, target: string, reason: string, evidence: string[]) => {
-    setBusy(true);
-    try {
-      await call(`/candidates/${item.candidate_id}/decision`, {
-        method: 'POST', body: JSON.stringify({
-          decision, identity_relation: relation, target_destination_id: target ? Number(target) : null,
-          reason, evidence_refs: evidence, policy_version: 'national-catalogue-review-v1',
-        }),
-      });
-      setItems(current => current.filter(candidate => candidate.candidate_id !== item.candidate_id));
-      await load();
-    } catch { setError(t.error); } finally { setBusy(false); }
-  };
-  const decideSource = async (item: SourceCandidate, decision: 'register_pending'|'reject'|'defer'|'request_evidence', reason: string, evidence: string[]) => {
-    setBusy(true);
-    try {
-      await call(`/sources/${item.source_candidate_id}/decision`,{method:'POST',body:JSON.stringify({decision,reason,evidence_refs:evidence,policy_version:'national-catalogue-source-review-v1'})});
-      setSourceItems(current=>current.filter(candidate=>candidate.source_candidate_id!==item.source_candidate_id));
-      await loadSources();
-    } catch { setError(t.error); } finally { setBusy(false); }
-  };
-  return <main className="partner-workspace catalogue-review" dir={locale === 'en-US' ? 'ltr' : 'rtl'}>
-     <header><h1>{t.title}</h1><p>{t.note}</p><a href="/">&lt;- {t.back}</a></header>
-    <section className="partner-card">
-      <div className="candidate-review-actions"><button type="button" aria-pressed={tab==='places'} onClick={()=>setTab('places')}>{t.placesTab}</button><button type="button" aria-pressed={tab==='sources'} onClick={()=>setTab('sources')}>{t.sourcesTab}</button></div>
-      {tab==='places'&&<>
-      <label>{t.upload}<input type="file" accept=".zip,application/zip" onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>
-      <button className="primary" disabled={!file || busy} onClick={() => void upload()}>{t.upload}</button>
-      <label>{t.kind}<select value={kind} onChange={event => setKind(event.target.value)}>
-        <option value="">{t.all}</option>
-        <option value="destination_identity">{t.identity}</option><option value="discovery_lead">{t.lead}</option>
-      </select></label>
-      <label>{t.search}<input value={search} onChange={event => setSearch(event.target.value)} maxLength={120} /></label>
-      <button type="button" disabled={busy} onClick={() => void load()}>{t.reload}</button>
-      </>}
-      {tab==='sources'&&<><label>{t.search}<input value={search} onChange={event=>setSearch(event.target.value)} maxLength={120}/></label><button type="button" disabled={busy} onClick={()=>void loadSources()}>{t.reload}</button></>}
+  const t=words[locale];const[tab,setTab]=useState<Tab>('places');const[candidates,setCandidates]=useState<Candidate[]>([]);const[sourceCandidates,setSourceCandidates]=useState<SourceCandidate[]>([]);const[pending,setPending]=useState<PendingSource[]>([]);const[sources,setSources]=useState<VerifiedSource[]>([]);const[approved,setApproved]=useState<ApprovedCandidate[]>([]);const[search,setSearch]=useState('');const[file,setFile]=useState<File|null>(null);const[error,setError]=useState('');const[busy,setBusy]=useState(false);
+  const get=async(path:string)=>{const r=await fetch(`/api/v1/catalogue-review${path}`,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});if(!r.ok)throw new Error();return r.json();};
+  const load=async()=>{setError('');try{const q=search.trim()?`&q=${encodeURIComponent(search.trim().slice(0,120))}`:'';const[c,s,p,v,a]=await Promise.all([get(`/candidates?limit=50&kind=destination_identity${q}`),get(`/sources?limit=100`),get('/sources/pending-verification'),get('/sources/verified'),get('/candidates/approved')]);setCandidates(c.items);setSourceCandidates(s.items);setPending(p.items);setSources(v.items);setApproved(a.items);}catch{setError(t.error);}};
+  useEffect(()=>{void load();},[]);
+  const upload=async()=>{if(!file)return;setBusy(true);try{const r=await fetch('/api/v1/catalogue-review/archives',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/zip','X-Archive-Filename':file.name,'X-CSRF-Token':csrfToken},body:file});if(!r.ok)throw new Error();setFile(null);await load();}catch{setError(t.error);}finally{setBusy(false);}};
+  const refresh=()=>{void load();};
+  return <main className="partner-workspace catalogue-review" dir={locale==='en-US'?'ltr':'rtl'}>
+    <header><h1>{t.title}</h1><p>{t.note}</p><a href="/">← {t.back}</a></header>
+    <section className="partner-card"><div className="candidate-review-actions"><button type="button" aria-pressed={tab==='places'} onClick={()=>setTab('places')}>{t.places}</button><button type="button" aria-pressed={tab==='sources'} onClick={()=>setTab('sources')}>{t.sources}</button><button type="button" aria-pressed={tab==='publication'} onClick={()=>setTab('publication')}>{t.publication}</button></div>
+      {tab==='places'&&<><label>{t.upload}<input type="file" accept=".zip,application/zip" onChange={e=>setFile(e.target.files?.[0]||null)}/></label><button type="button" className="primary" disabled={!file||busy} onClick={()=>void upload()}>{t.upload}</button><label>{t.search}<input value={search} onChange={e=>setSearch(e.target.value)}/></label><button type="button" disabled={busy} onClick={()=>void load()}>{t.reload}</button></>}
+      {tab==='sources'&&<><p>{t.warning}</p><button type="button" disabled={busy} onClick={()=>void load()}>{t.reload}</button><DirectSourceForm locale={locale} csrfToken={csrfToken} onChanged={refresh}/></>}
+      {tab==='publication'&&<button type="button" disabled={busy} onClick={()=>void load()}>{t.reload}</button>}
     </section>
-    {error && <p role="alert">{error}</p>}
-    {tab==='places'&&(items.length === 0 ? <p role="status">{t.empty}</p> : items.map(item => <CandidateCard key={item.candidate_id}
-      item={item} locale={locale} busy={busy} onDecision={decide} />))}
-    {tab==='places'&&nextCursor && <button disabled={busy} onClick={() => void load(nextCursor, true)}>{t.loadMore}</button>}
-    {tab==='sources'&&(sourceItems.length===0?<p role="status">{t.empty}</p>:sourceItems.map(item=><SourceCandidateCard key={item.source_candidate_id} item={item} locale={locale} busy={busy} onDecision={decideSource}/>))}
-    {tab==='sources'&&sourceCursor&&<button disabled={busy} onClick={()=>void loadSources(sourceCursor,true)}>{t.loadMore}</button>}
+    {error&&<p role="alert">{error}</p>}
+    {tab==='places'&&(candidates.length?candidates.map(item=><CandidateCard key={item.candidate_id} item={item} locale={locale} csrfToken={csrfToken} sources={sources} onChanged={refresh}/>):<p role="status">{t.empty}</p>)}
+    {tab==='sources'&&<><h2>{t.sources}</h2>{sourceCandidates.map(item=><SourceCandidateCard key={item.source_candidate_id} item={item} locale={locale} csrfToken={csrfToken} onChanged={refresh}/>)}<h2>{t.pending}</h2>{pending.map(item=><PendingSourceCard key={item.source_id} item={item} locale={locale} csrfToken={csrfToken} onChanged={refresh}/>)}<h2>{t.source} — {sources.length}</h2>{sources.map(s=><p key={s.source_id}>{s.source_name} · {s.publisher} · {s.url}</p>)}</>}
+    {tab==='publication'&&(approved.length?approved.map(item=><PublicationCard key={item.candidate_id} item={item} locale={locale} csrfToken={csrfToken} onChanged={refresh}/>):<p role="status">{t.empty}</p>)}
   </main>;
 }

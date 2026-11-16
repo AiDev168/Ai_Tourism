@@ -132,3 +132,67 @@ def test_source_registration_requires_review_evidence_before_database_access(mon
         assert response.status_code == 422
     finally:
         app.dependency_overrides.clear()
+
+
+def test_identity_approval_rejects_archive_reference_instead_of_real_field_evidence(monkeypatch):
+    user = AuthenticatedUser(UUID(int=1), None, UUID(int=2), "test")
+    app.dependency_overrides[authenticated_user] = lambda: user
+    app.dependency_overrides[require_authenticated_csrf] = lambda: None
+    app.dependency_overrides[get_settings] = _settings
+    monkeypatch.setattr(
+        "app.api.catalogue_review._connect",
+        lambda _settings: (_ for _ in ()).throw(AssertionError("opaque evidence must fail before DB")),
+    )
+    try:
+        response = TestClient(app).post(
+            "/api/v1/catalogue-review/candidates/00000000-0000-0000-0000-000000000001/decision",
+            json={
+                "decision": "approve_new_identity", "identity_relation": "unresolved",
+                "reason": "archive name only, direct evidence missing", "evidence_refs": ["archive:row-1"],
+            },
+        )
+        assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_candidate_evidence_requires_short_source_excerpt_and_timestamp(monkeypatch):
+    user = AuthenticatedUser(UUID(int=1), None, UUID(int=2), "test")
+    app.dependency_overrides[authenticated_user] = lambda: user
+    app.dependency_overrides[require_authenticated_csrf] = lambda: None
+    app.dependency_overrides[get_settings] = _settings
+    monkeypatch.setattr(
+        "app.api.catalogue_review._connect",
+        lambda _settings: (_ for _ in ()).throw(AssertionError("invalid source evidence must not reach DB")),
+    )
+    try:
+        response = TestClient(app).post(
+            "/api/v1/catalogue-review/candidates/00000000-0000-0000-0000-000000000001/evidence",
+            json={
+                "source_id": 1, "field_key": "identity", "claim_value": "A site",
+                "evidence_excerpt": "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty one twenty two twenty three twenty four twenty five twenty six",
+                "retrieved_at": "2026-11-16T10:00:00Z",
+            },
+        )
+        assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_publication_requires_safe_coordinate_role_before_database(monkeypatch):
+    user = AuthenticatedUser(UUID(int=1), None, UUID(int=2), "test")
+    app.dependency_overrides[authenticated_user] = lambda: user
+    app.dependency_overrides[require_authenticated_csrf] = lambda: None
+    app.dependency_overrides[get_settings] = _settings
+    monkeypatch.setattr(
+        "app.api.catalogue_review._connect",
+        lambda _settings: (_ for _ in ()).throw(AssertionError("bad coordinate role must not reach DB")),
+    )
+    try:
+        response = TestClient(app).post(
+            "/api/v1/catalogue-review/candidates/00000000-0000-0000-0000-000000000001/publish",
+            json={"destination_key": "unesco-1262-sample", "coordinate_role": "entrance"},
+        )
+        assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()

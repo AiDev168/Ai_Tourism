@@ -355,8 +355,8 @@ def list_production_destination_page(
                 d.destination_type,d.province_name,d.city_name,d.latitude,d.longitude,d.coordinate_role,
                 EXISTS(SELECT 1 FROM knowledge.production_destination_sources s WHERE s.destination_id=d.destination_id) AS has_verified_provenance
                 FROM knowledge.production_destinations d
-                WHERE d.destination_id>%s AND (%s::text IS NULL OR lower(d.canonical_name) LIKE lower(%s)||'%' OR lower(d.city_name) LIKE lower(%s)||'%' OR lower(d.province_name) LIKE lower(%s)||'%')
-                  AND (%s::text IS NULL OR lower(d.province_name) LIKE lower(%s)||'%')
+                WHERE d.destination_id>%s AND (%s::text IS NULL OR lower(d.canonical_name) LIKE lower(%s)||'%%' OR lower(d.city_name) LIKE lower(%s)||'%%' OR lower(d.province_name) LIKE lower(%s)||'%%')
+                  AND (%s::text IS NULL OR lower(d.province_name) LIKE lower(%s)||'%%')
                   AND (%s::text IS NULL OR d.destination_type=%s)
                   AND (%s::float8[] IS NULL OR ST_Intersects(d.location,ST_MakeEnvelope(%s,%s,%s,%s,4326)::geography))
                 ORDER BY d.destination_id LIMIT %s""",
@@ -382,8 +382,10 @@ def list_production_destination_page(
         next_id = int(rows[limit - 1]["destination_id"]) if len(rows) > limit else None
         items = [_to_item(row, aliases.get(str(row["destination_key"]))) for row in rows[:limit]]
         return items, next_id
-    except (psycopg.Error, AliasManifestUnavailable, CatalogueUnavailableError, KeyError, TypeError, ValueError):
-        logger.warning("catalogue.v2_page_unavailable")
+    except (psycopg.Error, AliasManifestUnavailable, CatalogueUnavailableError, KeyError, TypeError, ValueError) as exc:
+        # Emit only the exception class for diagnostics; never include SQL text,
+        # parameters, or traveler search terms in logs.
+        logger.warning("catalogue.v2_page_unavailable failure_type=%s", type(exc).__name__)
         raise CatalogueUnavailableError from None
 
 
