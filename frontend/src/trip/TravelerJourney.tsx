@@ -204,7 +204,10 @@ function unresolvedConsentFields(value: TripRequirements | null): RequirementFie
 
 function parseReviewedBudget(text: string, locale: Locale): TripRequirements['budget']['value'] {
   if (!text.trim()) return null;
-  const result = createTripRequirements({ requestText: text.trim(), locale });
+  // This is a budget field, not a complete natural-language trip request.
+  // Supplying the parser's budget marker lets it validate amounts such as
+  // "30 million toman" without requiring unrelated destination/date fields.
+  const result = createTripRequirements({ requestText: `budget ${text.trim()}`, locale });
   return result.kind === 'invalid' ? null : result.requirements.budget.value;
 }
 
