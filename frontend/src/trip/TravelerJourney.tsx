@@ -898,7 +898,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     finally { setBusy(false); }
   };
 
-  const askAssistant = async () => {
+  const askAssistant = async (overrideContent?: string) => {
     if (!session || !activeConversation || !activeTrip || !online) return;
     // When the status endpoint already reports no usable model, do not
     // reserve or charge an AI turn. Use existing local parsing instead.
@@ -907,7 +907,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       else setError(assistantCopy[locale].unavailable);
       return;
     }
-    const content = messageText.trim() || assistantCopy[locale].initial;
+    const content = overrideContent?.trim() || messageText.trim() || assistantCopy[locale].initial;
     if (content.length > 1200) return;
     setBusy(true); setError(''); setStatus('');
     setAssistantCandidate(null);
@@ -924,6 +924,12 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       setExtractionPath(result.extraction_path ?? 'fallback');
       if (result.provisional_itinerary?.status === 'provisional_unverified') {
         setProvisionalCandidate({ days: result.provisional_itinerary.days });
+      } else if (overrideContent) {
+        setStatus(locale === 'fa-IR'
+          ? 'دستیار پاسخ داد اما برنامهٔ روزبه‌روز تولید نکرد. می‌توانید دوباره درخواست کنید یا یک برنامهٔ خالی قابل ویرایش بسازید.'
+          : locale === 'ar'
+            ? 'ردّ المساعد دون خطة يومية. يمكنك إعادة الطلب أو إنشاء مسودة فارغة قابلة للتعديل.'
+            : 'The assistant replied without a day-by-day draft. You can retry or create an editable empty draft.');
       }
       setAssistantState('responded');
       setAssistantRemaining(value => value === null ? null : Math.max(0, value - 1));
@@ -1540,6 +1546,33 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                 </ul>}
               </>}
             </div>}
+            {recommendations?.status === 'empty' && !provisionalCandidate && !provisionalItinerary && <section className="provisional-plan-card" aria-label={provisionalText[locale].title}>
+              <span className="provisional-plan-badge">{provisionalText[locale].heading}</span>
+              <h4>{provisionalText[locale].title}</h4>
+              <p>{provisionalText[locale].warning}</p>
+              <p>{locale === 'fa-IR'
+                ? 'کاتالوگ مقصد هنوز خالی است؛ این موضوع نباید مانع ساخت یک پیش‌نویس روزبه‌روزِ قابل ویرایش شود.'
+                : locale === 'ar'
+                  ? 'فهرس الوجهات المعتمدة فارغ، لكن يمكنك إنشاء خطة أولية يومية قابلة للتعديل.'
+                  : 'The verified destination catalogue is empty. You can still create an editable day-by-day draft.'}</p>
+              <button className="primary" type="button" disabled={busy || !online || !assistantConfigured}
+                onClick={() => {
+                  const duration = requestedTripDays ?? Number(durationText);
+                  const summary = [
+                    destinationNames.filter(Boolean).join('، '),
+                    Number.isInteger(duration) && duration > 0 ? String(duration) : '',
+                    originText, travelStartText, travelEndText, travelerCountText, budgetText, interestText,
+                  ].filter(Boolean).join(' | ').slice(0, 650);
+                  const instruction = locale === 'fa-IR'
+                    ? `برای این اطلاعات تأییدشدهٔ سفر (${summary})، لطفاً یک پیش‌نویس برنامهٔ روزبه‌روز با نام مکان‌های پیشنهادی در قالب provisional_itinerary تهیه کن. همهٔ مکان‌ها تأییدنشده‌اند؛ ساعت، هزینه، مسیر و اطلاعات ایمنی را ادعا نکن.`
+                    : locale === 'ar'
+                      ? `أنشئ مسودة رحلة يومية في provisional_itinerary لهذه التفاصيل المؤكدة (${summary}). أسماء الأماكن اقتراحات غير موثقة؛ لا تخترع المواعيد أو الأسعار أو الطرق أو معلومات السلامة.`
+                      : `Create a day-by-day provisional_itinerary for this confirmed trip profile (${summary}). Suggested place names are unverified. Do not invent hours, prices, routes or safety facts.`;
+                  void askAssistant(instruction);
+                }}>{locale === 'fa-IR' ? 'دریافت برنامهٔ پیشنهادی از هوش مصنوعی' : locale === 'ar' ? 'إنشاء خطة أولية بالذكاء الاصطناعي' : 'Generate preliminary AI itinerary'}</button>
+              <button className="secondary" type="button" disabled={busy || !online || !dayCountValid}
+                onClick={() => void saveProvisionalDraft()}>{locale === 'fa-IR' ? 'ساخت برنامهٔ خالی برای ویرایش دستی' : locale === 'ar' ? 'إنشاء خطة فارغة للتحرير اليدوي' : 'Create an editable blank itinerary'}</button>
+            </section>}
             {(provisionalCandidate || provisionalItinerary) && recommendations?.status === 'empty' && <section className="provisional-plan-card" aria-labelledby="provisional-plan-title">
               <span className="provisional-plan-badge">{provisionalText[locale].heading}</span>
               <h4 id="provisional-plan-title">{provisionalText[locale].title}</h4>
