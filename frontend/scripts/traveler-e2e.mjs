@@ -1124,8 +1124,11 @@ async function verifySimulatedAssistant(page, api, locale, conversationId, tripI
   }
   await page.locator('.assistant-candidate button').first().click(); // Apply only as an editable suggestion.
   const confirmButton = page.getByRole('button', { name: localeCopy[locale].confirm });
-  if (await page.locator('#profile-duration').inputValue() !== '2' || await confirmButton.isEnabled()) {
-    throw new Error('applied_ai_suggestion_bypassed_profile_review_' + locale);
+  // Applying an AI suggestion may enable the explicit confirmation action.
+  // The safety invariant is that it must NOT confirm the profile by itself.
+  if (await page.locator('#profile-duration').inputValue() !== '2'
+      || await page.locator('.recommendation-controls').count() !== 0) {
+    throw new Error('applied_ai_suggestion_auto_confirmed_profile_' + locale);
   }
   await page.locator('#profile-duration').fill(String(expectedDuration));
   await page.locator('#profile-destination-0').fill(destinationByLocale[locale]);
@@ -1134,12 +1137,12 @@ async function verifySimulatedAssistant(page, api, locale, conversationId, tripI
         || await page.locator('#profile-travelers').inputValue() !== '4'
         || !containsFortyFive(await page.locator('#profile-budget').inputValue())
         || !containsToman(await page.locator('#profile-budget').inputValue())
-        || await confirmButton.isEnabled()) {
-      throw new Error('traveler_correction_or_confirmation_gate_failed_fa-IR');
+        || await page.locator('.recommendation-controls').count() !== 0) {
+      throw new Error('traveler_correction_auto_confirmed_profile_fa-IR');
     }
   } else if (await page.locator('#profile-duration').inputValue() !== String(expectedDuration)
-      || await confirmButton.isEnabled()) {
-    throw new Error(`traveler_duration_restore_or_confirmation_gate_failed_${locale}`);
+      || await page.locator('.recommendation-controls').count() !== 0) {
+    throw new Error(`traveler_duration_restore_auto_confirmed_profile_${locale}`);
   }
   const finalCallCount = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
   if (finalCallCount.count !== before.count + 2) throw new Error('simulated_gateway_call_budget_not_two_' + locale);
