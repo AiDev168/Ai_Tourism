@@ -416,7 +416,7 @@ def test_p0_reference_request_accepts_llm_semantics_for_all_core_fields():
     assert (budget.amount, budget.scale, budget.currency, budget.raw) == (
         '30', 'million', 'TOMAN', evidence['budget_text'],
     )
-    assert candidate.fields.interests.value == ['historical_attractions', evidence['interest']]
+    assert candidate.fields.interests.value == ['historical_attractions', 'gardens', evidence['interest']]
     assert all(getattr(candidate.fields, name).source == 'llm' for name in (
         'origin', 'destination', 'relative_start_date', 'duration_days',
         'travelers', 'budget', 'interests',

@@ -11,6 +11,19 @@ from app.modules.trip.requirements_interpretation import (
 
 EXAMPLE = "از دو روز دیگه با 4 نفر میخوام برم از مناطق تاریخی شیراز دیدن کنم و فقط 10 میلیون هزینه میخوام بکنم"
 
+
+def test_persian_historical_and_garden_interests_are_both_retained_by_fallback():
+    text = (
+        "از مشهد می‌خوام از پس‌فردا برای پنج روز برم شیراز. پنج نفر هستیم و "
+        "بودجه‌مون ۳۰ میلیون تومنه. بیشتر جاهای تاریخی و باغ‌ها رو دوست داریم."
+    )
+    fields = interpret_trip_requirements(text, "fa-IR").fields
+    assert fields.interests.value == ["historical_attractions", "gardens"]
+    span = fields.interests.evidence_span
+    assert span is not None
+    assert text[span.start:span.end] == span.text
+    assert "باغ" in span.text
+
 @pytest.mark.parametrize(
     ("request_text", "expected_origin"),
     [

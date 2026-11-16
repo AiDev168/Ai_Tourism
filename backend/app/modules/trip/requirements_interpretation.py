@@ -424,7 +424,24 @@ def interpret_trip_requirements(
         r"\u0627\u0644\u0645\u0646\u0627\u0637\u0642\s+\u0627\u0644\u062a\u0627\u0631\u064a\u062e\u064a\u0629",
         r"\u0627\u0644\u0645\u0639\u0627\u0644\u0645\s+\u0627\u0644\u062a\u0627\u0631\u064a\u062e\u064a\u0629",
     ])[0]
-    interests_field = _known(["historical_attractions"], _span(request_text, *history_match.span())) if history_match else _missing()
+    garden_match = _find_first(request_text, [
+        r"\u0628\u0627\u063a(?:[\s\u200c]*\u0647\u0627)?",
+        r"\bgardens?\b", r"\bparks?\b", r"\u062d\u062f\u0627\u0626\u0642",
+    ])[0]
+    interest_matches = [match for match in (history_match, garden_match) if match]
+    if interest_matches:
+        interest_values = []
+        if history_match:
+            interest_values.append("historical_attractions")
+        if garden_match:
+            interest_values.append("gardens")
+        interests_field = _known(
+            interest_values,
+            _span(request_text, min(match.start() for match in interest_matches),
+                  max(match.end() for match in interest_matches)),
+        )
+    else:
+        interests_field = _missing()
 
     origin_match = _find_first(request_text, [
         r"(?<!\w)از\s+(?P<place>[\u0600-\u06ff][\u0600-\u06ff\u200c-]{1,45}(?:\s+[\u0600-\u06ff][\u0600-\u06ff\u200c-]{1,45})?)\s+می[\s\u200c]*(?:خوام|خواهم|خوایم|خواهیم)\s+(?:برم|بریم|برویم|سفر)",
