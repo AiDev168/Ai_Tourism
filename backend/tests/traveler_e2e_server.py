@@ -23,6 +23,8 @@ import psycopg
 from psycopg.rows import dict_row
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = BACKEND_ROOT.parent
+sys.path.insert(0, str(REPOSITORY_ROOT))
 sys.path.insert(0, str(BACKEND_ROOT))
 
 
