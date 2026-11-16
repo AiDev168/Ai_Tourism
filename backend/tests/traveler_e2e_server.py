@@ -83,6 +83,94 @@ def _verify_disposable_database() -> dict[str, Any]:
     return {"host": host, "port": port, "dbname": database, "user": user, "password": password}
 
 
+def _grant_catalogue_capabilities(database: dict[str, Any], user_id: str, capabilities: list[str]) -> bool:
+    """Test-control-only grants on the marked national-catalogue disposable DB."""
+    if os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") != "1":
+        return False
+    if not re.fullmatch(r"[0-9a-fA-F-]{36}", user_id) or not capabilities or len(capabilities) > 3:
+        return False
+    allowed = {"candidate_review", "source_review", "catalogue_publish"}
+    if any(value not in allowed for value in capabilities) or len(set(capabilities)) != len(capabilities):
+        return False
+    owner_password = os.environ.get("AUTH_TEST_DATABASE_OWNER_PASSWORD", "")
+    if not owner_password:
+        return False
+    try:
+        with psycopg.connect(
+            **{**database, "user": "ai_tourism_owner", "password": owner_password},
+            connect_timeout=2,
+            row_factory=dict_row,
+        ) as connection, connection.transaction():
+            row = connection.execute(
+                """SELECT current_database() AS db,
+                          (SELECT count(*) FROM public.ai_tourism_auth_test_marker) AS marker_count,
+                          (SELECT min(marker_value) FROM public.ai_tourism_auth_test_marker) AS marker"""
+            ).fetchone()
+            if row["db"] != database["dbname"] or row["marker_count"] != 1 or not __import__("hmac").compare_digest(
+                row["marker"] or "", os.environ.get("AUTH_TEST_DATABASE_MARKER", "")
+            ):
+                return False
+            exists = connection.execute("SELECT 1 FROM identity.users WHERE user_id=%s", (user_id,)).fetchone()
+            if not exists:
+                return False
+            for capability in capabilities:
+                connection.execute(
+                    """INSERT INTO identity.catalogue_review_grants(user_id,capability,granted_by,reason)
+                       VALUES (%s,%s,%s,'Isolated national catalogue browser acceptance only')""",
+                    (user_id, capability, user_id),
+                )
+        return True
+    except Exception:
+        return False
+
+
+def _national_catalogue_counts(database: dict[str, Any]) -> dict[str, int] | None:
+    if os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") != "1":
+        return None
+    try:
+        owner_password = os.environ.get("AUTH_TEST_DATABASE_OWNER_PASSWORD", "")
+        marker = os.environ.get("AUTH_TEST_DATABASE_MARKER", "")
+        if not owner_password or not marker:
+            return None
+        with psycopg.connect(
+            **{**database, "user": "ai_tourism_owner", "password": owner_password},
+            connect_timeout=2,
+            row_factory=dict_row,
+        ) as connection:
+            identity = connection.execute(
+                """SELECT current_database() AS db,
+                          (SELECT count(*) FROM public.ai_tourism_auth_test_marker) AS marker_count,
+                          (SELECT min(marker_value) FROM public.ai_tourism_auth_test_marker) AS marker"""
+            ).fetchone()
+            if (
+                identity["db"] != database["dbname"]
+                or identity["marker_count"] != 1
+                or not __import__("hmac").compare_digest(identity["marker"] or "", marker)
+            ):
+                return None
+            row = connection.execute(
+                """SELECT
+                     (SELECT count(*) FROM knowledge.destination_candidates) AS candidates,
+                     (SELECT count(*) FROM knowledge.destination_candidates WHERE candidate_kind='destination_identity') AS identities,
+                     (SELECT count(*) FROM knowledge.destination_candidates WHERE candidate_kind='discovery_lead') AS leads,
+                     (SELECT count(*) FROM knowledge.destination_candidates WHERE candidate_kind='discovery_lead' AND candidate_status='needs_review') AS unpublished_leads,
+                     (SELECT count(*) FROM knowledge.source_candidates) AS source_candidates,
+                     (SELECT count(*) FROM operations.dataset_import_batches) AS import_batches,
+                     (SELECT count(*) FROM knowledge.knowledge_sources WHERE verification_status='verified' AND NOT is_synthetic) AS verified_sources,
+                     (SELECT count(*) FROM knowledge.production_destinations) AS published_destinations,
+                     (SELECT count(*) FROM partner.organizations) AS organizations,
+                     (SELECT count(*) FROM partner.services) AS services,
+                     (SELECT count(*) FROM partner.schedules) AS schedules,
+                     (SELECT count(*) FROM partner.offers) AS offers,
+                     (SELECT count(*) FROM partner.prices) AS prices,
+                     (SELECT count(*) FROM partner.availability_snapshots) AS availability,
+                     (SELECT count(*) FROM travel.itineraries) AS itineraries"""
+            ).fetchone()
+        return {key: int(value) for key, value in row.items()}
+    except Exception:
+        return None
+
+
 def _account_state(database: dict[str, Any], user_id: str, phone: str) -> dict[str, Any]:
     with psycopg.connect(**database, connect_timeout=2, row_factory=dict_row) as connection:
         row = connection.execute(
@@ -198,6 +286,14 @@ class _ControlHandler(socketserver.StreamRequestHandler):
             elif action == "assert_phones_unused":
                 phones = command.get("phones")
                 result = {"ok": isinstance(phones, list) and _phones_unused(self.server.database, phones)}
+            elif action == "grant_catalogue_capabilities":
+                caps = command.get("capabilities")
+                result = {"ok": isinstance(caps, list) and _grant_catalogue_capabilities(
+                    self.server.database, str(command.get("user_id", "")), caps
+                )}
+            elif action == "national_catalogue_counts":
+                counts = _national_catalogue_counts(self.server.database)
+                result = {"ok": counts is not None, **(counts or {})}
             else:
                 result = {"ok": False}
         except Exception:
@@ -223,6 +319,7 @@ def main() -> None:
     rag_url = os.environ.get("TOURISM_RAG_API_URL", "http://127.0.0.1:8765")
     rag_token = os.environ.get("TOURISM_RAG_API_TOKEN", "")
     geo_qa_mode = os.environ.get("RAHGARD_REAL_GEO_E2E", "") == "1"
+    national_catalogue_mode = os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E", "") == "1"
     if geo_qa_mode and (os.environ.get("RAHGARD_RUN_GEO_QA") != "1" or rag_enabled):
         raise RuntimeError("E2E real geographic QA mode requires explicit opt-in and no RAG")
     if rag_enabled:
@@ -398,7 +495,7 @@ def main() -> None:
         actual_geo = {row["destination_key"]: row["coordinate_role"] for row in geo_rows}
         if published_count != 4 or actual_geo != expected_geo:
             raise RuntimeError("E2E geo QA expects exactly four real canonical published map points")
-    elif published_count != 0:
+    elif published_count != 0 and not national_catalogue_mode:
         raise RuntimeError("E2E historical fixture mode requires an empty production catalogue")
     # Pending content-pack geometry is borrowed only to exercise the coordinate
     # grouping path with synthetic destination identities. It is not canonical,
@@ -455,7 +552,7 @@ def main() -> None:
         return original_bundle(settings)
 
     # Never inject synthetic recommendation identities in real-catalogue mode.
-    if not geo_qa_mode:
+    if not geo_qa_mode and not national_catalogue_mode:
         traveler_api.production_catalogue_bundle = guarded_catalogue_bundle
     adapter = FakeSmsAdapter()
     app.state.sms_adapter = adapter

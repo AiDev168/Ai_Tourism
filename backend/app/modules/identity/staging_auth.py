@@ -28,7 +28,7 @@ def normalize_login(value: str) -> str:
 
 
 def password_bytes(value: str) -> bytes:
-    if not isinstance(value, str) or not 16 <= len(value) <= 256 or "\0" in value:
+    if not isinstance(value, str) or not 8 <= len(value) <= 256 or "\0" in value:
         raise ValueError("invalid password")
     encoded = value.encode("utf-8", errors="strict")
     if len(encoded) > 1024:

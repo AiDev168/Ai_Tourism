@@ -14,7 +14,8 @@ $Migration = [IO.Path]::GetFullPath($Migration)
 $PriorMigration = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\017_provisional_itineraries.sql'))
 $PartnerMigration = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\019_partner_workspace.sql'))
 $PublicationMigration = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\020_archive_candidate_publication.sql'))
-foreach ($file in @($Migration, $PriorMigration, $PartnerMigration, $PublicationMigration)) {
+$PostgisPublicationMigration = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\021_postgis_security_definer_publication.sql'))
+foreach ($file in @($Migration, $PriorMigration, $PartnerMigration, $PublicationMigration, $PostgisPublicationMigration)) {
     if (-not (Test-Path -LiteralPath $file)) { throw "Migration input is missing: $file" }
 }
 
@@ -231,11 +232,26 @@ ROLLBACK;
             -d rahgard_pilot_vps_staging -f /tmp/020_archive_candidate_publication.sql
         if ($LASTEXITCODE -ne 0) { throw 'Migration 0020 failed on the isolated disposable database.' }
 
+        $currentStep = 'guarded migration 0021 execution'
+        $postgisPublicationHash = (Get-FileHash -LiteralPath $PostgisPublicationMigration -Algorithm SHA256).Hash.ToLowerInvariant()
+        & docker cp $PostgisPublicationMigration "$($container):/tmp/021_postgis_security_definer_publication.sql" | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not copy migration 0021 into the disposable container.' }
+        $postgisPublicationVariables = @(
+            '-e', "RAHGARD_PILOT_DATABASE_MARKER=$marker",
+            '-e', "RAHGARD_PILOT_MIGRATION_0020_SHA256=$publicationHash",
+            '-e', "RAHGARD_PILOT_MIGRATION_0021_SHA256=$postgisPublicationHash"
+        )
+        & docker exec @postgisPublicationVariables $container psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres `
+            -d rahgard_pilot_vps_staging -f /tmp/021_postgis_security_definer_publication.sql
+        if ($LASTEXITCODE -ne 0) { throw 'Migration 0021 failed on the isolated disposable database.' }
+
         $currentStep = 'candidate publication capability and immutable audit assertions'
         Invoke-ContainerSql @"
 DO `$`$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM system.schema_migrations WHERE migration_id='0020_archive_candidate_publication' AND sha256='$publicationHash') THEN
     RAISE EXCEPTION '0020 migration ledger row missing or checksum mismatch'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM system.schema_migrations WHERE migration_id='0021_postgis_security_definer_publication' AND sha256='$postgisPublicationHash') THEN
+    RAISE EXCEPTION '0021 migration ledger row missing or checksum mismatch'; END IF;
   IF NOT has_function_privilege('ai_tourism_app','knowledge.verify_archive_source(bigint,text,text,text,timestamp with time zone,text,uuid)','EXECUTE') THEN
     RAISE EXCEPTION 'source verification entry point is not granted'; END IF;
   IF NOT has_function_privilege('ai_tourism_app','knowledge.publish_archive_destination(uuid,text,text,uuid,text)','EXECUTE') THEN
@@ -380,7 +396,7 @@ ROLLBACK;
     $integrity = (& docker exec $container psql -X -q -A -t -U postgres -d rahgard_pilot_vps_staging `
         -c "SELECT count(*) FROM knowledge.destination_candidates").Trim()
     if ($IncludePartner) {
-        Write-Output "MIGRATIONS_0018_0020_ISOLATED_PASS 0018_sha256=$migrationHash 0019_sha256=$partnerHash 0020_sha256=$publicationHash candidate_rows=$integrity tenant_isolation=pass publication_gate=pass"
+        Write-Output "MIGRATIONS_0018_0021_ISOLATED_PASS 0018_sha256=$migrationHash 0019_sha256=$partnerHash 0020_sha256=$publicationHash 0021_sha256=$postgisPublicationHash candidate_rows=$integrity tenant_isolation=pass publication_gate=pass"
     } else {
         Write-Output "MIGRATION_0018_ISOLATED_PASS migration_sha256=$migrationHash candidate_rows=$integrity unapproved_admin_rows=0"
     }

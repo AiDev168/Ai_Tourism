@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 
 import psycopg
 import json
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg.rows import dict_row
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -19,6 +20,7 @@ from app.modules.catalog.archive_ingest import stage_archive
 from app.modules.identity.auth_service import AuthenticatedUser
 
 router = APIRouter(prefix="/api/v1/catalogue-review", tags=["catalogue-review"])
+_logger = logging.getLogger(__name__)
 MAX_UPLOAD_BYTES = 256 * 1024 * 1024
 CandidateKind = Literal["destination_identity", "discovery_lead"]
 
@@ -228,15 +230,19 @@ def decide_candidate(
             raise HTTPException(422, "review_requires_candidate_evidence_ids") from None
     if body.decision in {"reject", "defer", "request_evidence"} and body.target_destination_id is not None:
         raise HTTPException(422, "nonaccept_decision_cannot_have_target")
+    decision_phase = "connect"
     try:
         with _connect(settings) as conn, conn.cursor() as cur:
+            decision_phase = "bind_actor"
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            decision_phase = "check_capability"
             cur.execute(
                 "SELECT identity.has_catalogue_review_capability(%s,'candidate_review') AS allowed",
                 (user.user_id,),
             )
             if not cur.fetchone()["allowed"]:
                 raise HTTPException(403, "catalogue_review_not_granted")
+            decision_phase = "lock_candidate"
             cur.execute(
                 "SELECT candidate_status FROM knowledge.destination_candidates WHERE candidate_id=%s FOR UPDATE",
                 (candidate_id,),
@@ -247,6 +253,7 @@ def decide_candidate(
             if candidate["candidate_status"] not in {"needs_review", "in_review", "conflict"}:
                 raise HTTPException(409, "candidate_already_reviewed")
             if body.decision in {"accept", "approve_new_identity"}:
+                decision_phase = "validate_evidence"
                 cur.execute(
                     """SELECT count(DISTINCT e.evidence_id) AS n
                     FROM knowledge.destination_candidate_evidence e
@@ -257,6 +264,7 @@ def decide_candidate(
                 )
                 if int(cur.fetchone()["n"]) != len(evidence_ids):
                     raise HTTPException(422, "review_evidence_not_linked_to_verified_source")
+            decision_phase = "insert_review"
             cur.execute(
                 """INSERT INTO knowledge.destination_candidate_reviews
                 (candidate_id,identity_relation,target_destination_id,decision,reason,evidence_refs,reviewer_user_id,policy_version)
@@ -282,9 +290,12 @@ def decide_candidate(
                     "defer": "needs_review",
                     "request_evidence": "needs_review",
                 }[body.decision]
+            decision_phase = "update_candidate"
             cur.execute(
                 """UPDATE knowledge.destination_candidates
-                SET candidate_status=%s, canonical_destination_id=CASE WHEN %s='same_entity' THEN %s ELSE NULL END,updated_at=now()
+                SET candidate_status=%s::text,
+                    canonical_destination_id=CASE WHEN %s::text='same_entity' THEN %s::bigint ELSE NULL::bigint END,
+                    updated_at=now()
                 WHERE candidate_id=%s RETURNING candidate_id""",
                 (status, body.identity_relation, body.target_destination_id, candidate_id),
             )
@@ -296,7 +307,8 @@ def decide_candidate(
         raise HTTPException(403, "catalogue_review_not_granted") from None
     except psycopg.errors.ForeignKeyViolation:
         raise HTTPException(422, "unknown_canonical_destination") from None
-    except psycopg.Error:
+    except psycopg.Error as exc:
+        _logger.warning("catalogue_review.decision_failed phase=%s sqlstate=%s error_type=%s", decision_phase, exc.sqlstate, type(exc).__name__)
         raise HTTPException(503, "review_unavailable") from None
     return {
         "review_id": review_id,
@@ -720,28 +732,42 @@ def publish_candidate(
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
+    publication_phase = "connect"
     try:
         with _connect(settings) as conn, conn.cursor() as cur:
+            publication_phase = "actor_context"
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            publication_phase = "publish_function"
             cur.execute(
                 "SELECT knowledge.publish_archive_destination(%s,%s,%s,%s,%s) AS destination_id",
                 (candidate_id, body.destination_key, body.coordinate_role, user.user_id, body.policy_version),
             )
             result = cur.fetchone()
-            cur.execute("SELECT destination_key FROM knowledge.destinations WHERE destination_id=%s", (result["destination_id"],))
+            if result is None or result["destination_id"] is None:
+                raise HTTPException(503, "catalogue_publication_unavailable")
+            publication_phase = "destination_identity"
+            # The app role is intentionally denied direct reads from the
+            # canonical table. Resolve the key through the same vetted view
+            # consumed by public catalogue/recommendation paths.
+            cur.execute("SELECT destination_key FROM knowledge.production_destinations WHERE destination_id=%s", (result["destination_id"],))
             key_row = cur.fetchone()
+            if key_row is None:
+                raise HTTPException(409, "published_destination_identity_missing")
+            publication_phase = "production_visibility"
             cur.execute("SELECT count(*) AS n FROM knowledge.production_destinations WHERE destination_id=%s", (result["destination_id"],))
             if int(cur.fetchone()["n"]) != 1:
                 raise HTTPException(409, "destination_did_not_pass_production_view")
     except HTTPException:
         raise
-    except psycopg.errors.InsufficientPrivilege:
+    except psycopg.errors.InsufficientPrivilege as exc:
+        _logger.warning("catalogue_review.publication_denied phase=%s sqlstate=%s error_type=%s", publication_phase, exc.sqlstate, type(exc).__name__)
         raise HTTPException(403, "catalogue_publish_not_granted") from None
     except psycopg.errors.RaiseException:
         raise HTTPException(422, "candidate_not_publishable") from None
     except psycopg.errors.UniqueViolation:
         raise HTTPException(409, "candidate_already_published_or_key_conflict") from None
-    except psycopg.Error:
+    except psycopg.Error as exc:
+        _logger.warning("catalogue_review.publication_failed phase=%s sqlstate=%s error_type=%s", publication_phase, exc.sqlstate, type(exc).__name__)
         raise HTTPException(503, "catalogue_publication_unavailable") from None
     return {"destination_id": result["destination_id"], "destination_key": key_row["destination_key"],
             "publication_status": "published", "published": True}

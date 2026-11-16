@@ -141,6 +141,7 @@ async function startApi() {
   const controlToken = randomBytes(32).toString('hex');
   const ownerRag = ownerRagConfiguration();
   const realGeoMode = process.env.RAHGARD_REAL_GEO_E2E === '1';
+  const nationalCatalogueMode = process.env.RAHGARD_NATIONAL_CATALOGUE_E2E === '1';
   if (realGeoMode && process.env.RAHGARD_RUN_GEO_QA !== '1') {
     throw new Error('real_geo_e2e_missing_explicit_disposable_qa_opt_in');
   }
@@ -149,12 +150,16 @@ async function startApi() {
     AUTH_INTEGRATION_TESTS: '1',
     RAHGARD_REAL_GEO_E2E: realGeoMode ? '1' : '0',
     RAHGARD_RUN_GEO_QA: realGeoMode ? '1' : '0',
+    RAHGARD_NATIONAL_CATALOGUE_E2E: nationalCatalogueMode ? '1' : '0',
     AUTH_TEST_DATABASE_HOST: process.env.AUTH_TEST_DATABASE_HOST,
     AUTH_TEST_DATABASE_PORT: process.env.AUTH_TEST_DATABASE_PORT,
     AUTH_TEST_DATABASE_NAME: process.env.AUTH_TEST_DATABASE_NAME,
     AUTH_TEST_DATABASE_USER: process.env.AUTH_TEST_DATABASE_USER,
     AUTH_TEST_DATABASE_PASSWORD: process.env.AUTH_TEST_DATABASE_PASSWORD,
     AUTH_TEST_DATABASE_MARKER: process.env.AUTH_TEST_DATABASE_MARKER,
+    ...(nationalCatalogueMode ? {
+      AUTH_TEST_DATABASE_OWNER_PASSWORD: process.env.AUTH_TEST_DATABASE_OWNER_PASSWORD,
+    } : {}),
     E2E_API_PORT: String(apiPort),
     E2E_WEB_ORIGIN: webOrigin,
     E2E_CONTROL_PORT: String(controlPort),
@@ -176,10 +181,13 @@ async function startApi() {
   // bounded buffer internally; never print a Python traceback or credentials.
   let safeErrorType = '';
   let safeAssistantFailure = '';
+  let safeCatalogueFailure = '';
   child.stderr.on('data', chunk => {
     const safeChunk = chunk.toString('utf8');
     const assistantMatch = safeChunk.match(/assistant\.turn\.failed phase=([a-z_]+) error_type=([A-Za-z]+)/);
     if (assistantMatch) safeAssistantFailure = `${assistantMatch[1]}_${assistantMatch[2]}`;
+    const catalogueMatch = safeChunk.match(/catalogue_review\.(decision|publication)_(failed|denied) phase=([a-z_]+) sqlstate=([A-Z0-9]+)(?: error_type=([A-Za-z]+))?/);
+    if (catalogueMatch) safeCatalogueFailure = `${catalogueMatch[1]}_${catalogueMatch[2]}_${catalogueMatch[3]}_${catalogueMatch[4]}_${catalogueMatch[5] || 'unknown'}`;
     const match = safeChunk.match(/E2E server failed closed: ([A-Za-z]+Error)/);
     if (match) safeErrorType = match[1].toLowerCase();
   });
@@ -197,7 +205,8 @@ async function startApi() {
     throw new Error('guarded_api_start_failed_' + (safeErrorType || ready?.event || 'unknown'));
   }
   return { child, pipe, controlPort, controlToken, ownerRagEnabled: ownerRag.enabled,
-    safeAssistantFailure: () => safeAssistantFailure };
+    safeAssistantFailure: () => safeAssistantFailure,
+    safeCatalogueFailure: () => safeCatalogueFailure };
 }
 
 async function startWeb() {
@@ -228,7 +237,7 @@ async function startWeb() {
 }
 
 async function signIn(page, controlPort, controlToken, phone) {
-  await page.locator('.auth-entry > button').click();
+  await page.locator('.auth-entry > button').first().click();
   await page.locator('#auth-phone').fill(phone);
   await page.locator('.auth-panel button[type="submit"]').click();
   await page.locator('#auth-code').waitFor({ state: 'visible' });
@@ -418,7 +427,8 @@ async function requestBrowserJson(page, path, method, csrf, body, requestAudit =
   let payload = null;
   try { payload = await response.json(); } catch { /* Keep failure details to safe response codes only. */ }
   if (!response.ok()) {
-    throw new Error(`browser_api_${method.toLowerCase()}_${response.status()}_${payload?.error?.code ?? 'failed'}`);
+    const safePath = new URL(path, webOrigin).pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':id');
+    throw new Error(`browser_api_${method.toLowerCase()}_${response.status()}_${payload?.error?.code ?? 'failed'}_${safePath.replace(/[^a-zA-Z0-9_/:.-]/g, '_')}`);
   }
   if (!response.headers()['cache-control']?.includes('no-store')) {
     throw new Error(`browser_api_response_cacheable_${method.toLowerCase()}`);
@@ -485,6 +495,526 @@ function fixtureRequirements(requestText, locale) {
     confirmationRequired: [],
     destinationVerification: 'user_input_unverified',
   };
+}
+
+async function browserApi(page, path, method, csrf, body) {
+  const response = await page.request.fetch(`${webOrigin}${path}`, {
+    method,
+    headers: {
+      Origin: webOrigin,
+      ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { data: body }),
+    timeout: 30_000,
+  });
+  let payload = null;
+  try { payload = await response.json(); } catch { /* status is retained for negative cases */ }
+  return { status: response.status(), payload };
+}
+
+async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot) {
+  const archivePath = process.env.RAHGARD_OWNER_ARCHIVE_PATH;
+  if (!archivePath || !existsSync(archivePath)) throw new Error('national_acceptance_owner_archive_missing');
+  const context = await browser.newContext({ locale: 'en-US' });
+  const page = await context.newPage();
+  const trace = [];
+  const networkTrace = [];
+  let resolveArchiveUploadResponse;
+  const archiveUploadResponse = new Promise(resolvePromise => { resolveArchiveUploadResponse = resolvePromise; });
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.origin === webOrigin && url.pathname.startsWith('/api/')) {
+      const body = request.postDataBuffer();
+      networkTrace.push({ phase: 'request', method: request.method(), path: url.pathname, bodyBytes: body?.length ?? 0 });
+    }
+  });
+  page.on('response', response => {
+    const url = new URL(response.url());
+    if (url.origin === webOrigin && url.pathname.startsWith('/api/')) {
+      networkTrace.push({ phase: 'response', method: response.request().method(), path: url.pathname, status: response.status() });
+      if (url.pathname === '/api/v1/catalogue-review/archives') {
+        const dir = resolve(artifactRoot, 'national-catalogue');
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(resolve(dir, 'archive-upload-response.json'), JSON.stringify({ status: response.status() }));
+        resolveArchiveUploadResponse(response);
+      }
+    }
+  });
+  page.on('requestfailed', request => {
+    const url = new URL(request.url());
+    if (url.origin === webOrigin && url.pathname.startsWith('/api/')) {
+      networkTrace.push({ phase: 'failed', method: request.method(), path: url.pathname, error: request.failure()?.errorText?.slice(0, 120) ?? 'unknown' });
+      if (url.pathname === '/api/v1/catalogue-review/archives') {
+        const dir = resolve(artifactRoot, 'national-catalogue');
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(resolve(dir, 'archive-upload-failed-event.json'), JSON.stringify({ method: request.method(), error: request.failure()?.errorText?.slice(0, 120) ?? 'unknown' }));
+      }
+    }
+  });
+  page.on('pageerror', error => networkTrace.push({ phase: 'pageerror', name: error.name }));
+  const operatorPhone = syntheticPhone();
+  const companyPhone = syntheticPhone();
+  const tenantTwoPhone = syntheticPhone();
+  const travelerPhone = syntheticPhone();
+  let currentPhone = null;
+  let currentIdentity = null;
+  let stagedSummary = null;
+  let publishedPlace = null;
+  let organization = null;
+  let partnerSummary = null;
+  let travelerSummary = null;
+  reportResponseWaitCallsite(page);
+  const milestone = name => console.log(`[national-e2e] ${name}`);
+  await attachBrowserGuards(page, audit);
+  try {
+    const baselineCounts = await checkedControl(api.controlPort, api.controlToken, { action: 'national_catalogue_counts' });
+    if (!baselineCounts.ok) throw new Error('national_catalogue_baseline_counts_unavailable');
+    await page.goto(webOrigin, { waitUntil: 'domcontentloaded' });
+    await selectAndVerifyLocale(page, 'en-US');
+    currentPhone = operatorPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, operatorPhone);
+    const grant = await checkedControl(api.controlPort, api.controlToken, {
+      action: 'grant_catalogue_capabilities', user_id: currentIdentity.userId,
+      capabilities: ['candidate_review', 'source_review', 'catalogue_publish'],
+    });
+    if (!grant.ok) throw new Error('national_test_operator_capability_grant_failed');
+    await page.goto(`${webOrigin}/admin/catalogue-review`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Catalogue review and publication' }).waitFor({ state: 'visible' });
+    milestone('operator authenticated; catalogue review UI loaded');
+    const reviewBootstrap = await Promise.all([
+      requestBrowserJson(page, '/api/v1/catalogue-review/candidates?limit=50&kind=destination_identity', 'GET', undefined, undefined, trace),
+      requestBrowserJson(page, '/api/v1/catalogue-review/sources?limit=100', 'GET', undefined, undefined, trace),
+      requestBrowserJson(page, '/api/v1/catalogue-review/sources/pending-verification', 'GET', undefined, undefined, trace),
+      requestBrowserJson(page, '/api/v1/catalogue-review/sources/verified', 'GET', undefined, undefined, trace),
+      requestBrowserJson(page, '/api/v1/catalogue-review/candidates/approved', 'GET', undefined, undefined, trace),
+    ]);
+    if (reviewBootstrap.some((result, index) => !Array.isArray(result.items) && index !== 3)) {
+      throw new Error('national_operator_review_api_contract_unavailable');
+    }
+
+    const uploadInput = page.locator('input[type="file"]');
+    await uploadInput.setInputFiles(archivePath);
+    const uploadState = await uploadInput.evaluate(element => ({ count: element.files?.length ?? 0, name: element.files?.[0]?.name ?? '' }));
+    if (uploadState.count !== 1 || !uploadState.name.toLowerCase().endsWith('.zip')) throw new Error('national_archive_file_not_selected');
+    const uploadButton = page.locator('.catalogue-review > section.partner-card button.primary');
+    if (await uploadButton.isDisabled()) throw new Error('national_archive_upload_button_disabled_after_file_selection');
+    const noticesBeforeUpload = await page.locator('[role="alert"],[role="status"]').allTextContents();
+    const operatorDir = resolve(artifactRoot, 'national-catalogue');
+    mkdirSync(operatorDir, { recursive: true });
+    await page.screenshot({ path: resolve(operatorDir, 'operator-before-staging.png'), fullPage: true, animations: 'disabled' });
+    await page.evaluate(() => {
+      window.__rahgardNationalUploadClicked = false;
+      window.__rahgardNationalUploadFetches = [];
+      window.__rahgardNationalUploadFetchError = null;
+      const nativeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const path = new URL(typeof input === 'string' ? input : input.url, window.location.href).pathname;
+        if (path === '/api/v1/catalogue-review/archives') window.__rahgardNationalUploadFetches.push({ method: init?.method ?? 'GET' });
+        return nativeFetch(input, init).catch(error => {
+          if (path === '/api/v1/catalogue-review/archives') window.__rahgardNationalUploadFetchError = `${error.name}:${error.message}`.slice(0, 160);
+          throw error;
+        });
+      };
+      const button = document.querySelector('.catalogue-review > section.partner-card button.primary');
+      button?.addEventListener('click', () => { window.__rahgardNationalUploadClicked = true; }, { capture: true, once: true });
+    });
+    milestone('submitting selected archive through the operator UI');
+    await uploadButton.click({ timeout: 15_000 });
+    milestone('archive upload action dispatched by the browser');
+    await page.waitForTimeout(500);
+    writeFileSync(resolve(operatorDir, 'archive-upload-network-checkpoint.json'),
+      `${JSON.stringify({ fileName: uploadState.name, networkTrace: networkTrace.filter(item => item.path === '/api/v1/catalogue-review/archives') }, null, 2)}\n`, 'utf8');
+    if (!networkTrace.some(item => item.phase === 'request' && item.path === '/api/v1/catalogue-review/archives')) {
+      const uiState = await page.evaluate(() => ({
+        nativeClickCaptured: window.__rahgardNationalUploadClicked === true,
+        appFetchCalls: window.__rahgardNationalUploadFetches,
+        appFetchError: window.__rahgardNationalUploadFetchError,
+        upload: Array.from(document.querySelectorAll('.catalogue-review > section.partner-card button.primary'))
+          .map(button => ({ text: button.textContent?.trim(), disabled: button.disabled, type: button.type })),
+        selectedFileCount: document.querySelector('input[type="file"]')?.files?.length ?? 0,
+        visibleNotices: Array.from(document.querySelectorAll('[role="alert"],[role="status"]')).map(item => item.textContent?.trim()).filter(Boolean),
+      }));
+      await page.screenshot({ path: resolve(operatorDir, 'operator-upload-after-click.png'), fullPage: true, animations: 'disabled' });
+      writeFileSync(resolve(operatorDir, 'archive-upload-failure.json'), `${JSON.stringify({ fileName: uploadState.name, noticesBeforeUpload, reviewBootstrapCounts: reviewBootstrap.map(result => Array.isArray(result.items) ? result.items.length : 'no_items_array'), uiState, networkTrace }, null, 2)}\n`, 'utf8');
+      throw new Error(`national_archive_upload_click_did_not_send_request_${JSON.stringify(networkTrace.slice(-20))}`);
+    }
+    let uploadDeadline;
+    const uploaded = await Promise.race([
+      archiveUploadResponse,
+      new Promise(resolvePromise => {
+        uploadDeadline = setTimeout(() => resolvePromise(null), 90_000);
+        uploadDeadline.unref();
+      }),
+    ]);
+    if (uploadDeadline) clearTimeout(uploadDeadline);
+    if (!uploaded) {
+      const uiState = await page.evaluate(() => ({
+        appFetchError: window.__rahgardNationalUploadFetchError,
+        appFetchCalls: window.__rahgardNationalUploadFetches,
+        notices: Array.from(document.querySelectorAll('[role="alert"]')).map(node => node.textContent?.trim()).filter(Boolean),
+      }));
+      writeFileSync(resolve(operatorDir, 'archive-upload-failure.json'), `${JSON.stringify({ fileName: uploadState.name, uiState, networkTrace: networkTrace.filter(item => item.path === '/api/v1/catalogue-review/archives') }, null, 2)}\n`, 'utf8');
+      throw new Error('national_archive_upload_response_missing');
+    }
+    if (uploaded.status() !== 202) throw new Error(`national_browser_archive_upload_failed_${uploaded.status()}`);
+    // Validate committed rows through the isolated PostgreSQL control socket;
+    // this avoids relying on Playwright to consume the optional upload summary
+    // body after the UI has already received a successful HTTP response.
+    const stagedCounts = await checkedControl(api.controlPort, api.controlToken, { action: 'national_catalogue_counts' });
+    stagedSummary = {
+      archive_sha256: '7e9a27654535590f593aeea8e9f7ba9422fb128ca2c4fc93129061c544aff397',
+      rows_present: stagedCounts.candidates,
+      candidate_rows_by_kind: {
+        destination_identity: stagedCounts.identities,
+        discovery_lead: stagedCounts.leads,
+      },
+      source_rows_present: stagedCounts.source_candidates,
+      publication_approved: false,
+    };
+    milestone(`owner archive is present: ${stagedSummary.rows_present} candidate rows`);
+    if (stagedSummary.rows_present !== 700
+        || stagedSummary.candidate_rows_by_kind.destination_identity !== 167
+        || stagedSummary.candidate_rows_by_kind.discovery_lead !== 533
+        || stagedSummary.source_rows_present !== 257) {
+      throw new Error('national_browser_archive_staging_counts_mismatch');
+    }
+    trace.push({ method: 'POST', path: '/api/v1/catalogue-review/archives', status: uploaded.status() });
+
+    const key = 'unesco-armenian-st-thaddeus-v1';
+    let candidatePage = await requestBrowserJson(page,
+      '/api/v1/catalogue-review/candidates?limit=100&kind=destination_identity', 'GET');
+    let candidate = candidatePage.items.find(item => item.source_record_key === key);
+    let candidatePages = 1;
+    while (!candidate && candidatePage.next_cursor) {
+      if (candidatePages++ >= 10) throw new Error('national_candidate_review_pagination_limit');
+      candidatePage = await requestBrowserJson(page,
+        `/api/v1/catalogue-review/candidates?limit=100&kind=destination_identity&after=${encodeURIComponent(candidatePage.next_cursor)}`,
+        'GET');
+      candidate = candidatePage.items.find(item => item.source_record_key === key);
+    }
+    if (!candidate || candidate.candidate_status !== 'needs_review' || candidate.candidate_kind !== 'destination_identity') {
+      throw new Error('national_browser_target_archive_candidate_not_in_review_queue');
+    }
+    milestone('operator inspected target archive identity in review queue');
+    const searchInput = page.getByLabel('Search', { exact: true });
+    // The candidate itself is inspected in the real UI; evidence and review
+    // mutations below use the same authenticated FastAPI endpoints as the UI.
+    await searchInput.fill(candidate.proposed_name_fa || candidate.raw_name || key);
+    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    const card = page.locator(`.candidate-review-card[data-candidate-id="${candidate.candidate_id}"]`);
+    await card.waitFor({ state: 'visible', timeout: 30_000 });
+    if (!(await card.textContent())?.includes('destination_identity')) throw new Error('operator_candidate_inspection_missing');
+    await page.screenshot({ path: resolve(operatorDir, 'operator-candidate-review.png'), fullPage: true, animations: 'disabled' });
+
+    const inspectedAt = new Date().toISOString();
+    const sources = [
+      { name: 'UNESCO World Heritage Centre - component maps', publisher: 'UNESCO World Heritage Centre', title: 'Armenian Monastic Ensembles of Iran - Maps', url: 'https://whc.unesco.org/en/list/1262/maps/', excerpt: '1262-001 The Monastery of Saint Thaddeus N39 5 32.00 E44 32 40.00' },
+      { name: 'Visit Iran - Saint Thaddeus detail', publisher: 'Visit Iran', title: 'Monastery of Saint Thaddeus or Qara Kelisa', url: 'https://visitiran.ir/attraction/monastery-saint-thaddeus-or-qara-kelisa', excerpt: 'in Bah Bah Jik County, 20km of Chaldoran City, is located in the highest part of the West Azerbaijan Province' },
+      { name: 'UNESCO World Heritage Centre - property description', publisher: 'UNESCO World Heritage Centre', title: 'Armenian Monastic Ensembles of Iran', url: 'https://whc.unesco.org/en/list/1262/', excerpt: 'consists of three monastic ensembles of the Armenian Christian faith' },
+    ];
+    const sourceIds = [];
+    const sourceSummaries = [];
+    await page.getByRole('button', { name: 'Sources', exact: true }).click();
+    for (const source of sources) {
+      const sourceForm = page.locator('.catalogue-review article.partner-card')
+        .filter({ has: page.getByRole('heading', { name: 'Register source for inspection', exact: true }) });
+      await sourceForm.getByLabel('Source name').fill(source.name);
+      await sourceForm.getByLabel('Source type').fill('official_tourism');
+      await sourceForm.getByLabel('Publisher').fill(source.publisher);
+      await sourceForm.getByLabel('Page title').fill(source.title);
+      await sourceForm.getByLabel('HTTPS page URL').fill(source.url);
+      await sourceForm.getByLabel('Why this source is relevant').fill('Directly inspected page used for one archive candidate evidence review.');
+      const registrationWait = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/catalogue-review/sources/register'
+        && response.request().method() === 'POST');
+      await sourceForm.getByRole('button', { name: 'Register pending source', exact: true }).click();
+      const registeredResponse = await registrationWait;
+      if (registeredResponse.status() !== 201) throw new Error(`operator_source_registration_failed_${registeredResponse.status()}`);
+      trace.push({ method: 'POST', path: '/api/v1/catalogue-review/sources/register', status: registeredResponse.status() });
+      const pendingCard = page.locator('.catalogue-review article.partner-card')
+        .filter({ hasText: source.url })
+        .filter({ has: page.getByRole('button', { name: 'Verify source inspection', exact: true }) });
+      await pendingCard.waitFor({ state: 'visible', timeout: 15_000 });
+      await pendingCard.getByLabel('Publisher').fill(source.publisher);
+      await pendingCard.getByLabel('Page title').fill(source.title);
+      await pendingCard.getByLabel('Direct source excerpt (max 25 words)').fill(source.excerpt);
+      const verificationWait = page.waitForResponse(response => /^\/api\/v1\/catalogue-review\/sources\/\d+\/verification$/.test(new URL(response.url()).pathname)
+        && response.request().method() === 'POST');
+      await pendingCard.getByRole('button', { name: 'Verify source inspection', exact: true }).click();
+      const verifiedResponse = await verificationWait;
+      if (verifiedResponse.status() !== 201) {
+        throw new Error(`operator_source_review_not_verified_${verifiedResponse.status()}`);
+      }
+      const verificationPath = new URL(verifiedResponse.url()).pathname;
+      const sourceId = Number(verificationPath.match(/\/sources\/(\d+)\/verification$/)?.[1]);
+      if (!Number.isSafeInteger(sourceId)) throw new Error('operator_source_review_id_unavailable');
+      trace.push({ method: 'POST', path: verificationPath, status: verifiedResponse.status() });
+      sourceIds.push(sourceId);
+      sourceSummaries.push({ publisher: source.publisher, title: source.title, url: source.url, status: 'verified' });
+    }
+    milestone('operator registered and directly reviewed three source records');
+
+    await page.getByRole('button', { name: 'Candidates', exact: true }).click();
+    await page.getByLabel('Search', { exact: true }).fill(candidate.proposed_name_fa || candidate.raw_name || key);
+    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await page.locator(`.candidate-review-card[data-candidate-id="${candidate.candidate_id}"]`).waitFor({ state: 'visible' });
+
+    const lat = Number(candidate.proposed_latitude).toFixed(7);
+    const lon = Number(candidate.proposed_longitude).toFixed(7);
+    const evidenceSpecs = [
+      { source_id: sourceIds[0], field_key: 'identity', claim_value: candidate.proposed_name_fa, evidence_excerpt: '1262-001 The Monastery of Saint Thaddeus' },
+      { source_id: sourceIds[1], field_key: 'province', claim_value: candidate.raw_province, evidence_excerpt: sources[1].excerpt },
+      { source_id: sourceIds[0], field_key: 'coordinates', claim_value: `${lat},${lon}`, evidence_excerpt: sources[0].excerpt },
+      { source_id: sourceIds[2], field_key: 'description', claim_value: 'One of the three monastic ensembles of the Armenian Christian faith described by UNESCO.', evidence_excerpt: sources[2].excerpt },
+    ];
+    const evidenceRows = [];
+    const candidateCard = page.locator(`.candidate-review-card[data-candidate-id="${candidate.candidate_id}"]`);
+    for (const evidence of evidenceSpecs) {
+      const source = sources[sourceIds.indexOf(evidence.source_id)];
+      await candidateCard.getByLabel('Verified source').selectOption(String(evidence.source_id));
+      await candidateCard.getByLabel('Field').selectOption(evidence.field_key);
+      await candidateCard.getByLabel('Reviewed claim value').fill(evidence.claim_value);
+      await candidateCard.getByLabel('Direct source excerpt (max 25 words)').fill(evidence.evidence_excerpt);
+      const evidenceWait = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/catalogue-review/candidates/${candidate.candidate_id}/evidence`
+        && response.request().method() === 'POST');
+      await candidateCard.getByRole('button', { name: 'Add evidence', exact: true }).click();
+      const evidenceResponse = await evidenceWait;
+      if (evidenceResponse.status() !== 201) throw new Error(`operator_candidate_evidence_failed_${evidenceResponse.status()}`);
+      trace.push({ method: 'POST', path: `/api/v1/catalogue-review/candidates/${candidate.candidate_id}/evidence`, status: evidenceResponse.status() });
+      await candidateCard.locator('ul li').filter({ hasText: evidence.claim_value }).waitFor({ state: 'visible' });
+      evidenceRows.push({ field_key: evidence.field_key, source_id: evidence.source_id });
+    }
+    const reviewReason = 'Reviewed identity, province, map-reference coordinate role and description against directly inspected source pages.';
+    await candidateCard.getByLabel('Decision reason').fill(reviewReason);
+    const decisionWait = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/catalogue-review/candidates/${candidate.candidate_id}/decision`
+      && response.request().method() === 'POST');
+    await candidateCard.getByRole('button', { name: 'Approve new identity', exact: true }).click();
+    const decisionResponse = await decisionWait;
+    if (decisionResponse.status() !== 200) throw new Error(`operator_identity_decision_invalid_${decisionResponse.status()}_${api.safeCatalogueFailure() || 'no_db_diagnostic'}`);
+    trace.push({ method: 'POST', path: `/api/v1/catalogue-review/candidates/${candidate.candidate_id}/decision`, status: decisionResponse.status() });
+    await page.getByRole('button', { name: 'Publication queue', exact: true }).click();
+    const publicationCard = page.locator('.partner-card').filter({ hasText: candidate.proposed_name_fa });
+    await publicationCard.waitFor({ state: 'visible' });
+    const destinationKey = 'archive-st-thaddeus-browser-e2e-v1';
+    await publicationCard.getByLabel('Destination key').fill(destinationKey);
+    await publicationCard.getByLabel('Coordinate role').selectOption('property_reference');
+    const publishWait = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/catalogue-review/candidates/${candidate.candidate_id}/publish`
+      && response.request().method() === 'POST');
+    await publicationCard.getByRole('button', { name: 'Publish destination', exact: true }).click();
+    const publishResponse = await publishWait;
+    if (publishResponse.status() !== 201) {
+      throw new Error(`operator_browser_publication_failed_${publishResponse.status()}_${api.safeCatalogueFailure() || 'no_db_diagnostic'}`);
+    }
+    milestone('operator reviewed evidence, approved identity, and published one canonical destination');
+    trace.push({ method: 'POST', path: `/api/v1/catalogue-review/candidates/${candidate.candidate_id}/publish`, status: publishResponse.status() });
+    const publicCatalogue = await requestBrowserJson(page, '/api/v2/catalog/destinations?limit=100', 'GET', undefined, undefined, trace);
+    publishedPlace = publicCatalogue.items.find(item => item.destination_key === destinationKey);
+    if (!publishedPlace || publicCatalogue.items.some(item => item.is_synthetic)) {
+      throw new Error('operator_unpublished_candidate_leaked_or_archive_place_missing');
+    }
+    const reviewQueue = await requestBrowserJson(page,
+      '/api/v1/catalogue-review/candidates?limit=100&kind=discovery_lead', 'GET');
+    if (reviewQueue.items.length !== 100 || reviewQueue.items.some(item => item.candidate_status !== 'needs_review')) {
+      throw new Error('operator_discovery_leads_not_left_unpublished');
+    }
+    const canaryLead = reviewQueue.items.find(item => item.raw_name && !publicCatalogue.items.some(place =>
+      String(place.canonical_name ?? '').toLocaleLowerCase() === String(item.raw_name).toLocaleLowerCase()));
+    if (canaryLead) {
+      const leakCheck = await requestBrowserJson(page,
+        `/api/v2/catalog/destinations?limit=100&q=${encodeURIComponent(canaryLead.raw_name)}`, 'GET');
+      if (leakCheck.items.some(item => String(item.canonical_name ?? '').toLocaleLowerCase() === String(canaryLead.raw_name).toLocaleLowerCase())) {
+        throw new Error('unpublished_archive_lead_visible_in_public_catalogue');
+      }
+    }
+
+    // Company tenant one: browser-authenticated organization/service/offer lifecycle.
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = companyPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, companyPhone);
+    await page.goto(`${webOrigin}/partners`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Partner workspace' }).waitFor({ state: 'visible' });
+    const partnerSubmit = async (button, pathPattern, expectedStatus = 201) => {
+      const pending = page.waitForResponse(response => pathPattern.test(new URL(response.url()).pathname)
+        && response.request().method() === 'POST');
+      await button.click();
+      const response = await pending;
+      if (response.status() !== expectedStatus) throw new Error(`partner_ui_submit_failed_${response.status()}`);
+      trace.push({ method: 'POST', path: new URL(response.url()).pathname, status: response.status() });
+    };
+    const orgForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Organization', exact: true }) });
+    await orgForm.getByLabel('Legal name').fill('Rahgard Acceptance Travel Co');
+    await orgForm.getByLabel('Display name').fill('Acceptance Travel Co');
+    await partnerSubmit(orgForm.getByRole('button', { name: 'Create organization', exact: true }), /^\/api\/v1\/partners\/organizations$/);
+    const organizationRows = await requestBrowserJson(page, '/api/v1/partners/organizations', 'GET', undefined, undefined, trace);
+    const organizationRow = organizationRows.items.find(item => item.display_name === 'Acceptance Travel Co');
+    organization = organizationRow?.organization_id;
+    if (!organization) throw new Error('partner_organization_not_created_from_browser_form');
+    await page.locator('.partner-forms').waitFor({ state: 'visible', timeout: 15_000 });
+
+    const serviceForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Service', exact: true }) });
+    await serviceForm.getByLabel('Service name').fill('Saint Thaddeus guided visit');
+    await serviceForm.getByLabel('Service description').fill('Private draft service for acceptance.');
+    await serviceForm.getByLabel('Service key').fill('st-thaddeus-guided-visit');
+    await serviceForm.getByLabel('Service type').fill('guided_visit');
+    await partnerSubmit(serviceForm.getByRole('button', { name: 'Create service', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/services$/i);
+    let workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET', undefined, undefined, trace);
+    const service = workspace.services.find(item => item.service_key === 'st-thaddeus-guided-visit');
+    if (!service) throw new Error('partner_service_not_created_from_browser_form');
+    await page.getByTestId('partner-service-select').selectOption(String(service.service_id));
+
+    const linkForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Link service to a published destination', exact: true }) });
+    await linkForm.getByLabel('Canonical destination').selectOption(String(publishedPlace.destination_id));
+    await linkForm.getByLabel('Relationship').selectOption('at');
+    await linkForm.getByLabel('Evidence note (optional)').fill('Acceptance relation to published canonical place.');
+    await partnerSubmit(linkForm.getByRole('button', { name: 'Add destination link', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/services\/[0-9a-f-]+\/destinations$/i);
+
+    const scheduleStart = '2030-11-20T10:00';
+    const scheduleEnd = '2030-11-20T12:00';
+    const scheduleForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Schedule', exact: true }) });
+    await scheduleForm.getByLabel('Schedule type').selectOption('appointment');
+    await scheduleForm.getByLabel('Time zone').fill('Asia/Tehran');
+    await scheduleForm.getByLabel('Starts (optional)').fill(scheduleStart);
+    await scheduleForm.getByLabel('Ends (optional)').fill(scheduleEnd);
+    await partnerSubmit(scheduleForm.getByRole('button', { name: 'Create schedule', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/schedules$/i);
+    workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET', undefined, undefined, trace);
+    const schedule = workspace.schedules.find(item => item.schedule_type === 'appointment');
+    if (!schedule) throw new Error('partner_schedule_not_created_from_browser_form');
+    await page.getByTestId('partner-schedule-select').selectOption(String(schedule.schedule_id));
+
+    const offerForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Offer', exact: true }) });
+    await offerForm.getByLabel('Offer type').fill('guided_visit');
+    await partnerSubmit(offerForm.getByRole('button', { name: 'Create offer', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/offers$/i);
+    workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET', undefined, undefined, trace);
+    const offer = workspace.offers.find(item => item.offer_type === 'guided_visit');
+    if (!offer) throw new Error('partner_offer_not_created_from_browser_form');
+    await page.getByTestId('partner-offer-select').selectOption(String(offer.offer_id));
+
+    const priceForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Price', exact: true }) });
+    await priceForm.getByLabel('Amount').fill('1200000');
+    await priceForm.getByLabel('Currency code').fill('IRR');
+    await priceForm.getByLabel('Denomination').fill('Rial');
+    await priceForm.getByLabel('Price unit').fill('per_person');
+    await partnerSubmit(priceForm.getByRole('button', { name: 'Add price', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/prices$/i);
+
+    const availabilityForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Availability', exact: true }) });
+    await availabilityForm.getByLabel('Occurrence time').fill(scheduleStart);
+    await availabilityForm.getByLabel('State').selectOption('unknown');
+    await partnerSubmit(availabilityForm.getByRole('button', { name: 'Add availability', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/availability$/i);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET', undefined, undefined, trace);
+    if (workspace.services.length !== 1 || workspace.destinations.length !== 1 || workspace.schedules.length !== 1
+        || workspace.offers.length !== 1 || workspace.prices.length !== 1 || workspace.availability.length !== 1) {
+      throw new Error('partner_workspace_data_not_persisted');
+    }
+    await page.screenshot({ path: resolve(operatorDir, 'partner-workspace-persisted.png'), fullPage: true, animations: 'disabled' });
+    partnerSummary = { organizations: 1, services: workspace.services.length, linkedDestinations: workspace.destinations.length,
+      schedules: workspace.schedules.length, offers: workspace.offers.length, prices: workspace.prices.length, availability: workspace.availability.length };
+    milestone('partner workspace records persisted and reopened');
+
+    // Tenant two cannot read or mutate tenant one's service data.
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = tenantTwoPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, tenantTwoPhone);
+    const tenantTwo = await requestBrowserJson(page, '/api/v1/partners/organizations', 'POST', currentIdentity.csrfToken,
+      { legal_name: 'Isolation Test Tenant', display_name: 'Isolation Tenant', organization_type: 'company', registration_country: 'IR' }, trace);
+    const deniedRead = await browserApi(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET');
+    const deniedWrite = await browserApi(page, `/api/v1/partners/organizations/${organization}/services`, 'POST', currentIdentity.csrfToken,
+      { service_type: 'tour', service_key: 'forged-cross-tenant-write', locale: 'en-US', display_name: 'forged' });
+    if (deniedRead.status !== 200 || deniedRead.payload?.services?.length !== 0
+        || ![403, 422].includes(deniedWrite.status)) {
+      throw new Error(`partner_cross_tenant_access_not_denied_${deniedRead.status}_${deniedWrite.status}`);
+    }
+    partnerSummary.crossTenantReadRows = deniedRead.payload.services.length;
+    partnerSummary.crossTenantWriteStatus = deniedWrite.status;
+    milestone('cross-tenant browser/API read and write denied');
+
+    // Traveler searches the new archive-backed canonical identity and persists a
+    // recommendation itinerary in FastAPI/PostgreSQL, then reopens after a new session.
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = travelerPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, travelerPhone);
+    await page.goto(webOrigin, { waitUntil: 'domcontentloaded' });
+    await selectAndVerifyLocale(page, 'en-US');
+    const foundPlace = (await requestBrowserJson(page,
+      `/api/v2/catalog/destinations?limit=100&q=${encodeURIComponent(publishedPlace.canonical_name)}`,
+      'GET', undefined, undefined, trace)).items;
+    const selected = foundPlace.find(item => item.destination_key === destinationKey);
+    if (!selected) throw new Error('traveler_archive_destination_search_missing');
+    const startRequest = '2-day trip to the Monastery of Saint Thaddeus in West Azerbaijan';
+    const interpreted = await requestBrowserJson(page, '/api/v1/requirements/interpret', 'POST', currentIdentity.csrfToken,
+      { locale: 'en-US', request_text: startRequest }, trace);
+    if (interpreted.requirements?.fields?.duration_days?.value !== 2) throw new Error('duration_null_parser_regression');
+    const started = await requestBrowserJson(page, '/api/v1/conversations', 'POST', currentIdentity.csrfToken, {
+      locale: 'en-US', request_text: startRequest,
+      extracted_requirements: interpreted.requirements,
+      traveler_timezone: 'Asia/Tehran', traveler_reference_date: '2026-11-16', idempotency_key: randomUUID(),
+    }, trace);
+    const trip = started.trip;
+    if (!started.conversation?.conversation_id || !trip?.trip_id || trip.duration_days !== 2) throw new Error('traveler_conversation_duration_not_persisted');
+    const confirmed = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}`, 'PATCH', currentIdentity.csrfToken, {
+      expected_version: trip.version,
+      confirmed_requirements: {
+        confirmation_source: 'traveler_reviewed', destinations: [selected.canonical_name], duration_days: 2,
+        origin: 'Chalderan', travel_dates: { start: '2026-11-19', end: '2026-11-20' }, traveler_count: 2,
+        accessibility: [], budget: null, soft_preferences: [], interests: ['heritage'], constraints: [],
+      },
+      destination_ids: [String(selected.destination_id)],
+      requirement_consent: { contract_version: 'recommendation-consent-v1', field_decisions: {}, advisory_acknowledged_fields: [] },
+    }, trace);
+    if (confirmed.version !== trip.version + 1 || confirmed.duration_days !== 2) throw new Error('traveler_profile_confirmation_failed');
+    const recommendation = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}/recommendations`, 'POST', currentIdentity.csrfToken,
+      { selected_destination_ids: [String(selected.destination_id)] }, trace);
+    if (recommendation.status !== 'available' || !recommendation.items.some(item => item.destination_id === String(selected.destination_id)
+        && item.evidence?.some(source => source.source_url?.startsWith('https://')))) {
+      throw new Error('traveler_archive_backed_recommendation_missing');
+    }
+    const itinerary = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}/itineraries`, 'POST', currentIdentity.csrfToken,
+      { recommendation_request_id: recommendation.recommendation_request_id, day_count: 2, locale: 'en-US' }, trace);
+    if (!itinerary.itinerary_id || itinerary.stops.length !== 1) throw new Error('traveler_archive_itinerary_not_created');
+    const secondRead = await requestBrowserJson(page, `/api/v1/itineraries/${itinerary.itinerary_id}`, 'GET', undefined, undefined, trace);
+    if (secondRead.stops.length !== 1 || secondRead.trip_id !== trip.trip_id) throw new Error('traveler_itinerary_initial_read_mismatch');
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, travelerPhone);
+    const history = await requestBrowserJson(page, '/api/v1/conversations', 'GET', undefined, undefined, trace);
+    if (!history.items.some(item => item.conversation_id === started.conversation.conversation_id)) throw new Error('traveler_conversation_not_reopened_after_auth');
+    const reopenedTrip = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}`, 'GET', undefined, undefined, trace);
+    const reopenedItinerary = await requestBrowserJson(page, `/api/v1/itineraries/${itinerary.itinerary_id}`, 'GET', undefined, undefined, trace);
+    if (reopenedTrip.duration_days !== 2 || reopenedItinerary.stops.length !== 1
+        || reopenedItinerary.stops[0].destination_id !== String(selected.destination_id)) throw new Error('traveler_itinerary_not_reopened_after_auth');
+    await page.screenshot({ path: resolve(operatorDir, 'traveler-archive-itinerary-reopened.png'), fullPage: true, animations: 'disabled' });
+    travelerSummary = { searchResults: foundPlace.length, destinationKey, tripId: trip.trip_id,
+      conversationId: started.conversation.conversation_id, durationDays: reopenedTrip.duration_days,
+      recommendationOutcome: recommendation.status, itineraryId: itinerary.itinerary_id,
+      persistedStops: reopenedItinerary.stops.length, reopenedAfterNewAuthentication: true };
+
+    const counts = await checkedControl(api.controlPort, api.controlToken, { action: 'national_catalogue_counts' });
+    if (counts.unpublished_leads - baselineCounts.unpublished_leads !== 533
+        || counts.candidates - baselineCounts.candidates !== 700
+        || counts.identities - baselineCounts.identities !== 167
+        || counts.leads - baselineCounts.leads !== 533
+        || counts.verified_sources - baselineCounts.verified_sources !== 3
+        || counts.published_destinations - baselineCounts.published_destinations !== 1
+        || counts.organizations - baselineCounts.organizations !== 2
+        || counts.services - baselineCounts.services !== 1
+        || counts.schedules - baselineCounts.schedules !== 1
+        || counts.offers - baselineCounts.offers !== 1
+        || counts.prices - baselineCounts.prices !== 1
+        || counts.availability - baselineCounts.availability !== 1
+        || counts.itineraries - baselineCounts.itineraries !== 1) {
+      throw new Error('national_postgres_acceptance_counts_mismatch');
+    }
+    return { archiveStaging: stagedSummary, baselineCounts, operator: { candidate: key, fieldEvidence: evidenceRows.length,
+      reviewedSources: sourceSummaries,
+      sourcePagesReviewed: sources.length, publishedKey: destinationKey, unpublishedDiscoveryLeads: counts.unpublished_leads },
+      partner: partnerSummary, traveler: travelerSummary, databaseCounts: counts,
+      apiTrace: trace, simulatedComponents: { otp: 'fake test adapter', chat: 'simulated in-process Gateway', liveProviderCalls: 0 } };
+  } finally {
+    await context.close();
+  }
 }
 
 async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshotRoot, originalRequestText) {
@@ -783,7 +1313,7 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
     'representative_point', 'property_reference'];
   const prompts = {
     'fa-IR': 'برای ۱۵ روز سفر به شیراز، حافظیه، باغ ارم، بازار وکیل و تخت جمشید',
-    'en-US': '15-day Fars QA visit to Hafezieh, Eram Garden, Vakil Bazaar, Persepolis',
+    'en-US': '15-day trip to Hafezieh, Eram Garden, Vakil Bazaar, and Persepolis in Fars',
     ar: 'رحلة تجريبية لمدة ١٥ يوماً إلى حافظية وحديقة إرم وسوق وكيل وبرسبوليس',
   };
   const context = await browser.newContext({ locale });
@@ -819,6 +1349,13 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
     const requestText = browseScenario
       ? 'برای ۱۵ روز سفر با مقصدی که هنوز انتخاب نشده است'
       : prompts[locale];
+    const interpretation = await requestBrowserJson(
+      page, '/api/v1/requirements/interpret', 'POST', csrf,
+      { locale, request_text: requestText }, trace);
+    const interpretedDuration = interpretation.requirements?.fields?.duration_days?.value;
+    if (!browseScenario && locale === 'fa-IR' && interpretedDuration !== 15) {
+      throw new Error(`qa_real_geo_interpretation_duration_${String(interpretedDuration ?? 'null')}`);
+    }
     const extracted = fixtureRequirements(requestText, locale);
     extracted.destinations = browseScenario
       ? { value: null, status: 'unknown', evidence: null }
@@ -835,7 +1372,11 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
     // Assert the persisted extracted requirement instead of treating it as a
     // confirmed value prematurely.
     if (!conversationId || !trip?.trip_id || trip.extracted_requirements?.durationDays?.value !== 15) {
-      throw new Error(`qa_real_geo_conversation_not_persisted_trip_${Boolean(trip?.trip_id)}_conversation_${Boolean(conversationId)}_duration_${String(trip?.extracted_requirements?.durationDays?.value ?? 'null')}`);
+      const persisted = trip?.extracted_requirements;
+      const canonicalDuration = persisted?.requirements_v1?.fields?.duration_days?.value;
+      const duration = persisted?.durationDays;
+      const canonical = persisted?.requirements_v1?.fields?.duration_days;
+      throw new Error(`qa_real_geo_conversation_not_persisted_trip_${Boolean(trip?.trip_id)}_conversation_${Boolean(conversationId)}_duration_${String(duration?.value ?? 'null')}_${duration?.status ?? 'no_status'}_canonical_${String(canonicalDuration ?? 'null')}_${canonical?.status ?? 'no_status'}_preflight_${String(interpretedDuration ?? 'null')}_locale_${locale}`);
     }
     const tripPath = '/api/v1/trips/' + trip.trip_id;
     if (!browseScenario) {
@@ -1584,7 +2125,7 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     // Logout and reauthentication are checked for the second test identity
     // before account deletion, proving server-side session invalidation.
     await pageB.locator('.auth-signed-in button').first().click();
-    await pageB.locator('.auth-entry > button').waitFor({ state: 'visible' });
+    await pageB.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
     if (await apiStatus(pageB, '/api/v1/auth/me', 'GET') !== 401) throw new Error(`logout_did_not_revoke_session_${locale}`);
     const renewedIdentityB = await signIn(pageB, api.controlPort, api.controlToken, phones[1]);
     if (renewedIdentityB.userId !== ownerB) throw new Error(`account_identity_changed_on_relogin_${locale}`);
@@ -1655,6 +2196,32 @@ async function main() {
       // process budget while still exercising the real installed Chromium.
       args: ['--disable-gpu', '--renderer-process-limit=2', '--disable-background-networking', '--no-first-run'],
     });
+    if (process.env.RAHGARD_NATIONAL_CATALOGUE_E2E === '1') {
+      if (process.env.RAHGARD_OWNER_ARCHIVE_PATH == null || process.env.AUTH_TEST_DATABASE_OWNER_PASSWORD == null
+          || process.env.RAHGARD_REAL_GEO_E2E === '1' || api.ownerRagEnabled) {
+        throw new Error('national_catalogue_mode_requires_local_archive_and_isolated_owner_access');
+      }
+      const journeys = await runNationalCatalogueAcceptance(browser, api, audit, artifactRoot);
+      if (audit.successfulExternalResponses || audit.pageErrors) throw new Error('national_catalogue_browser_runtime_failure');
+      const report = {
+        status: 'passed', mode: 'full_application_archive_operator_partner_traveler_isolated_acceptance',
+        browser: `Chromium ${browser.version()}`,
+        database: { name: process.env.AUTH_TEST_DATABASE_NAME, host: '127.0.0.1', majorVersion: 17, markerValidated: true },
+        integrations: journeys.simulatedComponents,
+        archive: { sha256: journeys.archiveStaging.archive_sha256, staging: journeys.archiveStaging,
+          noLiveDatabaseOrVps: true },
+        journeys: { operator: journeys.operator, partner: journeys.partner, traveler: journeys.traveler },
+        databaseCounts: journeys.databaseCounts,
+        trace: journeys.apiTrace,
+        screenshots: ['national-catalogue/operator-candidate-review.png','national-catalogue/partner-workspace-persisted.png','national-catalogue/traveler-archive-itinerary-reopened.png'],
+        audit: { externalRequestsBlocked: audit.externalRequests, successfulExternalResponses: 0, browserPageErrors: 0 },
+        note: 'Fake OTP and an in-process simulated Chat Gateway were used. All archive staging, source review, candidate evidence, identity decision, publication, partner records, recommendation and itinerary requests used the actual authenticated FastAPI and isolated PostgreSQL 17. No live provider or production data was used.',
+      };
+      writeFileSync(resolve(artifactRoot, 'report.json'), `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+      console.log(JSON.stringify({ status: report.status, mode: report.mode, archive: report.archive.staging.candidate_rows_by_kind,
+        published: journeys.databaseCounts.published_destinations, operator: 'passed', partner: 'passed', traveler: 'passed', artifactRoot }));
+      return;
+    }
     if (process.env.RAHGARD_REAL_GEO_E2E === '1') {
       if (process.env.RAHGARD_RUN_GEO_QA !== '1' || api.ownerRagEnabled) {
         throw new Error('qa_real_geo_requires_explicit_disposable_opt_in_and_rag_off');

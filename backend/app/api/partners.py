@@ -254,7 +254,10 @@ def workspace(
                 "offers": "SELECT offer_id,service_id,schedule_id,offer_type,status,valid_from,valid_until,capacity_limit FROM partner.offers WHERE organization_id=%s ORDER BY created_at DESC LIMIT 200",
                 "prices": "SELECT price_id,offer_id,price_state,amount,currency,denomination,unit,observed_at,valid_until FROM partner.prices WHERE organization_id=%s ORDER BY created_at DESC LIMIT 200",
                 "availability": "SELECT snapshot_id,offer_id,schedule_id,occurrence_starts_at,availability_state,observed_at,valid_until FROM partner.availability_snapshots WHERE organization_id=%s ORDER BY created_at DESC LIMIT 200",
-                "destinations": "SELECT sd.service_id,sd.destination_id,sd.relation_type,sd.status,d.canonical_name,d.province_name,d.city_name FROM partner.service_destinations sd JOIN knowledge.destinations d USING(destination_id) WHERE sd.organization_id=%s ORDER BY sd.created_at DESC LIMIT 200",
+                # The partner app role intentionally has no direct read grant on
+                # canonical storage. The publication view is the authorized
+                # source for destination details in the private workspace too.
+                "destinations": "SELECT sd.service_id,sd.destination_id,sd.relation_type,sd.status,d.canonical_name,d.province_name,d.city_name FROM partner.service_destinations sd JOIN knowledge.production_destinations d USING(destination_id) WHERE sd.organization_id=%s ORDER BY sd.created_at DESC LIMIT 200",
             }.items():
                 cur.execute(sql, (organization_id,))
                 result[name] = cur.fetchall()

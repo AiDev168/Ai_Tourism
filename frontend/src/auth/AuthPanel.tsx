@@ -9,9 +9,9 @@ type Phase = 'phone' | 'code';
 type StagingMode = 'login' | 'register' | 'redeem';
 
 const stagingCopy = {
-  'fa-IR': { account: 'ورود آزمایشی', email: 'ایمیل', password: 'گذرواژه (حداقل ۱۶ نویسه)', invite: 'کد دعوت', redeem: 'فعال‌سازی دعوت', switchToRedeem: 'کد دعوت دارید؟ ایجاد حساب', switchToLogin: 'بازگشت به ورود', invalid: 'ورود یا کد دعوت معتبر نیست.', smsUnavailable: 'ارسال پیامک در این محیط تنظیم نشده است؛ کد ورود پیامکی ارسال نمی‌شود.' },
-  'en-US': { account: 'Private pilot sign in', email: 'Email', password: 'Password (at least 16 characters)', invite: 'Invitation code', redeem: 'Activate invitation', switchToRedeem: 'Have an invitation? Create account', switchToLogin: 'Back to sign in', invalid: 'The sign-in details or invitation are invalid.', smsUnavailable: 'SMS delivery is not configured in this environment. No OTP will be sent.' },
-  ar: { account: 'تسجيل دخول تجريبي خاص', email: 'البريد الإلكتروني', password: 'كلمة المرور (16 حرفًا على الأقل)', invite: 'رمز الدعوة', redeem: 'تفعيل الدعوة', switchToRedeem: 'لديك دعوة؟ إنشاء حساب', switchToLogin: 'العودة إلى تسجيل الدخول', invalid: 'بيانات الدخول أو الدعوة غير صالحة.', smsUnavailable: 'إرسال الرسائل النصية غير مُعدّ في هذه البيئة؛ لن يُرسل رمز تحقق.' },
+  'fa-IR': { account: 'ورود آزمایشی', email: 'ایمیل', password: 'گذرواژه (حداقل ۸ نویسه)', invite: 'کد دعوت', redeem: 'فعال‌سازی دعوت', switchToRedeem: 'کد دعوت دارید؟ ایجاد حساب', switchToLogin: 'بازگشت به ورود', invalid: 'ورود یا کد دعوت معتبر نیست.', smsUnavailable: 'ارسال پیامک در این محیط تنظیم نشده است؛ کد ورود پیامکی ارسال نمی‌شود.' },
+  'en-US': { account: 'Private pilot sign in', email: 'Email', password: 'Password (at least 8 characters)', invite: 'Invitation code', redeem: 'Activate invitation', switchToRedeem: 'Have an invitation? Create account', switchToLogin: 'Back to sign in', invalid: 'The sign-in details or invitation are invalid.', smsUnavailable: 'SMS delivery is not configured in this environment. No OTP will be sent.' },
+  ar: { account: 'تسجيل دخول تجريبي خاص', email: 'البريد الإلكتروني', password: 'كلمة المرور (8 أحرف على الأقل)', invite: 'رمز الدعوة', redeem: 'تفعيل الدعوة', switchToRedeem: 'لديك دعوة؟ إنشاء حساب', switchToLogin: 'العودة إلى الدخول', invalid: 'بيانات الدخول أو الدعوة غير صالحة.', smsUnavailable: 'إرسال الرسائل النصية غير مُعدّ في هذه البيئة؛ لن يُرسل رمز تحقق.' },
 } as const;
 
 const stagingMethodCopy = {
@@ -245,7 +245,7 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
                 <label htmlFor="auth-stage-email">{stageCopy.email}</label>
                 <input id="auth-stage-email" name="email" type="email" autoComplete="email" required maxLength={254} value={stagingEmail} onChange={event => setStagingEmail(event.target.value)} />
                 <label htmlFor="auth-stage-password">{stageCopy.password}</label>
-                <input id="auth-stage-password" name="password" type="password" autoComplete={stagingMode === 'login' ? 'current-password' : 'new-password'} required minLength={stagingMode === 'login' ? 1 : 16} maxLength={256} value={stagingPassword} onChange={event => setStagingPassword(event.target.value)} />
+                <input id="auth-stage-password" name="password" type="password" autoComplete={stagingMode === 'login' ? 'current-password' : 'new-password'} required minLength={stagingMode === 'login' ? 1 : 8} maxLength={256} value={stagingPassword} onChange={event => setStagingPassword(event.target.value)} />
                 <button type="submit" disabled={busy}>{busy ? copy.loading : stagingMode === 'login' ? copy.signIn : stagingMode === 'register' ? emailCopy.registerTitle : stageCopy.redeem}</button>
               </form>
             </section>

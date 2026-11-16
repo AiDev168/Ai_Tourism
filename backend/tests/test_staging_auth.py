@@ -8,12 +8,16 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from app.api import auth as auth_api
-from app.api.auth import get_auth_service
+from app.api.auth import (
+    StagingEmailRegistrationRequest,
+    StagingInviteRedeemRequest,
+    get_auth_service,
+)
 from app.core.config import Settings, get_settings
 from app.api.auth import router as auth_router
 from app.modules.identity.auth_service import AuthenticationService
 from app.modules.identity.sms import DisabledSmsAdapter
-from app.modules.identity.staging_auth import derive_password, hash_invite, normalize_login, password_material
+from app.modules.identity.staging_auth import derive_password, hash_invite, normalize_login, password_bytes, password_material
 
 api_test_app = FastAPI()
 api_test_app.include_router(auth_router)
@@ -84,6 +88,33 @@ def test_staging_passwords_preserve_unicode_and_bound_inputs():
             password_material(value)
 
 
+def test_regular_user_password_boundaries_are_8_to_256_unicode_characters():
+    for length in (8, 24, 25, 256):
+        value = "旅" * length
+        assert len(password_bytes(value)) > length
+        salt, verifier = password_material(value)
+        assert derive_password(value, salt) == verifier
+        registration = StagingEmailRegistrationRequest.model_validate(
+            {"email": "new@example.test", "password": value}
+        )
+        redemption = StagingInviteRedeemRequest.model_validate(
+            {"invite_code": "A" * 32, "email": "new@example.test", "password": value}
+        )
+        assert registration.password == redemption.password == value
+    for length in (7, 257):
+        value = "旅" * length
+        with pytest.raises(ValueError):
+            password_bytes(value)
+        with pytest.raises(ValueError):
+            StagingEmailRegistrationRequest.model_validate(
+                {"email": "new@example.test", "password": value}
+            )
+        with pytest.raises(ValueError):
+            StagingInviteRedeemRequest.model_validate(
+                {"invite_code": "A" * 32, "email": "new@example.test", "password": value}
+            )
+
+
 def test_staging_login_uses_exact_origin_secure_cookie_and_one_time_invite(monkeypatch):
     settings = staging_settings()
     correct_password = "\u0633\u0641\u0631 \u0627\u0645\u0646 \u0648 \u062f\u0644\u0646\u0634\u06cc\u0646 Rahgard \u06f2\u06f0\u06f2\u06f6"
@@ -122,7 +153,7 @@ def test_staging_login_uses_exact_origin_secure_cookie_and_one_time_invite(monke
 
 
 def test_staging_email_registration_is_explicitly_gated_rate_limited_and_issues_secure_session(monkeypatch):
-    password = "A secure staging password 2026"
+    password = "Pilot888"
     settings = staging_settings(staging_email_signup_enabled=True)
     repository = MemoryStagingRepository("existing@example.test", password)
     attempts = []

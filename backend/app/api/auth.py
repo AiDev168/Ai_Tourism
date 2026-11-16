@@ -98,7 +98,7 @@ class StagingLoginRequest(BaseModel):
 class StagingEmailRegistrationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str = Field(min_length=5, max_length=254)
-    password: str = Field(min_length=16, max_length=256)
+    password: str = Field(min_length=8, max_length=256)
 
     @field_validator("email")
     @classmethod
@@ -110,7 +110,7 @@ class StagingInviteRedeemRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     invite_code: str = Field(min_length=32, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
     email: str = Field(min_length=5, max_length=254)
-    password: str = Field(min_length=16, max_length=256)
+    password: str = Field(min_length=8, max_length=256)
 
     @field_validator("email")
     @classmethod

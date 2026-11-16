@@ -56,10 +56,20 @@ function Stop-RemoveOwnedContainer([string]$ContainerName) {
         $metadata[0].Config.Labels.'ai-tourism.disposable-mvp-e2e' -ne 'true') {
         throw 'Refusing cleanup because the container name or safety label does not match.'
     }
+    $containerId = [string]$metadata[0].Id
     & docker stop $ContainerName | Out-Null
     $stopCode = $LASTEXITCODE
-    $remaining = & docker inspect $ContainerName 2>$null
-    if ($LASTEXITCODE -eq 0) {
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $remaining = & docker inspect $ContainerName 2>$null
+        $inspectCode = $LASTEXITCODE
+    } catch {
+        $inspectCode = 1
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($inspectCode -eq 0) {
         $remainingMetadata = ($remaining | Out-String) | ConvertFrom-Json
         if ($remainingMetadata[0].Name -ne "/$ContainerName" -or
             $remainingMetadata[0].Config.Labels.'ai-tourism.disposable-mvp-e2e' -ne 'true') {
@@ -68,8 +78,14 @@ function Stop-RemoveOwnedContainer([string]$ContainerName) {
         & docker rm $ContainerName | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'Could not remove the verified task-created container.' }
     }
-    elseif ($stopCode -ne 0) {
-        throw 'Task-created container was not stopped or found during cleanup.'
+    else {
+        # This runner creates with --rm, so docker stop normally removes the
+        # exact stopped ID before inspect runs. Confirm that original ID is
+        # absent rather than treating the expected inspect miss as an error.
+        $stillPresent = & docker ps -a --filter "id=$containerId" --format '{{.ID}}'
+        if ($LASTEXITCODE -ne 0 -or ($stillPresent | Out-String).Trim() -or $stopCode -ne 0) {
+            throw 'Task-created disposable container cleanup could not be verified.'
+        }
     }
 }
 $Created = $false

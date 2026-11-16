@@ -137,4 +137,24 @@ describe('localized OTP panel', () => {
     expect(document.querySelector('#auth-code')).toBeNull();
     expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/otp/challenges'))).toBe(false);
   });
+
+  it.each([
+    ['fa-IR', '۸'],
+    ['en-US', '8'],
+    ['ar', '8'],
+  ] as const)('uses the 8-character regular-user password floor in %s without changing the 256 maximum', async (locale, numeral) => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ methods: ['otp', 'staging_invite'], otp_delivery: 'unavailable', staging_email_signup: true }))
+      .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401));
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => { root.render(<AuthPanel locale={locale} />); }); await settle();
+    await act(async () => { (document.querySelector('button') as HTMLButtonElement).click(); });
+    const register = document.querySelectorAll<HTMLButtonElement>('.auth-mode-switch button')[1];
+    expect(register).toBeDefined();
+    await act(async () => { register.click(); });
+    const password = document.querySelector<HTMLInputElement>('#auth-stage-password');
+    expect(password?.minLength).toBe(8);
+    expect(password?.maxLength).toBe(256);
+    expect(document.body.textContent).toContain(numeral);
+  });
 });
