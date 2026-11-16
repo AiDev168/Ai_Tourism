@@ -236,6 +236,6 @@ artifacts/visual-qa-task32/
 
 # Ignore future disposable E2E report runs; retain earlier committed artifacts.
 artifacts/visual-qa-task15d/run-*/
-# Local live-release acceptance outputs, portable bundles and copied release trees.
-# These are generated runtime artifacts, not project source files.
+
+# Local deployment and acceptance artifacts
 /artifacts/live-acceptance/
