@@ -46,3 +46,9 @@ C:\Users\coole\Downloads\Tourism_Database\دیتابیس - توریسم.zip
 ```
 
 Read this file directly from the owner's Windows filesystem when Codex runs on that PC. Verify it is present and compare its SHA-256 against the previously audited archive checksum documented in `engineering/database-reconciliation/stage-1/OWNER_ARCHIVE_RECHECK_2026-11-16.md`. Do **not** ask the owner to reupload it, download it from GitHub, or commit the archive to the public repository. Use a disposable PostgreSQL instance first; no automatic publication or live VPS writes.
+
+## Password policy adjustment — explicit owner request (2026-11-16)
+
+The owner's desired **new-password policy is 8–24 Unicode characters inclusive**, not 12/16 minimum, and not digits-only. Implement this consistently for newly created/reset password credentials on the applicable Rahgard sign-in / invitation and owner-local flows, across backend Pydantic schemas, credential derivation/create/reset validators, frontend HTML attributes and fa/en/ar labels, documentation and boundary tests (7 reject; 8 accept; 24 accept; 25 reject). Preserve password security: hashing, timing-safe comparison, rate limiting and Unicode handling. Do **not** change OTP code lengths or invitation tokens; those are not passwords.
+
+**Migration compatibility:** users with already-issued valid credentials outside the new 8–24 length must not be silently locked out. Keep their login verification functional until they voluntarily rotate/reset; enforce 8–24 on new passwords and resets. Test that path explicitly. Don't log plaintext passwords, reveal presence of accounts, or write a migration that discards credential hashes.
