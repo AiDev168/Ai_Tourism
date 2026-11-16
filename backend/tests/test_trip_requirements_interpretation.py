@@ -11,6 +11,28 @@ from app.modules.trip.requirements_interpretation import (
 
 EXAMPLE = "از دو روز دیگه با 4 نفر میخوام برم از مناطق تاریخی شیراز دیدن کنم و فقط 10 میلیون هزینه میخوام بکنم"
 
+@pytest.mark.parametrize(
+    ("request", "expected_origin"),
+    [
+        ("از مشهد میخوام برم شیراز", "مشهد"),
+        ("من از بندر عباس می‌خواهم برم شیراز", "بندر عباس"),
+    ],
+)
+def test_colloquial_departure_is_extracted_as_fallback_with_evidence(request, expected_origin):
+    result = interpret_trip_requirements(request, "fa-IR")
+    origin = result.fields.origin
+    assert origin.value == expected_origin
+    assert origin.source == "fallback"
+    assert request[origin.evidence_span.start:origin.evidence_span.end] == expected_origin
+    assert result.fields.destination.value == "شیراز"
+
+
+def test_relative_departure_is_not_misread_as_origin_city():
+    result = interpret_trip_requirements("از فردا میخوام برم شیراز", "fa-IR")
+    assert result.fields.origin.status == "missing"
+
+
+
 
 def test_persian_relative_departure_is_not_trip_duration_and_budget_currency_stays_unknown():
     result = interpret_trip_requirements(EXAMPLE, "fa-IR")
