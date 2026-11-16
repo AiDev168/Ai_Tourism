@@ -180,9 +180,12 @@ const cleanPlace=(s:string)=>s.replace(/^[\s,،؛:]+|[\s,،؛:.!?؟]+$/g,'').rep
 const genericPlace=/^(?:a city|the city|city|a town|town|somewhere|یک شهر|شهر|یه شهر|مدينة|مدينة ما|بلدة)$/iu;
 function extractPlaces(source:string, locale:Locale, spans:ReturnType<typeof durationSpans>):{places:Field<string[]>;origin:Field<string>} {
   void locale;
-  const text=normalize(source); const originMatch=text.match(/(?:from|از|من)\s+(.{1,70}?)\s+(?:to|به|إلى|الى)\s+/iu);
+  const text=normalize(source);
+  // Fallback for explicit colloquial departure grammar, not the primary LLM interpretation.
+  const originMatch=text.match(/(?:from|از|من)\s+(.{1,70}?)\s+(?:to|به|إلى|الى)\s+/iu)
+    ?? text.match(/(?:^|\s)از\s+([\p{Script=Arabic}]{2,50}(?:\s+[\p{Script=Arabic}]{2,50})?)\s+می\s*(?:خوام|خواهم|خوایم|خواهیم)\s+(?:برم|بریم|برویم|سفر)/iu);
   let origin:Field<string>={value:null,status:'unknown',evidence:null};
-  if(originMatch){const candidate=cleanPlace(originMatch[1].replace(/^(?:tehran|تهران|طهران)$/iu,'$&'));if(candidate&&!genericPlace.test(candidate))origin={value:candidate,status:'extracted',evidence:originMatch[0]};}
+  if(originMatch){const candidate=cleanPlace(originMatch[1].replace(/^(?:tehran|تهران|طهران)$/iu,'$&'));if(candidate&&!genericPlace.test(candidate)&&!/^(?:امروز|فردا|پس\s*فردا|دیروز|[0-9]+\s*روز)$/u.test(candidate))origin={value:candidate,status:'extracted',evidence:originMatch[0]};}
   // A small deterministic alias set covers commonly requested destinations; this is
   // extraction only, never verification. Unknown places still use the syntax parser below.
   const contextual=/(?:travel|trip|journey|visit|سفر|مسافرت|رحلة|السفر|أرید|میخواهم|می‌خواهم|می‌خوام|برم|أريد|اريد)/iu.test(text)||spans.length>0;
