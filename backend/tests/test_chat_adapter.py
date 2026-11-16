@@ -330,6 +330,18 @@ def test_provisional_itinerary_is_bounded_and_bad_optional_proposal_does_not_dro
         assert reply.provisional_itinerary.days[0].stops[0].role == "model_proposed"
 
 
+def test_provider_budget_hint_accepts_persian_colloquial_toman_suffix():
+    budget = "\u06f3\u06f0 \u0645\u06cc\u0644\u06cc\u0648\u0646 \u062a\u0648\u0645\u0646\u0647"
+    quote = "\u0628\u0648\u062f\u062c\u0647\u200c\u0645\u0648\u0646 " + budget
+    reply = _parse_provider_content(json.dumps({
+        "reply": "budget captured",
+        "requirements": {"budget_text": budget},
+        "requirement_evidence": {"budget_text": quote},
+    }, ensure_ascii=False))
+
+    assert reply.requirements["budget_text"] == budget
+    assert reply.requirement_evidence["budget_text"] == quote
+
 def test_provider_envelope_noise_and_invalid_optional_hints_do_not_discard_reply():
     reply = _parse_provider_content(json.dumps({
         "reply": "برای تکمیل برنامه، مقصد و مدت سفر را تأیید کنید.",

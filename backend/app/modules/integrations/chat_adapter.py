@@ -132,7 +132,7 @@ class ChatReply(BaseModel):
                     and not any(ord(char) < 32 or ord(char) == 127 for char in item)):
                 if key != "budget_text" or (
                     re.search(r"\d", item)
-                    and re.search(r"تومان|ریال|ريال|toman|rial|IRR|USD|دلار|دولار|AED|درهم", item, re.I)
+                    and re.search(r"\u062a\u0648\u0645\u0627\u0646|\u062a\u0648\u0645\u0646(?:\u0647)?|\u0631\u06cc\u0627\u0644|\u0631\u064a\u0627\u0644|toman|rial|IRR|USD|\u062f\u0644\u0627\u0631|\u062f\u0648\u0644\u0627\u0631|AED|\u062f\u0631\u0647\u0645", item, re.I)
                 ):
                     hints[key] = item.strip()
         start, end = value.get("travel_start"), value.get("travel_end")
@@ -200,9 +200,13 @@ def _parse_provider_content(content: object) -> ChatReply:
         if "provisional_itinerary" in parsed:
             try:
                 ProvisionalItinerary.model_validate(parsed["provisional_itinerary"])
-            except ValidationError:
+            except ValidationError as error:
                 # A bad optional proposal must not discard a valid chat turn or
-                # its independently validated requirement extraction.
+                # its independently validated requirement extraction. Record
+                # only schema field names so the integration is diagnosable
+                # without logging traveler text or provider output.
+                fields = sorted({str(item["loc"][0]) for item in error.errors() if item.get("loc")})
+                logger.warning("chat.response.optional_itinerary_invalid fields=%s", ",".join(fields[:8]) or "unknown")
                 parsed["provisional_itinerary"] = None
 
         # Providers sometimes add harmless envelope fields or return malformed
