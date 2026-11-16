@@ -66,8 +66,9 @@ def _archive() -> bytes:
     inner = io.BytesIO()
     with zipfile.ZipFile(inner, "w") as nested:
         nested.writestr(
-            "poi.csv",
-            "destination_key,name_fa,province,latitude,longitude\npoi-1,نمونه,گیلان,37.2,49.6\n",
+            "destinations.csv",
+            "destination_key,canonical_name,destination_type,province_name,city_name,latitude,longitude\n"
+            "poi-1,نمونه,heritage_site,گیلان,رشت,37.2,49.6\n",
         )
     outer = io.BytesIO()
     with zipfile.ZipFile(outer, "w") as archive:
@@ -94,3 +95,22 @@ def test_archive_stage_deduplicates_identical_nested_deliveries_and_never_publis
         result["rows_staged"] == 1
     )  # byte-identical repeated delivery yields one review candidate
     assert result["publication_approved"] is False
+
+
+def test_archive_classifier_only_selects_place_identity_and_national_discovery_files():
+    assert archive_ingest._classify_destination_csv(
+        "batch/destinations.csv",
+        ["destination_key", "canonical_name", "destination_type", "province_name"],
+    ) == "destination_identity"
+    assert archive_ingest._classify_destination_csv(
+        "national/national_candidate_places.csv",
+        ["candidate_key", "candidate_name_source", "province_en", "province_fa"],
+    ) == "discovery_lead"
+    assert archive_ingest._classify_destination_csv(
+        "national/culinary_candidates.csv",
+        ["candidate_key", "name_source", "province_en", "province_fa"],
+    ) is None
+    assert archive_ingest._classify_destination_csv(
+        "batch/destination_sources.csv",
+        ["destination_key", "source_name", "source_role"],
+    ) is None

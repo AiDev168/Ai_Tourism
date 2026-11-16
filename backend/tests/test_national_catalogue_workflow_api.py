@@ -73,3 +73,62 @@ def test_identity_review_rejects_ambiguous_target_contract_before_database(monke
         assert "error" in result.json()
     finally:
         app.dependency_overrides.clear()
+
+
+def test_unresolved_is_not_implicitly_approved_as_a_new_identity():
+    user = AuthenticatedUser(UUID(int=1), None, UUID(int=2), "test")
+    app.dependency_overrides[authenticated_user] = lambda: user
+    app.dependency_overrides[require_authenticated_csrf] = lambda: None
+    app.dependency_overrides[get_settings] = _settings
+    try:
+        response = TestClient(app).post(
+            "/api/v1/catalogue-review/candidates/00000000-0000-0000-0000-000000000001/decision",
+            json={
+                "decision": "accept",
+                "identity_relation": "unresolved",
+                "reason": "not enough identity evidence",
+                "evidence_refs": ["archive:row-1"],
+            },
+        )
+        assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_new_identity_approval_requires_explicit_evidence():
+    user = AuthenticatedUser(UUID(int=1), None, UUID(int=2), "test")
+    app.dependency_overrides[authenticated_user] = lambda: user
+    app.dependency_overrides[require_authenticated_csrf] = lambda: None
+    app.dependency_overrides[get_settings] = _settings
+    try:
+        response = TestClient(app).post(
+            "/api/v1/catalogue-review/candidates/00000000-0000-0000-0000-000000000001/decision",
+            json={
+                "decision": "approve_new_identity",
+                "identity_relation": "unresolved",
+                "reason": "reviewer explicitly designates a new identity",
+                "evidence_refs": [],
+            },
+        )
+        assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_source_registration_requires_review_evidence_before_database_access(monkeypatch):
+    user = AuthenticatedUser(UUID(int=1), None, UUID(int=2), "test")
+    app.dependency_overrides[authenticated_user] = lambda: user
+    app.dependency_overrides[require_authenticated_csrf] = lambda: None
+    app.dependency_overrides[get_settings] = _settings
+    monkeypatch.setattr(
+        "app.api.catalogue_review._connect",
+        lambda _settings: (_ for _ in ()).throw(AssertionError("database should not be reached")),
+    )
+    try:
+        response = TestClient(app).post(
+            "/api/v1/catalogue-review/sources/00000000-0000-0000-0000-000000000001/decision",
+            json={"decision": "register_pending", "reason": "reviewed archive record", "evidence_refs": []},
+        )
+        assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()

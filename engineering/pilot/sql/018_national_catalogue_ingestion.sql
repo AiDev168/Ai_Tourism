@@ -143,8 +143,51 @@ CREATE TABLE operations.dataset_import_files (
 );
 CREATE INDEX ix_dataset_import_files_batch ON operations.dataset_import_files(dataset_import_batch_id, created_at);
 
+-- Source-register rows are reviewed separately from candidate identity rows.
+-- Registering a source creates only a pending existing-schema source record.
+CREATE TABLE knowledge.source_candidates (
+    source_candidate_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    dataset_import_batch_id UUID NOT NULL REFERENCES operations.dataset_import_batches(dataset_import_batch_id) ON DELETE RESTRICT,
+    file_id UUID NOT NULL REFERENCES operations.dataset_import_files(file_id) ON DELETE RESTRICT,
+    source_file_sha256 CHAR(64) NOT NULL CHECK (source_file_sha256 ~ '^[a-f0-9]{64}$'),
+    source_record_key TEXT NOT NULL CHECK (length(btrim(source_record_key)) BETWEEN 1 AND 512),
+    row_sha256 CHAR(64) NOT NULL CHECK (row_sha256 ~ '^[a-f0-9]{64}$'),
+    raw_record JSONB NOT NULL CHECK (jsonb_typeof(raw_record)='object'),
+    proposed_source_key TEXT,
+    proposed_source_name TEXT,
+    proposed_publisher TEXT,
+    proposed_source_type TEXT,
+    proposed_url TEXT,
+    proposed_license TEXT,
+    candidate_status TEXT NOT NULL DEFAULT 'needs_review'
+        CHECK (candidate_status IN ('needs_review','registered_pending','rejected','conflict')),
+    registered_source_id BIGINT REFERENCES knowledge.knowledge_sources(source_id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (dataset_import_batch_id, source_file_sha256, source_record_key),
+    CHECK ((candidate_status='registered_pending') = (registered_source_id IS NOT NULL))
+);
+CREATE INDEX ix_source_candidates_queue ON knowledge.source_candidates(candidate_status, created_at, source_candidate_id);
+CREATE UNIQUE INDEX uq_source_candidate_file_identity ON knowledge.source_candidates(source_file_sha256, source_record_key);
+
+CREATE TABLE knowledge.source_candidate_reviews (
+    source_review_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_candidate_id UUID NOT NULL REFERENCES knowledge.source_candidates(source_candidate_id) ON DELETE RESTRICT,
+    decision TEXT NOT NULL CHECK (decision IN ('register_pending','reject','defer','request_evidence')),
+    source_id BIGINT REFERENCES knowledge.knowledge_sources(source_id) ON DELETE RESTRICT,
+    reason TEXT NOT NULL CHECK (length(btrim(reason)) BETWEEN 1 AND 2000),
+    evidence_refs JSONB NOT NULL DEFAULT '[]'::JSONB CHECK (jsonb_typeof(evidence_refs)='array'),
+    reviewer_user_id UUID NOT NULL REFERENCES identity.users(user_id) ON DELETE RESTRICT,
+    policy_version TEXT NOT NULL CHECK (length(btrim(policy_version)) BETWEEN 1 AND 80),
+    decided_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK ((decision='register_pending') = (source_id IS NOT NULL))
+);
+CREATE INDEX ix_source_candidate_reviews_candidate_time ON knowledge.source_candidate_reviews(source_candidate_id, decided_at DESC);
+
 CREATE TABLE knowledge.destination_candidates (
     candidate_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    candidate_kind TEXT NOT NULL DEFAULT 'destination_identity'
+        CHECK (candidate_kind IN ('destination_identity','discovery_lead')),
     dataset_import_batch_id UUID NOT NULL REFERENCES operations.dataset_import_batches(dataset_import_batch_id) ON DELETE RESTRICT,
     file_id UUID NOT NULL REFERENCES operations.dataset_import_files(file_id) ON DELETE RESTRICT,
     source_file_sha256 CHAR(64) NOT NULL CHECK (source_file_sha256 ~ '^[a-f0-9]{64}$'),
@@ -180,15 +223,19 @@ CREATE TABLE knowledge.destination_candidate_reviews (
     candidate_id UUID NOT NULL REFERENCES knowledge.destination_candidates(candidate_id) ON DELETE RESTRICT,
     identity_relation TEXT NOT NULL CHECK (identity_relation IN ('same_entity','part_of_or_within','nearby_distinct','unresolved')),
     target_destination_id BIGINT REFERENCES knowledge.destinations(destination_id) ON DELETE RESTRICT,
-    decision TEXT NOT NULL CHECK (decision IN ('accept','reject','defer','request_evidence')),
+    decision TEXT NOT NULL CHECK (decision IN ('accept','approve_new_identity','reject','defer','request_evidence')),
     reason TEXT NOT NULL CHECK (length(btrim(reason)) BETWEEN 1 AND 2000),
     evidence_refs JSONB NOT NULL DEFAULT '[]'::JSONB CHECK (jsonb_typeof(evidence_refs)='array'),
     reviewer_user_id UUID NOT NULL REFERENCES identity.users(user_id) ON DELETE RESTRICT,
     policy_version TEXT NOT NULL CHECK (length(btrim(policy_version)) BETWEEN 1 AND 80),
     decided_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (decision <> 'accept' OR
-           (identity_relation = 'unresolved' AND target_destination_id IS NULL) OR
-           (identity_relation <> 'unresolved' AND target_destination_id IS NOT NULL))
+           (identity_relation <> 'unresolved' AND target_destination_id IS NOT NULL
+            AND jsonb_array_length(evidence_refs) > 0)),
+    CHECK (decision NOT IN ('reject','defer','request_evidence') OR target_destination_id IS NULL),
+    CHECK (decision <> 'approve_new_identity' OR
+           (identity_relation = 'unresolved' AND target_destination_id IS NULL
+            AND jsonb_array_length(evidence_refs) > 0))
 );
 CREATE INDEX ix_candidate_reviews_candidate_time ON knowledge.destination_candidate_reviews(candidate_id, decided_at DESC);
 
@@ -292,19 +339,24 @@ CREATE TABLE knowledge.destination_operational_assertions (
 CREATE INDEX ix_operational_assertions_fact_time ON knowledge.destination_operational_assertions(destination_id, fact_type, observed_at DESC);
 
 REVOKE ALL ON geo.admin_area_releases, geo.admin_areas, geo.admin_area_aliases,
-    operations.dataset_import_files, knowledge.destination_candidates,
+    operations.dataset_import_files, knowledge.destination_candidates, knowledge.source_candidates,
+    knowledge.source_candidate_reviews,
     knowledge.destination_candidate_reviews, knowledge.destination_localizations,
     knowledge.destination_aliases, knowledge.destination_access_points,
     knowledge.destination_visit_duration_evidence, knowledge.destination_operational_assertions
     FROM PUBLIC;
 GRANT USAGE ON SCHEMA geo TO ai_tourism_app;
 GRANT SELECT, INSERT ON operations.dataset_import_batches TO ai_tourism_app;
+GRANT SELECT, INSERT ON knowledge.knowledge_sources TO ai_tourism_app;
+GRANT USAGE, SELECT ON SEQUENCE knowledge.knowledge_sources_source_id_seq TO ai_tourism_app;
 GRANT SELECT ON geo.admin_area_releases, geo.admin_areas, geo.admin_area_aliases TO ai_tourism_app;
 GRANT SELECT, INSERT, UPDATE ON operations.dataset_import_files,
-    knowledge.destination_candidates, knowledge.destination_candidate_reviews,
+    knowledge.destination_candidates, knowledge.source_candidates,
     knowledge.destination_localizations, knowledge.destination_aliases,
     knowledge.destination_access_points, knowledge.destination_visit_duration_evidence,
     knowledge.destination_operational_assertions TO ai_tourism_app;
+GRANT SELECT, INSERT ON knowledge.destination_candidate_reviews TO ai_tourism_app;
+GRANT SELECT, INSERT ON knowledge.source_candidate_reviews TO ai_tourism_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA geo TO ai_tourism_app;
 
 -- Raw candidate and review data is unavailable unless a separate, owner-managed
@@ -313,7 +365,7 @@ DO $$ DECLARE t TEXT; BEGIN
   FOREACH t IN ARRAY ARRAY['dataset_import_files'] LOOP
     EXECUTE format('ALTER TABLE operations.%I ENABLE ROW LEVEL SECURITY', t);
   END LOOP;
-  FOREACH t IN ARRAY ARRAY['destination_candidates','destination_candidate_reviews','destination_localizations',
+  FOREACH t IN ARRAY ARRAY['destination_candidates','destination_candidate_reviews','source_candidates','source_candidate_reviews','destination_localizations',
     'destination_aliases','destination_access_points','destination_visit_duration_evidence','destination_operational_assertions'] LOOP
     EXECUTE format('ALTER TABLE knowledge.%I ENABLE ROW LEVEL SECURITY', t);
   END LOOP;
@@ -333,6 +385,16 @@ USING (identity.has_catalogue_review_capability(identity.current_app_actor_id(),
 CREATE POLICY candidate_reviews_insert ON knowledge.destination_candidate_reviews FOR INSERT
 WITH CHECK (reviewer_user_id = identity.current_app_actor_id()
     AND identity.has_catalogue_review_capability(identity.current_app_actor_id(), 'candidate_review'));
+CREATE POLICY source_candidates_reviewer ON knowledge.source_candidates FOR ALL
+USING (identity.has_catalogue_review_capability(identity.current_app_actor_id(), 'source_review')
+    OR identity.has_catalogue_review_capability(identity.current_app_actor_id(), 'candidate_review'))
+WITH CHECK (identity.has_catalogue_review_capability(identity.current_app_actor_id(), 'source_review')
+    OR identity.has_catalogue_review_capability(identity.current_app_actor_id(), 'candidate_review'));
+CREATE POLICY source_reviews_select ON knowledge.source_candidate_reviews FOR SELECT
+USING (identity.has_catalogue_review_capability(identity.current_app_actor_id(), 'source_review'));
+CREATE POLICY source_reviews_insert ON knowledge.source_candidate_reviews FOR INSERT
+WITH CHECK (reviewer_user_id = identity.current_app_actor_id()
+    AND identity.has_catalogue_review_capability(identity.current_app_actor_id(), 'source_review'));
 CREATE POLICY localizations_select_reviewers ON knowledge.destination_localizations FOR SELECT
 USING (identity.has_catalogue_review_capability(identity.current_app_actor_id(), 'candidate_review')
     OR identity.has_catalogue_review_capability(identity.current_app_actor_id(), 'catalogue_publish'));

@@ -40,6 +40,13 @@ class ServiceInput(BaseModel):
     branch_id: UUID | None = None
 
 
+class ServiceDestinationInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    destination_id: int = Field(ge=1)
+    relation_type: Literal["at", "serves", "near", "route_endpoint"]
+    evidence_note: str | None = Field(default=None, max_length=1000)
+
+
 class ScheduleInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     service_id: UUID
@@ -247,10 +254,49 @@ def workspace(
                 "offers": "SELECT offer_id,service_id,schedule_id,offer_type,status,valid_from,valid_until,capacity_limit FROM partner.offers WHERE organization_id=%s ORDER BY created_at DESC LIMIT 200",
                 "prices": "SELECT price_id,offer_id,price_state,amount,currency,denomination,unit,observed_at,valid_until FROM partner.prices WHERE organization_id=%s ORDER BY created_at DESC LIMIT 200",
                 "availability": "SELECT snapshot_id,offer_id,schedule_id,occurrence_starts_at,availability_state,observed_at,valid_until FROM partner.availability_snapshots WHERE organization_id=%s ORDER BY created_at DESC LIMIT 200",
+                "destinations": "SELECT sd.service_id,sd.destination_id,sd.relation_type,sd.status,d.canonical_name,d.province_name,d.city_name FROM partner.service_destinations sd JOIN knowledge.destinations d USING(destination_id) WHERE sd.organization_id=%s ORDER BY sd.created_at DESC LIMIT 200",
             }.items():
                 cur.execute(sql, (organization_id,))
                 result[name] = cur.fetchall()
             return result
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.post("/organizations/{organization_id}/services/{service_id}/destinations", status_code=201)
+def associate_published_destination(
+    organization_id: UUID,
+    service_id: UUID,
+    body: ServiceDestinationInput,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Link a private draft service only to a currently published canonical POI."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                "SELECT 1 FROM knowledge.production_destinations WHERE destination_id=%s",
+                (body.destination_id,),
+            )
+            if cur.fetchone() is None:
+                raise HTTPException(422, "destination_not_published")
+            cur.execute(
+                """INSERT INTO partner.service_destinations
+                (organization_id,service_id,destination_id,relation_type,evidence_note)
+                VALUES (%s,%s,%s,%s,%s) RETURNING service_id,destination_id,relation_type,status""",
+                (
+                    organization_id,
+                    service_id,
+                    body.destination_id,
+                    body.relation_type,
+                    body.evidence_note,
+                ),
+            )
+            return cur.fetchone()
+    except HTTPException:
+        raise
     except psycopg.Error as exc:
         _db_error(exc)
 

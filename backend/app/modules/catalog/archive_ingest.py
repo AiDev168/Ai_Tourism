@@ -20,9 +20,12 @@ from app.modules.identity.auth_service import AuthenticatedUser
 from scripts.rahgard_archive_preflight import UnsafeArchive, inspect
 
 _ALIASES = {
-    "name": ("name", "name_fa", "canonical_name", "title", "poi_name", "نام", "نام مکان"),
-    "province": ("province", "province_name", "استان"),
-    "city": ("city", "city_name", "county", "شهر", "شهرستان"),
+    "name": (
+        "name_fa", "canonical_name_fa", "name", "canonical_name", "candidate_name_source",
+        "title", "poi_name", "نام", "نام مکان",
+    ),
+    "province": ("province", "province_name", "province_fa", "استان"),
+    "city": ("city", "city_name", "county", "city_or_county", "county_source_label", "شهر", "شهرستان"),
     "record_key": (
         "destination_key",
         "record_key",
@@ -30,14 +33,60 @@ _ALIASES = {
         "poi_id",
         "feature_id",
         "place_id",
-        "destination_id",
+        "destination_id", "candidate_key", "candidate_id",
         "id",
     ),
     "latitude": ("latitude", "lat", "y"),
     "longitude": ("longitude", "lon", "lng", "x"),
     "coordinate_role": ("coordinate_role", "coordinate_type", "location_role"),
-    "destination_type": ("destination_type", "type", "category", "kind"),
+    "destination_type": (
+        "destination_type", "destination_type_hint", "candidate_type", "type", "category", "kind",
+    ),
+    "source_key": ("source_key", "source_id", "key", "external_id", "id"),
+    "source_name": ("source_name", "source_title", "title", "name"),
+    "publisher": ("publisher", "source_publisher"),
+    "source_type": ("source_type", "type", "source_level"),
+    "source_url": ("source_url", "url"),
+    "license": ("license", "license_name", "reuse_license"),
 }
+
+
+def _classify_destination_csv(path: str, headers: list[str]) -> str | None:
+    """Import only the two owner-reviewed place collections in this archive.
+
+    The archive also contains food, source registers, documents, chunks,
+    reconciliation reports and other research tables. Treating every CSV as a
+    place would corrupt the review queue, so those files remain inventoried
+    but are not converted to destination candidates.
+    """
+    folded = {header.strip().casefold() for header in headers}
+    basename = path.rsplit("!", 1)[-1].rsplit("/", 1)[-1].casefold()
+    if (
+        basename == "destinations.csv"
+        and "destination_key" in folded
+        and bool({"canonical_name", "canonical_name_fa"} & folded)
+        and "destination_type" in folded
+        and "province_name" in folded
+    ):
+        return "destination_identity"
+    if (
+        basename == "national_candidate_places.csv"
+        and {"candidate_key", "candidate_name_source", "province_en", "province_fa"} <= folded
+    ):
+        return "discovery_lead"
+    return None
+
+
+def _classify_source_csv(path: str, headers: list[str]) -> bool:
+    """Identify only source-register CSVs; never treat evidence link tables as sources."""
+    folded = {header.strip().casefold() for header in headers}
+    basename = path.rsplit("!", 1)[-1].rsplit("/", 1)[-1].casefold()
+    return (
+        basename in {"sources.csv", "source_register.csv"}
+        and bool({"source_name", "source_title", "title", "name"} & folded)
+        and bool({"source_url", "url"} & folded)
+        and bool({"source_type", "type", "source_level"} & folded)
+    )
 
 
 def _key(row: Mapping[str, Any], names: tuple[str, ...]) -> str | None:
@@ -74,6 +123,14 @@ def stage_archive(data: bytes, user: AuthenticatedUser, settings: Settings) -> d
     batch_key = f"upload:{archive_hash}"
     staged = 0
     conflicts = 0
+    imported_rows = {"destination_identity": 0, "discovery_lead": 0}
+    unique_record_keys = {"destination_identity": set(), "discovery_lead": set()}
+    source_rows = 0
+    source_keys: set[str] = set()
+    source_files = 0
+    source_staged = 0
+    candidate_file_count = 0
+    ignored_csv_count = 0
     try:
         with (
             psycopg.connect(
@@ -122,16 +179,26 @@ def stage_archive(data: bytes, user: AuthenticatedUser, settings: Settings) -> d
                 text = body.decode("utf-8-sig", errors="strict")
                 reader = csv.DictReader(io.StringIO(text, newline=""))
                 if not reader.fieldnames:
+                    ignored_csv_count += 1
                     continue
+                candidate_kind = _classify_destination_csv(path, reader.fieldnames)
+                is_source_register = _classify_source_csv(path, reader.fieldnames)
                 signature = hashlib.sha256("\0".join(reader.fieldnames).encode()).hexdigest()
                 rows = list(reader)
+                if candidate_kind is None and not is_source_register:
+                    ignored_csv_count += 1
+                    continue
+                if candidate_kind is not None:
+                    candidate_file_count += 1
+                if is_source_register:
+                    source_files += 1
                 cur.execute(
                     """INSERT INTO operations.dataset_import_files
                     (dataset_import_batch_id,relative_path,file_sha256,byte_size,format,schema_signature,row_count,accepted_count,import_status,parsed_at)
                     VALUES (%s,%s,%s,%s,'csv',%s,%s,%s,'review_ready',now())
                     ON CONFLICT (dataset_import_batch_id,relative_path,file_sha256) DO UPDATE SET row_count=EXCLUDED.row_count
                     RETURNING file_id""",
-                    (batch_id, path, digest, len(body), signature, len(rows), len(rows)),
+                    (batch_id, path, digest, len(body), signature, len(rows), None),
                 )
                 file_id = cur.fetchone()["file_id"]
                 for index, row in enumerate(rows, start=2):
@@ -141,9 +208,52 @@ def stage_archive(data: bytes, user: AuthenticatedUser, settings: Settings) -> d
                             raw, ensure_ascii=False, sort_keys=True, separators=(",", ":")
                         ).encode()
                     ).hexdigest()
+                    if is_source_register:
+                        source_key = _key(raw, _ALIASES["source_key"])
+                        source_record_key = source_key or (
+                            f"url:{_key(raw, _ALIASES['source_url']) or 'missing'}:{row_hash[:20]}"
+                        )
+                        source_keys.add(source_record_key)
+                        source_rows += 1
+                        cur.execute(
+                            """INSERT INTO knowledge.source_candidates
+                            (dataset_import_batch_id,file_id,source_file_sha256,source_record_key,row_sha256,raw_record,
+                             proposed_source_key,proposed_source_name,proposed_publisher,proposed_source_type,proposed_url,proposed_license)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                            ON CONFLICT (source_file_sha256,source_record_key) DO NOTHING
+                            RETURNING source_candidate_id""",
+                            (
+                                batch_id,
+                                file_id,
+                                digest,
+                                source_record_key,
+                                row_hash,
+                                Jsonb(raw),
+                                source_key,
+                                _key(raw, _ALIASES["source_name"]),
+                                _key(raw, _ALIASES["publisher"]),
+                                _key(raw, _ALIASES["source_type"]),
+                                _key(raw, _ALIASES["source_url"]),
+                                _key(raw, _ALIASES["license"]),
+                            ),
+                        )
+                        if cur.fetchone():
+                            source_staged += 1
+                        else:
+                            cur.execute(
+                                """SELECT row_sha256 FROM knowledge.source_candidates
+                                WHERE source_file_sha256=%s AND source_record_key=%s""",
+                                (digest, source_record_key),
+                            )
+                            existing_source = cur.fetchone()
+                            if existing_source and existing_source["row_sha256"] != row_hash:
+                                conflicts += 1
+                        continue
                     record_key = (
                         _key(raw, _ALIASES["record_key"]) or f"line:{index}:{row_hash[:20]}"
                     )
+                    unique_record_keys[candidate_kind].add(record_key)
+                    imported_rows[candidate_kind] += 1
                     name = _key(raw, _ALIASES["name"])
                     province, city = _key(raw, _ALIASES["province"]), _key(raw, _ALIASES["city"])
                     lat, lon = _key(raw, _ALIASES["latitude"]), _key(raw, _ALIASES["longitude"])
@@ -156,10 +266,15 @@ def stage_archive(data: bytes, user: AuthenticatedUser, settings: Settings) -> d
                         and not (-90 <= latitude <= 90 and -180 <= longitude <= 180)
                     ):
                         latitude = longitude = None
+                    proposed_key = (
+                        _key(raw, ("destination_key",))
+                        if candidate_kind == "destination_identity"
+                        else None
+                    )
                     cur.execute(
                         """INSERT INTO knowledge.destination_candidates
-                        (dataset_import_batch_id,file_id,source_file_sha256,source_record_key,row_sha256,raw_record,raw_name,raw_province,raw_city,raw_coordinate_role,proposed_destination_key,proposed_name_fa,proposed_destination_type,proposed_latitude,proposed_longitude)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        (dataset_import_batch_id,file_id,source_file_sha256,source_record_key,row_sha256,raw_record,raw_name,raw_province,raw_city,raw_coordinate_role,proposed_destination_key,proposed_name_fa,proposed_destination_type,proposed_latitude,proposed_longitude,candidate_kind)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                         ON CONFLICT (source_file_sha256,source_record_key) DO NOTHING
                         RETURNING candidate_id""",
                         (
@@ -173,11 +288,12 @@ def stage_archive(data: bytes, user: AuthenticatedUser, settings: Settings) -> d
                             province,
                             city,
                             _key(raw, _ALIASES["coordinate_role"]),
-                            _key(raw, _ALIASES["record_key"]),
+                            proposed_key,
                             name,
                             _key(raw, _ALIASES["destination_type"]),
                             latitude,
                             longitude,
+                            candidate_kind,
                         ),
                     )
                     if cur.fetchone():
@@ -200,6 +316,16 @@ def stage_archive(data: bytes, user: AuthenticatedUser, settings: Settings) -> d
         "archive_sha256": archive_hash,
         "members": manifest["member_count"],
         "csv_files": manifest["csv_file_count"],
+        "candidate_files": candidate_file_count,
+        "source_register_files": source_files,
+        "source_rows_in_supported_registers": source_rows,
+        "distinct_source_record_keys": len(source_keys),
+        "source_rows_staged": source_staged,
+        "ignored_non_place_csv_files": ignored_csv_count,
+        "candidate_rows_by_kind": imported_rows,
+        "distinct_record_keys_by_kind": {
+            key: len(value) for key, value in unique_record_keys.items()
+        },
         "rows_staged": staged,
         "conflicts": conflicts,
         "publication_approved": False,
