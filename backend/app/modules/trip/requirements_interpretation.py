@@ -427,9 +427,13 @@ def interpret_trip_requirements(
     interests_field = _known(["historical_attractions"], _span(request_text, *history_match.span())) if history_match else _missing()
 
     origin_match = _find_first(request_text, [
+        r"(?<!\w)از\s+(?P<place>[\u0600-\u06ff][\u0600-\u06ff\u200c-]{1,45}(?:\s+[\u0600-\u06ff][\u0600-\u06ff\u200c-]{1,45})?)\s+می[\s\u200c]*(?:خوام|خواهم|خوایم|خواهیم)\s+(?:برم|بریم|برویم|سفر)",
         r"(?:\u0627\u0632\s+\u0645\u0628\u062f\u0627\u0621?\s+)(?P<place>[\u0600-\u06ffA-Za-z][\u0600-\u06ffA-Za-z\s\u200c-]{1,50})",
         r"\bfrom\s+(?P<place>[A-Za-z][A-Za-z -]{1,50})",
     ])[0]
+    # An explicit relative departure is a date, never a city of origin.
+    if origin_match and re.fullmatch(r"(?:امروز|فردا|پس[\s\u200c]*فردا|دیروز)", origin_match.group("place").strip()):
+        origin_match = None
     origin = _known(origin_match.group("place").strip(), _span(request_text, *origin_match.span("place"))) if origin_match else _missing()
 
     soft_patterns = [
