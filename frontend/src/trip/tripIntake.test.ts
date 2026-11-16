@@ -2,6 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { createTripRequirements, extractDurationDays, inclusiveEndDate, mergeRequirementInterpretations, tripRequirementsV1ToTripRequirements, resolveRelativeTripDates, requirementsForPersistence } from './tripIntake';
 
 const intake=(requestText:string,locale:'fa-IR'|'en-US'|'ar'='fa-IR')=>createTripRequirements({requestText,locale});
+describe('Persian colloquial origin fallback', () => {
+ it.each([
+   ['از مشهد میخوام برم شیراز', 'مشهد'],
+   ['من از بندر عباس می‌خواهم برم شیراز', 'بندر عباس'],
+ ])('recognizes the stated departure in %s', (text, origin) => {
+   const result = intake(text);
+   if (result.kind === 'invalid') throw new Error('Unexpected invalid request');
+   expect(result.requirements.origin.value).toBe(origin);
+   expect(result.requirements.origin.source).toBe('fallback');
+   expect(result.requirements.destinations.value).toContain('شیراز');
+ });
+ it('does not interpret tomorrow as a departure city', () => {
+   const result = intake('از فردا میخوام برم شیراز');
+   if (result.kind === 'invalid') throw new Error('Unexpected invalid request');
+   expect(result.requirements.origin.value).toBeNull();
+ });
+});
+
 describe('natural-language trip intake v2',()=>{
  it('keeps the owner Persian request as tomorrow, five travelers, historical Shiraz and five million TOMAN',()=>{
   const text='برای فردا برای 5 نفر برای بازدید از مناطق تاریخی شیراز برنامه ریزی سفر کن و هزینه ای که میخوایم بکنیم 5 میلیون تومان است';
