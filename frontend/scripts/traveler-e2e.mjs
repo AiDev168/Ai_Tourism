@@ -1312,7 +1312,6 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       pageA, api, locale, conversationId, tripId, csrfA,
       assistantTripVersion, assistantConversationVersion, initialDuration,
     );
-    await pageA.locator('#requirement-consent-budget-advisory').waitFor({ state: 'visible' });
     if (await pageA.locator('.requirement-accessibility-mandatory').count() === 0) {
       const diagnosticResponse = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
       const diagnosticTrip = await diagnosticResponse.json();
@@ -1323,28 +1322,11 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     if (await pageA.locator('#requirement-consent-accessibility-must, #requirement-consent-accessibility-advisory').count() !== 0) {
       throw new Error(`mandatory_access_field_was_offered_consent_downgrade_${locale}`);
     }
-    const consentRadio = pageA.locator('#requirement-consent-budget-advisory');
-    if (await consentRadio.isChecked()) throw new Error(`advisory_consent_was_preselected_${locale}`);
-    const confirmButton = pageA.getByRole('button', { name: copy.confirm });
-    if (await confirmButton.isEnabled()) throw new Error(`profile_confirm_enabled_without_explicit_choice_${locale}`);
-    await consentRadio.check();
-    const advisoryAcknowledgement = pageA.locator('#requirement-consent-budget-ack');
-    await advisoryAcknowledgement.check();
-    await pageA.locator('#requirement-consent-soft_preference-advisory').check();
-    await pageA.locator('#requirement-consent-soft_preference-ack').check();
-    // The confirmed profile may also contain explicit dates, party size, or
-    // origin. Each is a separate user decision; exercise any rendered choice
-    // individually instead of treating the first acknowledgement as a blanket
-    // waiver. Safety/access fields are intentionally absent from this list.
-    for (const field of ['travel_dates', 'traveler_count', 'origin']) {
-      const advisoryChoice = pageA.locator(`#requirement-consent-${field}-advisory`);
-      if (await advisoryChoice.count()) {
-        if (await advisoryChoice.isChecked()) throw new Error(`advisory_consent_was_preselected_${field}_${locale}`);
-        await advisoryChoice.check();
-        await pageA.locator(`#requirement-consent-${field}-ack`).check();
-      }
+    if (await pageA.locator('.requirement-consent').count() !== 0) {
+      throw new Error(`routine_profile_confirmation_prompt_was_rendered_${locale}`);
     }
-    if (await confirmButton.isDisabled()) throw new Error(`explicit_advisory_choice_not_accepted_${locale}`);
+    const confirmButton = pageA.getByRole('button', { name: copy.confirm });
+    if (await confirmButton.isDisabled()) throw new Error(`profile_confirmation_unnecessarily_blocked_${locale}`);
 
     const confirmResponsePromise = pageA.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/trips/${tripId}`
       && response.request().method() === 'PATCH');
@@ -1384,12 +1366,8 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     const acknowledgedConsentFields = [...(persistedConsent?.advisory_acknowledged_fields ?? [])].sort();
     if (persistedConsent?.contract_version !== 'recommendation-consent-v1'
       || persistedConsent?.profile_version !== confirmedTrip.version
-      || persistedConsent?.field_decisions?.budget !== 'advisory'
-      || persistedConsent?.field_decisions?.soft_preference !== 'advisory'
-      || Object.values(persistedConsent?.field_decisions ?? {}).some(decision => decision !== 'advisory')
-      || consentDecisionFields.join(',') !== acknowledgedConsentFields.join(',')
-      || !persistedConsent?.advisory_acknowledged_fields?.includes('budget')
-      || !persistedConsent?.advisory_acknowledged_fields?.includes('soft_preference')) {
+      || consentDecisionFields.length !== 0
+      || acknowledgedConsentFields.length !== 0) {
       throw new Error(`server_bound_consent_snapshot_missing_${locale}`);
     }
     consentSnapshotVerified = true;
@@ -1409,28 +1387,22 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     const preferenceAssessment = recommendation.requirement_assessments?.find(item => item.field === 'soft_preference');
     const accessibilityAssessment = recommendation.requirement_assessments?.find(item => item.field === 'accessibility');
     const hardConstraintAssessment = recommendation.requirement_assessments?.find(item => item.field === 'hard_constraint');
+    const assessmentsByField = Object.fromEntries((recommendation.requirement_assessments ?? []).map(item => [item.field, item]));
     if (recommendationResponse.status() !== 201 || !recommendationResponse.headers()['cache-control']?.includes('no-store')
       || recommendation.status !== 'needs_confirmation' || recommendation.reason_code !== 'hard_constraints_unverifiable'
-      || !recommendation.waived_fields?.includes('budget') || !recommendation.not_evaluated_fields?.includes('budget')
-      || !recommendation.waived_fields?.includes('soft_preference') || !recommendation.not_evaluated_fields?.includes('soft_preference')
-      || [...recommendation.waived_fields].sort().join(',') !== consentDecisionFields.join(',')
-      || [...recommendation.not_evaluated_fields].sort().join(',') !== consentDecisionFields.join(',')
-      || recommendation.requirement_assessments?.some(item => consentDecisionFields.includes(item.field)
-        && (item.decision !== 'advisory' || item.status !== 'not_evaluated'))
-      || budgetAssessment?.decision !== 'advisory' || budgetAssessment.status !== 'not_evaluated'
-      || preferenceAssessment?.decision !== 'advisory' || preferenceAssessment.status !== 'not_evaluated'
-      || preferenceAssessment.reason_code !== 'preference_unverifiable'
+      || recommendation.waived_fields?.length !== 0 || recommendation.not_evaluated_fields?.length !== 0
+      || ['duration_days', 'budget', 'soft_preference', 'destination'].some(field => assessmentsByField[field]?.status !== 'known')
+      || budgetAssessment?.status !== 'known'
+      || (preferenceAssessment && preferenceAssessment.status !== 'known')
       || accessibilityAssessment?.decision !== 'must_have' || accessibilityAssessment.status !== 'unresolved'
       || !['access_unverifiable', 'accessibility_unverifiable'].includes(accessibilityAssessment.reason_code)
       || hardConstraintAssessment?.decision !== 'must_have' || hardConstraintAssessment.status !== 'unresolved'
       || !recommendation.unresolved_fields?.includes('hard_constraint') || recommendation.items?.length !== 0) {
-      throw new Error(`empty_or_advisory_result_contract_failed_${locale}_${JSON.stringify({
-        http: recommendationResponse.status(), status: recommendation.status,
-        reason: recommendation.reason_code, waived: recommendation.waived_fields,
-        notEvaluated: recommendation.not_evaluated_fields,
+      throw new Error(`recommendation_contract_failed_${locale}_${JSON.stringify({
+        http: recommendationResponse.status(), status: recommendation.status, reason: recommendation.reason_code,
+        waived: recommendation.waived_fields, notEvaluated: recommendation.not_evaluated_fields,
         assessments: recommendation.requirement_assessments?.map(item => [item.field, item.decision, item.status, item.reason_code]),
-        unresolved: recommendation.unresolved_fields,
-        profileShape: confirmedProfileShape,
+        unresolved: recommendation.unresolved_fields, items: recommendation.items?.length,
       })}`);
     }
     // This is a needs_confirmation result because mandatory fields remain
@@ -1441,11 +1413,6 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     recommendationReasonCode = recommendation.reason_code;
     unresolvedFields = [...recommendation.unresolved_fields];
     if (await pageA.locator('.itinerary-start').count()) throw new Error(`itinerary_offered_without_eligible_candidate_${locale}`);
-    const notEvaluated = pageA.locator('.not-evaluated-warning');
-    await notEvaluated.waitFor({ state: 'visible' });
-    const warningText = await notEvaluated.textContent();
-    const localizedBudget = { 'fa-IR': 'بودجه', 'en-US': 'Budget', ar: 'الميزانية' }[locale];
-    if (!warningText?.includes(localizedBudget)) throw new Error(`advisory_warning_not_localized_${locale}`);
     const unresolved = pageA.locator('.unresolved-requirements');
     await unresolved.waitFor({ state: 'visible' });
     const unresolvedCopy = await unresolved.textContent();
@@ -1477,17 +1444,14 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       throw new Error('restored_assistant_candidate_missing_' + locale);
     }
     await pageA.locator('.assistant-candidate button').last().click();
-    if (!(await pageA.locator('#requirement-consent-budget-advisory').isChecked())
-      || !(await pageA.locator('#requirement-consent-budget-ack').isChecked())
-      || !(await pageA.locator('#requirement-consent-soft_preference-advisory').isChecked())
-      || !(await pageA.locator('#requirement-consent-soft_preference-ack').isChecked())) {
-      throw new Error(`history_consent_not_restored_${locale}`);
+    if (await pageA.locator('.requirement-consent').count() !== 0) {
+      throw new Error(`routine_consent_prompt_reappeared_after_restore_${locale}`);
     }
     const reopenedTrip = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
     const reopenedRecord = await reopenedTrip.json();
     if (reopenedRecord.confirmed_requirements?.requirement_consent?.profile_version !== reopenedRecord.version
-      || reopenedRecord.confirmed_requirements?.requirement_consent?.field_decisions?.budget !== 'advisory') {
-      throw new Error(`history_consent_version_changed_${locale}`);
+      || Object.keys(reopenedRecord.confirmed_requirements?.requirement_consent?.field_decisions ?? {}).length !== 0) {
+      throw new Error(`history_confirmation_version_changed_${locale}`);
     }
     if (await apiStatus(pageA, `/api/v1/trips/${tripId}/recommendations`, 'GET') !== 200) {
       throw new Error(`saved_empty_recommendation_not_reopenable_${locale}`);
@@ -1557,13 +1521,17 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     await pageA.locator('.journey-new-actions button').first().click();
     const secondPrompt = `${copy.prompt} — ${locale === 'en-US' ? 'second draft' : locale === 'ar' ? 'مسودة ثانية' : 'پیش‌نویس دوم'}`;
     await pageA.locator('#trip-prompt').fill(secondPrompt);
-    const secondPersist = pageA.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/conversations/${conversationId}/trips`
-      && response.request().method() === 'POST' && response.status() === 201);
+    const secondPersist = pageA.waitForResponse(response => {
+      const path = new URL(response.url()).pathname;
+      return response.request().method() === 'POST'
+        && (path === '/api/v1/conversations' || path === `/api/v1/conversations/${conversationId}/trips`);
+    });
     await pageA.locator('.trip-form button[type="submit"]').click();
     const secondResponse = await secondPersist;
     const secondTrip = await secondResponse.json();
-    if (!secondTrip?.trip?.trip_id || secondTrip.conversation.conversation_id !== conversationId) {
-      throw new Error(`second_trip_not_persisted_${locale}`);
+    if (secondResponse.status() !== 201 || !secondTrip?.trip?.trip_id
+        || secondTrip.conversation?.conversation_id !== conversationId) {
+      throw new Error(`second_trip_not_persisted_${locale}_status=${secondResponse.status()}_path=${new URL(secondResponse.url()).pathname}_code=${secondTrip?.error?.code ?? 'none'}`);
     }
     const rows = await pageA.locator('.history-trip').evaluateAll(nodes => nodes.map(node => node.querySelector('button')?.textContent?.trim() ?? ''));
     const originalIndex = rows.findIndex(text => text === copy.prompt);
