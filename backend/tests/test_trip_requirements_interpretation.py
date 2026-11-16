@@ -12,18 +12,18 @@ from app.modules.trip.requirements_interpretation import (
 EXAMPLE = "از دو روز دیگه با 4 نفر میخوام برم از مناطق تاریخی شیراز دیدن کنم و فقط 10 میلیون هزینه میخوام بکنم"
 
 @pytest.mark.parametrize(
-    ("request", "expected_origin"),
+    ("request_text", "expected_origin"),
     [
         ("از مشهد میخوام برم شیراز", "مشهد"),
         ("من از بندر عباس می‌خواهم برم شیراز", "بندر عباس"),
     ],
 )
-def test_colloquial_departure_is_extracted_as_fallback_with_evidence(request, expected_origin):
-    result = interpret_trip_requirements(request, "fa-IR")
+def test_colloquial_departure_is_extracted_as_fallback_with_evidence(request_text, expected_origin):
+    result = interpret_trip_requirements(request_text, "fa-IR")
     origin = result.fields.origin
     assert origin.value == expected_origin
     assert origin.source == "fallback"
-    assert request[origin.evidence_span.start:origin.evidence_span.end] == expected_origin
+    assert request_text[origin.evidence_span.start:origin.evidence_span.end] == expected_origin
     assert result.fields.destination.value == "شیراز"
 
 

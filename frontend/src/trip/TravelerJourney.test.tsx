@@ -207,7 +207,7 @@ describe('persisted traveler journey', () => {
     const patchCall = fetchMock.mock.calls.find(call => (call[1] as RequestInit | undefined)?.method === 'PATCH')!;
     expect(JSON.parse(String((patchCall[1] as RequestInit).body)).destination_ids).toEqual(['3']);
   });
-  it('persists the exact signed-in request, then shows an honest empty result without creating an itinerary', async () => {
+  it('offers an AI provisional plan and a working manual draft when the approved catalogue is empty', async () => {
     const requestText = 'Plan a 3-day trip to Shiraz';
     const parsed = createTripRequirements({ requestText, locale: 'en-US' });
     expect(parsed.kind).not.toBe('invalid');
@@ -218,8 +218,10 @@ describe('persisted traveler journey', () => {
       started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
       trips: [trip], messages: [{ message_id: 'message-1', trip_id: trip.trip_id, role: 'user', content: requestText, created_at: trip.created_at }],
     };
+    let savedPlan: Record<string, unknown> | null = null;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); const method = init?.method ?? 'GET';
+      if (url === '/api/v1/assistant/status') return response({ state: 'configured', user_used: 0, user_remaining: 8, user_limit: 8, global_used: 0, global_remaining: 100, global_limit: 100 });
       if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
       if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
       if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: conversation.messages[0] }, 201);
@@ -229,6 +231,30 @@ describe('persisted traveler journey', () => {
         unresolved_fields: [], algorithm_version: 'deterministic-v1', trip_version: 2, items: [],
       });
       if (url === `/api/v1/trips/${trip.trip_id}` && method === 'GET') return response({ ...trip, version: 2 });
+      if (url === `/api/v1/trips/${trip.trip_id}/provisional-itineraries` && method === 'GET') return response({ error: { code: 'not_found' } }, 404);
+      if (url === `/api/v1/conversations/${conversation.conversation_id}/assistant-turns` && method === 'POST') {
+        const body = JSON.parse(String(init?.body));
+        return response({ conversation: { ...conversation, version: 2 }, trip: { ...trip, version: 2 },
+          message: { message_id: 'assistant-1', trip_id: trip.trip_id, role: 'assistant', content: 'I replied but did not return a structured itinerary.', created_at: trip.created_at },
+          candidate_requirements: {}, extraction_path: 'llm', replayed: false, received_test_turn: body });
+      }
+      if (url === `/api/v1/trips/${trip.trip_id}/provisional-itineraries` && method === 'POST') {
+        const body = JSON.parse(String(init?.body));
+        savedPlan = { provisional_itinerary_id: 'provisional-1', trip_id: trip.trip_id, revision: 1,
+          day_count: body.day_count, locale: body.locale, title_by_locale: body.title_by_locale,
+          status: 'provisional_unverified', days: body.days.map((day: { day_number: number; stops: unknown[] }) => ({
+            day_number: day.day_number, stops: day.stops,
+          })), unplanned_days: body.days.filter((day: { stops: unknown[] }) => day.stops.length === 0).map((day: { day_number: number }) => day.day_number),
+          updated_at: trip.updated_at };
+        return response(savedPlan, 201);
+      }
+      if (url === '/api/v1/provisional-itineraries/provisional-1' && method === 'PUT') {
+        const body = JSON.parse(String(init?.body));
+        savedPlan = { ...(savedPlan as Record<string, unknown>), revision: 2,
+          days: body.days.map((day: { day_number: number; stops: unknown[] }) => ({ day_number: day.day_number, stops: day.stops })),
+          unplanned_days: body.days.filter((day: { stops: unknown[] }) => day.stops.length === 0).map((day: { day_number: number }) => day.day_number) };
+        return response(savedPlan);
+      }
       throw new Error(`Unexpected request: ${method} ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -253,8 +279,31 @@ describe('persisted traveler journey', () => {
     const recommendations = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].findRecommendations)!;
     await act(async () => { recommendations.click(); }); await settle();
     expect(host.textContent).toContain(journeyMessages['en-US'].recommendationEmpty);
-    expect(host.querySelector('button')?.textContent).not.toBe(journeyMessages['en-US'].createItinerary);
-    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/itineraries'))).toBe(false);
+
+    const aiPlan = [...host.querySelectorAll('button')].find(button => button.textContent === 'Generate preliminary AI itinerary')!;
+    const blankPlan = [...host.querySelectorAll('button')].find(button => button.textContent === 'Create an editable blank itinerary')!;
+    expect(aiPlan).toBeTruthy();
+    expect(blankPlan).toBeTruthy();
+    await act(async () => { aiPlan.click(); }); await settle();
+    const assistantCall = fetchMock.mock.calls.filter(call => String(call[0]).endsWith('/assistant-turns')).at(-1)!;
+    expect(JSON.parse(String(assistantCall[1]?.body)).content).toContain('provisional_itinerary');
+    expect(host.textContent).toContain('assistant replied without a day-by-day draft');
+
+    await act(async () => { blankPlan.click(); }); await settle();
+    expect(savedPlan).toMatchObject({ day_count: 3, status: 'provisional_unverified', unplanned_days: [1, 2, 3] });
+    expect(host.querySelectorAll('.provisional-itinerary .itinerary-day')).toHaveLength(3);
+    const addInput = host.querySelector<HTMLInputElement>('#provisional-add-1')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(addInput, 'Traveler-selected museum');
+      addInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const addButton = [...host.querySelectorAll('button')].find(button => button.textContent === 'Add a place you provide')!;
+    await act(async () => { addButton.click(); }); await settle();
+    const saveEdits = [...host.querySelectorAll('button')].find(button => button.textContent === 'Save edits')!;
+    await act(async () => { saveEdits.click(); }); await settle();
+    const updateCall = fetchMock.mock.calls.find(call => String(call[0]) === '/api/v1/provisional-itineraries/provisional-1' && call[1]?.method === 'PUT')!;
+    expect(JSON.parse(String(updateCall[1]?.body)).days[0].stops[0]).toMatchObject({ name: 'Traveler-selected museum', role: 'traveler_provided' });
+    expect(host.textContent).toContain('Save edits');
   });
 
   it('renders the privacy notice in all supported directions/locales and keeps anonymous intake transient', async () => {
