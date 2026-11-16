@@ -112,7 +112,9 @@ decrypted=$(mktemp "$backup_dir/.pre-017.XXXXXX.dump")
 trap 'rm -f -- "$decrypted"' EXIT
 openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
   -pass file:"$root/secrets/backup_encryption_passphrase" -in "$backup_path" -out "$decrypted"
-pg_restore --list "$decrypted" >/dev/null
+# The verified Postgres image carries the matching client tools; the Ubuntu
+# host is intentionally not required to install PostgreSQL utilities.
+docker exec -i "$db_id" pg_restore --list < "$decrypted" >/dev/null
 
 # Read-only invariants before the migration. These counts are rechecked after
 # commit; the DDL must not change any traveler or published catalogue row.
