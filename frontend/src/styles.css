@@ -711,3 +711,19 @@ body {
   .saved-itinerary { margin-inline: 12px; padding: 18px 14px; border-radius: 20px; }
   .profile-confirm-action, .itinerary-generate-action, .itinerary-save-action { min-height: 54px; }
 }
+/* Private company workspace: structured and review-first, never implies publication. */
+.partner-workspace { width:min(1120px, calc(100% - 2rem)); margin:2rem auto 5rem; }
+.partner-workspace > header { padding:clamp(1.25rem,4vw,3rem); border-radius:1.5rem; background:linear-gradient(135deg,#eef8f3,#f7f4e9); }
+.partner-workspace h1 { margin:.25rem 0; }
+.partner-forms { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:1rem; margin-block:1.5rem; }
+.partner-card { display:grid; align-content:start; gap:.85rem; padding:1.2rem; border:1px solid #d7e4dc; border-radius:1.1rem; background:#fff; box-shadow:0 8px 28px rgb(24 69 49 / 8%); }
+.partner-card h2 { margin:0; font-size:1.2rem; }
+.partner-card label,.partner-workspace>label { display:grid; gap:.35rem; font-weight:650; }
+.partner-card input,.partner-card select,.partner-workspace select,.partner-workspace input { min-width:0; width:100%; padding:.75rem .85rem; border:1px solid #b8c9bf; border-radius:.7rem; background:#fff; color:#173c2d; }
+.partner-card input:focus-visible,.partner-card select:focus-visible,.partner-workspace select:focus-visible,.partner-workspace input:focus-visible { outline:3px solid #82c7a7; outline-offset:2px; }
+.partner-workspace > label { max-width:32rem; margin-block:1rem; }
+.catalogue-review { display:grid; gap:1rem; }
+.candidate-review-card { overflow-wrap:anywhere; }
+.candidate-review-card pre { max-height:20rem; overflow:auto; white-space:pre-wrap; direction:ltr; text-align:left; background:#f5f7f5; padding:.8rem; border-radius:.6rem; }
+.candidate-review-actions { display:flex; flex-wrap:wrap; gap:.6rem; }
+@media(max-width:420px){.partner-workspace{width:calc(100% - 1rem);margin:1rem auto 3rem}.partner-card{padding:.9rem}}

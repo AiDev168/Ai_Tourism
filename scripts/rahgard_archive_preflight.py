@@ -13,6 +13,7 @@ import hashlib
 import io
 import json
 import sys
+import zlib
 import zipfile
 from collections import defaultdict
 from pathlib import PurePosixPath
@@ -67,10 +68,14 @@ def inspect(data: bytes) -> dict[str, Any]:
         if depth > MAX_DEPTH:
             raise UnsafeArchive("nested ZIP depth exceeded")
         with _open_zip(payload) as archive:
+            seen_names: set[str] = set()
             for info in archive.infolist():
                 if info.is_dir():
                     continue
                 name = safe_path(info.filename)
+                if name in seen_names:
+                    raise UnsafeArchive("duplicate normalized archive member path")
+                seen_names.add(name)
                 if info.flag_bits & 1:
                     raise UnsafeArchive("encrypted member unsupported")
                 file_count += 1
@@ -85,7 +90,7 @@ def inspect(data: bytes) -> dict[str, Any]:
                     raise UnsafeArchive("symbolic links prohibited")
                 try:
                     body = archive.read(info)
-                except (RuntimeError, zipfile.BadZipFile, OSError) as exc:
+                except (RuntimeError, zipfile.BadZipFile, OSError, zlib.error) as exc:
                     raise UnsafeArchive("unreadable ZIP member") from exc
                 if len(body) != info.file_size:
                     raise UnsafeArchive("ZIP member size mismatch")
@@ -102,25 +107,46 @@ def inspect(data: bytes) -> dict[str, Any]:
                         if not reader.fieldnames or None in reader.fieldnames:
                             raise ValueError("invalid csv headers")
                         headers = list(reader.fieldnames)
+                        if any(not header or not header.strip() for header in headers):
+                            raise ValueError("blank csv header")
+                        if len({header.strip() for header in headers}) != len(headers):
+                            raise ValueError("duplicate csv header")
                         count = 0
+                        identity_fields = [
+                            header for header in headers
+                            if header.strip().lower() in {
+                                "destination_key", "record_key", "external_id", "poi_id",
+                                "feature_id", "place_id", "destination_id",
+                            }
+                        ]
+                        primary_key_field = (
+                            "destination_key" if "destination_key" in headers
+                            else identity_fields[0] if identity_fields else None
+                        )
                         keys: set[str] = set()
                         duplicate_keys = 0
                         for row in reader:
-                            if None in row:
+                            if None in row or any(value is None for value in row.values()):
                                 raise ValueError("invalid csv field count")
                             count += 1
-                            key = (row.get("destination_key") or "").strip()
+                            key = (row.get(primary_key_field) or "").strip() if primary_key_field else ""
                             if key:
                                 if key in keys:
                                     duplicate_keys += 1
                                 keys.add(key)
                     except (UnicodeError, csv.Error, ValueError) as exc:
                         raise UnsafeArchive(f"invalid CSV at {location}") from exc
-                    csv_rows.append({
+                    csv_summary = {
                         "location": location, "sha256": digest, "row_count": count,
-                        "headers": headers, "unique_destination_keys": len(keys),
-                        "repeated_destination_keys_in_file": duplicate_keys,
-                    })
+                        "headers": headers,
+                        "unique_identity_keys": len(keys),
+                        "repeated_identity_keys_in_file": duplicate_keys,
+                        "identity_key_field": primary_key_field,
+                    }
+                    if primary_key_field == "destination_key":
+                        csv_summary["unique_destination_keys"] = len(keys)
+                        csv_summary["repeated_destination_keys_in_file"] = duplicate_keys
+                    csv_rows.append(csv_summary)
 
     visit(data, "", 0)
     by_hash: dict[str, list[str]] = defaultdict(list)

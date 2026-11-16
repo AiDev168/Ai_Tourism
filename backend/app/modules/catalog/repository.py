@@ -1,6 +1,10 @@
 """Read-only access to the approved, spatial production destination view."""
 
 import logging
+import base64
+import hashlib
+import hmac
+import json
 import re
 from collections.abc import Mapping
 from typing import Literal
@@ -316,6 +320,101 @@ def list_production_destinations(settings: Settings) -> list[ProductionDestinati
     except (AliasManifestUnavailable, KeyError, TypeError, ValueError):
         logger.warning("catalogue.read_invalid_projection")
         raise CatalogueUnavailableError from None
+
+
+def list_production_destination_page(
+    settings: Settings,
+    *,
+    limit: int,
+    after_id: int = 0,
+    query: str | None = None,
+    province: str | None = None,
+    destination_type: str | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> tuple[list[ProductionDestinationItem], int | None]:
+    """Indexed keyset page over the same publication view as the legacy endpoint."""
+    try:
+        aliases = load_reviewed_aliases()
+        with (
+            psycopg.connect(
+                host=settings.database_host,
+                port=settings.database_port,
+                dbname=settings.database_name,
+                user=settings.database_user,
+                password=settings.database_password.get_secret_value(),
+                connect_timeout=settings.database_connect_timeout_seconds,
+                application_name="ai-tourism-catalogue-v2-page",
+                options=f"-c statement_timeout={settings.database_connect_timeout_seconds * 1000}",
+                row_factory=dict_row,
+            ) as conn,
+            conn.cursor() as cur,
+        ):
+            cur.execute("SET TRANSACTION READ ONLY")
+            cur.execute(
+                """SELECT d.destination_id::text AS destination_id,d.destination_key,d.canonical_name,
+                d.destination_type,d.province_name,d.city_name,d.latitude,d.longitude,d.coordinate_role,
+                EXISTS(SELECT 1 FROM knowledge.production_destination_sources s WHERE s.destination_id=d.destination_id) AS has_verified_provenance
+                FROM knowledge.production_destinations d
+                WHERE d.destination_id>%s AND (%s::text IS NULL OR lower(d.canonical_name) LIKE lower(%s)||'%' OR lower(d.city_name) LIKE lower(%s)||'%' OR lower(d.province_name) LIKE lower(%s)||'%')
+                  AND (%s::text IS NULL OR lower(d.province_name) LIKE lower(%s)||'%')
+                  AND (%s::text IS NULL OR d.destination_type=%s)
+                  AND (%s::float8[] IS NULL OR ST_Intersects(d.location,ST_MakeEnvelope(%s,%s,%s,%s,4326)::geography))
+                ORDER BY d.destination_id LIMIT %s""",
+                (
+                    after_id,
+                    query,
+                    query,
+                    query,
+                    query,
+                    province,
+                    province,
+                    destination_type,
+                    destination_type,
+                    [*bbox] if bbox else None,
+                    bbox[0] if bbox else None,
+                    bbox[1] if bbox else None,
+                    bbox[2] if bbox else None,
+                    bbox[3] if bbox else None,
+                    limit + 1,
+                ),
+            )
+            rows = cur.fetchall()
+        next_id = int(rows[limit - 1]["destination_id"]) if len(rows) > limit else None
+        items = [_to_item(row, aliases.get(str(row["destination_key"]))) for row in rows[:limit]]
+        return items, next_id
+    except (psycopg.Error, AliasManifestUnavailable, CatalogueUnavailableError, KeyError, TypeError, ValueError):
+        logger.warning("catalogue.v2_page_unavailable")
+        raise CatalogueUnavailableError from None
+
+
+def sign_catalogue_cursor(settings: Settings, *, last_id: int, filters: dict[str, object]) -> str:
+    secret = settings.auth_rate_limit_secret
+    if secret is None:
+        raise CatalogueUnavailableError
+    payload = json.dumps(
+        {"v": 1, "last": last_id, "filters": filters}, sort_keys=True, separators=(",", ":")
+    ).encode()
+    sig = hmac.new(secret.get_secret_value().encode(), payload, hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(payload + sig).decode().rstrip("=")
+
+
+def verify_catalogue_cursor(settings: Settings, token: str, filters: dict[str, object]) -> int:
+    secret = settings.auth_rate_limit_secret
+    if secret is None or len(token) > 2048:
+        raise ValueError("invalid cursor")
+    raw = base64.urlsafe_b64decode(token + "=" * ((4 - len(token) % 4) % 4))
+    payload, sig = raw[:-32], raw[-32:]
+    expected = hmac.new(secret.get_secret_value().encode(), payload, hashlib.sha256).digest()
+    data = json.loads(payload)
+    if (
+        not hmac.compare_digest(sig, expected)
+        or data.get("v") != 1
+        or data.get("filters") != filters
+        or type(data.get("last")) is not int
+        or data["last"] < 0
+    ):
+        raise ValueError("invalid cursor")
+    return data["last"]
 
 
 def list_production_destination_sources(

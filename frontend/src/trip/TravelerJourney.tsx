@@ -324,6 +324,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const [catalogueLoading, setCatalogueLoading] = useState(false);
   const [catalogueUnavailable, setCatalogueUnavailable] = useState(false);
   const [catalogueSearch, setCatalogueSearch] = useState('');
+  const [catalogueNextCursor, setCatalogueNextCursor] = useState<string | null>(null);
   const [destinationNames, setDestinationNames] = useState<string[]>([]);
   const [durationText, setDurationText] = useState('');
   const [originText, setOriginText] = useState('');
@@ -419,10 +420,13 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     const sequence = ++resolutionSequenceRef.current;
     if (!names.length || names.some(name => !name.trim())) { setResolution(null); setCatalogueDestinations([]); return; }
     try {
-      const catalogue = await catalog.load();
+      const pages = await Promise.all(names.map(name => catalog.load(name)));
       if (sequence !== resolutionSequenceRef.current) return;
-      setCatalogueDestinations(catalogue.kind === 'available' && catalogue.boundary === 'knowledge.production_destinations'
-        ? catalogue.destinations : []);
+      const allAvailable = pages.every(item => item.kind === 'available' && item.boundary === 'knowledge.production_destinations');
+      const catalogue = allAvailable
+        ? { kind:'available' as const, boundary:'knowledge.production_destinations', destinations:pages.flatMap(item => item.kind === 'available' ? item.destinations : []) }
+        : { kind:'unavailable' as const };
+      setCatalogueDestinations(catalogue.kind === 'available' ? catalogue.destinations : []);
       let resolved = resolveDestinationNames(names, locale, catalogue);
       for (const choice of explicitChoices) {
         resolved = confirmDestinationCandidate(resolved, choice.index, choice.destinationId);
@@ -435,18 +439,20 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     }
   };
 
-  const browseCatalogue = async () => {
+  const browseCatalogue = async (cursor?: string, append = false) => {
     if (!online || catalogueLoading) return;
     const sequence = ++catalogueBrowseSequenceRef.current;
     setCatalogueOpen(true); setCatalogueLoading(true); setCatalogueUnavailable(false);
     try {
-      const result = await catalog.load();
+      const result = await catalog.load(catalogueSearch.trim() || undefined, cursor);
       if (sequence !== catalogueBrowseSequenceRef.current) return;
-      if (result.kind === 'available' && result.boundary === 'knowledge.production_destinations') setCatalogueDestinations(result.destinations);
-      else { setCatalogueDestinations([]); setCatalogueUnavailable(true); }
+      if (result.kind === 'available' && result.boundary === 'knowledge.production_destinations') {
+        setCatalogueDestinations(current => append ? [...current, ...result.destinations.filter(item => !current.some(existing => existing.destinationId === item.destinationId))] : result.destinations);
+        setCatalogueNextCursor(result.nextCursor ?? null);
+      } else { setCatalogueDestinations([]); setCatalogueNextCursor(null); setCatalogueUnavailable(true); }
     } catch {
       if (sequence !== catalogueBrowseSequenceRef.current) return;
-      setCatalogueDestinations([]); setCatalogueUnavailable(true);
+      setCatalogueDestinations([]); setCatalogueNextCursor(null); setCatalogueUnavailable(true);
     } finally { if (sequence === catalogueBrowseSequenceRef.current) setCatalogueLoading(false); }
   };
 
@@ -1412,6 +1418,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                       <label htmlFor="approved-destination-search">{copy.searchDestinations}</label>
                       <input id="approved-destination-search" type="search" value={catalogueSearch} dir="auto"
                         onChange={event => setCatalogueSearch(event.target.value)} />
+                      <button type="button" onClick={() => { setCatalogueDestinations([]); setCatalogueNextCursor(null); void browseCatalogue(); }}>{locale === 'fa-IR' ? 'جست‌وجو' : locale === 'ar' ? 'بحث' : 'Search'}</button>
                       {(() => {
                         const query = normalizeDestinationName(catalogueSearch);
                         const matches = catalogueDestinations.filter(destination => !query || [
@@ -1430,6 +1437,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                           </li>;
                         })}</ul> : <p role="status">{copy.noDestinationMatches}</p>;
                       })()}
+                      {catalogueNextCursor && <button type="button" disabled={catalogueLoading} onClick={() => void browseCatalogue(catalogueNextCursor,true)}>{locale === 'fa-IR' ? 'نتایج بیشتر' : locale === 'ar' ? 'المزيد من النتائج' : 'Load more results'}</button>}
                     </>}
               </div>}
               {!destinationNames.length && <p>{copy.noDestination}</p>}

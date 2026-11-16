@@ -223,7 +223,7 @@ describe('persisted traveler journey', () => {
       const url = String(input); const method = init?.method ?? 'GET';
       if (url === '/api/v1/assistant/status') return response({ state: 'configured', user_used: 0, user_remaining: 8, user_limit: 8, global_used: 0, global_remaining: 100, global_limit: 100 });
       if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: conversation.messages[0] }, 201);
       if (url === `/api/v1/trips/${trip.trip_id}` && method === 'PATCH') return response({ ...trip, version: 2, confirmed_requirements: { confirmation_source: 'traveler_reviewed' } });
       if (url === `/api/v1/trips/${trip.trip_id}/recommendations` && method === 'POST') return response({
@@ -373,7 +373,7 @@ describe('persisted traveler journey', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); const method = init?.method ?? 'GET';
       if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: null }, 201);
       if (url === `/api/v1/trips/${trip.trip_id}` && method === 'PATCH') return response(savedTrip);
       if (url === `/api/v1/trips/${trip.trip_id}/recommendations` && method === 'POST') return response({
@@ -435,7 +435,7 @@ describe('persisted traveler journey', () => {
       if (url.endsWith('/conversations?limit=50')) return response({ items: [conversation], next_cursor: null });
       if (url === '/api/v1/conversations/conversation-1') return response(conversation);
       if (url === `/api/v1/trips/${trip.trip_id}`) return response(trip);
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -527,7 +527,7 @@ describe('persisted traveler journey', () => {
       if (url === '/api/v1/conversations/conversation-1') return response(conversation);
       const trip = trips.find(item => url === `/api/v1/trips/${item.trip_id}`);
       if (trip) return response(trip);
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       throw new Error(`Unexpected request: ${init?.method ?? 'GET'} ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -573,7 +573,7 @@ describe('persisted traveler journey', () => {
         algorithm_version: 'structured-catalogue-ranking-v3', retrieval_version: 'approved-structured-catalogue-v2',
         trip_version: 2, items: [],
       });
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -601,7 +601,7 @@ describe('persisted traveler journey', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); const method = init?.method ?? 'GET';
       if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: null }, 201);
       throw new Error(`Unexpected request: ${method} ${url}`);
     });
@@ -674,7 +674,7 @@ describe('persisted traveler journey', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); const method = init?.method ?? 'GET';
       if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: null }, 201);
       if (url === `/api/v1/trips/${trip.trip_id}` && method === 'PATCH') return response({ ...trip, version: 2, confirmed_requirements: { duration_days: 10 } });
       if (url === `/api/v1/trips/${trip.trip_id}/recommendations` && method === 'POST') return response({

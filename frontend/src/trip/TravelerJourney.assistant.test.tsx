@@ -52,7 +52,7 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); const method = init?.method ?? 'GET';
       if (url.endsWith('/conversations?limit=50')) return reply({ items: [], next_cursor: null });
-      if (url === '/api/v1/catalog/destinations') return reply({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return reply({ status: 'available', items: [], next_cursor: null });
       if (url === '/api/v1/conversations' && method === 'POST') {
         return reply({ conversation, trip: currentTrip, initial_message: initialMessage });
       }
@@ -165,7 +165,7 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); const method = init?.method ?? 'GET';
       if (url.endsWith('/conversations?limit=50')) return reply({ items: [conversation], next_cursor: null });
-      if (url === '/api/v1/catalog/destinations') return reply({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return reply({ status: 'available', items: [], next_cursor: null });
       if (url === '/api/v1/conversations/conversation-1') return reply(conversation);
       if (url === '/api/v1/trips/trip-1' && method === 'GET') return reply(trip);
       if (url === '/api/v1/conversations/conversation-1/assistant-turns' && method === 'POST') {

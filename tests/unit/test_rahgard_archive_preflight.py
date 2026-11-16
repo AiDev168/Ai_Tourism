@@ -57,6 +57,31 @@ class ArchivePreflightTests(unittest.TestCase):
         with self.assertRaises(UnsafeArchive):
             inspect(zipped({"data.csv": b"destination_key,name\na,b,c\n"}))
 
+    def test_rejects_short_csv_rows_and_duplicate_headers(self):
+        for body in (b"a,b\n1\n", b"a,a\n1,2\n"):
+            with self.subTest(body=body), self.assertRaises(UnsafeArchive):
+                inspect(zipped({"data.csv": body}))
+
+    def test_duplicate_member_names_are_rejected(self):
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w") as archive:
+            archive.writestr("same.csv", b"destination_key,name\na,A\n")
+            archive.writestr("same.csv", b"destination_key,name\nb,B\n")
+        with self.assertRaises(UnsafeArchive):
+            inspect(out.getvalue())
+
+    def test_external_record_ids_are_not_mislabeled_destination_keys(self):
+        out = io.StringIO()
+        writer = csv.writer(out)
+        writer.writerow(["external_id", "name"])
+        writer.writerow(["source-1", "A"])
+        writer.writerow(["source-2", "B"])
+        report = inspect(zipped({"data.csv": out.getvalue().encode("utf-8")}))
+        row = report["csv"][0]
+        self.assertEqual(row["identity_key_field"], "external_id")
+        self.assertEqual(row["unique_identity_keys"], 2)
+        self.assertNotIn("unique_destination_keys", row)
+
     def test_rejects_non_archive(self):
         with self.assertRaises(UnsafeArchive):
             inspect(b"not a ZIP")

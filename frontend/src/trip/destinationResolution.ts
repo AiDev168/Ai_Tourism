@@ -16,9 +16,9 @@ export type ProductionDestinationCandidate = {
 
 export type ProductionCatalogue =
   | { kind: 'unavailable' }
-  | { kind: 'available'; boundary: string; destinations: readonly ProductionDestinationCandidate[] };
+  | { kind: 'available'; boundary: string; destinations: readonly ProductionDestinationCandidate[]; nextCursor?: string | null };
 export interface ProductionDestinationCatalogPort {
-  load(): Promise<ProductionCatalogue>;
+  load(query?: string, cursor?: string): Promise<ProductionCatalogue>;
 }
 
 export type DestinationChoice = Pick<ProductionDestinationCandidate,

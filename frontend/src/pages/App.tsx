@@ -16,6 +16,8 @@ import { AiProviderAdminPanel } from '../admin/aiProviders/AiProviderAdminPanel'
 import { displayTripInterest } from '../trip/interestDisplay';
 import { deviceCalendarDate } from '../trip/jalaliDate';
 import { requestDeviceOrigin, withApproximateDeviceOrigin } from './locationOrigin';
+import { PartnerWorkspace } from '../partners/PartnerWorkspace';
+import { CatalogueReviewPanel } from '../admin/catalogue/CatalogueReviewPanel';
 
 const destinationCatalog = new ApiDestinationCatalogPort();
 
@@ -266,7 +268,7 @@ export function App() {
   const tripCopy = tripMessages[locale];
   const requirementCopy = requirementClarificationMessages[locale];
 
-  if (window.location.pathname === '/admin/ai-providers') {
+  if (window.location.pathname === '/admin/ai-providers' || window.location.pathname === '/admin/catalogue-review') {
     return <>
       <header className="topbar">
         <a className="brand" href="/"><span className="brand-mark" aria-hidden="true">Ø±</span><span>{t('brand')}<small>{t('tagline')}</small></span></a>
@@ -278,8 +280,11 @@ export function App() {
           </select>
         </div>
       </header>
-      <AiProviderAdminPanel locale={locale} csrfToken={authSession?.csrf_token ?? ''}
+      {window.location.pathname === '/admin/catalogue-review'
+        ? <CatalogueReviewPanel locale={locale} csrfToken={authSession?.csrf_token ?? ''} />
+        : <AiProviderAdminPanel locale={locale} csrfToken={authSession?.csrf_token ?? ''}
         authMethod={authSession?.user.auth_method === 'staging_invite' ? undefined : authSession?.user.auth_method} />
+      }
     </>;
   }
 
@@ -293,6 +298,8 @@ export function App() {
         <nav aria-label={t('navExplore')}>
           <a href="#discover">{t('navExplore')}</a>
           <a href="#itinerary">{t('navPlan')}</a>
+          {authSession && <a href="/partners">{locale === 'fa-IR' ? 'فضای کسب‌وکار' : locale === 'ar' ? 'مساحة الشركاء' : 'Partner workspace'}</a>}
+          {authSession?.user.auth_method === 'local_owner' && <a href="/admin/catalogue-review">{locale === 'fa-IR' ? 'بازبینی کاتالوگ' : locale === 'ar' ? 'مراجعة الدليل' : 'Catalogue review'}</a>}
           {authSession?.user.auth_method === 'local_owner' && <a href="/admin/ai-providers">AI admin</a>}
         </nav>
         <div className="top-actions">
@@ -308,7 +315,9 @@ export function App() {
 
       {!online && <p className="offline-banner" role="status">{t('offline')}</p>}
 
-      <main id="home" className={authSession ? 'traveler-app' : undefined}>
+      {window.location.pathname === '/partners' ? (authSession
+        ? <PartnerWorkspace locale={locale} csrfToken={authSession.csrf_token} />
+        : <main className="partner-workspace"><h1>{locale === 'fa-IR' ? 'برای ادامه وارد شوید' : locale === 'ar' ? 'سجّل الدخول للمتابعة' : 'Sign in to continue'}</h1><AuthPanel locale={locale} onSessionChange={setAuthSession} /></main>) : <main id="home" className={authSession ? 'traveler-app' : undefined}>
         <section className={authSession ? 'hero hero-planner' : 'hero'}>
           <div className="hero-copy">
             <p className="eyebrow"><span className="sun">✳</span>{t('heroEyebrow')}</p>
@@ -507,7 +516,7 @@ export function App() {
           </div>
         </section>}
 
-      </main>
+      </main>}
 
       <footer>
         <span>{t('brand')} · {t('footer')}</span>

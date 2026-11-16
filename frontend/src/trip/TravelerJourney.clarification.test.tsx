@@ -62,8 +62,8 @@ describe('visible traveler-only clarification flow', () => {
       const url = String(input);
       const method = init?.method ?? 'GET';
       if (url.endsWith('/conversations?limit=50')) return ok({ items: [], next_cursor: null });
-      if (url === '/api/v1/catalog/destinations')
-        return ok({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations')
+        return ok({ status: 'available', items: [], next_cursor: null });
       if (url === '/api/v1/conversations' && method === 'POST')
         return ok({ conversation: initialConversation, trip: initialTrip, initial_message: firstMessage }, 201);
       if (url === '/api/v1/conversations/conversation-1/messages' && method === 'POST') {

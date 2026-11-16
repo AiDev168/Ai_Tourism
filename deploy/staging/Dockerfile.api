@@ -13,6 +13,7 @@ WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 COPY backend/app /app/backend/app
 COPY backend/scripts /app/backend/scripts
+COPY scripts/rahgard_archive_preflight.py /app/backend/scripts/rahgard_archive_preflight.py
 COPY deploy/staging/api-entrypoint.sh /usr/local/bin/rahgard-entrypoint
 RUN chmod 0555 /usr/local/bin/rahgard-entrypoint && chown -R rahgard:rahgard /app
 USER rahgard
