@@ -79,10 +79,10 @@ if any(m.get("Type")!="tmpfs" for m in c.get("Mounts") or []): raise SystemExit(
 '
 ready=false
 for _ in $(seq 1 60); do
-  if docker exec "$isolated" pg_isready -U "$owner" -d "$database" >/dev/null 2>&1; then ready=true; break; fi
+  if docker exec "$isolated" psql -X -q -A -t -h 127.0.0.1 -p 5432 -U "$owner" -d "$database" -c 'SELECT 1' >/dev/null 2>&1; then ready=true; break; fi
   sleep 1
 done
-[[ "$ready" == true ]] || { echo 'Isolated PostgreSQL did not become ready.' >&2; exit 3; }
+[[ "$ready" == true ]] || { echo 'Isolated PostgreSQL did not accept loopback TCP SQL within 60 seconds.' >&2; exit 3; }
 docker exec "$isolated" psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$owner" -d "$database" <<'SQL' >/dev/null
 CREATE ROLE ai_tourism_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 CREATE ROLE rahgard_pilot_geo_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
