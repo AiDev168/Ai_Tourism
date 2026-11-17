@@ -83,7 +83,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 [[ "$ready" == true ]] || { echo 'Isolated PostgreSQL did not accept loopback TCP SQL within 60 seconds.' >&2; exit 3; }
-docker exec "$isolated" psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$owner" -d "$database" <<'SQL' >/dev/null
+docker exec -i "$isolated" psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$owner" -d "$database" <<'SQL' >/dev/null
 CREATE ROLE ai_tourism_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 CREATE ROLE rahgard_pilot_geo_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 CREATE ROLE rahgard_pilot_geo_migrator NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
