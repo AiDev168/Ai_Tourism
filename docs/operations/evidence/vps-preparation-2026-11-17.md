@@ -83,3 +83,42 @@ An initial run of the new rollback probe exposed an unset `current_sha` variable
 the cleanup trap removed the isolated resources, the script was fixed and
 repackaged, and the final complete rehearsal then passed. No corresponding
 failure occurred against the live database or services.
+
+## Docker Hub image-build follow-up
+
+The follow-up mission was fetched from the branch at `7fe8331`; the prepared
+source SHA remains `d5d9847373b20087a8a866449c6550d306f45b63`. The Windows
+Docker Desktop and VPS Docker state were inspected without displaying proxy
+values, credential contents, or tokens. Both daemons are `linux/amd64` and
+report no registry mirror. Windows Docker Desktop reports a configured proxy
+and a credential helper, but no explicit registry auth entries; a non-printing
+Docker Hub credential lookup returned unavailable. The VPS
+reports no proxy and no operator Docker client config.
+
+Windows direct registry access timed out after 12 seconds; a 35-second bounded
+pull did not produce the Python base image and was interrupted. On the VPS,
+the unauthenticated registry root returned HTTP 403 on one probe and timed out
+on retry; the prior BuildKit manifest request returned HTTP 403. The pinned
+Python, Node and Nginx base tags were absent on both hosts; their RepoDigests
+and image config IDs therefore remain unverified. The target API and Web image
+tags are absent locally and on the VPS. No image was loaded, no registry
+configuration changed, and no live service or database was touched.
+
+The normal target API and Web builds, API/Web isolated image smoke, browser
+static-asset smoke, and no-build startup are **BLOCKED / NOT RUN** because the
+three pinned parent images cannot be acquired. `deploy.sh` with
+`RAHGARD_BUILD_IMAGES=false` requires both exact target tags and the PostgreSQL
+image before starting; missing tags fail closed. The earlier API layer test
+using the already-installed runtime is not accepted as this build or smoke.
+
+The single tested-safe alternative is an owner-supplied, checksummed Docker
+archive from an authorized Docker Hub network containing the exact
+`linux/amd64` parents `python:3.13.9-slim-bookworm`, `node:22.14-alpine`, and
+`nginx:1.27-alpine`, plus a manifest of canonical tags, RepoDigests, image
+config IDs, and architecture. No credentials should be included. Suggested
+local path:
+`artifacts/live-acceptance/vps-release-prep-2026-11-17/rahgard-pinned-build-bases-linux-amd64.tar`.
+After verification and SSH transfer, `docker load` will only add the base
+images to the VPS image store; it will not change a running service. Both
+target images must then be built from the unchanged `d5d984…` release and
+tested in isolation before any deployment authorization.

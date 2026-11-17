@@ -2,7 +2,11 @@
 
 ## Decision
 
-**PREPARATION: PREPARED WITH A TECHNICAL IMAGE-BUILD BLOCKER.**
+**BLOCKED — do not deploy.** The previous backup and migration rehearsals
+remain valid, but this follow-up could not produce the normal API/Web image
+pair because neither available Docker host could reach an approved Docker
+Hub image source. No third-party mirror or runtime-derived image is accepted
+as a substitute.
 
 **LIVE ROLLOUT: NOT AUTHORIZED / NOT PERFORMED.** This report is not a GO for
 production deployment. The current app, database, Nginx, DNS, secrets, and
@@ -129,6 +133,61 @@ available locally, then build both target images and repeat the package/image
 identity checks. Until that passes, the source package is staged but the
 deployment artifact set is not fully ready to launch.
 
+## Follow-up blocker resolution attempt — 2026-11-17
+
+The prepared source SHA remains
+`d5d9847373b20087a8a866449c6550d306f45b63`; it was not changed. Required
+Dockerfile parents are `python:3.13.9-slim-bookworm` (API build/runtime),
+`node:22.14-alpine` (Web build), and `nginx:1.27-alpine` (Web runtime).
+
+Safe registry diagnostics:
+
+- Windows Docker Desktop 4.92 / Engine 29.8, Buildx platform `linux/amd64`;
+  registry mirrors list was empty. The Docker client uses a credential helper,
+  but its configuration has no explicit registry auth entries or
+  per-registry helpers. A non-printing credential-helper lookup for Docker Hub
+  returned not available. Proxy configuration is present in Docker Desktop;
+  its value was not printed.
+- A direct Windows request to `registry-1.docker.io` timed out after 12
+  seconds. A bounded `docker pull python:3.13.9-slim-bookworm` produced no
+  image and was interrupted after 35 seconds; the base image remains absent.
+- VPS Docker Engine reports `linux/amd64`, no registry mirrors, no configured
+  HTTP/HTTPS proxy, and no operator-user Docker client credential config. The
+  unauthenticated registry-root probe returned HTTP 403 once and timed out on
+  retry. The previous BuildKit request for the pinned Python manifest returned
+  HTTP 403. This is a registry egress/access failure before image metadata
+  could be obtained; no conclusion is made that a tag is missing.
+- Target tags `rahgard-api:d5d9847373b20087a8a866449c6550d306f45b63` and
+  `rahgard-web:d5d9847373b20087a8a866449c6550d306f45b63` are absent locally
+  and on the VPS. `deploy.sh`'s `RAHGARD_BUILD_IMAGES=false` path requires both
+  exact tags (and the expected PG image) before starting anything, so that
+  no-build path cannot currently pass. Base-image RepoDigests and content IDs
+  could not be established and are **unverified**.
+
+No registry credential was added, no daemon configuration changed, no image
+was loaded, and no running container/service or database was touched. The
+earlier temporary API source-layer rehearsal remains compatibility evidence
+only; it does **not** satisfy the normal target-image requirement. The target
+web image and an isolated browser/static-asset smoke remain untested.
+
+### One concrete approved alternate transport
+
+Have an owner-authorized machine/network with legitimate Docker Hub access
+pull the three exact canonical tags above for `linux/amd64`, then create a
+checksummed Docker archive containing those tags and a small manifest with
+each tag, `RepoDigests`, image config `Id`, and `Os/Architecture`. Place only
+that archive and manifest (no credentials) at:
+
+`C:\Projects\Ai_Tourism\artifacts\live-acceptance\vps-release-prep-2026-11-17\rahgard-pinned-build-bases-linux-amd64.tar`
+
+with a `.sha256` sidecar. I can verify the archive digest, canonical image
+names, RepoDigests, config IDs and architecture, transfer it through the
+existing authorized SSH channel, load the non-running base images, then build
+the exact API and Web tags from the already-verified `d5d984…` release.
+`docker load` changes only the image store; it does not restart or replace a
+service. Both target images will still need isolated smoke and no-build
+identity checks before a separate deployment approval.
+
 ## Rollback and release procedure
 
 The database upgrade script is fail-closed and requires the exact current SHA,
@@ -186,8 +245,10 @@ and [`evidence/vps-preparation-2026-11-17.json`](evidence/vps-preparation-2026-1
 ## Explicit owner decision gate
 
 No deploy, live migration, content publication, app restart, or public change
-was performed. Before proceeding, the owner must (1) clear the pinned-image
-registry access/build blocker and (2) separately provide explicit approval for
-the exact SHA, migrations 0018–0021, short expected restart, and the backup
-proof above. Public content publication remains a distinct approval. Until
-then, retain the current live release and database unchanged.
+was performed. First provide the approved offline base-image bundle described
+above (the currently tested path available in this environment). After target
+images and isolated smoke pass, the owner must separately provide explicit
+approval for app SHA `d5d9847373b20087a8a866449c6550d306f45b63`, migrations
+0018–0021, the short expected restart, and the verified backup proof above.
+Public content publication remains a distinct approval. Until then, retain
+the current live release and database unchanged.

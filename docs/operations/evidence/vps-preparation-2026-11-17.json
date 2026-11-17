@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "prepared_at_utc": "2026-11-17T08:34:43Z",
+  "prepared_at_utc": "2026-11-17T09:11:55Z",
   "branch": "feat/rahgard-national-catalogue-execution-handoff",
-  "status": "prepared_with_image_build_blocker_rollout_not_authorized",
+  "status": "blocked_image_sources_unavailable_rollout_not_authorized",
   "release": {
     "source_sha": "d5d9847373b20087a8a866449c6550d306f45b63",
     "inactive_release_directory": "/opt/rahgard-staging/releases/d5d9847373b20087a8a866449c6550d306f45b63",
@@ -10,7 +10,11 @@
     "source_archive_bytes": 2960848,
     "source_archive_entries": 566,
     "compose_sha256_active_and_target": "60bc1c55d70d42d0388cf806f95152e966bd9e3aadac1c02decaf3c78a1858e2",
-    "target_runtime_images_built": false
+    "target_runtime_images_built": false,
+    "target_api_image_present_vps": false,
+    "target_web_image_present_vps": false,
+    "target_api_image_present_windows": false,
+    "target_web_image_present_windows": false
   },
   "live_before_and_after": {
     "release_sha": "5e2664fb51e18f52549aa37a8b5793e12ace09b2",
@@ -113,10 +117,45 @@
     "sms_adapter": "disabled",
     "sms_live_tested": false
   },
+  "registry_diagnostics": {
+    "required_base_tags": {
+      "python:3.13.9-slim-bookworm": {"windows_present": false, "vps_present": false, "repo_digest_verified": false},
+      "node:22.14-alpine": {"windows_present": false, "vps_present": false, "repo_digest_verified": false},
+      "nginx:1.27-alpine": {"windows_present": false, "vps_present": false, "repo_digest_verified": false}
+    },
+    "windows_docker": {
+      "desktop_version": "4.92.0",
+      "engine_version": "29.8.0",
+      "architecture": "linux/amd64",
+      "registry_mirrors": [],
+      "proxy_configured": true,
+      "credential_helper_configured": true,
+      "explicit_auth_registry_entries": 0,
+      "docker_hub_credential_lookup": "not_available",
+      "direct_registry_probe": "timeout_after_12_seconds",
+      "bounded_pull": "no_image_after_35_seconds; interrupted"
+    },
+    "vps_docker": {
+      "architecture": "linux/amd64",
+      "registry_mirrors": [],
+      "proxy_configured": false,
+      "operator_client_config_present": false,
+      "registry_root_probe": ["http_403", "timeout_on_retry"],
+      "buildkit_manifest_request": "http_403"
+    },
+    "diagnosis": "registry egress/access unavailable; requested image tag availability cannot be concluded",
+    "third_party_mirror_used": false,
+    "registry_configuration_changed": false
+  },
+  "approved_alternate_transport": {
+    "required_owner_input": "checksummed docker-save archive from an authorized Docker Hub network containing the three required linux/amd64 base tags and a manifest with RepoDigests, config IDs, and platform",
+    "suggested_path": "artifacts/live-acceptance/vps-release-prep-2026-11-17/rahgard-pinned-build-bases-linux-amd64.tar",
+    "credentials_included": false
+  },
   "blockers": [
     {
-      "kind": "image_build",
-      "detail": "Docker Hub returned HTTP 403 on the pinned python:3.13.9-slim-bookworm manifest HEAD request. Candidate source/API startup was tested using a temporary layer on the already-installed runtime after byte-identical uv.lock and entrypoint checks; standard API and web release images were not produced."
+      "kind": "image_source",
+      "detail": "Windows registry probes timed out; VPS probes returned HTTP 403 and then timed out. All three required canonical base images and both target-tagged images are absent on both hosts. Base RepoDigests could not be established. An owner-authorized offline Docker archive is required."
     },
     {
       "kind": "owner_approval",
