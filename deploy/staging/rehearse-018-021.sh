@@ -8,6 +8,8 @@ root=/opt/rahgard-staging
 release_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 database=rahgard_pilot_vps_staging
 owner=ai_tourism_owner
+current_sha=$(cat "$root/current/RELEASE_COMMIT")
+[[ "$current_sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'Current managed release identity is invalid.' >&2; exit 2; }
 backup_name="${1:-}"
 [[ "$backup_name" =~ ^rahgard-[A-Za-z0-9_.-]+\.dump\.enc$ ]] || {
   echo 'Usage: rehearse-018-021.sh <encrypted-backup-basename>' >&2; exit 2;
