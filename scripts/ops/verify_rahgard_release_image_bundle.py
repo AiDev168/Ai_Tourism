@@ -99,7 +99,14 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
                 raise ValueError("Image config is missing from Docker archive")
             config_bytes = config_member.read()
             config_id = "sha256:" + hashlib.sha256(config_bytes).hexdigest()
-            if Path(config_name).name != config_id.removeprefix("sha256:") + ".json":
+            digest = config_id.removeprefix("sha256:")
+            # Docker archive manifests use either legacy <sha256>.json names or
+            # content-addressed blobs/sha256/<sha256> names. Validate both the
+            # exact path shape and the actual config bytes; never trust a name
+            # without hashing the underlying content.
+            legacy_config_path = digest + ".json"
+            content_addressed_path = f"blobs/sha256/{digest}"
+            if config_name not in (legacy_config_path, content_addressed_path):
                 raise ValueError("Image config digest does not match its Docker archive filename")
             config = json.loads(config_bytes)
             env = ((config.get("config") or {}).get("Env") or [])
