@@ -160,9 +160,10 @@ unchanged, the new candidate/partner/publication data stays empty, and the
 container is removed. No production service is stopped or restarted.
 
 `upgrade-018-021.sh` is the future, separately approved live-schema command.
-It refuses to run without the expected current SHA, a named authenticated
-backup, an off-host-and-isolated-restore attestation, and the explicit
-`OWNER_APPROVED_APPLY_018_021` argument. It rechecks the exact migration prefix,
+It refuses to run without the expected current SHA, the explicitly approved
+target release SHA, a named authenticated backup, an off-host-and-isolated-
+restore attestation, and the explicit `OWNER_APPROVED_APPLY_018_021` argument.
+It rechecks the exact migration prefix,
 database marker, PostgreSQL image/volume and backup HMAC/SHA/decryptability
 before each migration. It applies DDL only; it does not deploy or restart the
 API/PWA. The owner must separately authorize application deployment after the

@@ -9,21 +9,23 @@ release_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 database=rahgard_pilot_vps_staging
 owner=ai_tourism_owner
 expected_current_sha="${1:-}"
-backup_name="${2:-}"
-backup_gate="${3:-}"
-approval_gate="${4:-}"
+approved_target_sha="${2:-}"
+backup_name="${3:-}"
+backup_gate="${4:-}"
+approval_gate="${5:-}"
 
-[[ "$expected_current_sha" =~ ^[0-9a-f]{40}$ && "$backup_name" =~ ^rahgard-[A-Za-z0-9_.-]+\.dump\.enc$ \
+[[ "$expected_current_sha" =~ ^[0-9a-f]{40}$ && "$approved_target_sha" =~ ^[0-9a-f]{40}$ \
+  && "$backup_name" =~ ^rahgard-[A-Za-z0-9_.-]+\.dump\.enc$ \
   && "$backup_gate" == OFFHOST_AND_ISOLATED_RESTORE_VERIFIED \
   && "$approval_gate" == OWNER_APPROVED_APPLY_018_021 ]] || {
-  echo 'Usage: upgrade-018-021.sh <expected-current-release-sha> <verified-backup-basename> OFFHOST_AND_ISOLATED_RESTORE_VERIFIED OWNER_APPROVED_APPLY_018_021' >&2
+  echo 'Usage: upgrade-018-021.sh <expected-current-release-sha> <explicitly-approved-target-release-sha> <verified-backup-basename> OFFHOST_AND_ISOLATED_RESTORE_VERIFIED OWNER_APPROVED_APPLY_018_021' >&2
   echo 'The last two arguments are explicit human approval attestations; this script never deploys or restarts app services.' >&2
   exit 2
 }
 [[ -s "$root/.env" && -s "$root/state/database-marker" && -f "$root/state/database-initialization-complete" ]] || { echo 'Protected pilot state is incomplete.' >&2; exit 2; }
 [[ -L "$root/current" && "$(cat "$root/current/RELEASE_COMMIT")" == "$expected_current_sha" ]] || { echo 'Current release changed since preflight; refusing migrations.' >&2; exit 2; }
 target_sha=$(cat "$release_dir/RELEASE_COMMIT" 2>/dev/null || git -C "$release_dir" rev-parse HEAD 2>/dev/null || true)
-[[ "$target_sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'Target source release SHA is unavailable.' >&2; exit 2; }
+[[ "$target_sha" =~ ^[0-9a-f]{40}$ && "$target_sha" == "$approved_target_sha" ]] || { echo 'Target source release SHA is unavailable or differs from explicit approval.' >&2; exit 2; }
 compose=(docker compose --env-file "$root/.env" -f "$root/current/deploy/staging/compose.yaml")
 db_id=$("${compose[@]}" ps -q db)
 [[ -n "$db_id" && "$(docker inspect -f '{{.State.Running}}' "$db_id")" == true \
