@@ -153,9 +153,11 @@ policy_count=$(db_scalar "SELECT count(*) FROM pg_policies WHERE schemaname IN (
 echo 'REHEARSAL_PASS migrations=20 critical_counts_unchanged=true candidates=0 partner_rows=0 publications=0'
 echo "SECURITY_REHEARSAL_PASS protected_rls_tables=$rls_count policies=$policy_count app_role_bypass=false"
 
-# Build and start the exact candidate API against the restored database in the
-# same network namespace. Networking is disabled by the PG target, so this
-# check cannot reach SMS, Chat, RAG, or any external service.
+# Start the candidate API source against the restored database in the same
+# network namespace. The VPS's authorized Docker Hub request returned 403 for
+# the pinned Python base image, so build the source layer from the running API
+# image instead. The dependency lock and entrypoint must match; this exercises
+# the exact candidate backend source without an external image pull.
 release_sha=$(cat "$release_dir/RELEASE_COMMIT")
 suffix="${release_sha:0:8}-$$"
 api_image="rahgard-restore-api:$suffix"
@@ -163,7 +165,24 @@ api_name="rahgard-restore-app-$suffix"
 [[ "$suffix" =~ ^[0-9a-f]{8}-[0-9]+$ && "$api_name" =~ ^rahgard-restore-app-[0-9a-f]{8}-[0-9]+$ ]] || { echo 'Invalid isolated API test identity.' >&2; exit 2; }
 [[ -z "$(docker ps -aq --filter "name=^/${api_name}$")" ]] || { echo 'Isolated API test container name already exists.' >&2; exit 2; }
 [[ -z "$(docker image ls -q --filter "reference=$api_image")" ]] || { echo 'Isolated API test image tag already exists.' >&2; exit 2; }
-docker build --pull=false -f "$release_dir/deploy/staging/Dockerfile.api" -t "$api_image" "$release_dir" >/dev/null
+compose=(docker compose --env-file "$root/.env" -f "$root/current/deploy/staging/compose.yaml")
+live_api_id=$("${compose[@]}" ps -q api)
+[[ -n "$live_api_id" && "$(docker inspect -f '{{.State.Running}}' "$live_api_id")" == true ]] || { echo 'Cannot identify the running managed API runtime.' >&2; exit 3; }
+runtime_image_id=$(docker inspect -f '{{.Image}}' "$live_api_id")
+[[ "$runtime_image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Managed API runtime image identity is invalid.' >&2; exit 3; }
+cmp -s "$root/current/uv.lock" "$release_dir/uv.lock" || { echo 'Candidate dependency lock differs from the active runtime; refusing a derived API rehearsal.' >&2; exit 3; }
+cmp -s "$root/current/deploy/staging/api-entrypoint.sh" "$release_dir/deploy/staging/api-entrypoint.sh" || { echo 'Candidate entrypoint differs from the active runtime; refusing a derived API rehearsal.' >&2; exit 3; }
+cat > "$plain_dir/Dockerfile.api.restore" <<EOF
+FROM $runtime_image_id
+COPY --chown=rahgard:rahgard backend/app /app/backend/app
+COPY --chown=rahgard:rahgard backend/scripts /app/backend/scripts
+COPY --chown=rahgard:rahgard scripts/rahgard_archive_preflight.py /app/backend/scripts/rahgard_archive_preflight.py
+USER rahgard
+WORKDIR /app/backend
+ENTRYPOINT ["/usr/local/bin/rahgard-entrypoint"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+EOF
+docker build --network=none --pull=false -f "$plain_dir/Dockerfile.api.restore" -t "$api_image" "$release_dir" >/dev/null
 api_image_created=true
 docker run -d --rm --name "$api_name" --network "container:$isolated" \
   --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m --tmpfs /run/secrets:rw,noexec,nosuid,size=1m \
@@ -187,5 +206,5 @@ done
 [[ "$api_ready" == true ]] || { echo 'Candidate API did not become ready against the restored, migrated database.' >&2; exit 3; }
 api_catalogue=$(docker exec "$api_name" python -c 'import json,urllib.request; r=urllib.request.urlopen("http://127.0.0.1:8000/api/v1/catalog/destinations",timeout=5); print(json.load(r)["count"])')
 [[ "$api_catalogue" == "$source_count" ]] || { echo 'Candidate API catalogue count differs from the restored database view.' >&2; exit 3; }
-echo "API_REHEARSAL_PASS release=$release_sha health=ready catalogue_count=$api_catalogue auth=disabled chat=disabled rag=disabled sms=disabled network=none"
+echo "API_REHEARSAL_PASS release=$release_sha runtime_image_id=$runtime_image_id lock_match=true health=ready catalogue_count=$api_catalogue auth=disabled chat=disabled rag=disabled sms=disabled network=none"
 echo 'The isolated container and plaintext dump will now be removed; the encrypted backup remains retained.'

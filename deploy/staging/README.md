@@ -157,13 +157,18 @@ no published ports or persistent mounts, and a `tmpfs` PGDATA. It verifies the
 restored 0017 ledger and privacy-safe critical row counts, applies migrations
 0018–0021 only to that disposable copy, and confirms all retained counts are
 unchanged, the new candidate/partner/publication data stays empty, and the
-container is removed. It then builds the exact candidate API image and starts
-it in the restored database container's network namespace, which remains
+container is removed. It then builds an isolated API image from the candidate
+release's exact backend source, using the already-running API image as its base
+only when the dependency lock and entrypoint are byte-identical. The API starts
+in the restored database container's network namespace, which remains
 network-isolated. Test-only secrets live in that API container's tmpfs; auth,
 Chat, RAG, and SMS are disabled. Readiness and the ordinary catalogue response
 are checked against the restored, migrated data, then only the uniquely labeled
 test API container/image is removed. No production service is stopped or
-restarted.
+restarted. The base image is reused because Docker Hub returned HTTP 403 for the
+pinned Python build base during this preparation run; the normal Dockerfile
+image build remains a deployment prerequisite if that base cannot be pulled
+from the approved registry/cache.
 
 `upgrade-018-021.sh` is the future, separately approved live-schema command.
 It refuses to run without the expected current SHA, the explicitly approved
