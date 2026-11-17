@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "prepared_at": "2026-11-17",
+  "status": "blocked_pending_default_branch_workflow_and_hosted_run",
+  "repository": "AiDev168/Ai_Tourism",
+  "feature_branch": "feat/rahgard-national-catalogue-execution-handoff",
+  "prepared_source_sha": "d5d9847373b20087a8a866449c6550d306f45b63",
+  "live_vps_sha_must_remain_unchanged": "5e2664fb51e18f52549aa37a8b5793e12ace09b2",
+  "target_platform": "linux/amd64",
+  "target_images": [
+    "rahgard-api:d5d9847373b20087a8a866449c6550d306f45b63",
+    "rahgard-web:d5d9847373b20087a8a866449c6550d306f45b63"
+  ],
+  "planned_artifact_files": [
+    "rahgard-images-linux-amd64.tar",
+    "release-manifest.json",
+    "SHA256SUMS.txt"
+  ],
+  "source_archive_in_artifact": false,
+  "pinned_parent_tags": [
+    "python:3.13.9-slim-bookworm",
+    "node:22.14-alpine",
+    "nginx:1.27-alpine"
+  ],
+  "workflow": ".github/workflows/rahgard-release-image-build.yml",
+  "trigger": "workflow_dispatch",
+  "default_branch_sha_checked_read_only": "c912000bccaee982a98d58f6810ad74431945ed0",
+  "workflow_present_on_default_branch": false,
+  "workflow_default_branch_prerequisite": "The workflow file must first exist on default branch main; this change has not been merged or dispatched.",
+  "hosted_build_attempted": false,
+  "base_repo_digests": null,
+  "api_image_id": null,
+  "web_image_id": null,
+  "docker_archive_sha256": null,
+  "artifact_sha256": null,
+  "transfer_or_vps_image_load_performed": false,
+  "live_application_database_or_services_touched": false,
+  "production_migrations_or_deployment_performed": false,
+  "registry_access_from_windows_or_vps_retried": false
+}

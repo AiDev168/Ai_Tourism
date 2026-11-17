@@ -252,3 +252,35 @@ approval for app SHA `d5d9847373b20087a8a866449c6550d306f45b63`, migrations
 0018–0021, the short expected restart, and the verified backup proof above.
 Public content publication remains a distinct approval. Until then, retain
 the current live release and database unchanged.
+
+## 2026-11-17 hosted-build follow-up
+
+The direct Windows/VPS registry paths are not retried. A one-time manual
+GitHub-hosted build workflow and a strict post-transfer verifier have been
+prepared on the feature branch. See
+[`RAHGARD_HOSTED_IMAGE_BUILD_HANDOFF.md`](RAHGARD_HOSTED_IMAGE_BUILD_HANDOFF.md).
+The workflow checks out only source SHA
+`d5d9847373b20087a8a866449c6550d306f45b63`, pulls the three exact Dockerfile
+parent tags on an `ubuntu-24.04` GitHub-hosted runner, records their
+`RepoDigests`, builds both exact `linux/amd64` tags, scans the Docker archive
+for secret files/secret-named runtime variables, and uploads a seven-day
+artifact with SHA-256 checksums.
+
+**Status remains BLOCKED, not READY:** the workflow has not been dispatched,
+so no API/Web image IDs, parent RepoDigests, archive checksum, or hosted
+registry/package access result is claimed. The repository currently has no
+workflow file on its default branch `main`; GitHub requires
+`workflow_dispatch` files to exist on that branch before the manual run can
+be triggered. The owner must review and merge/place this tooling on `main`
+through the normal approval process, then run the exact SHA input. No merge,
+default-branch change, image build, image transfer, VPS image load, migration,
+or live service/database operation was performed here.
+
+Once the artifact exists, follow the handoff's checksum and transfer steps.
+The provided strict runner validates the archive before `docker load`, checks
+loaded image IDs/revision/platform, then extends the existing authenticated
+backup rehearsal to use the exact hosted API and Web images against a
+disposable tmpfs PostgreSQL restore clone. It verifies API readiness/catalogue,
+the Web shell and hashed assets, and the Web reverse proxy. It never publishes
+ports or touches the persistent PostgreSQL volume. Deployment remains a
+separate explicit owner decision.

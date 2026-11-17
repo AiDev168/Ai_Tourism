@@ -5,11 +5,25 @@
 set -Eeuo pipefail
 umask 077
 root=/opt/rahgard-staging
-release_dir="$(cd "$(dirname "$0")/../.." && pwd)"
+script_release_dir="$(cd "$(dirname "$0")/../.." && pwd)"
+release_dir="${RAHGARD_REHEARSAL_RELEASE_DIR:-$script_release_dir}"
 database=rahgard_pilot_vps_staging
 owner=ai_tourism_owner
 current_sha=$(cat "$root/current/RELEASE_COMMIT")
 [[ "$current_sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'Current managed release identity is invalid.' >&2; exit 2; }
+release_sha=$(cat "$release_dir/RELEASE_COMMIT")
+[[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'Rehearsal source release identity is invalid.' >&2; exit 2; }
+require_release_images="${RAHGARD_REQUIRE_RELEASE_IMAGES:-false}"
+candidate_api_image="${RAHGARD_REHEARSAL_API_IMAGE:-}"
+candidate_web_image="${RAHGARD_REHEARSAL_WEB_IMAGE:-}"
+[[ "$require_release_images" == true || "$require_release_images" == false ]] || { echo 'RAHGARD_REQUIRE_RELEASE_IMAGES must be true or false.' >&2; exit 2; }
+if [[ "$require_release_images" == true ]]; then
+  [[ "$release_sha" == d5d9847373b20087a8a866449c6550d306f45b63 \
+    && "$candidate_api_image" == "rahgard-api:$release_sha" \
+    && "$candidate_web_image" == "rahgard-web:$release_sha" ]] || {
+    echo 'Required release-image mode needs both exact API and Web tags.' >&2; exit 2;
+  }
+fi
 backup_name="${1:-}"
 [[ "$backup_name" =~ ^rahgard-[A-Za-z0-9_.-]+\.dump\.enc$ ]] || {
   echo 'Usage: rehearse-018-021.sh <encrypted-backup-basename>' >&2; exit 2;
@@ -48,10 +62,15 @@ isolated="rahgard-restore-$(date -u +%Y%m%d%H%M%S)-$$"
 image=rahgard-postgres:17-postgis36-vector087
 api_image=""
 api_name=""
+web_name=""
 api_helper=""
 api_image_created=false
 cleanup() {
   status=$?
+  if [[ -n "$web_name" ]] && docker inspect "$web_name" >/dev/null 2>&1; then
+    labels=$(docker inspect -f '{{index .Config.Labels "rahgard.restore.target"}}|{{index .Config.Labels "rahgard.environment"}}' "$web_name" 2>/dev/null || true)
+    if [[ "$labels" == 'isolated|restore-test' ]]; then docker rm -f "$web_name" >/dev/null 2>&1 || true; fi
+  fi
   if [[ -n "$api_helper" ]] && docker inspect "$api_helper" >/dev/null 2>&1; then
     labels=$(docker inspect -f '{{index .Config.Labels "rahgard.restore.target"}}|{{index .Config.Labels "rahgard.environment"}}' "$api_helper" 2>/dev/null || true)
     if [[ "$labels" == 'isolated|restore-test' ]]; then docker rm -f "$api_helper" >/dev/null 2>&1 || true; fi
@@ -160,18 +179,21 @@ policy_count=$(db_scalar "SELECT count(*) FROM pg_policies WHERE schemaname IN (
 echo 'REHEARSAL_PASS migrations=20 critical_counts_unchanged=true candidates=0 partner_rows=0 publications=0'
 echo "SECURITY_REHEARSAL_PASS protected_rls_tables=$rls_count policies=$policy_count app_role_bypass=false"
 
-# Start the candidate API source against the restored database in the same
-# network namespace. The VPS's authorized Docker Hub request returned 403 for
-# the pinned Python base image, so create a source layer from the running API
-# image instead. The dependency lock and entrypoint must match; this exercises
-# the exact candidate backend source without an external image pull.
-release_sha=$(cat "$release_dir/RELEASE_COMMIT")
+# Start the exact hosted API image against the restored, migrated database
+# when required by the image-bundle acceptance. The previous source-layer
+# path remains available only for the historical migration rehearsal mode.
 suffix="${release_sha:0:8}-$$"
-api_image="rahgard-restore-api:$suffix"
+api_image="$candidate_api_image"
+if [[ -z "$api_image" ]]; then
+  [[ "$require_release_images" == false ]] || { echo 'Refusing to substitute a derived API image for the required hosted image.' >&2; exit 3; }
+  api_image="rahgard-restore-api:$suffix"
+fi
 api_name="rahgard-restore-app-$suffix"
 [[ "$suffix" =~ ^[0-9a-f]{8}-[0-9]+$ && "$api_name" =~ ^rahgard-restore-app-[0-9a-f]{8}-[0-9]+$ ]] || { echo 'Invalid isolated API test identity.' >&2; exit 2; }
 [[ -z "$(docker ps -aq --filter "name=^/${api_name}$")" ]] || { echo 'Isolated API test container name already exists.' >&2; exit 2; }
-[[ -z "$(docker image ls -q --filter "reference=$api_image")" ]] || { echo 'Isolated API test image tag already exists.' >&2; exit 2; }
+if [[ -z "$candidate_api_image" ]]; then
+  [[ -z "$(docker image ls -q --filter "reference=$api_image")" ]] || { echo 'Isolated derived API image tag already exists.' >&2; exit 2; }
+fi
 compose=(docker compose --env-file "$root/.env" -f "$root/current/deploy/staging/compose.yaml")
 live_api_id=$("${compose[@]}" ps -q api)
 [[ -n "$live_api_id" && "$(docker inspect -f '{{.State.Running}}' "$live_api_id")" == true ]] || { echo 'Cannot identify the running managed API runtime.' >&2; exit 3; }
@@ -180,21 +202,31 @@ runtime_image_id=$(docker inspect -f '{{.Image}}' "$live_api_id")
 runtime_image=$(docker inspect -f '{{.Config.Image}}' "$live_api_id")
 [[ "$runtime_image" =~ ^rahgard-api:[0-9a-f]{40}$ ]] || { echo 'Managed API runtime tag is not the expected immutable release tag.' >&2; exit 3; }
 docker image inspect "$runtime_image" >/dev/null
-cmp -s "$root/current/uv.lock" "$release_dir/uv.lock" || { echo 'Candidate dependency lock differs from the active runtime; refusing a derived API rehearsal.' >&2; exit 3; }
-cmp -s "$root/current/deploy/staging/api-entrypoint.sh" "$release_dir/deploy/staging/api-entrypoint.sh" || { echo 'Candidate entrypoint differs from the active runtime; refusing a derived API rehearsal.' >&2; exit 3; }
-api_helper="rahgard-restore-layer-${release_sha:0:8}-$$"
-[[ "$api_helper" =~ ^rahgard-restore-layer-[0-9a-f]{8}-[0-9]+$ ]] || { echo 'Invalid candidate-layer helper identity.' >&2; exit 2; }
-[[ -z "$(docker ps -aq --filter "name=^/${api_helper}$")" ]] || { echo 'Candidate-layer helper container already exists.' >&2; exit 2; }
-docker create --name "$api_helper" --network none \
-  --label rahgard.restore.target=isolated --label rahgard.environment=restore-test \
-  "$runtime_image" /bin/sh -c 'while :; do sleep 3600; done' >/dev/null
-docker cp "$release_dir/backend/app/." "$api_helper:/app/backend/app/"
-docker cp "$release_dir/backend/scripts/." "$api_helper:/app/backend/scripts/"
-docker cp "$release_dir/scripts/rahgard_archive_preflight.py" "$api_helper:/app/backend/scripts/rahgard_archive_preflight.py"
-docker commit "$api_helper" "$api_image" >/dev/null
-api_image_created=true
-docker rm "$api_helper" >/dev/null
-api_helper=""
+if [[ -n "$candidate_api_image" ]]; then
+  read -r loaded_api_id loaded_api_os loaded_api_arch loaded_api_revision < <(
+    docker image inspect --format '{{.Id}} {{.Os}} {{.Architecture}} {{index .Config.Labels "org.opencontainers.image.revision"}}' "$api_image"
+  )
+  [[ "$loaded_api_id" =~ ^sha256:[0-9a-f]{64}$ && "$loaded_api_os" == linux && "$loaded_api_arch" == amd64 && "$loaded_api_revision" == "$release_sha" ]] || {
+    echo 'Loaded API image identity, platform or source label is invalid.' >&2; exit 3;
+  }
+else
+  cmp -s "$root/current/uv.lock" "$release_dir/uv.lock" || { echo 'Candidate dependency lock differs from the active runtime; refusing a derived API rehearsal.' >&2; exit 3; }
+  cmp -s "$root/current/deploy/staging/api-entrypoint.sh" "$release_dir/deploy/staging/api-entrypoint.sh" || { echo 'Candidate entrypoint differs from the active runtime; refusing a derived API rehearsal.' >&2; exit 3; }
+  api_helper="rahgard-restore-layer-${release_sha:0:8}-$$"
+  [[ "$api_helper" =~ ^rahgard-restore-layer-[0-9a-f]{8}-[0-9]+$ ]] || { echo 'Invalid candidate-layer helper identity.' >&2; exit 2; }
+  [[ -z "$(docker ps -aq --filter "name=^/${api_helper}$")" ]] || { echo 'Candidate-layer helper already exists.' >&2; exit 2; }
+  docker create --name "$api_helper" --network none \
+    --label rahgard.restore.target=isolated --label rahgard.environment=restore-test \
+    "$runtime_image" /bin/sh -c 'while :; do sleep 3600; done' >/dev/null
+  docker cp "$release_dir/backend/app/." "$api_helper:/app/backend/app/"
+  docker cp "$release_dir/backend/scripts/." "$api_helper:/app/backend/scripts/"
+  docker cp "$release_dir/scripts/rahgard_archive_preflight.py" "$api_helper:/app/backend/scripts/rahgard_archive_preflight.py"
+  docker commit "$api_helper" "$api_image" >/dev/null
+  api_image_created=true
+  loaded_api_id=$(docker image inspect --format '{{.Id}}' "$api_image")
+  docker rm "$api_helper" >/dev/null
+  api_helper=""
+fi
 docker run -d --rm --name "$api_name" --network "container:$isolated" \
   --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m --tmpfs /run/secrets:rw,noexec,nosuid,size=1m \
   --security-opt no-new-privileges:true --cap-drop ALL \
@@ -217,8 +249,45 @@ done
 [[ "$api_ready" == true ]] || { echo 'Candidate API did not become ready against the restored, migrated database.' >&2; exit 3; }
 api_catalogue=$(docker exec "$api_name" python -c 'import json,urllib.request; r=urllib.request.urlopen("http://127.0.0.1:8000/api/v1/catalog/destinations",timeout=5); print(json.load(r)["count"])')
 [[ "$api_catalogue" == "$source_count" ]] || { echo 'Candidate API catalogue count differs from the restored database view.' >&2; exit 3; }
-echo "API_REHEARSAL_PASS release=$release_sha runtime_image_id=$runtime_image_id runtime_tag=$runtime_image lock_match=true health=ready catalogue_count=$api_catalogue auth=disabled chat=disabled rag=disabled sms=disabled network=none"
+echo "API_REHEARSAL_PASS release=$release_sha tested_image_id=$loaded_api_id tested_image_tag=$api_image rollback_image_id=$runtime_image_id rollback_tag=$runtime_image health=ready catalogue_count=$api_catalogue auth=disabled chat=disabled rag=disabled sms=disabled network=none"
+if [[ -n "$candidate_web_image" ]]; then
+  web_name="rahgard-restore-web-$suffix"
+  [[ "$web_name" =~ ^rahgard-restore-web-[0-9a-f]{8}-[0-9]+$ ]] || { echo 'Invalid isolated Web test identity.' >&2; exit 2; }
+  [[ -z "$(docker ps -aq --filter "name=^/${web_name}$")" ]] || { echo 'Isolated Web test container already exists.' >&2; exit 2; }
+  read -r loaded_web_id loaded_web_os loaded_web_arch loaded_web_revision < <(
+    docker image inspect --format '{{.Id}} {{.Os}} {{.Architecture}} {{index .Config.Labels "org.opencontainers.image.revision"}}' "$candidate_web_image"
+  )
+  [[ "$loaded_web_id" =~ ^sha256:[0-9a-f]{64}$ && "$loaded_web_os" == linux && "$loaded_web_arch" == amd64 && "$loaded_web_revision" == "$release_sha" ]] || {
+    echo 'Loaded Web image identity, platform or source label is invalid.' >&2; exit 3;
+  }
+  docker run -d --rm --name "$web_name" --network "container:$api_name" --add-host api:127.0.0.1 \
+    --read-only --tmpfs /var/cache/nginx:rw,noexec,nosuid,size=32m --tmpfs /var/run:rw,noexec,nosuid,size=4m \
+    --security-opt no-new-privileges:true --cap-drop ALL \
+    --label rahgard.restore.target=isolated --label rahgard.environment=restore-test \
+    --entrypoint nginx "$candidate_web_image" -g 'daemon off;' >/dev/null
+  web_ready=false
+  for _ in $(seq 1 30); do
+    if docker exec "$api_name" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/",timeout=2)' >/dev/null 2>&1; then web_ready=true; break; fi
+    sleep 1
+  done
+  [[ "$web_ready" == true ]] || { echo 'Built Web image did not serve the static application in the isolated namespace.' >&2; exit 3; }
+  web_html=$(docker exec "$api_name" python -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:8080/",timeout=4).read().decode())')
+  [[ "$web_html" == *'<div id="root">'* ]] || { echo 'Built Web image did not return the application shell.' >&2; exit 3; }
+  web_assets=$(grep -oE '/assets/[^" ]+\.(js|css)' <<<"$web_html" | sort -u)
+  [[ -n "$web_assets" ]] || { echo 'Built Web image did not reference hashed application assets.' >&2; exit 3; }
+  while IFS= read -r asset; do
+    [[ -n "$asset" ]] || continue
+    docker exec "$api_name" python -c 'import sys,urllib.request; urllib.request.urlopen("http://127.0.0.1:8080"+sys.argv[1],timeout=4).read(1)' "$asset" >/dev/null
+  done <<<"$web_assets"
+  proxy_body=$(docker exec "$api_name" python -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:8080/api/v1/catalog/destinations",timeout=8).read().decode())')
+  proxy_count=$(printf '%s' "$proxy_body" | docker exec -i "$api_name" python -c 'import json,sys; print(json.load(sys.stdin)["count"])')
+  [[ "$proxy_count" == "$source_count" ]] || { echo 'Built Web reverse proxy catalogue count differs from the restored database.' >&2; exit 3; }
+  echo "WEB_REHEARSAL_PASS image_id=$loaded_web_id static_shell=ready hashed_assets=$(wc -l <<<"$web_assets" | tr -d ' ') reverse_proxy_catalogue_count=$proxy_count network=none"
+  docker rm -f "$web_name" >/dev/null
+  web_name=""
+fi
 docker rm -f "$api_name" >/dev/null
+api_name=""
 api_name="rahgard-rollback-app-${release_sha:0:8}-$$"
 [[ "$api_name" =~ ^rahgard-rollback-app-[0-9a-f]{8}-[0-9]+$ ]] || { echo 'Invalid rollback API test identity.' >&2; exit 2; }
 [[ -z "$(docker ps -aq --filter "name=^/${api_name}$")" ]] || { echo 'Rollback API test container name already exists.' >&2; exit 2; }
