@@ -164,8 +164,11 @@ in the restored database container's network namespace, which remains
 network-isolated. Test-only secrets live in that API container's tmpfs; auth,
 Chat, RAG, and SMS are disabled. Readiness and the ordinary catalogue response
 are checked against the restored, migrated data, then only the uniquely labeled
-test API container/image is removed. No production service is stopped or
-restarted. The base image is reused because Docker Hub returned HTTP 403 for the
+test API container/image is removed. The rehearsal also starts the currently
+active API image against that migrated clone and checks readiness/catalogue,
+demonstrating application-only rollback compatibility without reverting the
+database. No production service is stopped or restarted. The base image is
+reused because Docker Hub returned HTTP 403 for the
 pinned Python build base during this preparation run; the normal Dockerfile
 image build remains a deployment prerequisite if that base cannot be pulled
 from the approved registry/cache.

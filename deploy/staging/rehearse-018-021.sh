@@ -216,4 +216,31 @@ done
 api_catalogue=$(docker exec "$api_name" python -c 'import json,urllib.request; r=urllib.request.urlopen("http://127.0.0.1:8000/api/v1/catalog/destinations",timeout=5); print(json.load(r)["count"])')
 [[ "$api_catalogue" == "$source_count" ]] || { echo 'Candidate API catalogue count differs from the restored database view.' >&2; exit 3; }
 echo "API_REHEARSAL_PASS release=$release_sha runtime_image_id=$runtime_image_id runtime_tag=$runtime_image lock_match=true health=ready catalogue_count=$api_catalogue auth=disabled chat=disabled rag=disabled sms=disabled network=none"
+docker rm -f "$api_name" >/dev/null
+api_name="rahgard-rollback-app-${release_sha:0:8}-$$"
+[[ "$api_name" =~ ^rahgard-rollback-app-[0-9a-f]{8}-[0-9]+$ ]] || { echo 'Invalid rollback API test identity.' >&2; exit 2; }
+[[ -z "$(docker ps -aq --filter "name=^/${api_name}$")" ]] || { echo 'Rollback API test container name already exists.' >&2; exit 2; }
+docker run -d --rm --name "$api_name" --network "container:$isolated" \
+  --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m --tmpfs /run/secrets:rw,noexec,nosuid,size=1m \
+  --security-opt no-new-privileges:true --cap-drop ALL \
+  --label rahgard.restore.target=isolated --label rahgard.environment=restore-test \
+  -e APP_ENV=test -e APP_HOST=127.0.0.1 -e APP_PORT=8000 -e LOG_LEVEL=WARNING \
+  -e DATABASE_HOST=127.0.0.1 -e DATABASE_PORT=5432 -e DATABASE_NAME="$database" \
+  -e DATABASE_USER=ai_tourism_app -e DATABASE_CONNECT_TIMEOUT_SECONDS=3 \
+  -e AUTH_ENABLED=false -e AUTH_LOCAL_OWNER_ENABLED=false -e STAGING_AUTH_ENABLED=false \
+  -e AUTH_SMS_ADAPTER=disabled -e INTERNAL_CHAT_ENABLED=false -e TOURISM_RAG_ENABLED=false \
+  -e AI_PROVIDER_ADMIN_ENABLED=false --entrypoint /bin/sh "$runtime_image" \
+  -c 'while :; do sleep 3600; done' >/dev/null
+docker exec -u 0 "$api_name" python -c 'from pathlib import Path; import secrets; p=Path("/run/secrets"); names=("app_db_password","auth_otp_hmac_secret","auth_csrf_secret","auth_rate_limit_secret"); [(p.joinpath(n).write_text(secrets.token_urlsafe(48)),p.joinpath(n).chmod(0o444)) for n in names]'
+docker exec -d -w /app/backend "$api_name" /usr/local/bin/rahgard-entrypoint \
+  uvicorn app.main:app --host 127.0.0.1 --port 8000 >/dev/null
+rollback_ready=false
+for _ in $(seq 1 40); do
+  if docker exec "$api_name" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health/ready",timeout=2)' >/dev/null 2>&1; then rollback_ready=true; break; fi
+  sleep 1
+done
+[[ "$rollback_ready" == true ]] || { echo 'Previously active API did not become ready against the migrated restored database.' >&2; exit 3; }
+rollback_catalogue=$(docker exec "$api_name" python -c 'import json,urllib.request; r=urllib.request.urlopen("http://127.0.0.1:8000/api/v1/catalog/destinations",timeout=5); print(json.load(r)["count"])')
+[[ "$rollback_catalogue" == "$source_count" ]] || { echo 'Previously active API catalogue count differs from the restored database view.' >&2; exit 3; }
+echo "ROLLBACK_API_REHEARSAL_PASS previous_release=$current_sha health=ready catalogue_count=$rollback_catalogue data_rollback=not_performed network=none"
 echo 'The isolated container and plaintext dump will now be removed; the encrypted backup remains retained.'
