@@ -141,6 +141,34 @@ Operator sequence for a reviewed release:
    behavior. Roll back application code only if needed; migration 0017 is
    additive and existing application rows are unchanged.
 
+### Preparing the national catalogue migrations (0018–0021)
+
+`upgrade-017.sh` is **not** valid for the national catalogue. Use
+`preflight-018-021.sh` to read-only verify the current managed release, marker,
+PostgreSQL 17 image and persistent volume, and compare the entire migration
+ledger against source checksums. It accepts only an exact, contiguous migration
+prefix from the 0017 baseline through 0021, and checks that schema objects agree
+with the recorded ledger. It does not modify the database or services.
+
+`rehearse-018-021.sh <encrypted-backup-basename>` authenticates and decrypts a
+routine database backup only into a mode-0700 `/run` temporary directory. It
+restores into a uniquely named PostgreSQL 17 container using `--network none`,
+no published ports or persistent mounts, and a `tmpfs` PGDATA. It verifies the
+restored 0017 ledger and privacy-safe critical row counts, applies migrations
+0018–0021 only to that disposable copy, and confirms all retained counts are
+unchanged, the new candidate/partner/publication data stays empty, and the
+container is removed. No production service is stopped or restarted.
+
+`upgrade-018-021.sh` is the future, separately approved live-schema command.
+It refuses to run without the expected current SHA, a named authenticated
+backup, an off-host-and-isolated-restore attestation, and the explicit
+`OWNER_APPROVED_APPLY_018_021` argument. It rechecks the exact migration prefix,
+database marker, PostgreSQL image/volume and backup HMAC/SHA/decryptability
+before each migration. It applies DDL only; it does not deploy or restart the
+API/PWA. The owner must separately authorize application deployment after the
+schema upgrade and smoke checks. Do not provide the approval arguments until
+the separate release decision is made.
+
 ## Release synchronization and server portability
 
 For a machine-readable release snapshot, use
