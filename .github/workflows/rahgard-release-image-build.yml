@@ -1,0 +1,57 @@
+name: Build Rahgard d5 Linux amd64 release images
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Immutable prepared source commit to build
+        required: true
+        type: string
+        default: d5d9847373b20087a8a866449c6550d306f45b63
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rahgard-image-build-${{ inputs.source_sha }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and package exact release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out workflow tooling revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Tooling is pinned to the independently reviewed feature-branch commit.
+          # main intentionally does not contain the build scripts.
+          ref: c4104494385c128a8e6a71c5be8c9e5ad1e09fab
+          path: tooling
+          persist-credentials: false
+
+      - name: Check out immutable application source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          path: source
+          persist-credentials: false
+
+      - name: Build, inspect, and package pinned images
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.source_sha }}
+        run: >-
+          bash tooling/scripts/ops/build_rahgard_release_images.sh
+          "$GITHUB_WORKSPACE/source"
+          "$RUNNER_TEMP/rahgard-release-artifact"
+
+      - name: Upload checksummed Docker images and manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rahgard-release-images-d5d9847-linux-amd64
+          path: ${{ runner.temp }}/rahgard-release-artifact/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
