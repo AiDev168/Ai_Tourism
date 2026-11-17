@@ -1,0 +1,27 @@
+{
+  "decision": {"gate_a": "BLOCKED", "gate_b": "BLOCKED"},
+  "base_head": "a5ded7b6b20d4edf4854cc0d80d32627b2d8b329",
+  "final_head": "a5ded7b6b20d4edf4854cc0d80d32627b2d8b329",
+  "branch": "feat/c1-c3-internal-installable-mvp-v1",
+  "integrated_assistant_browser_journey": false,
+  "guarded_postgres_e2e": "NOT_RUN_REQUIRED_DISPOSABLE_DATABASE_ENV_MISSING",
+  "live_provider": "NOT_RUN_NO_AUTHORIZED_LIVE_CALL",
+  "production_catalogue_count": "NOT_VERIFIED",
+  "tests": {
+    "chat_gateway_api": {"passed": 22, "failed": 0, "skipped": 0, "exit_code": 0},
+    "backend_full": {"passed": 157, "failed": 0, "skipped": 12, "setup_errors_initial_attempt": 7, "final_exit_code": 0},
+    "frontend": {"passed": 87, "files": 10, "exit_code": 0},
+    "frontend_build": {"exit_code": 0},
+    "pwa_build_contract": {"passed": 2, "failed": 0, "exit_code": 0},
+    "ruff": {"exit_code": 0},
+    "diff_check": {"exit_code": 0}
+  },
+  "security": {
+    "shared_database_access": false,
+    "root_env_read": false,
+    "live_provider_call": false,
+    "production_content_published": false,
+    "commit_push_merge_deploy": false
+  },
+  "known_gap": "Existing browser harness does not call the authenticated assistant-turn endpoint."
+}

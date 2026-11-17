@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "prepared_at_utc": "2026-11-17T09:11:55Z",
+  "branch": "feat/rahgard-national-catalogue-execution-handoff",
+  "status": "blocked_image_sources_unavailable_rollout_not_authorized",
+  "release": {
+    "source_sha": "d5d9847373b20087a8a866449c6550d306f45b63",
+    "inactive_release_directory": "/opt/rahgard-staging/releases/d5d9847373b20087a8a866449c6550d306f45b63",
+    "source_archive_sha256": "66f31920440aef7bbf4547048856f12e3c7524e0dbcd1f095c1565891f5d9c15",
+    "source_archive_bytes": 2960848,
+    "source_archive_entries": 566,
+    "compose_sha256_active_and_target": "60bc1c55d70d42d0388cf806f95152e966bd9e3aadac1c02decaf3c78a1858e2",
+    "target_runtime_images_built": false,
+    "target_api_image_present_vps": false,
+    "target_web_image_present_vps": false,
+    "target_api_image_present_windows": false,
+    "target_web_image_present_windows": false
+  },
+  "live_before_and_after": {
+    "release_sha": "5e2664fb51e18f52549aa37a8b5793e12ace09b2",
+    "postgres_version": "17.11",
+    "postgres_version_num": 170011,
+    "volume": "rahgard_staging_pgdata",
+    "services": {
+      "api": {
+        "container_id": "ce25a5741a9c361d2685cd8861ebdab45bc24841f0562665bd5fe2e2714d532f",
+        "image_tag": "rahgard-api:5e2664fb51e18f52549aa37a8b5793e12ace09b2",
+        "image_id": "sha256:8017e31258b13adc0dcbd9e96e3bb8e40dc874394c4dfb75e391513fc449a3b3",
+        "health": "healthy"
+      },
+      "web": {
+        "container_id": "22734496c4102bfb686812cf57cb56739be21a0bfeb59fa5a2ee99289423ff0c",
+        "image_tag": "rahgard-web:5e2664fb51e18f52549aa37a8b5793e12ace09b2",
+        "image_id": "sha256:b22b15ebd05cdd2bb2e595cdde22b16a2976953cc8e284ede0fe6d729cc4bb3a",
+        "health": "healthy"
+      },
+      "db": {
+        "container_id": "8eb0c092272ae2109ca425478ba380382769776cf27ecdc5669afb7d4eaa6aab",
+        "image_tag": "rahgard-postgres:17-postgis36-vector087",
+        "image_id": "sha256:a30c041297b2306a8bb79cc6ed737f16bfca3078a3024324bb8115b302e83535",
+        "health": "healthy"
+      }
+    },
+    "migration_count": 16,
+    "migration_tip": "0017_provisional_itineraries",
+    "migration_tip_sha256": "4576f4e1390de68345866e0d99815d1644833f577266539d47075da26776de6d",
+    "aggregate_counts": {
+      "users": 12,
+      "sessions": 19,
+      "conversations": 6,
+      "messages": 33,
+      "trips": 6,
+      "interests": 3,
+      "constraints": 3,
+      "itineraries": 1,
+      "itinerary_stops": 6,
+      "provisional_itineraries": 2,
+      "destinations": 66,
+      "destination_sources": 116,
+      "knowledge_sources": 58,
+      "documents": 52,
+      "chunks": 81,
+      "published_destination_view": 0
+    },
+    "services_healthy": true,
+    "database_modified": false,
+    "application_services_restarted": false,
+    "content_published": false
+  },
+  "backup": {
+    "filename": "rahgard-20261117T075028Z-Tbh9jK.dump.enc",
+    "encrypted": true,
+    "authenticated_hmac_verified": true,
+    "sha256": "a464e750fd7902d82eed56b94d420449d70c9d12a4f31161907b6e1b79ef7e2f",
+    "bytes": 310736,
+    "off_host_copy": true,
+    "off_host_copy_path": "artifacts/live-acceptance/vps-release-prep-2026-11-17/rahgard-20261117T075028Z-Tbh9jK.dump.enc",
+    "decrypt_and_pg_restore_list": "pass",
+    "key_material_in_repository": false
+  },
+  "isolated_rehearsal": {
+    "restore_environment": "temporary PostgreSQL 17 container; network none; tmpfs PGDATA; no persistent or bind mounts; mode-0700 /dev/shm plaintext workspace",
+    "pre_migration_ledger_rows": 16,
+    "post_migration_ledger_rows": 20,
+    "migration_checksums": {
+      "0018_national_catalogue_ingestion": "f5fc0cb3e3fcf61b36a5d21f9c98c3d75e04581cb19d4e22ad1754d53480dd36",
+      "0019_partner_workspace": "8f7c45e128faf0d9d91bf808159367a7a2636ac31b4544147619a9af751dd56",
+      "0020_archive_candidate_publication": "b6822a3401cef3f7ac8c85ce0577eb71d0373bc34bf4ec2d8c65b0a812f13326",
+      "0021_postgis_security_definer_publication": "bc0b6abb335549ddff91a811aeeca30bc5ba75d3e3f5f3fe81f7ded4b3bee650"
+    },
+    "critical_counts_preserved": true,
+    "candidate_rows": 0,
+    "partner_organizations": 0,
+    "publication_events": 0,
+    "published_view_rows": 0,
+    "protected_rls_tables": 27,
+    "policies": 67,
+    "application_role_bypass_rls": false,
+    "candidate_api_readiness": "pass",
+    "candidate_api_catalogue_count": 0,
+    "previous_api_rollback_readiness": "pass",
+    "previous_api_catalogue_count": 0,
+    "providers_disabled_in_rehearsal": ["chat", "rag", "sms"],
+    "resources_cleaned": true
+  },
+  "external_checks": {
+    "https_homepage_http_status": 200,
+    "https_catalogue_http_status": 200,
+    "https_catalogue_count": 0,
+    "internal_live_health": 200,
+    "internal_ready_health": 200
+  },
+  "provider_flags": {
+    "chat_enabled_flag": true,
+    "chat_live_call_tested": false,
+    "rag_enabled": false,
+    "sms_adapter": "disabled",
+    "sms_live_tested": false
+  },
+  "registry_diagnostics": {
+    "required_base_tags": {
+      "python:3.13.9-slim-bookworm": {"windows_present": false, "vps_present": false, "repo_digest_verified": false},
+      "node:22.14-alpine": {"windows_present": false, "vps_present": false, "repo_digest_verified": false},
+      "nginx:1.27-alpine": {"windows_present": false, "vps_present": false, "repo_digest_verified": false}
+    },
+    "windows_docker": {
+      "desktop_version": "4.92.0",
+      "engine_version": "29.8.0",
+      "architecture": "linux/amd64",
+      "registry_mirrors": [],
+      "proxy_configured": true,
+      "credential_helper_configured": true,
+      "explicit_auth_registry_entries": 0,
+      "docker_hub_credential_lookup": "not_available",
+      "direct_registry_probe": "timeout_after_12_seconds",
+      "bounded_pull": "no_image_after_35_seconds; interrupted"
+    },
+    "vps_docker": {
+      "architecture": "linux/amd64",
+      "registry_mirrors": [],
+      "proxy_configured": false,
+      "operator_client_config_present": false,
+      "registry_root_probe": ["http_403", "timeout_on_retry"],
+      "buildkit_manifest_request": "http_403"
+    },
+    "diagnosis": "registry egress/access unavailable; requested image tag availability cannot be concluded",
+    "third_party_mirror_used": false,
+    "registry_configuration_changed": false
+  },
+  "approved_alternate_transport": {
+    "required_owner_input": "checksummed docker-save archive from an authorized Docker Hub network containing the three required linux/amd64 base tags and a manifest with RepoDigests, config IDs, and platform",
+    "suggested_path": "artifacts/live-acceptance/vps-release-prep-2026-11-17/rahgard-pinned-build-bases-linux-amd64.tar",
+    "credentials_included": false
+  },
+  "blockers": [
+    {
+      "kind": "image_source",
+      "detail": "Windows registry probes timed out; VPS probes returned HTTP 403 and then timed out. All three required canonical base images and both target-tagged images are absent on both hosts. Base RepoDigests could not be established. An owner-authorized offline Docker archive is required."
+    },
+    {
+      "kind": "owner_approval",
+      "detail": "Separate explicit authorization is required before live migrations, application deployment, or content publication."
+    }
+  ],
+  "live_rollout": "not_performed"
+}

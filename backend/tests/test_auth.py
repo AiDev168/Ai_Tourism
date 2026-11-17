@@ -115,6 +115,35 @@ def test_settings_require_explicit_auth_security_configuration():
         auth_settings(app_env="production", auth_enabled=True)
 
 
+def test_restored_csrf_uses_the_same_configured_cookie_as_authentication():
+    settings = auth_settings(auth_cookie_secure=False)
+    sms = FakeSmsAdapter()
+    repository = MemoryAuthRepository()
+    service = AuthenticationService(settings, sms, repository)  # type: ignore[arg-type]
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_auth_service] = lambda: service
+    try:
+        with TestClient(app, base_url="https://testserver") as client:
+            issue = client.post("/api/v1/auth/otp/challenges", json={"phone_number": "09121234567"})
+            code = re.search(r"\d{6}", sms.take_messages()[0].body).group()
+            login = client.post("/api/v1/auth/otp/verify", json={
+                "challenge_id": issue.json()["challenge_id"], "code": code,
+            })
+            assert login.status_code == 200
+            session = client.cookies.get("rahgard_session")
+            restored = client.get("/api/v1/auth/me", headers={
+                "Cookie": f"__Host-rahgard_session=stale; rahgard_session={session}",
+            })
+            assert restored.status_code == 200
+            assert restored.json()["csrf_token"] == login.json()["csrf_token"]
+            logout = client.post("/api/v1/auth/logout", headers={
+                "Origin": "https://testserver", "X-CSRF-Token": restored.json()["csrf_token"],
+            })
+            assert logout.status_code == 204
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_phone_otp_flow_never_returns_code_or_raw_session_in_json(caplog):
     settings = auth_settings()
     sms = FakeSmsAdapter()

@@ -1,0 +1,32 @@
+{
+  "dataset_key": "shiraz_fars_research_addendum_v1",
+  "version": "1.0.0",
+  "created_at": "2026-11-09",
+  "status": "research_queue_only_not_owner_approved_scope",
+  "parent_candidate_pack": "shiraz_fars_candidate_content_v2@2.0.0",
+  "scope": {
+    "province": "Fars",
+    "primary_research_anchor": "Shiraz",
+    "pilot_scope_approved": false
+  },
+  "locale_policy": {
+    "fa-IR": "draft_or_unknown_until_native_review",
+    "en-US": "source_label_or_draft_until_review",
+    "ar": "unknown_until_native_review"
+  },
+  "publication_policy": {
+    "is_synthetic": false,
+    "verification_status": "pending",
+    "status": "needs_review",
+    "data_confidence": 0,
+    "publishable": false
+  },
+  "regional_queue_rows": 16,
+  "new_regional_candidate_count": 15,
+  "existing_record_cross_reference_count": 1,
+  "culinary_candidate_count": 8,
+  "regional_discovery_queue_file": "REGIONAL_DESTINATION_DISCOVERY_QUEUE_v1.0.csv",
+  "culinary_discovery_queue_file": "CULINARY_DISCOVERY_QUEUE_v1.0.csv",
+  "source_register_addendum": "SOURCE_REGISTER_ADDENDUM_v1.0.csv",
+  "warning": "This is not a migration, an import payload for content_pack.py, a publication decision or a complete coverage corpus. Existing reviewed proposal package must not be overwritten."
+}

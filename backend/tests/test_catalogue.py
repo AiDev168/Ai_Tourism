@@ -108,6 +108,9 @@ def test_repository_sql_uses_only_approved_production_views_and_complete_bound()
     for raw_table in ("knowledge.destinations AS", "knowledge.knowledge_sources", "operations."):
         assert raw_table not in _PRODUCTION_CATALOGUE_SQL
     assert "ORDER BY d.destination_id ASC" in _PRODUCTION_CATALOGUE_SQL
+    assert "d.latitude" in _PRODUCTION_CATALOGUE_SQL
+    assert "d.longitude" in _PRODUCTION_CATALOGUE_SQL
+    assert "d.coordinate_role" in _PRODUCTION_CATALOGUE_SQL
     assert "LIMIT %s" in _PRODUCTION_CATALOGUE_SQL
     assert MAX_CATALOGUE_ITEMS == 1_000
 
@@ -120,6 +123,64 @@ def test_repository_rejects_ineligible_provenance_projection():
     }
     with pytest.raises(CatalogueUnavailableError):
         _to_item(row, None)
+
+
+@pytest.mark.parametrize(
+    ("role", "latitude", "longitude"),
+    [
+        ("property_reference", 29.93444, 52.89028),
+        ("representative_point", 29.6254028, 52.5583194),
+        ("visitor_entrance", 29.61, 52.5425),
+    ],
+)
+def test_repository_preserves_approved_coordinate_role_without_relabeling(role, latitude, longitude):
+    row = {
+        "destination_id": "12",
+        "destination_key": "geo-example",
+        "canonical_name": "Example",
+        "destination_type": "heritage_site",
+        "province_name": "Fars",
+        "city_name": None,
+        "latitude": latitude,
+        "longitude": longitude,
+        "coordinate_role": role,
+        "has_verified_provenance": True,
+    }
+
+    item = _to_item(row, None)
+
+    assert item.latitude == latitude
+    assert item.longitude == longitude
+    assert item.coordinate_role == role
+
+
+def test_repository_preserves_null_coordinates_and_rejects_malformed_coordinate_pairs():
+    row = {
+        "destination_id": "12",
+        "destination_key": "geo-example",
+        "canonical_name": "Example",
+        "destination_type": "heritage_site",
+        "province_name": "Fars",
+        "city_name": None,
+        "latitude": None,
+        "longitude": None,
+        "coordinate_role": "unknown",
+        "has_verified_provenance": True,
+    }
+    item = _to_item(row, None)
+    assert item.latitude is None
+    assert item.longitude is None
+    assert item.coordinate_role == "unknown"
+
+    with pytest.raises(ValueError, match="both be present or both be null"):
+        ProductionDestinationItem.model_validate(
+            {
+                **item.model_dump(),
+                "latitude": 29.0,
+                "longitude": None,
+                "coordinate_role": "representative_point",
+            }
+        )
 
 
 def test_repository_maps_a_verified_production_projection_and_fails_on_overflow(monkeypatch):
@@ -169,12 +230,16 @@ def test_endpoint_returns_complete_production_projection(monkeypatch):
         destination_id="17", destination_key="shiraz-city", canonical_name="شیراز",
         localized_names={"fa-IR": "شیراز", "en-US": "Shiraz", "ar": "شيراز"},
         aliases=[], destination_type="city", province_name="فارس", city_name="شیراز",
+        latitude=29.61, longitude=52.5425, coordinate_role="representative_point",
     )
     monkeypatch.setattr("app.api.catalogue.list_production_destinations", lambda _settings: [item])
     response = client.get("/api/v1/catalog/destinations")
     assert response.status_code == 200
     assert response.json()["count"] == 1
     assert response.json()["items"][0]["destination_key"] == "shiraz-city"
+    assert response.json()["items"][0]["latitude"] == 29.61
+    assert response.json()["items"][0]["longitude"] == 52.5425
+    assert response.json()["items"][0]["coordinate_role"] == "representative_point"
     assert "status" not in response.json()["items"][0]
     assert "has_verified_provenance" not in response.json()["items"][0]
 

@@ -76,6 +76,89 @@ def test_empty_catalogue_and_unavailable_selection_are_honest_clarification_outc
     )
 
 
+def test_requested_destination_and_interests_remain_known_when_catalogue_is_empty() -> None:
+    result = recommend_trip(
+        requirements=requirements(destinations=["Shiraz"], interests=["historical sites", "gardens"]),
+        selected_destination_ids=[], catalogue=[], evidence_by_destination={}, locale="fa-IR",
+    )
+    assert (result.status, result.reason_code) == ("empty", "catalogue_empty")
+    assessments = {item.field: item for item in result.requirement_assessments}
+    assert assessments["destination"].status == "known"
+    assert assessments["destination"].reason_code == "requested_destination_identity_unresolved"
+    assert assessments["interests"].status == "known"
+    assert assessments["interests"].reason_code == "interest_match_not_catalogue_verified"
+
+
+def test_pwa_profile_empty_accessibility_list_is_absent_not_malformed() -> None:
+    profile = {
+        "confirmation_source": "traveler_reviewed",
+        "destinations": ["TEST ONLY"],
+        "duration_days": 15,
+        "origin": None,
+        "travel_dates": None,
+        "traveler_count": None,
+        "accessibility": [],
+        "budget": None,
+        "soft_preferences": [],
+        "interests": [],
+        "constraints": [],
+        "destination_ids": ["1"],
+        "requirement_consent": {
+            "contract_version": "recommendation-consent-v1",
+            "profile_version": 2,
+            "field_decisions": {},
+            "advisory_acknowledged_fields": [],
+        },
+    }
+
+    result = recommend_trip(
+        requirements=profile,
+        selected_destination_ids=["1"],
+        catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]},
+        locale="fa-IR",
+        profile_version=2,
+    )
+
+    assert result.status == "available"
+    assert result.duration_days == 15
+    assert result.items[0].matched_requirements == ["destination:1"]
+
+
+def test_known_trip_inputs_stay_known_while_catalogue_fit_is_unverified_and_hard_constraints_block():
+    profile = requirements(
+        origin={"value": "Mashhad", "status": "confirmed"},
+        travelDates={"value": {"start": "2026-11-17", "end": "2026-11-21"}, "status": "confirmed"},
+        travelerCount={"value": 5, "status": "confirmed"},
+        budget={"value": {"amount": 30_000_000, "currency": "TOMAN", "unit": "toman",
+                          "raw": "30 million toman"}, "status": "confirmed"},
+    )
+    result = recommend_trip(
+        requirements=profile, selected_destination_ids=["1"], catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]}, locale="fa-IR", profile_version=4,
+    )
+    assert result.status == "available"
+    assert result.unresolved_fields == []
+    assert result.items
+    known = {item.field: item for item in result.requirement_assessments if item.status == "known"}
+    assert set(known) == {"duration_days", "origin", "travel_dates", "traveler_count", "budget"}
+    assert {field for field in result.not_evaluated_fields} == set()
+    assert all(known[field].decision is None for field in {"origin", "travel_dates", "traveler_count", "budget"})
+    assert all(known[field].reason_code == "known_fit_not_catalogue_verified"
+               for field in {"origin", "travel_dates", "traveler_count", "budget"})
+
+    profile["constraints"] = ["wheelchair accessible only"]
+    blocked = recommend_trip(
+        requirements=profile, selected_destination_ids=["1"], catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]}, locale="fa-IR", profile_version=4,
+    )
+    assert blocked.status == "needs_confirmation"
+    assert blocked.unresolved_fields == ["hard_constraint"]
+    assert {item.field for item in blocked.requirement_assessments if item.status == "known"} >= {
+        "origin", "travel_dates", "traveler_count", "budget",
+    }
+
+
 def test_hard_constraints_do_not_get_overridden_by_a_match_score() -> None:
     result = recommend_trip(
         requirements=requirements(constraints={"value": ["wheelchair access"]}),
@@ -88,7 +171,7 @@ def test_hard_constraints_do_not_get_overridden_by_a_match_score() -> None:
     assert result.items == []
 
 
-def test_persian_and_arabic_rial_units_allow_only_explicit_advisory_consent() -> None:
+def test_known_persian_and_arabic_budget_is_not_missing_when_catalogue_cannot_evaluate_it() -> None:
     for currency, unit in (("IRR", "ریال"), ("IRR", "ريال"), (None, "تومان")):
         profile = requirements(
             destinations={"value": ["Shiraz"], "status": "confirmed"},
@@ -111,8 +194,12 @@ def test_persian_and_arabic_rial_units_allow_only_explicit_advisory_consent() ->
 
         assert result.status == "empty"
         assert result.reason_code == "catalogue_empty"
-        assert result.waived_fields == ["budget"]
-        assert result.requirement_assessments[0].status == "not_evaluated"
+        assert result.unresolved_fields == []
+        assessment = next(item for item in result.requirement_assessments if item.field == "budget")
+        assert assessment.status == "known"
+        assert assessment.reason_code == "known_fit_not_catalogue_verified"
+        assert result.waived_fields == []
+        assert result.not_evaluated_fields == []
 
 
 def test_actual_pwa_budget_shapes_reach_mandatory_and_acknowledged_advisory_assessment() -> None:
@@ -120,6 +207,7 @@ def test_actual_pwa_budget_shapes_reach_mandatory_and_acknowledged_advisory_asse
     # unit retains the scale/currency wording, and no FX or Rial/Toman conversion occurs.
     parser_budgets = [
         {"amount": 20, "currency": None, "unit": "million toman", "raw": "20 million toman"},
+        {"amount": 20, "currency": "TOMAN", "unit": "million toman", "raw": "20 million toman"},
         {"amount": 20, "currency": "IRR", "unit": "million IRR", "raw": "20 million IRR"},
         {"amount": 20, "currency": "IRR", "unit": "میلیون ریال", "raw": "۲۰ میلیون ریال"},
         {"amount": 20, "currency": "USD", "unit": "million USD", "raw": "20 million USD"},
@@ -132,9 +220,10 @@ def test_actual_pwa_budget_shapes_reach_mandatory_and_acknowledged_advisory_asse
             requirements=profile, selected_destination_ids=["1"], catalogue=[candidate("1")],
             evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
         )
-        assert mandatory.status == "needs_confirmation"
-        assert mandatory.reason_code == "requirements_unverifiable"
-        assert mandatory.unresolved_fields == ["budget"]
+        assert mandatory.status == "available"
+        assert mandatory.unresolved_fields == []
+        assert next(item for item in mandatory.requirement_assessments if item.field == "budget").status == "known"
+        assert mandatory.not_evaluated_fields == []
 
         profile["requirement_consent"] = {
             "contract_version": "recommendation-consent-v1", "profile_version": 4,
@@ -146,8 +235,9 @@ def test_actual_pwa_budget_shapes_reach_mandatory_and_acknowledged_advisory_asse
             evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
         )
         assert advisory.status == "available"
-        assert advisory.not_evaluated_fields == ["budget"]
-        assert advisory.requirement_assessments[0].status == "not_evaluated"
+        assert advisory.not_evaluated_fields == []
+        assert advisory.waived_fields == []
+        assert next(item for item in advisory.requirement_assessments if item.field == "budget").status == "known"
         assert all(component.component_key != "budget" for component in advisory.items[0].score_components)
 
 
@@ -169,32 +259,28 @@ def test_budget_currency_unit_mismatch_and_malformed_amount_fail_closed() -> Non
         assert result.items == []
 
 
-def test_explicit_soft_preference_can_be_advisory_but_hard_constraints_still_block() -> None:
-    soft = requirements(soft_preferences=["paved paths"])
-    soft["requirement_consent"] = {
-        "contract_version": "recommendation-consent-v1", "profile_version": 4,
-        "field_decisions": {"soft_preference": "advisory"},
-        "advisory_acknowledged_fields": ["soft_preference"],
-    }
-    advisory = recommend_trip(
-        requirements=soft, selected_destination_ids=["1"], catalogue=[candidate("1")],
+def test_explicit_soft_preference_is_known_nonblocking_and_never_scored() -> None:
+    soft = recommend_trip(
+        requirements=requirements(soft_preferences=["paved paths"]),
+        selected_destination_ids=["1"], catalogue=[candidate("1")],
         evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
     )
-    assert advisory.status == "available"
-    assert advisory.waived_fields == advisory.not_evaluated_fields == ["soft_preference"]
-    assert advisory.requirement_assessments[0].reason_code == "preference_unverifiable"
-    assert advisory.items[0].not_evaluated_fields == ["soft_preference"]
-    assert all(component.component_key != "soft_preference" for component in advisory.items[0].score_components)
+    assert soft.status == "available"
+    assert soft.unresolved_fields == soft.waived_fields == soft.not_evaluated_fields == []
+    assessment = next(item for item in soft.requirement_assessments if item.field == "soft_preference")
+    assert assessment.status == "known"
+    assert assessment.reason_code == "known_fit_not_catalogue_verified"
+    assert "preference_fit_not_evaluated" in soft.items[0].warnings
+    assert all(component.component_key != "soft_preference" for component in soft.items[0].score_components)
 
     hard = requirements(soft_preferences=["paved paths"], constraints=["avoid rough terrain"])
-    hard["requirement_consent"] = soft["requirement_consent"]
     blocked = recommend_trip(
         requirements=hard, selected_destination_ids=["1"], catalogue=[candidate("1")],
         evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
     )
     assert blocked.status == "needs_confirmation"
     assert blocked.unresolved_fields == ["hard_constraint"]
-    assert blocked.waived_fields == ["soft_preference"]
+    assert blocked.waived_fields == []
     assert blocked.items == []
 
 
@@ -251,20 +337,46 @@ def test_non_numeric_client_identifier_is_not_accepted_as_catalogue_identity() -
     assert result.items == []
 
 
-def test_unresolved_requirement_defaults_to_mandatory_and_blocks() -> None:
+def test_known_budget_is_not_mislabeled_missing_and_explicit_missing_budget_blocks() -> None:
     result = recommend_trip(
         requirements=requirements(budget={"amount": 50, "currency": None, "unit": "million toman"}),
         selected_destination_ids=["1"], catalogue=[candidate("1")],
         evidence_by_destination={"1": [source(1, 11)]}, locale="en-US", profile_version=4,
     )
 
-    assert result.status == "needs_confirmation"
-    assert result.unresolved_fields == ["budget"]
-    assert result.waived_fields == result.not_evaluated_fields == []
-    assert [assessment.model_dump() for assessment in result.requirement_assessments] == [{
-        "field": "budget", "decision": "must_have", "status": "unresolved",
-        "reason_code": "budget_unverifiable",
-    }]
+    assert result.status == "available"
+    assert result.unresolved_fields == []
+    assert result.waived_fields == []
+    assert result.not_evaluated_fields == []
+    assert next(item for item in result.requirement_assessments if item.field == "budget").model_dump() == {
+        "field": "budget", "decision": None, "status": "known",
+        "reason_code": "known_fit_not_catalogue_verified",
+    }
+
+    missing = recommend_trip(
+        requirements=requirements(missingRequired=["budget"]), selected_destination_ids=["1"],
+        catalogue=[candidate("1")], evidence_by_destination={"1": [source(1, 11)]},
+        locale="en-US", profile_version=4,
+    )
+    assert missing.status == "needs_confirmation"
+    assert missing.unresolved_fields == ["budget"]
+    assert next(item for item in missing.requirement_assessments if item.field == "budget").decision == "must_have"
+
+
+def test_colloquial_persian_toman_unit_remains_known_without_conversion() -> None:
+    result = recommend_trip(
+        requirements=requirements(budget={
+            "amount": "30", "currency": "TOMAN", "unit": "میلیون تومن",
+            "raw": "۳۰ میلیون تومن",
+        }),
+        selected_destination_ids=["1"], catalogue=[candidate("1")],
+        evidence_by_destination={"1": [source(1, 11)]}, locale="fa-IR", profile_version=4,
+    )
+
+    assert result.status == "available"
+    budget_assessment = next(item for item in result.requirement_assessments if item.field == "budget")
+    assert budget_assessment.status == "known"
+    assert budget_assessment.reason_code == "known_fit_not_catalogue_verified"
 
 
 def test_explicit_version_bound_advisory_is_not_evaluated_or_scored() -> None:
@@ -282,14 +394,15 @@ def test_explicit_version_bound_advisory_is_not_evaluated_or_scored() -> None:
 
     assert result.status == "available"
     assert result.unresolved_fields == []
-    assert result.waived_fields == result.not_evaluated_fields == ["budget"]
-    assert result.requirement_assessments[0].model_dump() == {
-        "field": "budget", "decision": "advisory", "status": "not_evaluated",
-        "reason_code": "budget_unverifiable",
+    assert result.waived_fields == []
+    assert result.not_evaluated_fields == []
+    assert next(item for item in result.requirement_assessments if item.field == "budget").model_dump() == {
+        "field": "budget", "decision": None, "status": "known",
+        "reason_code": "known_fit_not_catalogue_verified",
     }
     item = result.items[0]
-    assert item.not_evaluated_fields == ["budget"]
-    assert "requirements_not_evaluated" in item.warnings
+    assert item.not_evaluated_fields == []
+    assert "requirements_not_evaluated" not in item.warnings
     assert all(component.component_key != "budget" for component in item.score_components)
 
 
@@ -318,19 +431,19 @@ def test_stale_or_forged_consent_fails_closed() -> None:
     )
 
     assert stale_result.reason_code == "requirement_consent_stale"
-    assert stale_result.unresolved_fields == ["budget"]
+    assert stale_result.unresolved_fields == []
     assert stale_result.waived_fields == []
     assert forged_result.reason_code == "requirements_invalid"
     assert forged_result.items == []
 
 
-def test_consent_cannot_be_applied_to_a_field_no_longer_unresolved() -> None:
+def test_consent_cannot_be_applied_to_an_absent_requirement_field() -> None:
     profile = requirements()
     profile["requirement_consent"] = {
         "contract_version": "recommendation-consent-v1",
         "profile_version": 4,
-        "field_decisions": {"budget": "advisory"},
-        "advisory_acknowledged_fields": ["budget"],
+        "field_decisions": {"activity": "advisory"},
+        "advisory_acknowledged_fields": ["activity"],
     }
     result = recommend_trip(
         requirements=profile, selected_destination_ids=["1"], catalogue=[candidate("1")],

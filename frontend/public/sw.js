@@ -1,11 +1,17 @@
-const CACHE = 'rahgard-shell-v3';
+// The production build injects its content-derived revision and hashed assets.
+const CACHE = 'rahgard-shell-__RAHGARD_BUILD_ID__';
+const BUILD_ASSETS = /* __RAHGARD_BUILD_ASSETS__ */ [];
 const ASSETS = [
-  '/', '/manifest.webmanifest', '/mark.svg', '/fonts/estedad.css',
+  ...BUILD_ASSETS,
+  '/', '/manifest.webmanifest', '/mark.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/fonts/estedad.css',
   '/fonts/estedad-arabic-variable.woff2', '/fonts/estedad-latin-variable.woff2',
   ...['naghshe-jahan', 'fin-garden', 'yazd-windcatchers', 'qeshm-hara'].flatMap(name =>
     [640, 960, 1280].flatMap(width => [`/images/${name}-${width}.webp`, `/images/${name}-${width}.avif`])),
 ];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS))));
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
 self.addEventListener('activate', event => event.waitUntil(Promise.all([
   self.clients.claim(),
   caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('rahgard-shell-') && key !== CACHE).map(key => caches.delete(key)))),
@@ -20,18 +26,12 @@ self.addEventListener('fetch', event => {
   // navigation can replay a production index.html on a Vite dev server, whose
   // hashed production bundle no longer exists, producing a blank page and 404.
   if (event.request.mode === 'navigate') {
-    event.respondWith(fetch(event.request).then(response => {
-      if (response.ok) {
-        const copy = response.clone();
-        void caches.open(CACHE).then(cache => cache.put(event.request, copy));
-      }
-      return response;
-    }).catch(() => caches.match(event.request).then(cached => cached || caches.match('/'))));
+    event.respondWith(fetch(event.request).catch(() => caches.match('/')));
     return;
   }
 
-  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-    if (response.ok) { const copy = response.clone(); void caches.open(CACHE).then(cache => cache.put(event.request, copy)); }
-    return response;
-  }).catch(() => Response.error())));
+  // Only explicitly listed, public shell assets may enter or be read from cache.
+  // Other same-origin resources can carry user-specific content.
+  if (!ASSETS.includes(new URL(event.request.url).pathname)) return;
+  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request)));
 });

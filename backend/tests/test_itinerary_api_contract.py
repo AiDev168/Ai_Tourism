@@ -1,5 +1,6 @@
 """API-boundary checks for full-duration, bounded editable itineraries."""
 
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -142,6 +143,30 @@ def test_enriched_plan_shows_all_unplanned_days_after_partial_edit():
     assert result["status"] == "partial"
     assert result["unplanned_days"] == [5, 6, 7, 8, 9, 10]
     assert [stop["day_number"] for stop in result["stops"]] == [1, 2, 3, 4]
+    assert "stop_location_unknown" in result["warning_codes"]
+    assert "no_hours_or_routes_inferred" in result["warning_codes"]
+
+
+def test_enriched_plan_discloses_reference_point_and_geodesic_heuristic():
+    row = {
+        "day_count": 2,
+        "stops": [
+            {"destination_id": "1", "day_number": 1, "stop_order": 1,
+             "itinerary_stop_id": uuid4(), "recommendation_id": uuid4(), "notes_by_locale": {}},
+            {"destination_id": "2", "day_number": 2, "stop_order": 1,
+             "itinerary_stop_id": uuid4(), "recommendation_id": uuid4(), "notes_by_locale": {}},
+        ],
+    }
+    first = _published_item("1").model_copy(update={
+        "latitude": 29.935, "longitude": 52.891, "coordinate_role": "property_reference",
+    })
+    second = _published_item("2").model_copy(update={
+        "latitude": 29.940, "longitude": 52.900, "coordinate_role": "visitor_entrance",
+    })
+    result = _enrich_itinerary(row, {"1": first, "2": second})
+    assert "geodesic_grouping_heuristic_only" in result["warning_codes"]
+    assert "position_not_entrance" in result["warning_codes"]
+    assert "no_hours_or_routes_inferred" in result["warning_codes"]
 
 
 def test_normalized_confirmed_profile_persists_snake_case_duration_and_rejects_bool():
@@ -159,3 +184,69 @@ def test_normalized_confirmed_profile_persists_snake_case_duration_and_rejects_b
     bool_profile = _profile_columns({"duration_days": True, "traveler_count": False})
     assert bool_profile["duration"] is None
     assert bool_profile["travelers"] is None
+
+
+def test_itinerary_does_not_geocode_or_treat_text_origin_as_a_coordinate(monkeypatch):
+    destination = _published_item("1").model_copy(update={
+        "latitude": 29.61,
+        "longitude": 52.54,
+        "coordinate_role": "representative_point",
+    })
+    captured = {}
+    itinerary_id = uuid4()
+
+    class Repository:
+        def trip(self, user_id, trip_id):
+            return {
+                "duration_days": 15,
+                "confirmed_requirements": {"origin": "Shiraz"},
+            }
+
+        def create_itinerary(self, **kwargs):
+            return itinerary_id
+
+        def itinerary(self, user_id, requested_id):
+            return {
+                "day_count": 15,
+                "stops": [{
+                    "destination_id": "1",
+                    "day_number": 1,
+                    "stop_order": 1,
+                    "itinerary_stop_id": uuid4(),
+                    "recommendation_id": uuid4(),
+                    "notes_by_locale": {},
+                }],
+            }
+
+    def capture_generator(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(stops=[object()], warning_codes=[], day_count=15)
+
+    monkeypatch.setattr(
+        "app.api.traveler._current_recommendations",
+        lambda *args: (object(), {"1": destination}, {}, {}),
+    )
+    monkeypatch.setattr("app.api.traveler.generate_itinerary", capture_generator)
+    monkeypatch.setattr("app.api.traveler._draft_stops", lambda _draft, _rec_ids: [])
+
+    result = create_itinerary(
+        TRIP,
+        CreateItineraryRequest(
+            recommendation_request_id=uuid4(), day_count=15, locale="fa-IR"
+        ),
+        Response(),
+        Principal(OWNER, SESSION),
+        None,
+        Repository(),
+        object(),
+    )
+
+    assert result["day_count"] == 15
+    assert captured["geography_by_destination"] == {
+        "1": {
+            "latitude": 29.61,
+            "longitude": 52.54,
+            "coordinate_role": "representative_point",
+        }
+    }
+    assert "origin" not in captured

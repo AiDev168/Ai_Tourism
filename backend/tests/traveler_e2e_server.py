@@ -13,6 +13,7 @@ import os
 import re
 import socketserver
 import sys
+from secrets import token_hex
 import threading
 import time
 from pathlib import Path
@@ -22,6 +23,8 @@ import psycopg
 from psycopg.rows import dict_row
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = BACKEND_ROOT.parent
+sys.path.insert(0, str(REPOSITORY_ROOT))
 sys.path.insert(0, str(BACKEND_ROOT))
 
 
@@ -78,6 +81,94 @@ def _verify_disposable_database() -> dict[str, Any]:
     ):
         raise RuntimeError("E2E precondition failed: identity, PG major, least-privilege role, or marker mismatch")
     return {"host": host, "port": port, "dbname": database, "user": user, "password": password}
+
+
+def _grant_catalogue_capabilities(database: dict[str, Any], user_id: str, capabilities: list[str]) -> bool:
+    """Test-control-only grants on the marked national-catalogue disposable DB."""
+    if os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") != "1":
+        return False
+    if not re.fullmatch(r"[0-9a-fA-F-]{36}", user_id) or not capabilities or len(capabilities) > 3:
+        return False
+    allowed = {"candidate_review", "source_review", "catalogue_publish"}
+    if any(value not in allowed for value in capabilities) or len(set(capabilities)) != len(capabilities):
+        return False
+    owner_password = os.environ.get("AUTH_TEST_DATABASE_OWNER_PASSWORD", "")
+    if not owner_password:
+        return False
+    try:
+        with psycopg.connect(
+            **{**database, "user": "ai_tourism_owner", "password": owner_password},
+            connect_timeout=2,
+            row_factory=dict_row,
+        ) as connection, connection.transaction():
+            row = connection.execute(
+                """SELECT current_database() AS db,
+                          (SELECT count(*) FROM public.ai_tourism_auth_test_marker) AS marker_count,
+                          (SELECT min(marker_value) FROM public.ai_tourism_auth_test_marker) AS marker"""
+            ).fetchone()
+            if row["db"] != database["dbname"] or row["marker_count"] != 1 or not __import__("hmac").compare_digest(
+                row["marker"] or "", os.environ.get("AUTH_TEST_DATABASE_MARKER", "")
+            ):
+                return False
+            exists = connection.execute("SELECT 1 FROM identity.users WHERE user_id=%s", (user_id,)).fetchone()
+            if not exists:
+                return False
+            for capability in capabilities:
+                connection.execute(
+                    """INSERT INTO identity.catalogue_review_grants(user_id,capability,granted_by,reason)
+                       VALUES (%s,%s,%s,'Isolated national catalogue browser acceptance only')""",
+                    (user_id, capability, user_id),
+                )
+        return True
+    except Exception:
+        return False
+
+
+def _national_catalogue_counts(database: dict[str, Any]) -> dict[str, int] | None:
+    if os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") != "1":
+        return None
+    try:
+        owner_password = os.environ.get("AUTH_TEST_DATABASE_OWNER_PASSWORD", "")
+        marker = os.environ.get("AUTH_TEST_DATABASE_MARKER", "")
+        if not owner_password or not marker:
+            return None
+        with psycopg.connect(
+            **{**database, "user": "ai_tourism_owner", "password": owner_password},
+            connect_timeout=2,
+            row_factory=dict_row,
+        ) as connection:
+            identity = connection.execute(
+                """SELECT current_database() AS db,
+                          (SELECT count(*) FROM public.ai_tourism_auth_test_marker) AS marker_count,
+                          (SELECT min(marker_value) FROM public.ai_tourism_auth_test_marker) AS marker"""
+            ).fetchone()
+            if (
+                identity["db"] != database["dbname"]
+                or identity["marker_count"] != 1
+                or not __import__("hmac").compare_digest(identity["marker"] or "", marker)
+            ):
+                return None
+            row = connection.execute(
+                """SELECT
+                     (SELECT count(*) FROM knowledge.destination_candidates) AS candidates,
+                     (SELECT count(*) FROM knowledge.destination_candidates WHERE candidate_kind='destination_identity') AS identities,
+                     (SELECT count(*) FROM knowledge.destination_candidates WHERE candidate_kind='discovery_lead') AS leads,
+                     (SELECT count(*) FROM knowledge.destination_candidates WHERE candidate_kind='discovery_lead' AND candidate_status='needs_review') AS unpublished_leads,
+                     (SELECT count(*) FROM knowledge.source_candidates) AS source_candidates,
+                     (SELECT count(*) FROM operations.dataset_import_batches) AS import_batches,
+                     (SELECT count(*) FROM knowledge.knowledge_sources WHERE verification_status='verified' AND NOT is_synthetic) AS verified_sources,
+                     (SELECT count(*) FROM knowledge.production_destinations) AS published_destinations,
+                     (SELECT count(*) FROM partner.organizations) AS organizations,
+                     (SELECT count(*) FROM partner.services) AS services,
+                     (SELECT count(*) FROM partner.schedules) AS schedules,
+                     (SELECT count(*) FROM partner.offers) AS offers,
+                     (SELECT count(*) FROM partner.prices) AS prices,
+                     (SELECT count(*) FROM partner.availability_snapshots) AS availability,
+                     (SELECT count(*) FROM travel.itineraries) AS itineraries"""
+            ).fetchone()
+        return {key: int(value) for key, value in row.items()}
+    except Exception:
+        return None
 
 
 def _account_state(database: dict[str, Any], user_id: str, phone: str) -> dict[str, Any]:
@@ -143,6 +234,41 @@ class _ControlHandler(socketserver.StreamRequestHandler):
                     if not messages:
                         time.sleep(0.025)
                 result = {"ok": len(messages) == 1, "code": messages[0].verification_code if len(messages) == 1 else None}
+            elif action == "assistant_call_count":
+                # The private authenticated control socket exposes only counts.
+                result = {"ok": True, "count": self.server.chat_gateway.call_count}
+            elif action == "owner_rag_call_counts":
+                if self.server.owner_rag_counter is None:
+                    result = {
+                        "ok": True,
+                        "enabled": False,
+                        "calls": 0,
+                        "outcomes": {
+                            "ok": 0,
+                            "no_evidence": 0,
+                            "unavailable": 0,
+                            "invalid_request": 0,
+                            "authentication_failed": 0,
+                        },
+                    }
+                else:
+                    result = {"ok": True, **self.server.owner_rag_counter.safe_snapshot()}
+            elif action == "enable_itinerary_fixture":
+                # This test-only projection is deliberately isolated to the
+                # traveler recommendation dependency. Public catalogue views
+                # remain unchanged and empty; no canonical rows are written.
+                with psycopg.connect(**self.server.database, connect_timeout=2, row_factory=dict_row) as connection:
+                    published = connection.execute(
+                        "SELECT COUNT(*) AS n FROM knowledge.production_destinations"
+                    ).fetchone()["n"]
+                if published != 0:
+                    result = {"ok": False}
+                else:
+                    self.server.fixture_state["enabled"] = True
+                    result = {"ok": True, "destination_ids": self.server.itinerary_fixture_ids}
+            elif action == "disable_itinerary_fixture":
+                self.server.fixture_state["enabled"] = False
+                result = {"ok": True}
             elif action == "account_state":
                 user_id = str(command.get("user_id", ""))
                 phone = str(command.get("phone", ""))
@@ -160,6 +286,14 @@ class _ControlHandler(socketserver.StreamRequestHandler):
             elif action == "assert_phones_unused":
                 phones = command.get("phones")
                 result = {"ok": isinstance(phones, list) and _phones_unused(self.server.database, phones)}
+            elif action == "grant_catalogue_capabilities":
+                caps = command.get("capabilities")
+                result = {"ok": isinstance(caps, list) and _grant_catalogue_capabilities(
+                    self.server.database, str(command.get("user_id", "")), caps
+                )}
+            elif action == "national_catalogue_counts":
+                counts = _national_catalogue_counts(self.server.database)
+                result = {"ok": counts is not None, **(counts or {})}
             else:
                 result = {"ok": False}
         except Exception:
@@ -175,9 +309,42 @@ def main() -> None:
     web_origin = _required("E2E_WEB_ORIGIN")
     control_port = int(_required("E2E_CONTROL_PORT"))
     control_token = _required("E2E_CONTROL_TOKEN")
+    rag_flag = os.environ.get("TOURISM_RAG_ENABLED", "").strip().lower()
+    if rag_flag in {"", "0", "false", "no", "off"}:
+        rag_enabled = False
+    elif rag_flag in {"1", "true", "yes", "on"}:
+        rag_enabled = True
+    else:
+        raise RuntimeError("E2E precondition failed: owner RAG enable flag is invalid")
+    rag_url = os.environ.get("TOURISM_RAG_API_URL", "http://127.0.0.1:8765")
+    rag_token = os.environ.get("TOURISM_RAG_API_TOKEN", "")
+    geo_qa_mode = os.environ.get("RAHGARD_REAL_GEO_E2E", "") == "1"
+    national_catalogue_mode = os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E", "") == "1"
+    if geo_qa_mode and (os.environ.get("RAHGARD_RUN_GEO_QA") != "1" or rag_enabled):
+        raise RuntimeError("E2E real geographic QA mode requires explicit opt-in and no RAG")
+    if rag_enabled:
+        from urllib.parse import urlsplit
+
+        parsed_rag_url = urlsplit(rag_url)
+        if (
+            parsed_rag_url.scheme != "http"
+            or parsed_rag_url.hostname != "127.0.0.1"
+            or parsed_rag_url.port != 8765
+            or parsed_rag_url.path not in {"", "/"}
+            or parsed_rag_url.query
+            or parsed_rag_url.fragment
+            or parsed_rag_url.username
+            or parsed_rag_url.password
+            or not rag_token
+            or rag_token != rag_token.strip()
+            or "\r" in rag_token
+            or "\n" in rag_token
+        ):
+            raise RuntimeError("E2E precondition failed: owner RAG must use configured loopback service credentials")
     import uvicorn
 
     import app.core.config as config
+    settings_dependency = config.get_settings
 
     settings = config.Settings(
         _env_file=None,
@@ -190,6 +357,17 @@ def main() -> None:
         database_user=database["user"],
         database_password=database["password"],
         auth_enabled=True,
+        # Offline E2E enables the API route, but overrides its gateway before
+        # any request can reach the network. No paid or external model traffic.
+        internal_chat_enabled=True,
+        internal_chat_endpoint="https://example.invalid/v1/chat/completions",
+        internal_chat_model="offline-browser-fixture",
+        internal_chat_token=__import__("pydantic").SecretStr(token_hex(32)),
+        tourism_rag_enabled=rag_enabled,
+        tourism_rag_api_url=rag_url,
+        tourism_rag_api_token=(
+            __import__("pydantic").SecretStr(rag_token) if rag_enabled else None
+        ),
         auth_sms_adapter="fake",
         auth_cookie_secure=False,
         auth_allowed_origins=web_origin,
@@ -207,10 +385,181 @@ def main() -> None:
     config.get_settings = lambda: settings
     from app.main import app
     from app.modules.identity.sms import FakeSmsAdapter
+    from app.api.assistant import get_chat_gateway
+    from app.modules.integrations.chat_adapter import ChatReply
+    from app.api import traveler as traveler_api
+    from app.modules.catalog.schemas import ProductionDestinationItem
+    from app.modules.recommendation.contracts import EvidenceSource
+    from app.modules.recommendation.retrieval import StructuredDestinationMetadata
+    from app.modules.retrieval.contracts import (
+        RetrievalAuthenticationFailed,
+        RetrievalInvalidRequest,
+        RetrievalUnavailable,
+    )
+    from app.modules.retrieval.owner_http import OwnerRagHttpAdapter
 
+    class CountingOwnerRetrievalPort:
+        """Count safe outcomes only; never retain query or response evidence."""
+
+        def __init__(self, adapter):
+            self.adapter = adapter
+            self.call_count = 0
+            self.outcomes = {
+                "ok": 0,
+                "no_evidence": 0,
+                "unavailable": 0,
+                "invalid_request": 0,
+                "authentication_failed": 0,
+            }
+
+        async def retrieve(self, request, /):
+            self.call_count += 1
+            try:
+                response = await self.adapter.retrieve(request)
+            except RetrievalAuthenticationFailed:
+                self.outcomes["authentication_failed"] += 1
+                raise
+            except RetrievalInvalidRequest:
+                self.outcomes["invalid_request"] += 1
+                raise
+            except RetrievalUnavailable:
+                self.outcomes["unavailable"] += 1
+                raise
+            self.outcomes[response.status] += 1
+            return response
+
+        def safe_snapshot(self):
+            return {"enabled": True, "calls": self.call_count, "outcomes": dict(self.outcomes)}
+
+    class SimulatedChatGateway:
+        """Only for guarded E2E. Simulates model content; makes zero HTTP calls."""
+
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        async def invoke(self, request):
+            self.call_count += 1
+            # The first traveler turn has no prior conversation history; its
+            # current text is the persisted initial request. Follow-up turns
+            # add history naturally. Requiring history here rejected a valid
+            # initial request before the simulated provider could respond.
+            if not request.text.strip():
+                raise RuntimeError("simulated_e2e_input_missing")
+            prompts = {
+                "fa-IR": ("\u0628\u0631\u0627\u06cc \u0633\u0641\u0631 2 \u0631\u0648\u0632 \u0633\u0641\u0631 \u0628\u0647 \u0634\u06cc\u0631\u0627\u0632 \u067e\u06cc\u0634\u0646\u0647\u0627\u062f \u0628\u062f\u0647.", "\u0634\u06cc\u0631\u0627\u0632", "2 \u0631\u0648\u0632 \u0633\u0641\u0631"),
+                "en-US": ("Please suggest a 2-day trip to Shiraz.", "Shiraz", "2-day trip"),
+                "ar": ("\u0627\u0642\u062a\u0631\u062d \u0631\u062d\u0644\u0629 \u0644\u0645\u062f\u0629 2 \u064a\u0648\u0645 \u0625\u0644\u0649 Shiraz.", "Shiraz", "\u0644\u0645\u062f\u0629 2 \u064a\u0648\u0645"),
+            }
+            _, destination, duration_quote = prompts[request.locale]
+            replies = {
+                "fa-IR": "\u067e\u06cc\u0634\u0646\u0647\u0627\u062f \u0622\u0632\u0645\u0627\u06cc\u0634\u06cc: \u0633\u0641\u0631 \u062f\u0648 \u0631\u0648\u0632\u0647 \u0628\u0647 \u0634\u06cc\u0631\u0627\u0632. \u0627\u0628\u062a\u062f\u0627 \u0622\u0646 \u0631\u0627 \u0628\u0631\u0631\u0633\u06cc \u06a9\u0646\u06cc\u062f.",
+                "en-US": "Simulated suggestion: a two-day trip to Shiraz. Review it first.",
+                "ar": "\u0627\u0642\u062a\u0631\u0627\u062d \u062a\u062c\u0631\u064a\u0628\u064a: \u0631\u062d\u0644\u0629 \u0644\u0645\u062f\u0629 \u064a\u0648\u0645\u064a\u0646 \u0625\u0644\u0649 Shiraz. \u0631\u0627\u062c\u0639\u0647\u0627 \u0623\u0648\u0644\u0627.",
+            }
+            return ChatReply(
+                reply=replies[request.locale],
+                requirements={"destination": destination, "duration_days": 2},
+                requirement_evidence={"destination": destination, "duration_days": duration_quote},
+            )
+
+    chat_gateway = SimulatedChatGateway()
+    app.dependency_overrides[get_chat_gateway] = lambda: chat_gateway
+    owner_rag_counter = None
+    if rag_enabled:
+        owner_rag_counter = CountingOwnerRetrievalPort(OwnerRagHttpAdapter(settings))
+        app.dependency_overrides[traveler_api.get_owner_retrieval_port] = lambda: owner_rag_counter
+
+    # Existing synthetic itinerary-stop identities are read-only test fixtures.
+    # Their fake provenance is explicitly marked and never enters the approved
+    # production projection. The private loopback control socket gates access.
+    with psycopg.connect(**database, connect_timeout=2, row_factory=dict_row) as connection:
+        published_count = connection.execute(
+            "SELECT COUNT(*) AS n FROM knowledge.production_destinations"
+        ).fetchone()["n"]
+        fixture_rows = connection.execute(
+            """SELECT DISTINCT destination_id FROM travel.itinerary_stops
+               WHERE is_synthetic=TRUE ORDER BY destination_id LIMIT 4"""
+        ).fetchall()
+        geo_rows = connection.execute(
+            """SELECT destination_key, coordinate_role FROM knowledge.production_destinations"""
+        ).fetchall() if geo_qa_mode else []
+    if len(fixture_rows) != 4:
+        raise RuntimeError("E2E seeded QA fixture prerequisite failed")
+    if geo_qa_mode:
+        expected_geo = {
+            "shiraz-hafezieh-v1": "representative_point",
+            "shiraz-eram-garden-v1": "representative_point",
+            "shiraz-vakil-bazaar-v1": "representative_point",
+            "unesco-persepolis-v1": "property_reference",
+        }
+        actual_geo = {row["destination_key"]: row["coordinate_role"] for row in geo_rows}
+        if published_count != 4 or actual_geo != expected_geo:
+            raise RuntimeError("E2E geo QA expects exactly four real canonical published map points")
+    elif published_count != 0 and not national_catalogue_mode:
+        raise RuntimeError("E2E historical fixture mode requires an empty production catalogue")
+    # Pending content-pack geometry is borrowed only to exercise the coordinate
+    # grouping path with synthetic destination identities. It is not canonical,
+    # independently verified, returned as a traveler coordinate, or written to
+    # PostgreSQL. The first three points are a compact Shiraz cluster; the last
+    # is the regional Persepolis reference point in Marvdasht.
+    pending_review_test_geometry = (
+        (29.6254028, 52.5583194, "representative_point"),
+        (29.63583, 52.52528, "representative_point"),
+        (29.6149806, 52.5467972, "representative_point"),
+        (29.93444, 52.89028, "property_reference"),
+    )
+    fixture_items = []
+    fixture_sources = {}
+    for index, row in enumerate(fixture_rows, start=1):
+        destination_id = str(row["destination_id"])
+        latitude, longitude, coordinate_role = pending_review_test_geometry[index - 1]
+        fixture_items.append(ProductionDestinationItem(
+            destination_id=destination_id,
+            destination_key=f"E2E-TEST-ONLY-{index}",
+            canonical_name=f"NONEXISTENT E2E TEST PLACE {index}",
+            localized_names={
+                "fa-IR": f"مقصد ساختگی آزمون {index}",
+                "en-US": f"Synthetic E2E test place {index}",
+                "ar": f"وجهة اختبار اصطناعية {index}",
+            },
+            aliases=[],
+            destination_type="heritage_site",
+            province_name="TEST ONLY",
+            city_name="TEST ONLY",
+            latitude=latitude,
+            longitude=longitude,
+            coordinate_role=coordinate_role,
+        ))
+        fixture_sources[destination_id] = [EvidenceSource(
+            destination_id=int(destination_id),
+            source_id=98_000 + index,
+            source_name="FAKE EVIDENCE — TEST ONLY",
+            source_url=f"https://example.invalid/e2e-test-only/{index}",
+            source_role="synthetic_test_only",
+            evidence_note="Fabricated solely for guarded API and persistence verification.",
+        )]
+    fixture_bundle = (
+        fixture_items,
+        fixture_sources,
+        {str(item.destination_id): StructuredDestinationMetadata(tags=[]) for item in fixture_items},
+    )
+    original_bundle = traveler_api.production_catalogue_bundle
+    fixture_state = {"enabled": False}
+
+    def guarded_catalogue_bundle(settings):
+        if fixture_state["enabled"]:
+            return fixture_bundle
+        return original_bundle(settings)
+
+    # Never inject synthetic recommendation identities in real-catalogue mode.
+    if not geo_qa_mode and not national_catalogue_mode:
+        traveler_api.production_catalogue_bundle = guarded_catalogue_bundle
     adapter = FakeSmsAdapter()
     app.state.sms_adapter = adapter
-    app.dependency_overrides[config.get_settings] = lambda: settings
+    # Routers imported the original cached dependency function by reference.
+    # Override that exact callable; patching config.get_settings alone replaces
+    # only the module attribute and leaves route dependencies on defaults.
+    app.dependency_overrides[settings_dependency] = lambda: settings
     server = uvicorn.Server(uvicorn.Config(
         app, host="127.0.0.1", port=api_port, log_level="warning", access_log=False, log_config=None
     ))
@@ -225,6 +574,12 @@ def main() -> None:
     control.daemon_threads = True
     control.adapter = adapter
     control.database = database
+    control.chat_gateway = chat_gateway
+    control.owner_rag_counter = owner_rag_counter
+    control.itinerary_fixture_enabled = False
+    control.itinerary_fixture_ids = [str(row["destination_id"]) for row in fixture_rows]
+    # Keep the closure state shared with the private control handler.
+    control.fixture_state = fixture_state
     control.control_token = control_token
     control_thread = threading.Thread(target=control.serve_forever, daemon=True)
     control_thread.start()

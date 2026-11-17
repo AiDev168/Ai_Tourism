@@ -1,0 +1,25 @@
+﻿domain,metric,numerator_or_value,denominator,status,interpretation
+spatial_candidates,new_spatial_entities,0,0,none,The v2 pack proposes enriching 11 existing canonical entities; it adds no new spatial entity.
+spatial_candidates,existing_destination_enrichment_proposals,11,11,draft_review_only,All require exact target identity and editorial review; none is published by this candidate pack.
+spatial_candidates,localized_name_draft_complete,11,11,100_percent_draft_only,All three locale keys are populated; native review not yet accepted.
+spatial_candidates,localized_description_draft_complete,11,11,100_percent_draft_only,All three locale keys are populated; draft translations are not approved copy.
+spatial_candidates,claim_count,22,22,source_linked_drafts,Two source-linked draft factual claims per spatial proposal in this pack.
+spatial_candidates,secondary_representative_coordinates,9,11,needs_independent_validation,Wikipedia secondary point references; not entrances and not sufficient for routing.
+spatial_candidates,UNESCO_property_reference_coordinates,2,11,official_property_reference_only,Persepolis and Pasargadae property references; do not label as visitor gates.
+spatial_candidates,verified_visitor_entrance_coordinates,0,11,none,No verified visitor-entrance points in candidate pack.
+spatial_candidates,access_difficulty_mobility_safety_profile_verified,0,11,unknown,All access profiles intentionally remain unknown/not researched.
+spatial_candidates,operational_facts_verified,0,11,unknown,"Opening hours, tickets, duration, entrance, parking and public transport not verified."
+spatial_candidates,production_published,0,11,not_published,All candidate proposals remain needs_review/pending/publishable=false.
+culinary,non_spatial_food_candidates,5,5,draft_review_only,All are non-spatial and have no associated venue IDs.
+culinary,localized_name_draft_complete,5,5,100_percent_draft_only,Three locale keys populated; all require native editorial review.
+culinary,localized_description_draft_complete,5,5,100_percent_draft_only,Three locale keys populated; all require native editorial review.
+culinary,claim_count,7,7,source_linked_drafts,Seven claim-level draft records source-linked.
+culinary,venue_identity_and_live_availability_verified,0,5,none,"No restaurants, menu inventories, prices or current availability established."
+culinary,ingredients_allergens_dietary_guarantees_verified,0,5,unknown,No complete food safety/ingredient guarantee; keep unknown.
+culinary,coordinates_assigned,0,5,correctly_non_spatial,Food concepts are not geographic places.
+culinary,production_published,0,5,not_published,All remain needs_review/pending/publishable=false.
+sources,registered_sources,23,23,registered,Ten VisitIran attraction profiles etc.; see source register classification below.
+sources,source_record_types,9 distinct types,9,classified,"Source classes: tourism attraction, official portal, scholarly, World Heritage, geospatial, cuisine and food context."
+retrieval,production_spatial_candidates,0,current report evidence,empty_at_last_verified_test,Phase 4 report/browser observed zero approved spatial production candidates; not re-queried by ChatGPT.
+retrieval,production_culinary_candidates,0,current report evidence,no_published_candidates_in_phase4,Phase 4 report says no culinary candidates were published/returned in that run.
+retrieval,semantic_eval_runs,0,not_run,not_measured,No owner RAG evaluation run; no Recall/MRR/nDCG/faithfulness result claimed.

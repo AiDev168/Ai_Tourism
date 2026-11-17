@@ -1,0 +1,1311 @@
+{
+  "dataset_id": "ai_tourism_rag_eval_v1",
+  "version": "1.0.0",
+  "created_on": "2026-11-09",
+  "status": "draft_owner_review_required",
+  "purpose": "Multilingual evidence retrieval and grounded answer acceptance set; not a model benchmark and not permission to change the owner's RAG implementation.",
+  "locales": [
+    "fa-IR",
+    "en-US",
+    "ar"
+  ],
+  "scenario_counts": {
+    "positive_scenarios": 14,
+    "negative_scenarios": 12,
+    "total_scenarios": 26,
+    "localized_cases": 78
+  },
+  "corpus_policy": {
+    "positive_expectations": "Only source-backed claims in reviewed production corpus. Current candidate proposals remain non-published and therefore are not valid production retrieval targets until approved.",
+    "negative_expectations": "No evidence for current/operational/accessibility/safety/route/weather/restaurant/booking claims; abstain or return a clearly bounded partial answer only where specified.",
+    "spatial_and_culinary_separate": true,
+    "staging_and_synthetic_excluded": true
+  },
+  "scoring_warning": "The current owner RAG has not been run against this set. No Recall/MRR/nDCG/faithfulness result is claimed. Source identifiers are gold evidence references, not hardcoded production corpus row IDs.",
+  "cases": [
+    {
+      "case_id": "POS-01-fa-IR",
+      "scenario_id": "POS-01",
+      "locale": "fa-IR",
+      "topic": "fars_capital",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_FARS"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Fars Province guide identifies Shiraz as the provincial capital.",
+      "must_not_claim": [
+        "Do not infer municipal boundaries or population."
+      ],
+      "query": "مرکز استان فارس کدام شهر است؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-01-en-US",
+      "scenario_id": "POS-01",
+      "locale": "en-US",
+      "topic": "fars_capital",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_FARS"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Fars Province guide identifies Shiraz as the provincial capital.",
+      "must_not_claim": [
+        "Do not infer municipal boundaries or population."
+      ],
+      "query": "Which city is the capital of Fars Province?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-01-ar",
+      "scenario_id": "POS-01",
+      "locale": "ar",
+      "topic": "fars_capital",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_FARS"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Fars Province guide identifies Shiraz as the provincial capital.",
+      "must_not_claim": [
+        "Do not infer municipal boundaries or population."
+      ],
+      "query": "ما عاصمة محافظة فارس؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-02-fa-IR",
+      "scenario_id": "POS-02",
+      "locale": "fa-IR",
+      "topic": "shirazi_gardens",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_FARS"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "The source lists Eram, Afifabad, Delgosha and Jahan Nama gardens among Shiraz's notable gardens.",
+      "must_not_claim": [
+        "Do not infer entry fees, hours, current public access or UNESCO status for every garden."
+      ],
+      "query": "در راهنمای استان فارس چه باغ‌های شناخته‌شده‌ای برای شیراز نام برده شده‌اند؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-02-en-US",
+      "scenario_id": "POS-02",
+      "locale": "en-US",
+      "topic": "shirazi_gardens",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_FARS"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "The source lists Eram, Afifabad, Delgosha and Jahan Nama gardens among Shiraz's notable gardens.",
+      "must_not_claim": [
+        "Do not infer entry fees, hours, current public access or UNESCO status for every garden."
+      ],
+      "query": "Which notable gardens in Shiraz are named by the Fars Province guide?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-02-ar",
+      "scenario_id": "POS-02",
+      "locale": "ar",
+      "topic": "shirazi_gardens",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_FARS"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "The source lists Eram, Afifabad, Delgosha and Jahan Nama gardens among Shiraz's notable gardens.",
+      "must_not_claim": [
+        "Do not infer entry fees, hours, current public access or UNESCO status for every garden."
+      ],
+      "query": "ما الحدائق المعروفة في شيراز التي يذكرها دليل محافظة فارس؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-03-fa-IR",
+      "scenario_id": "POS-03",
+      "locale": "fa-IR",
+      "topic": "hafez_tomb_identity",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_HAFEZ",
+        "IRANICA_HAFEZ"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Hafezieh is the tomb/memorial of Hafez in Shiraz.",
+      "must_not_claim": [
+        "Do not infer current visiting permissions or opening times."
+      ],
+      "query": "حافظیه به یادبود چه کسی است و در کدام شهر قرار دارد؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-03-en-US",
+      "scenario_id": "POS-03",
+      "locale": "en-US",
+      "topic": "hafez_tomb_identity",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_HAFEZ",
+        "IRANICA_HAFEZ"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Hafezieh is the tomb/memorial of Hafez in Shiraz.",
+      "must_not_claim": [
+        "Do not infer current visiting permissions or opening times."
+      ],
+      "query": "Whose memorial is Hafezieh, and in which city is it located?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-03-ar",
+      "scenario_id": "POS-03",
+      "locale": "ar",
+      "topic": "hafez_tomb_identity",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_HAFEZ",
+        "IRANICA_HAFEZ"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Hafezieh is the tomb/memorial of Hafez in Shiraz.",
+      "must_not_claim": [
+        "Do not infer current visiting permissions or opening times."
+      ],
+      "query": "لمن خُصصت حافظية، وفي أي مدينة تقع؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-04-fa-IR",
+      "scenario_id": "POS-04",
+      "locale": "fa-IR",
+      "topic": "hafez_dome_date",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_HAFEZ"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran reports a dome was built over the tomb in 1452 CE; attribute the date to the source.",
+      "must_not_claim": [
+        "Must attribute the date; do not state it as independently cross-verified."
+      ],
+      "query": "طبق منبع Visit Iran، چه سالی گنبدی بر فراز آرامگاه حافظ ساخته شد؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-04-en-US",
+      "scenario_id": "POS-04",
+      "locale": "en-US",
+      "topic": "hafez_dome_date",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_HAFEZ"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran reports a dome was built over the tomb in 1452 CE; attribute the date to the source.",
+      "must_not_claim": [
+        "Must attribute the date; do not state it as independently cross-verified."
+      ],
+      "query": "According to Visit Iran, in what year was a dome built over Hafez's tomb?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-04-ar",
+      "scenario_id": "POS-04",
+      "locale": "ar",
+      "topic": "hafez_dome_date",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_HAFEZ"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran reports a dome was built over the tomb in 1452 CE; attribute the date to the source.",
+      "must_not_claim": [
+        "Must attribute the date; do not state it as independently cross-verified."
+      ],
+      "query": "وفقاً لموقع Visit Iran، في أي سنة بُنيت قبة فوق ضريح حافظ؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-05-fa-IR",
+      "scenario_id": "POS-05",
+      "locale": "fa-IR",
+      "topic": "saadi_delgosha_proximity",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_SAADI"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran describes Saadi's tomb as near Delgosha Garden; this is qualitative proximity only.",
+      "must_not_claim": [
+        "Do not invent distance, walking route or travel time."
+      ],
+      "query": "منبع Visit Iran چه ارتباط مکانی میان آرامگاه سعدی و باغ دلگشا ذکر می‌کند؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-05-en-US",
+      "scenario_id": "POS-05",
+      "locale": "en-US",
+      "topic": "saadi_delgosha_proximity",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_SAADI"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran describes Saadi's tomb as near Delgosha Garden; this is qualitative proximity only.",
+      "must_not_claim": [
+        "Do not invent distance, walking route or travel time."
+      ],
+      "query": "What geographic relationship does Visit Iran describe between Saadi's tomb and Delgosha Garden?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-05-ar",
+      "scenario_id": "POS-05",
+      "locale": "ar",
+      "topic": "saadi_delgosha_proximity",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_SAADI"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran describes Saadi's tomb as near Delgosha Garden; this is qualitative proximity only.",
+      "must_not_claim": [
+        "Do not invent distance, walking route or travel time."
+      ],
+      "query": "ما العلاقة المكانية التي يذكرها Visit Iran بين ضريح سعدي وحديقة دلگشا؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-06-fa-IR",
+      "scenario_id": "POS-06",
+      "locale": "fa-IR",
+      "topic": "persepolis_history",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "UNESCO_PERSEPOLIS",
+        "VISITIRAN_PERSEPOLIS"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "UNESCO says construction began under Darius I in 518 BCE and identifies the property in Fars near Marvdasht context.",
+      "must_not_claim": [
+        "Do not turn the UNESCO property coordinate into an entrance or road destination."
+      ],
+      "query": "ساخت تخت جمشید به فرمان کدام پادشاه و از چه سالی آغاز شد؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-06-en-US",
+      "scenario_id": "POS-06",
+      "locale": "en-US",
+      "topic": "persepolis_history",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "UNESCO_PERSEPOLIS",
+        "VISITIRAN_PERSEPOLIS"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "UNESCO says construction began under Darius I in 518 BCE and identifies the property in Fars near Marvdasht context.",
+      "must_not_claim": [
+        "Do not turn the UNESCO property coordinate into an entrance or road destination."
+      ],
+      "query": "Under which ruler and in what year did construction of Persepolis begin?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-06-ar",
+      "scenario_id": "POS-06",
+      "locale": "ar",
+      "topic": "persepolis_history",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "UNESCO_PERSEPOLIS",
+        "VISITIRAN_PERSEPOLIS"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "UNESCO says construction began under Darius I in 518 BCE and identifies the property in Fars near Marvdasht context.",
+      "must_not_claim": [
+        "Do not turn the UNESCO property coordinate into an entrance or road destination."
+      ],
+      "query": "في عهد أي ملك وفي أي سنة بدأ بناء تخت جمشيد؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-07-fa-IR",
+      "scenario_id": "POS-07",
+      "locale": "fa-IR",
+      "topic": "pasargadae_history",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "UNESCO_PASARGADAE",
+        "UNESCO_PASARGADAE_MAP"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Pasargadae was the first dynastic capital of the Achaemenid Empire associated with Cyrus II; property includes the tomb, palace/garden ensemble and Tall-e Takht.",
+      "must_not_claim": [
+        "Do not state current site access, prices or visitor routes."
+      ],
+      "query": "پاسارگاد چه جایگاهی در تاریخ هخامنشی دارد و چه اجزایی در محوطه آن معرفی شده‌اند؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-07-en-US",
+      "scenario_id": "POS-07",
+      "locale": "en-US",
+      "topic": "pasargadae_history",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "UNESCO_PASARGADAE",
+        "UNESCO_PASARGADAE_MAP"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Pasargadae was the first dynastic capital of the Achaemenid Empire associated with Cyrus II; property includes the tomb, palace/garden ensemble and Tall-e Takht.",
+      "must_not_claim": [
+        "Do not state current site access, prices or visitor routes."
+      ],
+      "query": "What was Pasargadae's role in Achaemenid history, and which major components are part of the property?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-07-ar",
+      "scenario_id": "POS-07",
+      "locale": "ar",
+      "topic": "pasargadae_history",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "UNESCO_PASARGADAE",
+        "UNESCO_PASARGADAE_MAP"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Pasargadae was the first dynastic capital of the Achaemenid Empire associated with Cyrus II; property includes the tomb, palace/garden ensemble and Tall-e Takht.",
+      "must_not_claim": [
+        "Do not state current site access, prices or visitor routes."
+      ],
+      "query": "ما مكانة باسارغاد في التاريخ الأخميني، وما أبرز مكونات الموقع؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-08-fa-IR",
+      "scenario_id": "POS-08",
+      "locale": "fa-IR",
+      "topic": "eram_garden_source",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_ERAM_EN",
+        "VISITIRAN_ERAM_FA",
+        "UNESCO_PERSIAN_GARDENS"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran describes Eram Garden in Shiraz and historical/landscape elements; UNESCO inscribed a serial property of nine Persian gardens. Preserve component-level attribution.",
+      "must_not_claim": [
+        "Do not claim all historic gardens in Shiraz are UNESCO components; verify the exact listed component."
+      ],
+      "query": "منابع چه ویژگی‌هایی درباره باغ ارم گزارش می‌کنند و ارتباط آن با مجموعه باغ‌های ایرانی چیست؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-08-en-US",
+      "scenario_id": "POS-08",
+      "locale": "en-US",
+      "topic": "eram_garden_source",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_ERAM_EN",
+        "VISITIRAN_ERAM_FA",
+        "UNESCO_PERSIAN_GARDENS"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran describes Eram Garden in Shiraz and historical/landscape elements; UNESCO inscribed a serial property of nine Persian gardens. Preserve component-level attribution.",
+      "must_not_claim": [
+        "Do not claim all historic gardens in Shiraz are UNESCO components; verify the exact listed component."
+      ],
+      "query": "What do the sources say about Eram Garden, and how should its relationship to the Persian Gardens serial property be described?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-08-ar",
+      "scenario_id": "POS-08",
+      "locale": "ar",
+      "topic": "eram_garden_source",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_ERAM_EN",
+        "VISITIRAN_ERAM_FA",
+        "UNESCO_PERSIAN_GARDENS"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran describes Eram Garden in Shiraz and historical/landscape elements; UNESCO inscribed a serial property of nine Persian gardens. Preserve component-level attribution.",
+      "must_not_claim": [
+        "Do not claim all historic gardens in Shiraz are UNESCO components; verify the exact listed component."
+      ],
+      "query": "ماذا تذكر المصادر عن حديقة إرم، وكيف ينبغي وصف علاقتها بممتلك الحدائق الفارسية المتسلسل؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-09-fa-IR",
+      "scenario_id": "POS-09",
+      "locale": "fa-IR",
+      "topic": "nasir_molk_architecture",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_NASIR_EN",
+        "VISITIRAN_NASIR_FA"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran describes the Qajar-era mosque and colored glass in the west prayer hall.",
+      "must_not_claim": [
+        "Do not infer current photography/access restrictions."
+      ],
+      "query": "در توصیف Visit Iran چه ویژگی معماری مسجد نصیرالملک برجسته شده است؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-09-en-US",
+      "scenario_id": "POS-09",
+      "locale": "en-US",
+      "topic": "nasir_molk_architecture",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_NASIR_EN",
+        "VISITIRAN_NASIR_FA"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran describes the Qajar-era mosque and colored glass in the west prayer hall.",
+      "must_not_claim": [
+        "Do not infer current photography/access restrictions."
+      ],
+      "query": "Which architectural feature of Nasir al-Mulk Mosque is highlighted by Visit Iran?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-09-ar",
+      "scenario_id": "POS-09",
+      "locale": "ar",
+      "topic": "nasir_molk_architecture",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_NASIR_EN",
+        "VISITIRAN_NASIR_FA"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran describes the Qajar-era mosque and colored glass in the west prayer hall.",
+      "must_not_claim": [
+        "Do not infer current photography/access restrictions."
+      ],
+      "query": "ما السمة المعمارية التي يبرزها موقع Visit Iran في مسجد نصير الملك؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-10-fa-IR",
+      "scenario_id": "POS-10",
+      "locale": "fa-IR",
+      "topic": "narenjestan_features",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_NARENJESTAN"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran associates Narenjestan Qavam with the Qavam family and Qajar period and lists decorative techniques.",
+      "must_not_claim": [
+        "Do not infer current access to each room or building."
+      ],
+      "query": "منبع Visit Iran نارنجستان قوام را به چه دوره و چه آرایه‌هایی مرتبط می‌کند؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-10-en-US",
+      "scenario_id": "POS-10",
+      "locale": "en-US",
+      "topic": "narenjestan_features",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_NARENJESTAN"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran associates Narenjestan Qavam with the Qavam family and Qajar period and lists decorative techniques.",
+      "must_not_claim": [
+        "Do not infer current access to each room or building."
+      ],
+      "query": "Which period and decorative features does Visit Iran associate with Narenjestan Qavam?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-10-ar",
+      "scenario_id": "POS-10",
+      "locale": "ar",
+      "topic": "narenjestan_features",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_NARENJESTAN"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Visit Iran associates Narenjestan Qavam with the Qavam family and Qajar period and lists decorative techniques.",
+      "must_not_claim": [
+        "Do not infer current access to each room or building."
+      ],
+      "query": "بأي عصر وما الزخارف التي يربط موقع Visit Iran نارنجستان قوام بها؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-11-fa-IR",
+      "scenario_id": "POS-11",
+      "locale": "fa-IR",
+      "topic": "vakil_bath_architecture",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_VAKIL_BATH",
+        "IRANICA_VAKIL_BATH"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Sources describe the Zand-era bath commissioned by Karim Khan and an octagonal dressing hall with a dome/skylight.",
+      "must_not_claim": [
+        "Do not assert present museum operation or visitor access."
+      ],
+      "query": "حمام وکیل به کدام دوره مربوط است و ایرانیکا چه ویژگی معماری برای آن توصیف می‌کند؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-11-en-US",
+      "scenario_id": "POS-11",
+      "locale": "en-US",
+      "topic": "vakil_bath_architecture",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_VAKIL_BATH",
+        "IRANICA_VAKIL_BATH"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Sources describe the Zand-era bath commissioned by Karim Khan and an octagonal dressing hall with a dome/skylight.",
+      "must_not_claim": [
+        "Do not assert present museum operation or visitor access."
+      ],
+      "query": "Which period is Vakil Bath associated with, and what architectural feature does Encyclopaedia Iranica describe?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-11-ar",
+      "scenario_id": "POS-11",
+      "locale": "ar",
+      "topic": "vakil_bath_architecture",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_VAKIL_BATH",
+        "IRANICA_VAKIL_BATH"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Sources describe the Zand-era bath commissioned by Karim Khan and an octagonal dressing hall with a dome/skylight.",
+      "must_not_claim": [
+        "Do not assert present museum operation or visitor access."
+      ],
+      "query": "إلى أي عصر يُنسب حمام وكيل، وما السمة المعمارية التي تصفها إيرانیکا؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-12-fa-IR",
+      "scenario_id": "POS-12",
+      "locale": "fa-IR",
+      "topic": "kalam_polo_recipe_variants",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_KALAM_POLO",
+        "ICRO_KALAM_POLO"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Two published descriptions vary in cabbage/kohlrabi and other ingredients. Preserve source-specific variants rather than synthesize one definitive recipe.",
+      "must_not_claim": [
+        "No allergen, halal, vegetarian or nutrition guarantee."
+      ],
+      "query": "آیا منابع درباره مواد کلم‌پلو شیرازی دقیقاً یکسان‌اند؟ تفاوت را با انتساب منبع توضیح بده.",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-12-en-US",
+      "scenario_id": "POS-12",
+      "locale": "en-US",
+      "topic": "kalam_polo_recipe_variants",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_KALAM_POLO",
+        "ICRO_KALAM_POLO"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Two published descriptions vary in cabbage/kohlrabi and other ingredients. Preserve source-specific variants rather than synthesize one definitive recipe.",
+      "must_not_claim": [
+        "No allergen, halal, vegetarian or nutrition guarantee."
+      ],
+      "query": "Do the sources give exactly the same ingredients for Shirazi Kalam Polo? Explain the differences with source attribution.",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-12-ar",
+      "scenario_id": "POS-12",
+      "locale": "ar",
+      "topic": "kalam_polo_recipe_variants",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_KALAM_POLO",
+        "ICRO_KALAM_POLO"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Two published descriptions vary in cabbage/kohlrabi and other ingredients. Preserve source-specific variants rather than synthesize one definitive recipe.",
+      "must_not_claim": [
+        "No allergen, halal, vegetarian or nutrition guarantee."
+      ],
+      "query": "هل تتفق المصادر تماماً على مكونات كلم پلو الشيرازي؟ اشرح الاختلاف مع نسبة كل وصف إلى مصدره.",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-13-fa-IR",
+      "scenario_id": "POS-13",
+      "locale": "fa-IR",
+      "topic": "fars_cuisine_list",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_FARS",
+        "VISITIRAN_VAKIL_BAZAAR_FOOD"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Fars guide names multiple local dishes and describes Aush-e Sabzi as a popular Shiraz breakfast; list only names supported by the source.",
+      "must_not_claim": [
+        "Do not infer recipes, ingredients, serving venues, prices or availability."
+      ],
+      "query": "راهنمای فارس چه خوراکی‌های محلی را نام می‌برد و آش سبزی را چگونه معرفی می‌کند؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-13-en-US",
+      "scenario_id": "POS-13",
+      "locale": "en-US",
+      "topic": "fars_cuisine_list",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_FARS",
+        "VISITIRAN_VAKIL_BAZAAR_FOOD"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Fars guide names multiple local dishes and describes Aush-e Sabzi as a popular Shiraz breakfast; list only names supported by the source.",
+      "must_not_claim": [
+        "Do not infer recipes, ingredients, serving venues, prices or availability."
+      ],
+      "query": "Which local foods does the Fars guide list, and how does it describe Aush-e Sabzi?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-13-ar",
+      "scenario_id": "POS-13",
+      "locale": "ar",
+      "topic": "fars_cuisine_list",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "VISITIRAN_FARS",
+        "VISITIRAN_VAKIL_BAZAAR_FOOD"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "Fars guide names multiple local dishes and describes Aush-e Sabzi as a popular Shiraz breakfast; list only names supported by the source.",
+      "must_not_claim": [
+        "Do not infer recipes, ingredients, serving venues, prices or availability."
+      ],
+      "query": "ما الأطعمة المحلية التي يذكرها دليل فارس، وكيف يصف آش سبزي؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-14-fa-IR",
+      "scenario_id": "POS-14",
+      "locale": "fa-IR",
+      "topic": "sassanid_fars_landscape",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "UNESCO_SASSANID_FARS",
+        "UNESCO_SASSANID_FARS_MAP"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "UNESCO describes an eight-component Sassanid archaeological landscape grouped in Firuzabad, Bishapur and Sarvestan regions.",
+      "must_not_claim": [
+        "Do not infer walking connections, access, route feasibility or common opening schedules."
+      ],
+      "query": "منظر باستان‌شناسی ساسانی فارس از چه نواحی و چند مؤلفه تشکیل شده است؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-14-en-US",
+      "scenario_id": "POS-14",
+      "locale": "en-US",
+      "topic": "sassanid_fars_landscape",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "UNESCO_SASSANID_FARS",
+        "UNESCO_SASSANID_FARS_MAP"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "UNESCO describes an eight-component Sassanid archaeological landscape grouped in Firuzabad, Bishapur and Sarvestan regions.",
+      "must_not_claim": [
+        "Do not infer walking connections, access, route feasibility or common opening schedules."
+      ],
+      "query": "Which areas and how many components make up the Sassanid Archaeological Landscape of Fars?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "POS-14-ar",
+      "scenario_id": "POS-14",
+      "locale": "ar",
+      "topic": "sassanid_fars_landscape",
+      "expected_class": "positive",
+      "expected_source_ids": [
+        "UNESCO_SASSANID_FARS",
+        "UNESCO_SASSANID_FARS_MAP"
+      ],
+      "expected_evidence_behavior": "retrieve_claim_level_evidence",
+      "answer_requirement": "UNESCO describes an eight-component Sassanid archaeological landscape grouped in Firuzabad, Bishapur and Sarvestan regions.",
+      "must_not_claim": [
+        "Do not infer walking connections, access, route feasibility or common opening schedules."
+      ],
+      "query": "ما المناطق وكم عدد المكونات التي يتألف منها المشهد الأثري الساساني في فارس؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-01-fa-IR",
+      "scenario_id": "NEG-01",
+      "locale": "fa-IR",
+      "topic": "current_opening_hours",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No approved current opening-hours source is in the reviewed pack.",
+      "must_not_claim": [
+        "No invented hours; no stale hours promoted as current."
+      ],
+      "query": "امروز حافظیه تا چه ساعتی باز است؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-01-en-US",
+      "scenario_id": "NEG-01",
+      "locale": "en-US",
+      "topic": "current_opening_hours",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No approved current opening-hours source is in the reviewed pack.",
+      "must_not_claim": [
+        "No invented hours; no stale hours promoted as current."
+      ],
+      "query": "What time does Hafezieh close today?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-01-ar",
+      "scenario_id": "NEG-01",
+      "locale": "ar",
+      "topic": "current_opening_hours",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No approved current opening-hours source is in the reviewed pack.",
+      "must_not_claim": [
+        "No invented hours; no stale hours promoted as current."
+      ],
+      "query": "إلى أي ساعة تفتح حافظية اليوم؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-02-fa-IR",
+      "scenario_id": "NEG-02",
+      "locale": "fa-IR",
+      "topic": "current_ticket_price",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No current ticket price is verified in the approved content.",
+      "must_not_claim": [
+        "No price, currency conversion or fabricated estimate."
+      ],
+      "query": "قیمت بلیت ورودی تخت جمشید امروز چقدر است؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-02-en-US",
+      "scenario_id": "NEG-02",
+      "locale": "en-US",
+      "topic": "current_ticket_price",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No current ticket price is verified in the approved content.",
+      "must_not_claim": [
+        "No price, currency conversion or fabricated estimate."
+      ],
+      "query": "What is today's admission price for Persepolis?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-02-ar",
+      "scenario_id": "NEG-02",
+      "locale": "ar",
+      "topic": "current_ticket_price",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No current ticket price is verified in the approved content.",
+      "must_not_claim": [
+        "No price, currency conversion or fabricated estimate."
+      ],
+      "query": "كم سعر تذكرة دخول تخت جمشيد اليوم؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-03-fa-IR",
+      "scenario_id": "NEG-03",
+      "locale": "fa-IR",
+      "topic": "wheelchair_accessibility",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Accessibility is explicitly unknown for the candidates.",
+      "must_not_claim": [
+        "Must abstain; accessibility is non-waivable and cannot be inferred from photos or type."
+      ],
+      "query": "آیا مسیر بازدید مسجد نصیرالملک برای ویلچر مناسب است؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-03-en-US",
+      "scenario_id": "NEG-03",
+      "locale": "en-US",
+      "topic": "wheelchair_accessibility",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Accessibility is explicitly unknown for the candidates.",
+      "must_not_claim": [
+        "Must abstain; accessibility is non-waivable and cannot be inferred from photos or type."
+      ],
+      "query": "Is the visitor route at Nasir al-Mulk Mosque wheelchair accessible?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-03-ar",
+      "scenario_id": "NEG-03",
+      "locale": "ar",
+      "topic": "wheelchair_accessibility",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Accessibility is explicitly unknown for the candidates.",
+      "must_not_claim": [
+        "Must abstain; accessibility is non-waivable and cannot be inferred from photos or type."
+      ],
+      "query": "هل مسار زيارة مسجد نصير الملك مناسب للكراسي المتحركة؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-04-fa-IR",
+      "scenario_id": "NEG-04",
+      "locale": "fa-IR",
+      "topic": "trail_difficulty",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No reviewed trail difficulty/access profile exists; Visit Iran's general Reghez note is not a full safety assessment.",
+      "must_not_claim": [
+        "No unsupported grade or safety conclusion."
+      ],
+      "query": "دره رغز برای فرد مبتدی چه درجه سختی و چه خطرهایی دارد؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-04-en-US",
+      "scenario_id": "NEG-04",
+      "locale": "en-US",
+      "topic": "trail_difficulty",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No reviewed trail difficulty/access profile exists; Visit Iran's general Reghez note is not a full safety assessment.",
+      "must_not_claim": [
+        "No unsupported grade or safety conclusion."
+      ],
+      "query": "What difficulty grade and hazards does Reghez Canyon have for a beginner?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-04-ar",
+      "scenario_id": "NEG-04",
+      "locale": "ar",
+      "topic": "trail_difficulty",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No reviewed trail difficulty/access profile exists; Visit Iran's general Reghez note is not a full safety assessment.",
+      "must_not_claim": [
+        "No unsupported grade or safety conclusion."
+      ],
+      "query": "ما درجة صعوبة ومخاطر وادي رغز للمبتدئين؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-05-fa-IR",
+      "scenario_id": "NEG-05",
+      "locale": "fa-IR",
+      "topic": "route_duration",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No route graph, verified entrances or live route provider are connected.",
+      "must_not_claim": [
+        "No distance, duration or navigable polyline fabricated from representative points."
+      ],
+      "query": "از حافظیه تا سعدیه پیاده چند دقیقه راه است؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-05-en-US",
+      "scenario_id": "NEG-05",
+      "locale": "en-US",
+      "topic": "route_duration",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No route graph, verified entrances or live route provider are connected.",
+      "must_not_claim": [
+        "No distance, duration or navigable polyline fabricated from representative points."
+      ],
+      "query": "How many minutes does it take to walk from Hafezieh to Saadieh?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-05-ar",
+      "scenario_id": "NEG-05",
+      "locale": "ar",
+      "topic": "route_duration",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No route graph, verified entrances or live route provider are connected.",
+      "must_not_claim": [
+        "No distance, duration or navigable polyline fabricated from representative points."
+      ],
+      "query": "كم دقيقة يستغرق المشي من حافظية إلى سعدية؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-06-fa-IR",
+      "scenario_id": "NEG-06",
+      "locale": "fa-IR",
+      "topic": "visitor_entrance_coordinate",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Existing points are mostly secondary representative points; UNESCO coordinates represent properties, not entrances.",
+      "must_not_claim": [
+        "Never return a property reference coordinate as entrance."
+      ],
+      "query": "مختصات دقیق ورودی بازدیدکنندگان تخت جمشید را بده.",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-06-en-US",
+      "scenario_id": "NEG-06",
+      "locale": "en-US",
+      "topic": "visitor_entrance_coordinate",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Existing points are mostly secondary representative points; UNESCO coordinates represent properties, not entrances.",
+      "must_not_claim": [
+        "Never return a property reference coordinate as entrance."
+      ],
+      "query": "Give me the exact visitor-gate coordinates for Persepolis.",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-06-ar",
+      "scenario_id": "NEG-06",
+      "locale": "ar",
+      "topic": "visitor_entrance_coordinate",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Existing points are mostly secondary representative points; UNESCO coordinates represent properties, not entrances.",
+      "must_not_claim": [
+        "Never return a property reference coordinate as entrance."
+      ],
+      "query": "أعطني الإحداثيات الدقيقة لبوابة زوار تخت جمشيد.",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-07-fa-IR",
+      "scenario_id": "NEG-07",
+      "locale": "fa-IR",
+      "topic": "restaurant_live_availability",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Culinary records describe food, not restaurants, venue identities, current menus or availability.",
+      "must_not_claim": [
+        "No venue or live availability invented."
+      ],
+      "query": "الان کدام رستوران نزدیک بازار وکیل کلم‌پلو دارد؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-07-en-US",
+      "scenario_id": "NEG-07",
+      "locale": "en-US",
+      "topic": "restaurant_live_availability",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Culinary records describe food, not restaurants, venue identities, current menus or availability.",
+      "must_not_claim": [
+        "No venue or live availability invented."
+      ],
+      "query": "Which restaurant near Vakil Bazaar serves Kalam Polo right now?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-07-ar",
+      "scenario_id": "NEG-07",
+      "locale": "ar",
+      "topic": "restaurant_live_availability",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Culinary records describe food, not restaurants, venue identities, current menus or availability.",
+      "must_not_claim": [
+        "No venue or live availability invented."
+      ],
+      "query": "أي مطعم قرب سوق وكيل يقدم كلم پلو الآن؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-08-fa-IR",
+      "scenario_id": "NEG-08",
+      "locale": "fa-IR",
+      "topic": "food_allergen_safety",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Food source variations do not constitute a complete ingredient/allergen statement for a serving.",
+      "must_not_claim": [
+        "Must not guarantee allergen absence, dietary suitability or cross-contamination."
+      ],
+      "query": "کلم‌پلو برای فرد حساس به گلوتن و لبنیات کاملاً بی‌خطر است؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-08-en-US",
+      "scenario_id": "NEG-08",
+      "locale": "en-US",
+      "topic": "food_allergen_safety",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Food source variations do not constitute a complete ingredient/allergen statement for a serving.",
+      "must_not_claim": [
+        "Must not guarantee allergen absence, dietary suitability or cross-contamination."
+      ],
+      "query": "Is Kalam Polo completely safe for someone allergic to gluten and dairy?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-08-ar",
+      "scenario_id": "NEG-08",
+      "locale": "ar",
+      "topic": "food_allergen_safety",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Food source variations do not constitute a complete ingredient/allergen statement for a serving.",
+      "must_not_claim": [
+        "Must not guarantee allergen absence, dietary suitability or cross-contamination."
+      ],
+      "query": "هل كلم پلو آمن تماماً لمن لديه حساسية من الغلوتين ومنتجات الألبان؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-09-fa-IR",
+      "scenario_id": "NEG-09",
+      "locale": "fa-IR",
+      "topic": "weather_forecast",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Weather is not part of the static tourism/culinary corpus; no approved weather provider is selected.",
+      "must_not_claim": [
+        "No forecast from static RAG."
+      ],
+      "query": "هوای تخت جمشید فردا ساعت ۱۰ صبح چطور است؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-09-en-US",
+      "scenario_id": "NEG-09",
+      "locale": "en-US",
+      "topic": "weather_forecast",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Weather is not part of the static tourism/culinary corpus; no approved weather provider is selected.",
+      "must_not_claim": [
+        "No forecast from static RAG."
+      ],
+      "query": "What will the weather at Persepolis be tomorrow at 10 a.m.?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-09-ar",
+      "scenario_id": "NEG-09",
+      "locale": "ar",
+      "topic": "weather_forecast",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "Weather is not part of the static tourism/culinary corpus; no approved weather provider is selected.",
+      "must_not_claim": [
+        "No forecast from static RAG."
+      ],
+      "query": "كيف سيكون الطقس في تخت جمشيد غداً الساعة العاشرة صباحاً؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-10-fa-IR",
+      "scenario_id": "NEG-10",
+      "locale": "fa-IR",
+      "topic": "current_transport_parking",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No verified parking/transport/operational facts are present.",
+      "must_not_claim": [
+        "No current transport, parking, schedules or route claims."
+      ],
+      "query": "بهترین پارکینگ و اتوبوس فعال برای رفتن به پاسارگاد کدام است؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-10-en-US",
+      "scenario_id": "NEG-10",
+      "locale": "en-US",
+      "topic": "current_transport_parking",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No verified parking/transport/operational facts are present.",
+      "must_not_claim": [
+        "No current transport, parking, schedules or route claims."
+      ],
+      "query": "What is the best parking and currently operating bus to Pasargadae?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-10-ar",
+      "scenario_id": "NEG-10",
+      "locale": "ar",
+      "topic": "current_transport_parking",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No verified parking/transport/operational facts are present.",
+      "must_not_claim": [
+        "No current transport, parking, schedules or route claims."
+      ],
+      "query": "ما أفضل موقف سيارات وحافلة تعمل حالياً للوصول إلى باسارغاد؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-11-fa-IR",
+      "scenario_id": "NEG-11",
+      "locale": "fa-IR",
+      "topic": "food_recipe_detail",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "The current non-spatial pack lacks a full independently reviewed recipe for Do Piazeh Aloo.",
+      "must_not_claim": [
+        "No ingredients, portions, nutrition or health advice invented."
+      ],
+      "query": "دستور کامل دوپیازه‌آلو با مقدار دقیق مواد و کالری هر وعده چیست؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-11-en-US",
+      "scenario_id": "NEG-11",
+      "locale": "en-US",
+      "topic": "food_recipe_detail",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "The current non-spatial pack lacks a full independently reviewed recipe for Do Piazeh Aloo.",
+      "must_not_claim": [
+        "No ingredients, portions, nutrition or health advice invented."
+      ],
+      "query": "What is the full Do Piazeh Aloo recipe with exact quantities and calories per serving?",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-11-ar",
+      "scenario_id": "NEG-11",
+      "locale": "ar",
+      "topic": "food_recipe_detail",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "The current non-spatial pack lacks a full independently reviewed recipe for Do Piazeh Aloo.",
+      "must_not_claim": [
+        "No ingredients, portions, nutrition or health advice invented."
+      ],
+      "query": "ما الوصفة الكاملة لدو بيازه آلو مع المقادير الدقيقة والسعرات لكل حصة؟",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-12-fa-IR",
+      "scenario_id": "NEG-12",
+      "locale": "fa-IR",
+      "topic": "booking_or_availability",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No booking, inventory or transactional capability is approved; outbound links are not bookings.",
+      "must_not_claim": [
+        "Do not claim a reservation or payment; explain that no booking operation exists."
+      ],
+      "query": "برای فردا ساعت ۱۲ بازدید تخت جمشید را برای دو نفر رزرو کن.",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-12-en-US",
+      "scenario_id": "NEG-12",
+      "locale": "en-US",
+      "topic": "booking_or_availability",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No booking, inventory or transactional capability is approved; outbound links are not bookings.",
+      "must_not_claim": [
+        "Do not claim a reservation or payment; explain that no booking operation exists."
+      ],
+      "query": "Book a two-person visit to Persepolis for tomorrow at noon.",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    },
+    {
+      "case_id": "NEG-12-ar",
+      "scenario_id": "NEG-12",
+      "locale": "ar",
+      "topic": "booking_or_availability",
+      "expected_class": "no_evidence",
+      "expected_source_ids": [],
+      "expected_evidence_behavior": "abstain_without_fabricating",
+      "answer_requirement": "No booking, inventory or transactional capability is approved; outbound links are not bookings.",
+      "must_not_claim": [
+        "Do not claim a reservation or payment; explain that no booking operation exists."
+      ],
+      "query": "احجز زيارة لشخصين إلى تخت جمشيد غداً عند الظهر.",
+      "notes": "Draft gold case. Human review required before use as a scored release gate."
+    }
+  ]
+}

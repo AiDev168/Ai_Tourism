@@ -94,6 +94,7 @@ class SmsIrSandboxAdapter:
         if not api_key or api_key != api_key.strip() or "\r" in api_key or "\n" in api_key:
             raise SmsDeliveryError(SmsFailureCategory.INVALID_CONFIGURATION)
         self._api_key = api_key
+        self._template_id = self.sandbox_template_id
         self._client = httpx.Client(
             transport=transport,
             follow_redirects=False,
@@ -128,7 +129,7 @@ class SmsIrSandboxAdapter:
                 },
                 json={
                     "mobile": mobile,
-                    "templateId": self.sandbox_template_id,
+                    "templateId": self._template_id,
                     "parameters": [{"name": "Code", "value": message.verification_code}],
                 },
                 timeout=httpx.Timeout(bounded_timeout),
@@ -175,3 +176,27 @@ class SmsIrSandboxAdapter:
                 if candidate_text and len(candidate_text) <= 128:
                     message_id = candidate_text
         return SmsDeliveryReceipt(provider_message_id=message_id)
+
+
+class SmsIrLiveStagingAdapter(SmsIrSandboxAdapter):
+    """SMS.ir Verify adapter for the explicitly enabled private staging pilot.
+
+    Unlike the sandbox adapter, this requires an owner-supplied live template
+    identifier and rejects the sandbox's hard-coded identifier.
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        template_id: int,
+        *,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        if (
+            type(template_id) is not int
+            or template_id <= 0
+            or template_id == self.sandbox_template_id
+        ):
+            raise SmsDeliveryError(SmsFailureCategory.INVALID_CONFIGURATION)
+        super().__init__(api_key, transport=transport)
+        self._template_id = template_id

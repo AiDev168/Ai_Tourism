@@ -33,22 +33,101 @@ afterEach(() => {
 describe('OTP delivery failure UX', () => {
   it('shows a generic retry state without opening code entry when no usable challenge is returned', async () => {
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ methods: ['otp'], otp_delivery: 'available' }))
       .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401))
       .mockResolvedValueOnce(response({ challenge_id: null, status: 'unavailable' }, 202));
     vi.stubGlobal('fetch', fetchMock);
     await act(async () => { root.render(<AuthPanel locale="en-US" />); });
     await settle();
-    await act(async () => { (host.querySelector('button') as HTMLButtonElement).click(); });
-    const phone = host.querySelector<HTMLInputElement>('#auth-phone')!;
+    await act(async () => { (document.querySelector('button') as HTMLButtonElement).click(); });
+    const phone = document.querySelector<HTMLInputElement>('#auth-phone')!;
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     await act(async () => {
       setter?.call(phone, '09121234567');
       phone.dispatchEvent(new Event('input', { bubbles: true }));
-      host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
     await settle();
-    expect(host.textContent).toContain(authMessages['en-US'].requestUnavailable);
-    expect(host.querySelector('#auth-code')).toBeNull();
-    expect(host.textContent).not.toMatch(/rate limit|too many requests/i);
+    expect(document.body.textContent).toContain(authMessages['en-US'].smsUnavailable);
+    expect(document.querySelector('#auth-code')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/rate limit|too many requests/i);
+  });
+
+  it('uses invitation sign-in for staging and clearly states that SMS is unavailable', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ methods: ['otp', 'staging_invite'], otp_delivery: 'unavailable' }))
+      .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401))
+      .mockResolvedValueOnce(response({ user: { user_id: 'user-1', phone_e164: null,
+        phone_verified: null, auth_method: 'staging_invite' }, csrf_token: 'csrf' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => { root.render(<AuthPanel locale="en-US" />); });
+    await settle();
+    await act(async () => { (document.querySelector('button') as HTMLButtonElement).click(); });
+    expect(document.body.textContent).toContain('SMS delivery is not configured');
+    const email = document.querySelector<HTMLInputElement>('#auth-stage-email')!;
+    const password = document.querySelector<HTMLInputElement>('#auth-stage-password')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => {
+      setter?.call(email, 'traveler@example.test'); email.dispatchEvent(new Event('input', { bubbles: true }));
+      setter?.call(password, 'a-long-staging-password'); password.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await settle();
+    expect(fetchMock.mock.calls[2][0]).toContain('/staging/login');
+    expect(document.body.textContent).toContain('Private pilot sign in');
+  });
+
+  it('offers staging email registration in a viewport-level dialog and creates a session', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ methods: ['otp', 'staging_invite'], otp_delivery: 'unavailable', staging_email_signup: true }))
+      .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401))
+      .mockResolvedValueOnce(response({ user: { user_id: 'new-user', phone_e164: null,
+        phone_verified: null, auth_method: 'staging_invite' }, csrf_token: 'csrf' }));
+    const onSessionChange = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => { root.render(<AuthPanel locale="en-US" onSessionChange={onSessionChange} />); });
+    await settle();
+    await act(async () => { (host.querySelector('.auth-entry > button') as HTMLButtonElement).click(); });
+    expect(document.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('SMS delivery is not configured');
+    const register = [...document.querySelectorAll('button')].find(button => button.textContent === 'Create a pilot email account')!;
+    await act(async () => { register.click(); });
+    const email = document.querySelector<HTMLInputElement>('#auth-stage-email')!;
+    const password = document.querySelector<HTMLInputElement>('#auth-stage-password')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => {
+      setter?.call(email, 'new@example.test'); email.dispatchEvent(new Event('input', { bubbles: true }));
+      setter?.call(password, 'a-very-long-pilot-password'); password.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await settle();
+    expect(String(fetchMock.mock.calls[2][0])).toContain('/staging/register');
+    expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual({ email: 'new@example.test', password: 'a-very-long-pilot-password' });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(onSessionChange).toHaveBeenCalledWith(expect.objectContaining({ user: expect.objectContaining({ user_id: 'new-user' }) }));
+  });
+
+  it('keeps OTP as primary when live SMS is available and exposes invitation fallback', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ methods: ['otp', 'staging_invite'], otp_delivery: 'available' }))
+      .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401));
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => { root.render(<AuthPanel locale="en-US" />); });
+    await settle();
+    await act(async () => { (document.querySelector('button') as HTMLButtonElement).click(); });
+    expect(document.querySelector('#auth-phone')).not.toBeNull();
+    expect(document.querySelector('#auth-stage-email')).toBeNull();
+    expect(document.body.textContent).toContain('Use invitation sign-in');
+    expect(document.body.textContent).not.toContain('SMS delivery is not configured');
+
+    const buttons = [...document.querySelectorAll('button')];
+    await act(async () => { buttons.find(button => button.textContent === 'Use invitation sign-in')!.click(); });
+    expect(document.querySelector('#auth-stage-email')).not.toBeNull();
+    expect(document.body.textContent).toContain('Use SMS sign-in');
+    await act(async () => { [...document.querySelectorAll('button')].find(button => button.textContent === 'Use SMS sign-in')!.click(); });
+    expect(document.querySelector('#auth-phone')).not.toBeNull();
+    expect(document.querySelector('#auth-stage-email')).toBeNull();
   });
 });

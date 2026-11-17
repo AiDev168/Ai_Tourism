@@ -197,12 +197,13 @@ def test_parser_shaped_budget_and_preference_profile_reaches_recommendation_api(
         result = response.json()
         assert result["status"] == "needs_confirmation"
         assert result["reason_code"] == "hard_constraints_unverifiable"
-        assert result["waived_fields"] == ["budget", "soft_preference"]
-        assert result["not_evaluated_fields"] == ["budget", "soft_preference"]
-        assert set(result["unresolved_fields"]) == {"hard_constraint", "destination_resolution"}
+        assert result["waived_fields"] == []
+        assert result["not_evaluated_fields"] == []
         assessments = {item["field"]: item for item in result["requirement_assessments"]}
-        assert assessments["budget"]["status"] == "not_evaluated"
-        assert assessments["soft_preference"]["status"] == "not_evaluated"
+        assert assessments["budget"]["status"] == "known"
+        assert assessments["budget"]["reason_code"] == "known_fit_not_catalogue_verified"
+        assert set(result["unresolved_fields"]) == {"hard_constraint", "destination_resolution"}
+        assert assessments["soft_preference"]["status"] == "known"
         assert assessments["hard_constraint"]["decision"] == "must_have"
         assert result["items"] == []
     finally:

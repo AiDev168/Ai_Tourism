@@ -1,0 +1,10 @@
+# SHA-256 of each file's bytes in the Git archive at commit 90820c0fc55dfc00fb534b96c6fe54cebae3fec8.
+# This file is intentionally excluded from its own checksum list.
+51f21557f2cf5401a4765093c0f3a1690c7efd2ce8707e3592cb9aee76d92d5b  deploy/staging/README.md
+c46b0fe1b8eac4cb60763a09e0610820002331b1a50a9bc894d7a3ab90509fe9  deploy/staging/preflight-018-021.sh
+90792d654dc960a588600f0ce435baaf2ae09935a62f696f582177b0d0598ddd  deploy/staging/rehearse-018-021.sh
+32581511e28fd82a291a14ecbc7ee1f3c7e43748ff4611a8c4cc3275dd8bbcea  deploy/staging/upgrade-018-021.sh
+eb07e520396770fce8fda59590dc4621b804ffd21036d2069ad1d319cdb0e6c0  docs/operations/RAHGARD_CODEX_VPS_CONTROLLED_RELEASE_PREPARATION_2026-11-17.md
+aa030695a0d7866149e328504b9dd8e162a9c87aed1d215f77e82a9222c483b1  docs/operations/VPS_RELEASE_GO_NO_GO.md
+e691703c673295dd5b7b58f5347b08e5c81bdbc41e60119a295f144212e5dafd  docs/operations/evidence/vps-preparation-2026-11-17.json
+6ca75661c56ece64230c42b694def921a260e13deae18dbb6cdb1708fa0389e4  docs/operations/evidence/vps-preparation-2026-11-17.md

@@ -2,13 +2,17 @@
 
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 Locale = Literal["fa-IR", "en-US", "ar"]
+_MAP_REVIEWED_CANDIDATE_IDS = frozenset({
+    "shiraz-hafezieh-v1", "shiraz-eram-garden-v1",
+    "shiraz-vakil-bazaar-v1", "unesco-persepolis-v1",
+})
 
 
 def _bounded_json(value: dict[str, Any]) -> dict[str, Any]:
@@ -29,6 +33,8 @@ class StartConversationRequest(StrictModel):
     locale: Locale = "fa-IR"
     request_text: str = Field(min_length=1, max_length=1200)
     extracted_requirements: dict[str, Any] = Field(default_factory=dict)
+    traveler_timezone: str | None = Field(default=None, max_length=80)
+    traveler_reference_date: date | None = None
     confirmed_requirements: dict[str, Any] = Field(default_factory=dict)
     destination_ids: list[str] = Field(default_factory=list, max_length=50)
     idempotency_key: str = Field(min_length=8, max_length=128)
@@ -179,6 +185,119 @@ class UpdateItineraryRequest(StrictModel):
         return value
 
 
+class ProvisionalStopRequest(StrictModel):
+    """A traveler-editable proposed stop, explicitly outside the approved catalogue."""
+
+    name: str = Field(min_length=1, max_length=200)
+    role: Literal["model_proposed", "map_reviewed_candidate", "traveler_provided"]
+    notes_by_locale: dict[Locale, str] = Field(default_factory=dict)
+    destination_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @field_validator("name")
+    @classmethod
+    def nonblank_name(cls, value: str) -> str:
+        if not value.strip() or any(ord(char) < 32 and char not in "\t" for char in value):
+            raise ValueError("provisional stop name is invalid")
+        return value.strip()
+
+    @field_validator("destination_id")
+    @classmethod
+    def bounded_identity(cls, value: str | None) -> str | None:
+        if value is not None and (not value.strip() or any(ord(char) < 32 for char in value)):
+            raise ValueError("map candidate identity is invalid")
+        return value.strip() if value is not None else None
+
+    @field_validator("notes_by_locale")
+    @classmethod
+    def bounded_notes(cls, value: dict[Locale, str]) -> dict[Locale, str]:
+        if any(len(note) > 2_000 for note in value.values()):
+            raise ValueError("provisional itinerary note is too long")
+        return value
+
+    @model_validator(mode="after")
+    def only_reviewed_maps_have_identity(self):
+        if self.destination_id is not None and self.role != "map_reviewed_candidate":
+            raise ValueError("only a map-reviewed candidate may carry a candidate identity")
+        if self.role == "map_reviewed_candidate" and self.destination_id not in _MAP_REVIEWED_CANDIDATE_IDS:
+            raise ValueError("map candidate is outside the owner-reviewed display batch")
+        return self
+
+
+class ProvisionalDayRequest(StrictModel):
+    day_number: StrictInt = Field(ge=1, le=365)
+    stops: list[ProvisionalStopRequest] = Field(max_length=50)
+
+
+class _ProvisionalDaysValidation:
+    @staticmethod
+    def validate(day_count: int, days: list[ProvisionalDayRequest]) -> list[ProvisionalDayRequest]:
+        if len(days) != day_count or {day.day_number for day in days} != set(range(1, day_count + 1)):
+            raise ValueError("provisional itinerary must explicitly include every requested day")
+        if sum(len(day.stops) for day in days) > 1_000:
+            raise ValueError("provisional itinerary has too many stops")
+        serialized = json.dumps(
+            [day.model_dump(mode="json") for day in days], ensure_ascii=False, allow_nan=False
+        ).encode("utf-8")
+        if len(serialized) > 256_000:
+            raise ValueError("provisional itinerary payload is too large")
+        return sorted(days, key=lambda day: day.day_number)
+
+
+class CreateProvisionalItineraryRequest(StrictModel):
+    expected_trip_version: StrictInt = Field(ge=1)
+    day_count: StrictInt = Field(ge=1, le=365)
+    locale: Locale
+    title_by_locale: dict[Locale, str] = Field(default_factory=dict)
+    days: list[ProvisionalDayRequest] = Field(min_length=1, max_length=365)
+
+    @model_validator(mode="after")
+    def validate_days_and_titles(self):
+        self.days = _ProvisionalDaysValidation.validate(self.day_count, self.days)
+        if any(not title.strip() or len(title) > 200 for title in self.title_by_locale.values()):
+            raise ValueError("provisional itinerary title is invalid")
+        return self
+
+
+class UpdateProvisionalItineraryRequest(StrictModel):
+    expected_revision: StrictInt = Field(ge=1)
+    day_count: StrictInt = Field(ge=1, le=365)
+    title_by_locale: dict[Locale, str] = Field(default_factory=dict)
+    days: list[ProvisionalDayRequest] = Field(min_length=1, max_length=365)
+
+    @model_validator(mode="after")
+    def validate_days_and_titles(self):
+        self.days = _ProvisionalDaysValidation.validate(self.day_count, self.days)
+        if any(not title.strip() or len(title) > 200 for title in self.title_by_locale.values()):
+            raise ValueError("provisional itinerary title is invalid")
+        return self
+
+
+class ProvisionalStopResponse(StrictModel):
+    name: str
+    role: Literal["model_proposed", "map_reviewed_candidate", "traveler_provided"]
+    verification_status: Literal["unverified"] = "unverified"
+    destination_id: str | None = None
+    notes_by_locale: dict[str, str]
+
+
+class ProvisionalDayResponse(StrictModel):
+    day_number: StrictInt = Field(ge=1, le=365)
+    stops: list[ProvisionalStopResponse]
+
+
+class ProvisionalItineraryResponse(StrictModel):
+    provisional_itinerary_id: UUID
+    trip_id: UUID
+    revision: int = Field(ge=1)
+    day_count: StrictInt = Field(ge=1, le=365)
+    locale: Locale
+    title_by_locale: dict[str, str]
+    status: Literal["provisional_unverified"] = "provisional_unverified"
+    days: list[ProvisionalDayResponse]
+    unplanned_days: list[StrictInt]
+    updated_at: datetime
+
+
 class MessageResponse(StrictModel):
     message_id: UUID
     conversation_id: UUID
@@ -186,6 +305,11 @@ class MessageResponse(StrictModel):
     role: Literal["user", "assistant", "system", "tool"]
     content: str
     created_at: datetime
+    # A bounded, validated advisory object, never authoritative. The repository
+    # sanitizes the metadata through TripRequirementsV1 before exposing it.
+    # The validated trip-requirements-v1 envelope has five top-level keys;
+    # legacy bounded suggestions can contain more than four named fields.
+    candidate_requirements: dict[str, Any] = Field(default_factory=dict, max_length=10)
 
 
 class TripResponse(StrictModel):
@@ -252,6 +376,30 @@ class RecommendationEvidence(StrictModel):
     reliability_score: float | None = None
 
 
+class RetrievalCitationSourceResponse(StrictModel):
+    source_id: str
+    source_name: str
+    source_url: str
+    source_role: str
+    license: str | None
+    retrieved_at: datetime | None
+    valid_from: datetime | None
+    valid_until: datetime | None
+
+
+class RetrievalCitationResponse(StrictModel):
+    evidence_id: str
+    canonical_entity_key: str
+    destination_id: int
+    document_id: str
+    claim_key: str
+    content_hash: str
+    locale: Locale
+    corpus: Literal["spatial_destinations", "culinary_knowledge"]
+    text: str
+    sources: list[RetrievalCitationSourceResponse] = Field(min_length=1, max_length=32)
+
+
 class RecommendationItemResponse(StrictModel):
     recommendation_id: UUID
     destination_id: str
@@ -265,6 +413,10 @@ class RecommendationItemResponse(StrictModel):
     explanation_by_locale: dict[str, str]
     score_components: list["RecommendationScoreComponent"]
     evidence: list[RecommendationEvidence]
+    retrieval_evidence_status: Literal[
+        "disabled", "not_requested", "no_evidence", "unavailable", "invalid", "unmapped", "mapped"
+    ] = "disabled"
+    retrieval_evidence: list[RetrievalCitationResponse] = Field(default_factory=list, max_length=20)
     canonical_name: str
     localized_names: dict[str, str | None]
     city_name: str | None
@@ -275,7 +427,7 @@ class RecommendationItemResponse(StrictModel):
 class RequirementAssessmentResponse(StrictModel):
     field: str
     decision: Literal["must_have", "advisory"] | None
-    status: Literal["satisfied", "not_evaluated", "unresolved"]
+    status: Literal["known", "satisfied", "not_evaluated", "unresolved"]
     reason_code: str
 
 
@@ -321,6 +473,7 @@ class ItineraryResponse(StrictModel):
     day_count: StrictInt = Field(ge=1, le=365)
     status: Literal["complete", "partial"]
     unplanned_days: list[StrictInt] = Field(max_length=365)
+    warning_codes: list[str] = Field(default_factory=list, max_length=16)
     title_by_locale: dict[str, str]
     stops: list[ItineraryStopResponse]
     updated_at: datetime

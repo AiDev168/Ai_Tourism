@@ -18,10 +18,34 @@ const apiPort = Number(process.env.E2E_API_PORT || 8811);
 const webOrigin = `http://127.0.0.1:${webPort}`;
 const apiTarget = `http://127.0.0.1:${apiPort}`;
 
+const containsFortyFive = value => /(?:45|۴۵|٤٥)/u.test(String(value ?? ''));
+const containsToman = value => /(?:تومان|toman)/iu.test(String(value ?? ''));
+const containsMillion = value => /(?:million|میلیون|مليون)/iu.test(String(value ?? ''));
+
 function requireEnv(name) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`missing_${name.toLowerCase()}`);
   return value;
+}
+
+function ownerRagConfiguration() {
+  const flag = process.env.TOURISM_RAG_ENABLED?.trim().toLowerCase() || '';
+  if (!flag || ['0', 'false', 'no', 'off'].includes(flag)) return { enabled: false };
+  if (!['1', 'true', 'yes', 'on'].includes(flag)) throw new Error('invalid_owner_rag_opt_in_flag');
+
+  const url = process.env.TOURISM_RAG_API_URL || '';
+  const token = process.env.TOURISM_RAG_API_TOKEN || '';
+  if (!url || !token || token.trim() !== token || /[\r\n]/.test(token)) {
+    throw new Error('owner_rag_opt_in_requires_server_configuration');
+  }
+  let parsed;
+  try { parsed = new URL(url); } catch { throw new Error('owner_rag_url_must_be_fixed_loopback'); }
+  if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1' || parsed.port !== '8765'
+      || !['', '/'].includes(parsed.pathname) || parsed.search || parsed.hash
+      || parsed.username || parsed.password) {
+    throw new Error('owner_rag_url_must_be_fixed_loopback');
+  }
+  return { enabled: true, url, token };
 }
 
 function runtimeEnv(extra = {}) {
@@ -39,7 +63,14 @@ function syntheticPhone() {
 function makePipe(client) {
   const waiting = [];
   const queued = [];
+  let closed = false;
   const reader = createInterface({ input: client.stdout });
+  // A startup failure must be reported as an early child exit, not a
+  // misleading timeout after Python has already closed its stdout.
+  reader.on('close', () => {
+    closed = true;
+    while (waiting.length) waiting.shift()({ ok: false, event: 'process_closed' });
+  });
   reader.on('line', line => {
     let value;
     try { value = JSON.parse(line); } catch { return; }
@@ -50,6 +81,7 @@ function makePipe(client) {
   return {
     next(timeoutMs = 20_000) {
       if (queued.length) return Promise.resolve(queued.shift());
+      if (closed) return Promise.resolve({ ok: false, event: 'process_closed' });
       return new Promise((resolvePromise, reject) => {
         const timer = setTimeout(() => {
           const index = waiting.indexOf(finish);
@@ -107,34 +139,74 @@ async function startApi() {
   if (!existsSync(chrome)) throw new Error('configured_chrome_executable_missing');
   const controlPort = await reserveLoopbackPort();
   const controlToken = randomBytes(32).toString('hex');
+  const ownerRag = ownerRagConfiguration();
+  const realGeoMode = process.env.RAHGARD_REAL_GEO_E2E === '1';
+  const nationalCatalogueMode = process.env.RAHGARD_NATIONAL_CATALOGUE_E2E === '1';
+  if (realGeoMode && process.env.RAHGARD_RUN_GEO_QA !== '1') {
+    throw new Error('real_geo_e2e_missing_explicit_disposable_qa_opt_in');
+  }
 
   const childEnv = runtimeEnv({
     AUTH_INTEGRATION_TESTS: '1',
+    RAHGARD_REAL_GEO_E2E: realGeoMode ? '1' : '0',
+    RAHGARD_RUN_GEO_QA: realGeoMode ? '1' : '0',
+    RAHGARD_NATIONAL_CATALOGUE_E2E: nationalCatalogueMode ? '1' : '0',
     AUTH_TEST_DATABASE_HOST: process.env.AUTH_TEST_DATABASE_HOST,
     AUTH_TEST_DATABASE_PORT: process.env.AUTH_TEST_DATABASE_PORT,
     AUTH_TEST_DATABASE_NAME: process.env.AUTH_TEST_DATABASE_NAME,
     AUTH_TEST_DATABASE_USER: process.env.AUTH_TEST_DATABASE_USER,
     AUTH_TEST_DATABASE_PASSWORD: process.env.AUTH_TEST_DATABASE_PASSWORD,
     AUTH_TEST_DATABASE_MARKER: process.env.AUTH_TEST_DATABASE_MARKER,
+    ...(nationalCatalogueMode ? {
+      AUTH_TEST_DATABASE_OWNER_PASSWORD: process.env.AUTH_TEST_DATABASE_OWNER_PASSWORD,
+    } : {}),
     E2E_API_PORT: String(apiPort),
     E2E_WEB_ORIGIN: webOrigin,
     E2E_CONTROL_PORT: String(controlPort),
     E2E_CONTROL_TOKEN: controlToken,
     PYTHONIOENCODING: 'utf-8',
+    TOURISM_RAG_ENABLED: ownerRag.enabled ? 'true' : 'false',
+    ...(ownerRag.enabled ? {
+      TOURISM_RAG_API_URL: ownerRag.url,
+      TOURISM_RAG_API_TOKEN: ownerRag.token,
+    } : {}),
   });
   const child = spawn(python, ['tests/traveler_e2e_server.py'], {
     cwd: backendRoot,
     env: childEnv,
-    stdio: ['ignore', 'pipe', 'ignore'],
+    stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
+  // Python only emits stable exception class labels to stderr. Retain a small
+  // bounded buffer internally; never print a Python traceback or credentials.
+  let safeErrorType = '';
+  let safeAssistantFailure = '';
+  let safeCatalogueFailure = '';
+  child.stderr.on('data', chunk => {
+    const safeChunk = chunk.toString('utf8');
+    const assistantMatch = safeChunk.match(/assistant\.turn\.failed phase=([a-z_]+) error_type=([A-Za-z]+)/);
+    if (assistantMatch) safeAssistantFailure = `${assistantMatch[1]}_${assistantMatch[2]}`;
+    const catalogueMatch = safeChunk.match(/catalogue_review\.(decision|publication)_(failed|denied) phase=([a-z_]+) sqlstate=([A-Z0-9]+)(?: error_type=([A-Za-z]+))?/);
+    if (catalogueMatch) safeCatalogueFailure = `${catalogueMatch[1]}_${catalogueMatch[2]}_${catalogueMatch[3]}_${catalogueMatch[4]}_${catalogueMatch[5] || 'unknown'}`;
+    const match = safeChunk.match(/E2E server failed closed: ([A-Za-z]+Error)/);
+    if (match) safeErrorType = match[1].toLowerCase();
+  });
+  child.on('error', () => { safeErrorType = 'process_spawn_error'; });
   const pipe = makePipe(child);
-  const ready = await pipe.next(25_000);
+  let ready;
+  try {
+    ready = await pipe.next(25_000);
+  } catch {
+    child.kill();
+    throw new Error('guarded_api_ready_timeout');
+  }
   if (!ready?.ok || ready.event !== 'ready') {
     child.kill();
-    throw new Error('guarded_api_start_failed');
+    throw new Error('guarded_api_start_failed_' + (safeErrorType || ready?.event || 'unknown'));
   }
-  return { child, pipe, controlPort, controlToken };
+  return { child, pipe, controlPort, controlToken, ownerRagEnabled: ownerRag.enabled,
+    safeAssistantFailure: () => safeAssistantFailure,
+    safeCatalogueFailure: () => safeCatalogueFailure };
 }
 
 async function startWeb() {
@@ -165,7 +237,7 @@ async function startWeb() {
 }
 
 async function signIn(page, controlPort, controlToken, phone) {
-  await page.locator('.auth-entry > button').click();
+  await page.locator('.auth-entry > button').first().click();
   await page.locator('#auth-phone').fill(phone);
   await page.locator('.auth-panel button[type="submit"]').click();
   await page.locator('#auth-code').waitFor({ state: 'visible' });
@@ -224,34 +296,34 @@ const localeCopy = {
     workspace: 'برنامه‌های سفر من',
     confirm: 'ذخیرهٔ تغییرات برداشت سفر',
     find: 'بررسی پیشنهادهای تأییدشده',
+    createPlan: 'ساخت پیش‌نویس برنامه',
     deleteTrip: 'حذف سفر',
     deleteConversation: 'حذف گفت‌وگو و همهٔ سفرهای آن',
-    prompt: 'سفر ۱۰ روزه به شیراز با بودجهٔ ۲۰ میلیون تومان؛ ترجیح می‌دهم مسیرهای سنگ‌فرش باشد؛ دسترسی ویلچر ضروری است؛ باید از مسیرهای ناهموار پرهیز شود.',
+    prompt: 'سفر ۱۵ روزه به شیراز با بودجهٔ ۲۰ میلیون تومان؛ به طبیعت و جاهای تاریخی علاقه دارم؛ ترجیح می‌دهم مسیرها سنگ‌فرش باشند؛ دسترسی ویلچر ضروری است؛ باید از مسیرهای ناهموار پرهیز شود.',
     accessLabel: 'دسترس‌پذیری',
     softPreference: 'مسیرهای سنگ‌فرش باشد',
-    fixtureName: 'نمونهٔ آزمایشی',
   },
   'en-US': {
     workspace: 'My travel plans',
     confirm: 'Save trip details',
     find: 'Check verified suggestions',
+    createPlan: 'Create plan draft',
     deleteTrip: 'Delete trip',
     deleteConversation: 'Delete conversation and all its trips',
     prompt: '10 day trip to Shiraz with a budget of 20 million IRR; I prefer paved paths; wheelchair access is essential; must avoid rough terrain.',
     accessLabel: 'Accessibility',
     softPreference: 'paved paths',
-    fixtureName: 'Test fixture',
   },
   ar: {
     workspace: 'خطط رحلاتي',
     confirm: 'احفظ تفاصيل الرحلة',
     find: 'تحقق من الاقتراحات الموثقة',
+    createPlan: 'أنشئ مسودة خطة',
     deleteTrip: 'احذف الرحلة',
     deleteConversation: 'احذف المحادثة وكل رحلاتها',
-    prompt: 'رحلة لمدة ١٠ أيام إلى شيراز بميزانية ٢٠ مليون درهم؛ أفضل المسارات المعبدة؛ إمكانية الوصول بالكراسي المتحركة ضرورية؛ يجب تجنب الطرق الوعرة.',
+    prompt: '\u0631\u062d\u0644\u0629 \u0644\u0645\u062f\u0629 10 \u0623\u064a\u0627\u0645 \u0625\u0644\u0649 Shiraz \u0628\u0645\u064a\u0632\u0627\u0646\u064a\u0629 20 \u0645\u0644\u064a\u0648\u0646 \u062f\u0631\u0647\u0645؛ \u0623\u0641\u0636\u0644 \u0627\u0644\u0645\u0633\u0627\u0631\u0627\u062a \u0627\u0644\u0645\u0639\u0628\u062f\u0629؛ \u0627\u062d\u062a\u064a\u0627\u062c\u0627\u062a \u062d\u0631\u0643\u064a\u0629 \u0636\u0631\u0648\u0631\u064a\u0629؛ \u064a\u062c\u0628 \u062a\u062c\u0646\u0628 \u0627\u0644\u0637\u0631\u0642 \u0627\u0644\u0648\u0639\u0631\u0629.' ,
     accessLabel: 'إمكانية الوصول',
     softPreference: 'المسارات المعبدة',
-    fixtureName: 'نموذج اختباري',
   },
 };
 
@@ -341,173 +413,1290 @@ async function sanitizeAndCapture(page, path, locale, width, height) {
   }, hiddenSensitiveStyles);
 }
 
-function fixtureRecommendation(tripId, tripVersion, locale) {
-  const requestId = randomUUID();
-  const items = Array.from({ length: 4 }, (_, index) => {
-    const destinationId = String(9_100_001 + index);
-    const sourceId = 99_001 + index;
-    const name = `${localeCopy[locale].fixtureName} ${index + 1}`;
-    return {
-      recommendation_id: randomUUID(),
-      destination_id: destinationId,
-      rank: index + 1,
-      final_score: 0,
-      matched_requirements: [],
-      unknown_fields: ['opening_hours', 'price', 'accessibility'],
-      warnings: ['test_fixture_only', 'ranking_is_structured_match_not_quality_score'],
-      explanation_key: 'published_area_candidate',
-      explanation_by_locale: {
-        'fa-IR': 'نمونهٔ صرفاً آزمایشی؛ دادهٔ واقعی یا منتشرشده نیست.',
-        'en-US': 'Test-only fixture; not real or published content.',
-        ar: 'نموذج للاختبار فقط؛ ليس محتوى حقيقيًا أو منشورًا.',
-      },
-      score_components: [],
-      evidence: [{
-        source_id: sourceId,
-        source_name: 'TEST FIXTURE SOURCE — NOT A REAL SOURCE',
-        source_url: `https://example.test/task32/${sourceId}`,
-        source_role: 'test_fixture_only',
-        evidence_note: 'Synthetic test fixture; excluded from production views.',
-        retrieved_at: null,
-        valid_from: null,
-        valid_until: null,
-        reliability_score: null,
-      }],
-      canonical_name: name,
-      localized_names: { 'fa-IR': name, 'en-US': name, ar: name },
-      city_name: null,
-      province_name: 'TEST FIXTURE ONLY',
-      destination_type: 'synthetic_fixture',
-    };
+async function requestBrowserJson(page, path, method, csrf, body, requestAudit = null) {
+  const response = await page.request.fetch(`${webOrigin}${path}`, {
+    method,
+    headers: {
+      Origin: webOrigin,
+      ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { data: body }),
+    timeout: 15_000,
   });
+  let payload = null;
+  try { payload = await response.json(); } catch { /* Keep failure details to safe response codes only. */ }
+  if (!response.ok()) {
+    const safePath = new URL(path, webOrigin).pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':id');
+    throw new Error(`browser_api_${method.toLowerCase()}_${response.status()}_${payload?.error?.code ?? 'failed'}_${safePath.replace(/[^a-zA-Z0-9_/:.-]/g, '_')}`);
+  }
+  if (!response.headers()['cache-control']?.includes('no-store')) {
+    throw new Error(`browser_api_response_cacheable_${method.toLowerCase()}`);
+  }
+  if (requestAudit) {
+    requestAudit.push({
+      method,
+      path,
+      status: response.status(),
+      cacheControl: response.headers()['cache-control'],
+      transport: 'playwright-api-request-to-local-vite-origin',
+    });
+  }
+  return payload;
+}
+
+function assertNoInventedSchedule(itinerary, { coordinateAware = false } = {}) {
+  const forbiddenInferredFields = [
+    'planned_start_time',
+    'duration_minutes',
+    'travel_to_next_estimate_minutes',
+    'opening_hours',
+    'estimated_arrival_time',
+    'estimated_travel_minutes',
+  ];
+  for (const stop of itinerary.stops ?? []) {
+    for (const field of forbiddenInferredFields) {
+      if (stop[field] != null) throw new Error(`itinerary_inferred_unsupported_${field}`);
+    }
+  }
+  if (!Array.isArray(itinerary.warning_codes)
+      || !itinerary.warning_codes.includes('no_hours_or_routes_inferred')) {
+    throw new Error('itinerary_missing_no_hours_or_routes_warning');
+  }
+  if (coordinateAware) {
+    if (!itinerary.warning_codes.includes('geodesic_grouping_heuristic_only')
+        || !itinerary.warning_codes.includes('position_not_entrance')
+        || itinerary.warning_codes.includes('stop_location_unknown')) {
+      throw new Error('coordinate_aware_itinerary_warning_mismatch');
+    }
+  } else if (!itinerary.warning_codes.includes('stop_location_unknown')
+      || itinerary.warning_codes.includes('geodesic_grouping_heuristic_only')) {
+    throw new Error('coordinate_free_itinerary_location_warning_mismatch');
+  }
+}
+
+function fixtureRequirements(requestText, locale) {
+  const unknown = { value: null, status: 'unknown', evidence: null };
   return {
-    recommendation_request_id: requestId,
-    status: 'available',
-    reason_code: null,
-    algorithm_version: 'task32-test-fixture-only-v1',
-    retrieval_version: 'isolated-test-fixture-only-v1',
-    trip_version: tripVersion,
-    unresolved_fields: [],
-    requirement_assessments: [{ field: 'budget', decision: 'advisory', status: 'not_evaluated', reason_code: 'budget_unverifiable' }],
-    waived_fields: ['budget'],
-    not_evaluated_fields: ['budget'],
-    items,
-    test_fixture_only: true,
-    trip_id: tripId,
+    requestText, locale,
+    destinations: { value: ['TEST ONLY'], status: 'extracted', evidence: 'test-only fixture identity' },
+    origin: unknown,
+    durationDays: { value: 15, status: 'extracted', evidence: '15 days' },
+    travelDates: unknown,
+    travelerCount: unknown,
+    accessibility: unknown,
+    budget: unknown,
+    interests: unknown,
+    softPreferences: unknown,
+    constraints: [],
+    extractionStatus: 'ready',
+    missingRequired: [],
+    ambiguousRequired: [],
+    confirmationRequired: [],
+    destinationVerification: 'user_input_unverified',
   };
 }
 
-function fixtureItinerary(tripId, recommendation, itineraryId = randomUUID()) {
-  const stops = recommendation.items.map((item, index) => ({
-    itinerary_stop_id: randomUUID(),
-    recommendation_id: item.recommendation_id,
-    destination_id: item.destination_id,
-    day_number: index + 1,
-    stop_order: 1,
-    notes_by_locale: {},
-    canonical_name: item.canonical_name,
-    localized_names: item.localized_names,
-  }));
-  return {
-    itinerary_id: itineraryId,
-    trip_id: tripId,
-    recommendation_request_id: recommendation.recommendation_request_id,
-    version: 1,
-    revision: 1,
-    day_count: 10,
-    status: 'partial',
-    unplanned_days: [5, 6, 7, 8, 9, 10],
-    title_by_locale: { 'fa-IR': 'نمونهٔ برنامه', 'en-US': 'Test fixture itinerary', ar: 'خطة اختبارية' },
-    stops,
-    updated_at: new Date().toISOString(),
-    test_fixture_only: true,
-  };
+async function browserApi(page, path, method, csrf, body) {
+  const response = await page.request.fetch(`${webOrigin}${path}`, {
+    method,
+    headers: {
+      Origin: webOrigin,
+      ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { data: body }),
+    timeout: 30_000,
+  });
+  let payload = null;
+  try { payload = await response.json(); } catch { /* status is retained for negative cases */ }
+  return { status: response.status(), payload };
 }
 
-async function runPartialFixture(page, locale, tripId, tripVersion, screenshotRoot) {
-  const recommendation = fixtureRecommendation(tripId, tripVersion, locale);
-  const itineraryId = randomUUID();
-  let current = fixtureItinerary(tripId, recommendation, itineraryId);
-  let updateBody = null;
-  await page.route(`${webOrigin}/api/v1/trips/${tripId}/recommendations`, async route => {
-    if (route.request().method() === 'POST') {
-      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(recommendation) });
-    } else await route.continue();
+async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot) {
+  const archivePath = process.env.RAHGARD_OWNER_ARCHIVE_PATH;
+  if (!archivePath || !existsSync(archivePath)) throw new Error('national_acceptance_owner_archive_missing');
+  const context = await browser.newContext({ locale: 'en-US' });
+  const page = await context.newPage();
+  const trace = [];
+  const networkTrace = [];
+  let resolveArchiveUploadResponse;
+  const archiveUploadResponse = new Promise(resolvePromise => { resolveArchiveUploadResponse = resolvePromise; });
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.origin === webOrigin && url.pathname.startsWith('/api/')) {
+      const body = request.postDataBuffer();
+      networkTrace.push({ phase: 'request', method: request.method(), path: url.pathname, bodyBytes: body?.length ?? 0 });
+    }
   });
-  await page.route(`${webOrigin}/api/v1/trips/${tripId}/itineraries`, async route => {
-    if (route.request().method() === 'POST') {
-      const request = route.request().postDataJSON();
-      if (request.day_count !== 10) throw new Error('fixture_itinerary_did_not_request_ten_days');
-      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(current) });
-    } else await route.continue();
-  });
-  await page.route(`${webOrigin}/api/v1/itineraries/${itineraryId}`, async route => {
-    const method = route.request().method();
-    if (method === 'GET') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) });
-    } else if (method === 'PUT') {
-      updateBody = route.request().postDataJSON();
-      if (updateBody.expected_revision !== 1 || updateBody.stops.length !== 3) {
-        throw new Error('fixture_edit_revision_or_stop_count_invalid');
+  page.on('response', response => {
+    const url = new URL(response.url());
+    if (url.origin === webOrigin && url.pathname.startsWith('/api/')) {
+      networkTrace.push({ phase: 'response', method: response.request().method(), path: url.pathname, status: response.status() });
+      if (url.pathname === '/api/v1/catalogue-review/archives') {
+        const dir = resolve(artifactRoot, 'national-catalogue');
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(resolve(dir, 'archive-upload-response.json'), JSON.stringify({ status: response.status() }));
+        resolveArchiveUploadResponse(response);
       }
-      const byId = new Map(current.stops.map(stop => [stop.recommendation_id, stop]));
-      current = {
-        ...current,
-        revision: 2,
-        stops: updateBody.stops.map((stop, index) => ({
-          ...byId.get(stop.recommendation_id),
-          day_number: stop.day_number,
-          stop_order: stop.stop_order,
-          notes_by_locale: stop.notes_by_locale,
-          itinerary_stop_id: randomUUID(),
-        })),
-      };
-      const planned = new Set(current.stops.map(stop => stop.day_number));
-      current.unplanned_days = Array.from({ length: 10 }, (_, index) => index + 1).filter(day => !planned.has(day));
-      current.status = current.unplanned_days.length ? 'partial' : 'complete';
-      current.updated_at = new Date().toISOString();
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) });
-    } else await route.continue();
+    }
   });
+  page.on('requestfailed', request => {
+    const url = new URL(request.url());
+    if (url.origin === webOrigin && url.pathname.startsWith('/api/')) {
+      networkTrace.push({ phase: 'failed', method: request.method(), path: url.pathname, error: request.failure()?.errorText?.slice(0, 120) ?? 'unknown' });
+      if (url.pathname === '/api/v1/catalogue-review/archives') {
+        const dir = resolve(artifactRoot, 'national-catalogue');
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(resolve(dir, 'archive-upload-failed-event.json'), JSON.stringify({ method: request.method(), error: request.failure()?.errorText?.slice(0, 120) ?? 'unknown' }));
+      }
+    }
+  });
+  page.on('pageerror', error => networkTrace.push({ phase: 'pageerror', name: error.name }));
+  const operatorPhone = syntheticPhone();
+  const companyPhone = syntheticPhone();
+  const tenantTwoPhone = syntheticPhone();
+  const travelerPhone = syntheticPhone();
+  let currentPhone = null;
+  let currentIdentity = null;
+  let stagedSummary = null;
+  let publishedPlace = null;
+  let organization = null;
+  let partnerSummary = null;
+  let travelerSummary = null;
+  reportResponseWaitCallsite(page);
+  const milestone = name => console.log(`[national-e2e] ${name}`);
+  await attachBrowserGuards(page, audit);
+  try {
+    const baselineCounts = await checkedControl(api.controlPort, api.controlToken, { action: 'national_catalogue_counts' });
+    if (!baselineCounts.ok) throw new Error('national_catalogue_baseline_counts_unavailable');
+    await page.goto(webOrigin, { waitUntil: 'domcontentloaded' });
+    await selectAndVerifyLocale(page, 'en-US');
+    currentPhone = operatorPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, operatorPhone);
+    const grant = await checkedControl(api.controlPort, api.controlToken, {
+      action: 'grant_catalogue_capabilities', user_id: currentIdentity.userId,
+      capabilities: ['candidate_review', 'source_review', 'catalogue_publish'],
+    });
+    if (!grant.ok) throw new Error('national_test_operator_capability_grant_failed');
+    await page.goto(`${webOrigin}/admin/catalogue-review`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Catalogue review and publication' }).waitFor({ state: 'visible' });
+    milestone('operator authenticated; catalogue review UI loaded');
+    const reviewBootstrap = await Promise.all([
+      requestBrowserJson(page, '/api/v1/catalogue-review/candidates?limit=50&kind=destination_identity', 'GET', undefined, undefined, trace),
+      requestBrowserJson(page, '/api/v1/catalogue-review/sources?limit=100', 'GET', undefined, undefined, trace),
+      requestBrowserJson(page, '/api/v1/catalogue-review/sources/pending-verification', 'GET', undefined, undefined, trace),
+      requestBrowserJson(page, '/api/v1/catalogue-review/sources/verified', 'GET', undefined, undefined, trace),
+      requestBrowserJson(page, '/api/v1/catalogue-review/candidates/approved', 'GET', undefined, undefined, trace),
+    ]);
+    if (reviewBootstrap.some((result, index) => !Array.isArray(result.items) && index !== 3)) {
+      throw new Error('national_operator_review_api_contract_unavailable');
+    }
 
-  await page.getByRole('button', { name: localeCopy[locale].find }).click();
-  await page.locator('.itinerary-start').waitFor({ state: 'visible' });
-  await page.locator('#journey-day-count').fill('10');
-  await page.locator('.itinerary-start button').click();
-  await page.locator('.saved-itinerary-days .itinerary-day').nth(9).waitFor({ state: 'visible' });
-  if (await page.locator('.saved-itinerary-days .itinerary-day').count() !== 10) throw new Error('fixture_ten_days_not_rendered');
-  const localizedTen = await page.locator('#itinerary-day-10').textContent();
-  const formattedTen = await page.evaluate(localeValue => new Intl.NumberFormat(localeValue, {
-    numberingSystem: localeValue === 'ar' ? 'arab' : localeValue === 'fa-IR' ? 'arabext' : 'latn',
-  }).format(10), locale);
-  if (!localizedTen?.includes(formattedTen)) throw new Error(`itinerary_day_number_not_localized_${locale}`);
-  if (await page.locator('.saved-stop').count() !== 4 || await page.locator('.unplanned-day').count() !== 6) {
-    throw new Error('fixture_four_stops_six_unplanned_days_mismatch');
-  }
-  if ((await page.locator('.itinerary-coverage').textContent())?.trim() === '') throw new Error('fixture_partial_status_missing');
+    const uploadInput = page.locator('input[type="file"]');
+    await uploadInput.setInputFiles(archivePath);
+    const uploadState = await uploadInput.evaluate(element => ({ count: element.files?.length ?? 0, name: element.files?.[0]?.name ?? '' }));
+    if (uploadState.count !== 1 || !uploadState.name.toLowerCase().endsWith('.zip')) throw new Error('national_archive_file_not_selected');
+    const uploadButton = page.locator('.catalogue-review > section.partner-card button.primary');
+    if (await uploadButton.isDisabled()) throw new Error('national_archive_upload_button_disabled_after_file_selection');
+    const noticesBeforeUpload = await page.locator('[role="alert"],[role="status"]').allTextContents();
+    const operatorDir = resolve(artifactRoot, 'national-catalogue');
+    mkdirSync(operatorDir, { recursive: true });
+    await page.screenshot({ path: resolve(operatorDir, 'operator-before-staging.png'), fullPage: true, animations: 'disabled' });
+    await page.evaluate(() => {
+      window.__rahgardNationalUploadClicked = false;
+      window.__rahgardNationalUploadFetches = [];
+      window.__rahgardNationalUploadFetchError = null;
+      const nativeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const path = new URL(typeof input === 'string' ? input : input.url, window.location.href).pathname;
+        if (path === '/api/v1/catalogue-review/archives') window.__rahgardNationalUploadFetches.push({ method: init?.method ?? 'GET' });
+        return nativeFetch(input, init).catch(error => {
+          if (path === '/api/v1/catalogue-review/archives') window.__rahgardNationalUploadFetchError = `${error.name}:${error.message}`.slice(0, 160);
+          throw error;
+        });
+      };
+      const button = document.querySelector('.catalogue-review > section.partner-card button.primary');
+      button?.addEventListener('click', () => { window.__rahgardNationalUploadClicked = true; }, { capture: true, once: true });
+    });
+    milestone('submitting selected archive through the operator UI');
+    await uploadButton.click({ timeout: 15_000 });
+    milestone('archive upload action dispatched by the browser');
+    await page.waitForTimeout(500);
+    writeFileSync(resolve(operatorDir, 'archive-upload-network-checkpoint.json'),
+      `${JSON.stringify({ fileName: uploadState.name, networkTrace: networkTrace.filter(item => item.path === '/api/v1/catalogue-review/archives') }, null, 2)}\n`, 'utf8');
+    if (!networkTrace.some(item => item.phase === 'request' && item.path === '/api/v1/catalogue-review/archives')) {
+      const uiState = await page.evaluate(() => ({
+        nativeClickCaptured: window.__rahgardNationalUploadClicked === true,
+        appFetchCalls: window.__rahgardNationalUploadFetches,
+        appFetchError: window.__rahgardNationalUploadFetchError,
+        upload: Array.from(document.querySelectorAll('.catalogue-review > section.partner-card button.primary'))
+          .map(button => ({ text: button.textContent?.trim(), disabled: button.disabled, type: button.type })),
+        selectedFileCount: document.querySelector('input[type="file"]')?.files?.length ?? 0,
+        visibleNotices: Array.from(document.querySelectorAll('[role="alert"],[role="status"]')).map(item => item.textContent?.trim()).filter(Boolean),
+      }));
+      await page.screenshot({ path: resolve(operatorDir, 'operator-upload-after-click.png'), fullPage: true, animations: 'disabled' });
+      writeFileSync(resolve(operatorDir, 'archive-upload-failure.json'), `${JSON.stringify({ fileName: uploadState.name, noticesBeforeUpload, reviewBootstrapCounts: reviewBootstrap.map(result => Array.isArray(result.items) ? result.items.length : 'no_items_array'), uiState, networkTrace }, null, 2)}\n`, 'utf8');
+      throw new Error(`national_archive_upload_click_did_not_send_request_${JSON.stringify(networkTrace.slice(-20))}`);
+    }
+    let uploadDeadline;
+    const uploaded = await Promise.race([
+      archiveUploadResponse,
+      new Promise(resolvePromise => {
+        uploadDeadline = setTimeout(() => resolvePromise(null), 90_000);
+        uploadDeadline.unref();
+      }),
+    ]);
+    if (uploadDeadline) clearTimeout(uploadDeadline);
+    if (!uploaded) {
+      const uiState = await page.evaluate(() => ({
+        appFetchError: window.__rahgardNationalUploadFetchError,
+        appFetchCalls: window.__rahgardNationalUploadFetches,
+        notices: Array.from(document.querySelectorAll('[role="alert"]')).map(node => node.textContent?.trim()).filter(Boolean),
+      }));
+      writeFileSync(resolve(operatorDir, 'archive-upload-failure.json'), `${JSON.stringify({ fileName: uploadState.name, uiState, networkTrace: networkTrace.filter(item => item.path === '/api/v1/catalogue-review/archives') }, null, 2)}\n`, 'utf8');
+      throw new Error('national_archive_upload_response_missing');
+    }
+    if (uploaded.status() !== 202) throw new Error(`national_browser_archive_upload_failed_${uploaded.status()}`);
+    // Validate committed rows through the isolated PostgreSQL control socket;
+    // this avoids relying on Playwright to consume the optional upload summary
+    // body after the UI has already received a successful HTTP response.
+    const stagedCounts = await checkedControl(api.controlPort, api.controlToken, { action: 'national_catalogue_counts' });
+    stagedSummary = {
+      archive_sha256: '7e9a27654535590f593aeea8e9f7ba9422fb128ca2c4fc93129061c544aff397',
+      rows_present: stagedCounts.candidates,
+      candidate_rows_by_kind: {
+        destination_identity: stagedCounts.identities,
+        discovery_lead: stagedCounts.leads,
+      },
+      source_rows_present: stagedCounts.source_candidates,
+      publication_approved: false,
+    };
+    milestone(`owner archive is present: ${stagedSummary.rows_present} candidate rows`);
+    if (stagedSummary.rows_present !== 700
+        || stagedSummary.candidate_rows_by_kind.destination_identity !== 167
+        || stagedSummary.candidate_rows_by_kind.discovery_lead !== 533
+        || stagedSummary.source_rows_present !== 257) {
+      throw new Error('national_browser_archive_staging_counts_mismatch');
+    }
+    trace.push({ method: 'POST', path: '/api/v1/catalogue-review/archives', status: uploaded.status() });
 
-  const firstStop = current.stops[0];
-  await page.locator(`#stop-day-${firstStop.recommendation_id}`).selectOption('5');
-  await page.locator('.saved-stop').nth(1).locator('.stop-actions button').last().click();
-  await sanitizeAndCapture(page, resolve(screenshotRoot, `partial-${locale}-390.png`), locale, 390, 844);
-  await sanitizeAndCapture(page, resolve(screenshotRoot, `partial-${locale}-1440.png`), locale, 1440, 1000);
-  const savedEditResponse = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/itineraries/${itineraryId}`
-    && response.request().method() === 'PUT');
-  await page.locator('.saved-itinerary > button').last().click();
-  const savedEdit = await savedEditResponse;
-  const savedEditBody = await savedEdit.json();
-  if (savedEdit.status() !== 200 || savedEditBody.revision !== 2 || savedEditBody.day_count !== 10) {
-    throw new Error('fixture_edit_response_revision_or_duration_failed');
+    const key = 'unesco-armenian-st-thaddeus-v1';
+    let candidatePage = await requestBrowserJson(page,
+      '/api/v1/catalogue-review/candidates?limit=100&kind=destination_identity', 'GET');
+    let candidate = candidatePage.items.find(item => item.source_record_key === key);
+    let candidatePages = 1;
+    while (!candidate && candidatePage.next_cursor) {
+      if (candidatePages++ >= 10) throw new Error('national_candidate_review_pagination_limit');
+      candidatePage = await requestBrowserJson(page,
+        `/api/v1/catalogue-review/candidates?limit=100&kind=destination_identity&after=${encodeURIComponent(candidatePage.next_cursor)}`,
+        'GET');
+      candidate = candidatePage.items.find(item => item.source_record_key === key);
+    }
+    if (!candidate || candidate.candidate_status !== 'needs_review' || candidate.candidate_kind !== 'destination_identity') {
+      throw new Error('national_browser_target_archive_candidate_not_in_review_queue');
+    }
+    milestone('operator inspected target archive identity in review queue');
+    const searchInput = page.getByLabel('Search', { exact: true });
+    // The candidate itself is inspected in the real UI; evidence and review
+    // mutations below use the same authenticated FastAPI endpoints as the UI.
+    await searchInput.fill(candidate.proposed_name_fa || candidate.raw_name || key);
+    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    const card = page.locator(`.candidate-review-card[data-candidate-id="${candidate.candidate_id}"]`);
+    await card.waitFor({ state: 'visible', timeout: 30_000 });
+    if (!(await card.textContent())?.includes('destination_identity')) throw new Error('operator_candidate_inspection_missing');
+    await page.screenshot({ path: resolve(operatorDir, 'operator-candidate-review.png'), fullPage: true, animations: 'disabled' });
+
+    const inspectedAt = new Date().toISOString();
+    const sources = [
+      { name: 'UNESCO World Heritage Centre - component maps', publisher: 'UNESCO World Heritage Centre', title: 'Armenian Monastic Ensembles of Iran - Maps', url: 'https://whc.unesco.org/en/list/1262/maps/', excerpt: '1262-001 The Monastery of Saint Thaddeus N39 5 32.00 E44 32 40.00' },
+      { name: 'Visit Iran - Saint Thaddeus detail', publisher: 'Visit Iran', title: 'Monastery of Saint Thaddeus or Qara Kelisa', url: 'https://visitiran.ir/attraction/monastery-saint-thaddeus-or-qara-kelisa', excerpt: 'in Bah Bah Jik County, 20km of Chaldoran City, is located in the highest part of the West Azerbaijan Province' },
+      { name: 'UNESCO World Heritage Centre - property description', publisher: 'UNESCO World Heritage Centre', title: 'Armenian Monastic Ensembles of Iran', url: 'https://whc.unesco.org/en/list/1262/', excerpt: 'consists of three monastic ensembles of the Armenian Christian faith' },
+    ];
+    const sourceIds = [];
+    const sourceSummaries = [];
+    await page.getByRole('button', { name: 'Sources', exact: true }).click();
+    for (const source of sources) {
+      const sourceForm = page.locator('.catalogue-review article.partner-card')
+        .filter({ has: page.getByRole('heading', { name: 'Register source for inspection', exact: true }) });
+      await sourceForm.getByLabel('Source name').fill(source.name);
+      await sourceForm.getByLabel('Source type').fill('official_tourism');
+      await sourceForm.getByLabel('Publisher').fill(source.publisher);
+      await sourceForm.getByLabel('Page title').fill(source.title);
+      await sourceForm.getByLabel('HTTPS page URL').fill(source.url);
+      await sourceForm.getByLabel('Why this source is relevant').fill('Directly inspected page used for one archive candidate evidence review.');
+      const registrationWait = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/catalogue-review/sources/register'
+        && response.request().method() === 'POST');
+      await sourceForm.getByRole('button', { name: 'Register pending source', exact: true }).click();
+      const registeredResponse = await registrationWait;
+      if (registeredResponse.status() !== 201) throw new Error(`operator_source_registration_failed_${registeredResponse.status()}`);
+      trace.push({ method: 'POST', path: '/api/v1/catalogue-review/sources/register', status: registeredResponse.status() });
+      const pendingCard = page.locator('.catalogue-review article.partner-card')
+        .filter({ hasText: source.url })
+        .filter({ has: page.getByRole('button', { name: 'Verify source inspection', exact: true }) });
+      await pendingCard.waitFor({ state: 'visible', timeout: 15_000 });
+      await pendingCard.getByLabel('Publisher').fill(source.publisher);
+      await pendingCard.getByLabel('Page title').fill(source.title);
+      await pendingCard.getByLabel('Direct source excerpt (max 25 words)').fill(source.excerpt);
+      const verificationWait = page.waitForResponse(response => /^\/api\/v1\/catalogue-review\/sources\/\d+\/verification$/.test(new URL(response.url()).pathname)
+        && response.request().method() === 'POST');
+      await pendingCard.getByRole('button', { name: 'Verify source inspection', exact: true }).click();
+      const verifiedResponse = await verificationWait;
+      if (verifiedResponse.status() !== 201) {
+        throw new Error(`operator_source_review_not_verified_${verifiedResponse.status()}`);
+      }
+      const verificationPath = new URL(verifiedResponse.url()).pathname;
+      const sourceId = Number(verificationPath.match(/\/sources\/(\d+)\/verification$/)?.[1]);
+      if (!Number.isSafeInteger(sourceId)) throw new Error('operator_source_review_id_unavailable');
+      trace.push({ method: 'POST', path: verificationPath, status: verifiedResponse.status() });
+      sourceIds.push(sourceId);
+      sourceSummaries.push({ publisher: source.publisher, title: source.title, url: source.url, status: 'verified' });
+    }
+    milestone('operator registered and directly reviewed three source records');
+
+    await page.getByRole('button', { name: 'Candidates', exact: true }).click();
+    await page.getByLabel('Search', { exact: true }).fill(candidate.proposed_name_fa || candidate.raw_name || key);
+    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await page.locator(`.candidate-review-card[data-candidate-id="${candidate.candidate_id}"]`).waitFor({ state: 'visible' });
+
+    const lat = Number(candidate.proposed_latitude).toFixed(7);
+    const lon = Number(candidate.proposed_longitude).toFixed(7);
+    const evidenceSpecs = [
+      { source_id: sourceIds[0], field_key: 'identity', claim_value: candidate.proposed_name_fa, evidence_excerpt: '1262-001 The Monastery of Saint Thaddeus' },
+      { source_id: sourceIds[1], field_key: 'province', claim_value: candidate.raw_province, evidence_excerpt: sources[1].excerpt },
+      { source_id: sourceIds[0], field_key: 'coordinates', claim_value: `${lat},${lon}`, evidence_excerpt: sources[0].excerpt },
+      { source_id: sourceIds[2], field_key: 'description', claim_value: 'One of the three monastic ensembles of the Armenian Christian faith described by UNESCO.', evidence_excerpt: sources[2].excerpt },
+    ];
+    const evidenceRows = [];
+    const candidateCard = page.locator(`.candidate-review-card[data-candidate-id="${candidate.candidate_id}"]`);
+    for (const evidence of evidenceSpecs) {
+      const source = sources[sourceIds.indexOf(evidence.source_id)];
+      await candidateCard.getByLabel('Verified source').selectOption(String(evidence.source_id));
+      await candidateCard.getByLabel('Field').selectOption(evidence.field_key);
+      await candidateCard.getByLabel('Reviewed claim value').fill(evidence.claim_value);
+      await candidateCard.getByLabel('Direct source excerpt (max 25 words)').fill(evidence.evidence_excerpt);
+      const evidenceWait = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/catalogue-review/candidates/${candidate.candidate_id}/evidence`
+        && response.request().method() === 'POST');
+      await candidateCard.getByRole('button', { name: 'Add evidence', exact: true }).click();
+      const evidenceResponse = await evidenceWait;
+      if (evidenceResponse.status() !== 201) throw new Error(`operator_candidate_evidence_failed_${evidenceResponse.status()}`);
+      trace.push({ method: 'POST', path: `/api/v1/catalogue-review/candidates/${candidate.candidate_id}/evidence`, status: evidenceResponse.status() });
+      await candidateCard.locator('ul li').filter({ hasText: evidence.claim_value }).waitFor({ state: 'visible' });
+      evidenceRows.push({ field_key: evidence.field_key, source_id: evidence.source_id });
+    }
+    const reviewReason = 'Reviewed identity, province, map-reference coordinate role and description against directly inspected source pages.';
+    await candidateCard.getByLabel('Decision reason').fill(reviewReason);
+    const decisionWait = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/catalogue-review/candidates/${candidate.candidate_id}/decision`
+      && response.request().method() === 'POST');
+    await candidateCard.getByRole('button', { name: 'Approve new identity', exact: true }).click();
+    const decisionResponse = await decisionWait;
+    if (decisionResponse.status() !== 200) throw new Error(`operator_identity_decision_invalid_${decisionResponse.status()}_${api.safeCatalogueFailure() || 'no_db_diagnostic'}`);
+    trace.push({ method: 'POST', path: `/api/v1/catalogue-review/candidates/${candidate.candidate_id}/decision`, status: decisionResponse.status() });
+    await page.getByRole('button', { name: 'Publication queue', exact: true }).click();
+    const publicationCard = page.locator('.partner-card').filter({ hasText: candidate.proposed_name_fa });
+    await publicationCard.waitFor({ state: 'visible' });
+    const destinationKey = 'archive-st-thaddeus-browser-e2e-v1';
+    await publicationCard.getByLabel('Destination key').fill(destinationKey);
+    await publicationCard.getByLabel('Coordinate role').selectOption('property_reference');
+    const publishWait = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/catalogue-review/candidates/${candidate.candidate_id}/publish`
+      && response.request().method() === 'POST');
+    await publicationCard.getByRole('button', { name: 'Publish destination', exact: true }).click();
+    const publishResponse = await publishWait;
+    if (publishResponse.status() !== 201) {
+      throw new Error(`operator_browser_publication_failed_${publishResponse.status()}_${api.safeCatalogueFailure() || 'no_db_diagnostic'}`);
+    }
+    milestone('operator reviewed evidence, approved identity, and published one canonical destination');
+    trace.push({ method: 'POST', path: `/api/v1/catalogue-review/candidates/${candidate.candidate_id}/publish`, status: publishResponse.status() });
+    const publicCatalogue = await requestBrowserJson(page, '/api/v2/catalog/destinations?limit=100', 'GET', undefined, undefined, trace);
+    publishedPlace = publicCatalogue.items.find(item => item.destination_key === destinationKey);
+    if (!publishedPlace || publicCatalogue.items.some(item => item.is_synthetic)) {
+      throw new Error('operator_unpublished_candidate_leaked_or_archive_place_missing');
+    }
+    const reviewQueue = await requestBrowserJson(page,
+      '/api/v1/catalogue-review/candidates?limit=100&kind=discovery_lead', 'GET');
+    if (reviewQueue.items.length !== 100 || reviewQueue.items.some(item => item.candidate_status !== 'needs_review')) {
+      throw new Error('operator_discovery_leads_not_left_unpublished');
+    }
+    const canaryLead = reviewQueue.items.find(item => item.raw_name && !publicCatalogue.items.some(place =>
+      String(place.canonical_name ?? '').toLocaleLowerCase() === String(item.raw_name).toLocaleLowerCase()));
+    if (canaryLead) {
+      const leakCheck = await requestBrowserJson(page,
+        `/api/v2/catalog/destinations?limit=100&q=${encodeURIComponent(canaryLead.raw_name)}`, 'GET');
+      if (leakCheck.items.some(item => String(item.canonical_name ?? '').toLocaleLowerCase() === String(canaryLead.raw_name).toLocaleLowerCase())) {
+        throw new Error('unpublished_archive_lead_visible_in_public_catalogue');
+      }
+    }
+
+    // Company tenant one: browser-authenticated organization/service/offer lifecycle.
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = companyPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, companyPhone);
+    await page.goto(`${webOrigin}/partners`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Partner workspace' }).waitFor({ state: 'visible' });
+    const partnerSubmit = async (button, pathPattern, expectedStatus = 201) => {
+      const pending = page.waitForResponse(response => pathPattern.test(new URL(response.url()).pathname)
+        && response.request().method() === 'POST');
+      await button.click();
+      const response = await pending;
+      if (response.status() !== expectedStatus) throw new Error(`partner_ui_submit_failed_${response.status()}`);
+      trace.push({ method: 'POST', path: new URL(response.url()).pathname, status: response.status() });
+    };
+    const orgForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Organization', exact: true }) });
+    await orgForm.getByLabel('Legal name').fill('Rahgard Acceptance Travel Co');
+    await orgForm.getByLabel('Display name').fill('Acceptance Travel Co');
+    await partnerSubmit(orgForm.getByRole('button', { name: 'Create organization', exact: true }), /^\/api\/v1\/partners\/organizations$/);
+    const organizationRows = await requestBrowserJson(page, '/api/v1/partners/organizations', 'GET', undefined, undefined, trace);
+    const organizationRow = organizationRows.items.find(item => item.display_name === 'Acceptance Travel Co');
+    organization = organizationRow?.organization_id;
+    if (!organization) throw new Error('partner_organization_not_created_from_browser_form');
+    await page.locator('.partner-forms').waitFor({ state: 'visible', timeout: 15_000 });
+
+    const serviceForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Service', exact: true }) });
+    await serviceForm.getByLabel('Service name').fill('Saint Thaddeus guided visit');
+    await serviceForm.getByLabel('Service description').fill('Private draft service for acceptance.');
+    await serviceForm.getByLabel('Service key').fill('st-thaddeus-guided-visit');
+    await serviceForm.getByLabel('Service type').fill('guided_visit');
+    await partnerSubmit(serviceForm.getByRole('button', { name: 'Create service', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/services$/i);
+    let workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET', undefined, undefined, trace);
+    const service = workspace.services.find(item => item.service_key === 'st-thaddeus-guided-visit');
+    if (!service) throw new Error('partner_service_not_created_from_browser_form');
+    await page.getByTestId('partner-service-select').selectOption(String(service.service_id));
+
+    const linkForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Link service to a published destination', exact: true }) });
+    await linkForm.getByLabel('Canonical destination').selectOption(String(publishedPlace.destination_id));
+    await linkForm.getByLabel('Relationship').selectOption('at');
+    await linkForm.getByLabel('Evidence note (optional)').fill('Acceptance relation to published canonical place.');
+    await partnerSubmit(linkForm.getByRole('button', { name: 'Add destination link', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/services\/[0-9a-f-]+\/destinations$/i);
+
+    const scheduleStart = '2030-11-20T10:00';
+    const scheduleEnd = '2030-11-20T12:00';
+    const scheduleForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Schedule', exact: true }) });
+    await scheduleForm.getByLabel('Schedule type').selectOption('appointment');
+    await scheduleForm.getByLabel('Time zone').fill('Asia/Tehran');
+    await scheduleForm.getByLabel('Starts (optional)').fill(scheduleStart);
+    await scheduleForm.getByLabel('Ends (optional)').fill(scheduleEnd);
+    await partnerSubmit(scheduleForm.getByRole('button', { name: 'Create schedule', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/schedules$/i);
+    workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET', undefined, undefined, trace);
+    const schedule = workspace.schedules.find(item => item.schedule_type === 'appointment');
+    if (!schedule) throw new Error('partner_schedule_not_created_from_browser_form');
+    await page.getByTestId('partner-schedule-select').selectOption(String(schedule.schedule_id));
+
+    const offerForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Offer', exact: true }) });
+    await offerForm.getByLabel('Offer type').fill('guided_visit');
+    await partnerSubmit(offerForm.getByRole('button', { name: 'Create offer', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/offers$/i);
+    workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET', undefined, undefined, trace);
+    const offer = workspace.offers.find(item => item.offer_type === 'guided_visit');
+    if (!offer) throw new Error('partner_offer_not_created_from_browser_form');
+    await page.getByTestId('partner-offer-select').selectOption(String(offer.offer_id));
+
+    const priceForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Price', exact: true }) });
+    await priceForm.getByLabel('Amount').fill('1200000');
+    await priceForm.getByLabel('Currency code').fill('IRR');
+    await priceForm.getByLabel('Denomination').fill('Rial');
+    await priceForm.getByLabel('Price unit').fill('per_person');
+    await partnerSubmit(priceForm.getByRole('button', { name: 'Add price', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/prices$/i);
+
+    const availabilityForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Availability', exact: true }) });
+    await availabilityForm.getByLabel('Occurrence time').fill(scheduleStart);
+    await availabilityForm.getByLabel('State').selectOption('unknown');
+    await partnerSubmit(availabilityForm.getByRole('button', { name: 'Add availability', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/availability$/i);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET', undefined, undefined, trace);
+    if (workspace.services.length !== 1 || workspace.destinations.length !== 1 || workspace.schedules.length !== 1
+        || workspace.offers.length !== 1 || workspace.prices.length !== 1 || workspace.availability.length !== 1) {
+      throw new Error('partner_workspace_data_not_persisted');
+    }
+    await page.screenshot({ path: resolve(operatorDir, 'partner-workspace-persisted.png'), fullPage: true, animations: 'disabled' });
+    partnerSummary = { organizations: 1, services: workspace.services.length, linkedDestinations: workspace.destinations.length,
+      schedules: workspace.schedules.length, offers: workspace.offers.length, prices: workspace.prices.length, availability: workspace.availability.length };
+    milestone('partner workspace records persisted and reopened');
+
+    // Tenant two cannot read or mutate tenant one's service data.
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = tenantTwoPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, tenantTwoPhone);
+    const tenantTwo = await requestBrowserJson(page, '/api/v1/partners/organizations', 'POST', currentIdentity.csrfToken,
+      { legal_name: 'Isolation Test Tenant', display_name: 'Isolation Tenant', organization_type: 'company', registration_country: 'IR' }, trace);
+    const deniedRead = await browserApi(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET');
+    const deniedWrite = await browserApi(page, `/api/v1/partners/organizations/${organization}/services`, 'POST', currentIdentity.csrfToken,
+      { service_type: 'tour', service_key: 'forged-cross-tenant-write', locale: 'en-US', display_name: 'forged' });
+    if (deniedRead.status !== 200 || deniedRead.payload?.services?.length !== 0
+        || ![403, 422].includes(deniedWrite.status)) {
+      throw new Error(`partner_cross_tenant_access_not_denied_${deniedRead.status}_${deniedWrite.status}`);
+    }
+    partnerSummary.crossTenantReadRows = deniedRead.payload.services.length;
+    partnerSummary.crossTenantWriteStatus = deniedWrite.status;
+    milestone('cross-tenant browser/API read and write denied');
+
+    // Traveler searches the new archive-backed canonical identity and persists a
+    // recommendation itinerary in FastAPI/PostgreSQL, then reopens after a new session.
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = travelerPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, travelerPhone);
+    await page.goto(webOrigin, { waitUntil: 'domcontentloaded' });
+    await selectAndVerifyLocale(page, 'en-US');
+    const foundPlace = (await requestBrowserJson(page,
+      `/api/v2/catalog/destinations?limit=100&q=${encodeURIComponent(publishedPlace.canonical_name)}`,
+      'GET', undefined, undefined, trace)).items;
+    const selected = foundPlace.find(item => item.destination_key === destinationKey);
+    if (!selected) throw new Error('traveler_archive_destination_search_missing');
+    const startRequest = '2-day trip to the Monastery of Saint Thaddeus in West Azerbaijan';
+    const interpreted = await requestBrowserJson(page, '/api/v1/requirements/interpret', 'POST', currentIdentity.csrfToken,
+      { locale: 'en-US', request_text: startRequest }, trace);
+    if (interpreted.requirements?.fields?.duration_days?.value !== 2) throw new Error('duration_null_parser_regression');
+    const started = await requestBrowserJson(page, '/api/v1/conversations', 'POST', currentIdentity.csrfToken, {
+      locale: 'en-US', request_text: startRequest,
+      extracted_requirements: interpreted.requirements,
+      traveler_timezone: 'Asia/Tehran', traveler_reference_date: '2026-11-16', idempotency_key: randomUUID(),
+    }, trace);
+    const trip = started.trip;
+    if (!started.conversation?.conversation_id || !trip?.trip_id || trip.duration_days !== 2) throw new Error('traveler_conversation_duration_not_persisted');
+    const confirmed = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}`, 'PATCH', currentIdentity.csrfToken, {
+      expected_version: trip.version,
+      confirmed_requirements: {
+        confirmation_source: 'traveler_reviewed', destinations: [selected.canonical_name], duration_days: 2,
+        origin: 'Chalderan', travel_dates: { start: '2026-11-19', end: '2026-11-20' }, traveler_count: 2,
+        accessibility: [], budget: null, soft_preferences: [], interests: ['heritage'], constraints: [],
+      },
+      destination_ids: [String(selected.destination_id)],
+      requirement_consent: { contract_version: 'recommendation-consent-v1', field_decisions: {}, advisory_acknowledged_fields: [] },
+    }, trace);
+    if (confirmed.version !== trip.version + 1 || confirmed.duration_days !== 2) throw new Error('traveler_profile_confirmation_failed');
+    const recommendation = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}/recommendations`, 'POST', currentIdentity.csrfToken,
+      { selected_destination_ids: [String(selected.destination_id)] }, trace);
+    if (recommendation.status !== 'available' || !recommendation.items.some(item => item.destination_id === String(selected.destination_id)
+        && item.evidence?.some(source => source.source_url?.startsWith('https://')))) {
+      throw new Error('traveler_archive_backed_recommendation_missing');
+    }
+    const itinerary = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}/itineraries`, 'POST', currentIdentity.csrfToken,
+      { recommendation_request_id: recommendation.recommendation_request_id, day_count: 2, locale: 'en-US' }, trace);
+    if (!itinerary.itinerary_id || itinerary.stops.length !== 1) throw new Error('traveler_archive_itinerary_not_created');
+    const secondRead = await requestBrowserJson(page, `/api/v1/itineraries/${itinerary.itinerary_id}`, 'GET', undefined, undefined, trace);
+    if (secondRead.stops.length !== 1 || secondRead.trip_id !== trip.trip_id) throw new Error('traveler_itinerary_initial_read_mismatch');
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, travelerPhone);
+    const history = await requestBrowserJson(page, '/api/v1/conversations', 'GET', undefined, undefined, trace);
+    if (!history.items.some(item => item.conversation_id === started.conversation.conversation_id)) throw new Error('traveler_conversation_not_reopened_after_auth');
+    const reopenedTrip = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}`, 'GET', undefined, undefined, trace);
+    const reopenedItinerary = await requestBrowserJson(page, `/api/v1/itineraries/${itinerary.itinerary_id}`, 'GET', undefined, undefined, trace);
+    if (reopenedTrip.duration_days !== 2 || reopenedItinerary.stops.length !== 1
+        || reopenedItinerary.stops[0].destination_id !== String(selected.destination_id)) throw new Error('traveler_itinerary_not_reopened_after_auth');
+    await page.screenshot({ path: resolve(operatorDir, 'traveler-archive-itinerary-reopened.png'), fullPage: true, animations: 'disabled' });
+    travelerSummary = { searchResults: foundPlace.length, destinationKey, tripId: trip.trip_id,
+      conversationId: started.conversation.conversation_id, durationDays: reopenedTrip.duration_days,
+      recommendationOutcome: recommendation.status, itineraryId: itinerary.itinerary_id,
+      persistedStops: reopenedItinerary.stops.length, reopenedAfterNewAuthentication: true };
+
+    const counts = await checkedControl(api.controlPort, api.controlToken, { action: 'national_catalogue_counts' });
+    if (counts.unpublished_leads - baselineCounts.unpublished_leads !== 533
+        || counts.candidates - baselineCounts.candidates !== 700
+        || counts.identities - baselineCounts.identities !== 167
+        || counts.leads - baselineCounts.leads !== 533
+        || counts.verified_sources - baselineCounts.verified_sources !== 3
+        || counts.published_destinations - baselineCounts.published_destinations !== 1
+        || counts.organizations - baselineCounts.organizations !== 2
+        || counts.services - baselineCounts.services !== 1
+        || counts.schedules - baselineCounts.schedules !== 1
+        || counts.offers - baselineCounts.offers !== 1
+        || counts.prices - baselineCounts.prices !== 1
+        || counts.availability - baselineCounts.availability !== 1
+        || counts.itineraries - baselineCounts.itineraries !== 1) {
+      throw new Error('national_postgres_acceptance_counts_mismatch');
+    }
+    return { archiveStaging: stagedSummary, baselineCounts, operator: { candidate: key, fieldEvidence: evidenceRows.length,
+      reviewedSources: sourceSummaries,
+      sourcePagesReviewed: sources.length, publishedKey: destinationKey, unpublishedDiscoveryLeads: counts.unpublished_leads },
+      partner: partnerSummary, traveler: travelerSummary, databaseCounts: counts,
+      apiTrace: trace, simulatedComponents: { otp: 'fake test adapter', chat: 'simulated in-process Gateway', liveProviderCalls: 0 } };
+  } finally {
+    await context.close();
   }
-  if (!updateBody || updateBody.expected_revision !== 1 || updateBody.stops.length !== 3
-    || !updateBody.stops.some(stop => stop.recommendation_id === firstStop.recommendation_id && stop.day_number === 5)
-    || current.day_count !== 10 || current.revision !== 2 || current.status !== 'partial') {
-    throw new Error('fixture_edit_save_revision_or_duration_failed');
+}
+
+async function runPersistedFifteenDayFixture(page, api, csrf, locale, screenshotRoot, originalRequestText) {
+  const apiTrace = [];
+  const enabled = await checkedControl(api.controlPort, api.controlToken, {
+    action: 'enable_itinerary_fixture',
+  });
+  const destinationIds = enabled.destination_ids;
+  if (!Array.isArray(destinationIds) || destinationIds.length !== 4) {
+    throw new Error('isolated_four_destination_fixture_missing');
   }
+  try {
+    const requestText = '\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0622\u0632\u0645\u0627\u06cc\u0634\u06cc: \u0633\u0641\u0631 15 \u0631\u0648\u0632\u0647';
+    const started = await requestBrowserJson(page, '/api/v1/conversations', 'POST', csrf, {
+      locale,
+      request_text: requestText,
+      extracted_requirements: fixtureRequirements(requestText, locale),
+      idempotency_key: randomUUID(),
+    }, apiTrace);
+    const conversationId = started.conversation?.conversation_id;
+    const trip = started.trip;
+    if (!conversationId || !trip?.trip_id || trip.duration_days !== 15) {
+      throw new Error('real_browser_test_trip_not_persisted');
+    }
+    const confirmed = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}`, 'PATCH', csrf, {
+      expected_version: trip.version,
+      confirmed_requirements: {
+        confirmation_source: 'traveler_reviewed', duration_days: 15,
+        destinations: ['TEST ONLY'], constraints: [],
+      },
+      destination_ids: destinationIds,
+    }, apiTrace);
+    if (confirmed.duration_days !== 15
+      || confirmed.confirmed_requirements?.duration_days !== 15) {
+      throw new Error('real_browser_fifteen_day_confirmation_failed');
+    }
+    // Continue this persisted test trip in the actual traveler UI. The private
+    // fixture only supplies isolated recommendation evidence; buttons below
+    // initiate both recommendation and itinerary requests through Vite/FastAPI.
+    const initialHistoryPending = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'GET');
+    await page.locator('.trip-history-heading button').click();
+    await initialHistoryPending;
+    await page.getByRole('button', { name: requestText, exact: true }).click();
+    await page.waitForFunction(expected => document.querySelector('#trip-prompt')?.value === expected, requestText);
+    await page.locator('#profile-duration').waitFor({ state: 'visible' });
+
+    const uiConfirmPath = `/api/v1/trips/${trip.trip_id}`;
+    const mandatoryChoices = page.locator('.requirement-consent-field input[value="must_have"]');
+    for (let choiceIndex = 0; choiceIndex < await mandatoryChoices.count(); choiceIndex += 1) {
+      await mandatoryChoices.nth(choiceIndex).check({ force: true });
+    }
+    const uiConfirmButton = page.getByRole('button', { name: localeCopy[locale].confirm, exact: true });
+    await uiConfirmButton.waitFor({ state: 'visible' });
+    const uiConfirmationPending = page.waitForResponse(response => new URL(response.url()).pathname === uiConfirmPath
+      && response.request().method() === 'PATCH', { timeout: 30_000 })
+      .then(response => ({ response }), error => ({ error }));
+    await uiConfirmButton.click();
+    const confirmationWaitResult = await uiConfirmationPending;
+    let uiConfirmationResponse = confirmationWaitResult.response;
+    if (!uiConfirmationResponse) {
+      const diagnostic = await page.evaluate(label => ({
+        confirmDisabled: [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === label)?.disabled ?? null,
+        invalidInputIds: [...document.querySelectorAll('[aria-invalid="true"]')].map(element => element.id),
+        consentFieldCount: document.querySelectorAll('.requirement-consent-field').length,
+        mandatoryChecked: [...document.querySelectorAll('.requirement-consent-field input[value="must_have"]')]
+          .filter(element => element.checked).length,
+        advisoryChecked: [...document.querySelectorAll('.requirement-consent-field input[value="advisory"]')]
+          .filter(element => element.checked).length,
+        consentAckMissing: [...document.querySelectorAll('.requirement-consent-field input[type="checkbox"]')]
+          .filter(element => !element.checked).length,
+      }), localeCopy[locale].confirm);
+      throw new Error(`traveler_ui_profile_confirmation_no_request_${JSON.stringify(diagnostic)}`);
+    }
+    if (uiConfirmationResponse.status() !== 200
+        || !uiConfirmationResponse.headers()['cache-control']?.includes('no-store')) {
+      throw new Error('traveler_ui_profile_confirmation_failed');
+    }
+    const uiConfirmedTrip = await uiConfirmationResponse.json();
+    const consent = uiConfirmedTrip.confirmed_requirements?.requirement_consent;
+    if (!consent || consent.contract_version !== 'recommendation-consent-v1') {
+      throw new Error('traveler_ui_profile_consent_snapshot_missing');
+    }
+    const fixtureProfile = { ...uiConfirmedTrip.confirmed_requirements };
+    delete fixtureProfile.requirement_consent;
+    const consentRequest = { ...consent };
+    delete consentRequest.profile_version;
+    const fixtureTrip = await requestBrowserJson(page, uiConfirmPath, 'PATCH', csrf, {
+      expected_version: uiConfirmedTrip.version,
+      confirmed_requirements: fixtureProfile,
+      destination_ids: destinationIds,
+      requirement_consent: consentRequest,
+    }, apiTrace);
+    if (fixtureTrip.destination_ids?.length !== 4
+        || fixtureTrip.confirmed_requirements?.requirement_consent?.profile_version !== fixtureTrip.version) {
+      throw new Error('isolated_test_fixture_identity_binding_failed');
+    }
+
+    const ownerRagBefore = await checkedControl(api.controlPort, api.controlToken, {
+      action: 'owner_rag_call_counts',
+    });
+    const recommendationsPath = `/api/v1/trips/${trip.trip_id}/recommendations`;
+    const recommendationPending = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/recommendations')
+      && response.request().method() === 'POST');
+    await page.getByRole('button', { name: localeCopy[locale].find, exact: true }).click();
+    const recommendationResponse = await recommendationPending;
+    if (new URL(recommendationResponse.url()).pathname !== recommendationsPath) {
+      throw new Error(`traveler_ui_recommendation_trip_mismatch_${new URL(recommendationResponse.url()).pathname}`);
+    }
+    if (!recommendationResponse.headers()['cache-control']?.includes('no-store')) {
+      throw new Error('browser_api_response_cacheable_post_recommendations');
+    }
+    apiTrace.push({ method: 'POST', path: recommendationsPath, status: recommendationResponse.status(),
+      cacheControl: recommendationResponse.headers()['cache-control'], transport: 'traveler-ui-to-local-vite-origin' });
+    const recommendation = await recommendationResponse.json();
+    if (recommendation.status !== 'available' || recommendation.items?.length !== 4
+      || recommendation.items.some(item => !item.evidence?.some(source => source.source_url.includes('.invalid')))) {
+      throw new Error(`real_browser_test_only_recommendations_failed_${JSON.stringify({
+        status: recommendation.status, reason: recommendation.reason_code,
+        itemCount: recommendation.items?.length,
+        evidenceCounts: recommendation.items?.map(item => item.evidence?.length ?? 0),
+      })}`);
+    }
+    if (recommendation.items.some(item =>
+      ['text', 'document_id', 'content_hash', 'claim_key', 'evidence_id'].some(key => key in item))) {
+      throw new Error('owner_rag_evidence_fields_leaked_to_traveler_recommendation');
+    }
+    if (recommendation.items.some(item => item.retrieval_evidence?.length)) {
+      throw new Error('owner_rag_no_evidence_was_replaced_with_fallback_citation');
+    }
+    const ownerRagAfter = await checkedControl(api.controlPort, api.controlToken, {
+      action: 'owner_rag_call_counts',
+    });
+    if (ownerRagAfter.enabled !== api.ownerRagEnabled) throw new Error('owner_rag_mode_report_mismatch');
+    const ownerRagProbe = {
+      enabled: ownerRagAfter.enabled,
+      calls: ownerRagAfter.calls - ownerRagBefore.calls,
+      outcomes: Object.fromEntries(Object.keys(ownerRagAfter.outcomes).map(key => [
+        key, ownerRagAfter.outcomes[key] - ownerRagBefore.outcomes[key],
+      ])),
+      travelerEvidenceTextReturned: false,
+    };
+    if (api.ownerRagEnabled && (ownerRagProbe.calls !== 1 || ownerRagProbe.outcomes.no_evidence !== 1)) {
+      throw new Error('owner_rag_empty_index_http_probe_not_confirmed');
+    }
+    if (!api.ownerRagEnabled && ownerRagProbe.calls !== 0) {
+      throw new Error('disabled_owner_rag_made_retrieval_calls');
+    }
+    if (recommendation.items.some(item => item.retrieval_evidence_status
+      !== (api.ownerRagEnabled ? 'no_evidence' : 'disabled'))) {
+      throw new Error('owner_rag_status_mismatch_with_truthful_structured_recommendation');
+    }
+    await page.locator('#journey-day-count').waitFor({ state: 'visible' });
+    if (await page.locator('#journey-day-count').inputValue() !== '15') {
+      throw new Error('traveler_ui_did_not_default_confirmed_fifteen_days');
+    }
+    const itineraryCreatePath = `/api/v1/trips/${trip.trip_id}/itineraries`;
+    const itineraryCreatePending = page.waitForResponse(response => new URL(response.url()).pathname === itineraryCreatePath
+      && response.request().method() === 'POST');
+    await page.getByRole('button', { name: localeCopy[locale].createPlan, exact: true }).click();
+    const itineraryCreateResponse = await itineraryCreatePending;
+    if (!itineraryCreateResponse.headers()['cache-control']?.includes('no-store')) {
+      throw new Error('browser_api_response_cacheable_post_itinerary');
+    }
+    apiTrace.push({ method: 'POST', path: itineraryCreatePath, status: itineraryCreateResponse.status(),
+      cacheControl: itineraryCreateResponse.headers()['cache-control'], transport: 'traveler-ui-to-local-vite-origin' });
+    const created = await itineraryCreateResponse.json();
+    const itineraryId = created.itinerary_id;
+    const initialDayCounts = Object.values((created.stops ?? []).reduce((counts, stop) => {
+      counts[stop.day_number] = (counts[stop.day_number] ?? 0) + 1;
+      return counts;
+    }, {})).sort((left, right) => left - right);
+    const cityFixtureIds = new Set(destinationIds.slice(0, 3).map(String));
+    const regionalFixtureId = String(destinationIds[3]);
+    const dayForFixture = new Map((created.stops ?? []).map(stop => [String(stop.destination_id), stop.day_number]));
+    const cityDays = new Set([...cityFixtureIds].map(id => dayForFixture.get(id)));
+    const cityDay = cityDays.size === 1 ? [...cityDays][0] : null;
+    const regionalDay = dayForFixture.get(regionalFixtureId);
+    if (!itineraryId || created.day_count !== 15 || created.status !== 'partial'
+      || created.stops?.length !== 4 || created.unplanned_days?.length !== 13
+      || JSON.stringify(initialDayCounts) !== JSON.stringify([1, 3])
+      || cityDay == null || regionalDay == null || cityDay === regionalDay) {
+      throw new Error('real_browser_fifteen_day_partial_itinerary_failed');
+    }
+    assertNoInventedSchedule(created, { coordinateAware: true });
+    const catalogue = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET', undefined, undefined, apiTrace);
+    if (catalogue.count !== 0) throw new Error('test_fixture_leaked_to_production_catalogue');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const historyPending = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'GET');
+    await page.locator('.trip-history-heading button').click();
+    await historyPending;
+    const requestButton = page.getByRole('button', { name: requestText, exact: true });
+    await requestButton.waitFor({ state: 'visible' });
+    await requestButton.click();
+    await page.locator('#itinerary-day-15').waitFor({ state: 'visible' });
+    if (await page.locator('.saved-itinerary-days .itinerary-day').count() !== 15
+      || await page.locator('.saved-stop').count() !== 4
+      || await page.locator('.unplanned-day').count() !== 13) {
+      throw new Error('real_persisted_fifteen_day_itinerary_not_restored_in_ui');
+    }
+    const lastDay = await page.locator('#itinerary-day-15').textContent();
+    const localizedDay = await page.evaluate(({ localeValue }) => new Intl.NumberFormat(localeValue, {
+      numberingSystem: localeValue === 'ar' ? 'arab' : localeValue === 'fa-IR' ? 'arabext' : 'latn',
+    }).format(15), { localeValue: locale });
+    if (!lastDay?.includes(localizedDay)) throw new Error(`fifteen_day_label_not_localized_${locale}`);
+
+    await page.locator(`#stop-day-${created.stops[0].recommendation_id}`).selectOption('5');
+    await page.locator('.saved-stop').nth(1).locator('.stop-actions button').last().click();
+    await sanitizeAndCapture(page, resolve(screenshotRoot, `partial-${locale}-390.png`), locale, 390, 844);
+    await sanitizeAndCapture(page, resolve(screenshotRoot, `partial-${locale}-1440.png`), locale, 1440, 1000);
+    const savePending = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/itineraries/${itineraryId}`
+      && response.request().method() === 'PUT');
+    await page.locator('.saved-itinerary > button').last().click();
+    const savedResponse = await savePending;
+    const saved = await savedResponse.json();
+    if (savedResponse.status() !== 200 || saved.revision !== 2 || saved.day_count !== 15 || saved.stops?.length !== 3) {
+      throw new Error('real_browser_itinerary_edit_not_persisted');
+    }
+    apiTrace.push({
+      method: 'PUT',
+      path: `/api/v1/itineraries/${itineraryId}`,
+      status: savedResponse.status(),
+      cacheControl: savedResponse.headers()['cache-control'],
+      transport: 'browser-page-request-to-local-vite-origin',
+    });
+    if (!savedResponse.headers()['cache-control']?.includes('no-store')) {
+      throw new Error('browser_api_response_cacheable_put');
+    }
+    const reopened = await requestBrowserJson(
+      page, `/api/v1/itineraries/${itineraryId}`, 'GET', undefined, undefined, apiTrace,
+    );
+    assertNoInventedSchedule(reopened, { coordinateAware: true });
+    if (reopened.revision !== 2 || reopened.day_count !== 15 || reopened.stops?.length !== 3
+      || reopened.unplanned_days?.length !== 12) {
+      throw new Error('real_browser_itinerary_edit_reopen_mismatch');
+    }
+    const catalogueAfter = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET', undefined, undefined, apiTrace);
+    if (catalogueAfter.count !== 0) throw new Error('test_fixture_leaked_after_itinerary_edit');
+    const deletedFixture = await requestBrowserJson(
+      page, `/api/v1/conversations/${conversationId}`, 'DELETE', csrf,
+    );
+    if (!deletedFixture.deleted) throw new Error('positive_fixture_conversation_cleanup_failed');
+    const refreshedHistory = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'GET');
+    await page.locator('.trip-history-heading button').click();
+    await refreshedHistory;
+    const originalTrip = page.getByRole('button', { name: originalRequestText, exact: true });
+    await originalTrip.waitFor({ state: 'visible' });
+    await originalTrip.click();
+    const originalRequestRestored = await page.waitForFunction(
+      expected => document.querySelector('#trip-prompt')?.value === expected,
+      originalRequestText,
+      { timeout: 15_000 },
+    );
+    if (!originalRequestRestored) {
+      throw new Error('original_journey_not_restored_after_positive_itinerary');
+    }
+    const positiveApiPaths = [
+      ['POST', `/api/v1/trips/${trip.trip_id}/recommendations`],
+      ['POST', `/api/v1/trips/${trip.trip_id}/itineraries`],
+      ['PUT', `/api/v1/itineraries/${itineraryId}`],
+      ['GET', `/api/v1/itineraries/${itineraryId}`],
+    ];
+    for (const [method, path] of positiveApiPaths) {
+      if (!apiTrace.some(entry => entry.method === method && entry.path === path && entry.status >= 200 && entry.status < 300)) {
+        throw new Error(`positive_live_api_call_not_observed_${method.toLowerCase()}`);
+      }
+    }
+    return {
+      itineraryId, dayCount: 15, initialStops: 4, initialDayGroupSizes: initialDayCounts, finalStops: 3,
+      initialUnplannedDays: 13, finalUnplannedDays: 12,
+      geographicDayAssignments: { cityClusterDay: cityDay, regionalDay, cityClusterStops: cityFixtureIds.size, regionalStops: 1 },
+      ownerRagProbe,
+      apiTrace: apiTrace.filter(entry => /recommendations|itineraries/.test(entry.path)),
+      noInventedScheduleFields: true,
+      geoGrouping: 'three pending Shiraz proposal points grouped together and one pending Marvdasht property-reference point grouped separately; coordinates were used only by synthetic in-memory test identities and were not published or returned to travelers',
+      warningCodes: reopened.warning_codes,
+    };
+  } finally {
+    await checkedControl(api.controlPort, api.controlToken, { action: 'disable_itinerary_fixture' });
+  }
+}
+
+
+// Explicit opt-in browser acceptance: real canonical Fars IDs in disposable QA PG17.
+// No in-memory/synthetic candidate override, provider call, or public approval.
+async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) {
+  const browseScenario = process.env.RAHGARD_GEO_BROWSE_E2E === '1';
+  const keys = [
+    'shiraz-hafezieh-v1', 'shiraz-eram-garden-v1',
+    'shiraz-vakil-bazaar-v1', 'unesco-persepolis-v1',
+  ];
+  const roles = ['representative_point', 'representative_point',
+    'representative_point', 'property_reference'];
+  const prompts = {
+    'fa-IR': 'برای ۱۵ روز سفر به شیراز، حافظیه، باغ ارم، بازار وکیل و تخت جمشید',
+    'en-US': '15-day trip to Hafezieh, Eram Garden, Vakil Bazaar, and Persepolis in Fars',
+    ar: 'رحلة تجريبية لمدة ١٥ يوماً إلى حافظية وحديقة إرم وسوق وكيل وبرسبوليس',
+  };
+  const context = await browser.newContext({ locale });
+  const page = await context.newPage();
+  const phone = syntheticPhone();
+  let authenticated = false;
+  reportResponseWaitCallsite(page);
+  await attachBrowserGuards(page, audit);
+  try {
+    await page.goto(webOrigin, { waitUntil: 'domcontentloaded' });
+    await selectAndVerifyLocale(page, locale);
+    const identity = await signIn(page, api.controlPort, api.controlToken, phone);
+    authenticated = true;
+    const csrf = identity.csrfToken;
+    const trace = [];
+    const catalog = await requestBrowserJson(
+      page, '/api/v1/catalog/destinations', 'GET', undefined, undefined, trace);
+    if (catalog.status !== 'available' || catalog.count !== 4 || catalog.items?.length !== 4) {
+      throw new Error('qa_real_geo_catalogue_not_four_destinations');
+    }
+    const byKey = new Map(catalog.items.map(item => [item.destination_key, item]));
+    const selected = keys.map((key, index) => {
+      const point = byKey.get(key);
+      if (!point || point.coordinate_role !== roles[index]
+          || !Number.isFinite(point.latitude) || !Number.isFinite(point.longitude)
+          || !/^[0-9]+$/.test(point.destination_id)) {
+        throw new Error('qa_real_geo_canonical_identity_coordinate_or_role_missing');
+      }
+      return point;
+    });
+    const selectedIds = selected.map(item => item.destination_id);
+    const names = selected.map(item => item.canonical_name);
+    const requestText = browseScenario
+      ? 'برای ۱۵ روز سفر با مقصدی که هنوز انتخاب نشده است'
+      : prompts[locale];
+    const interpretation = await requestBrowserJson(
+      page, '/api/v1/requirements/interpret', 'POST', csrf,
+      { locale, request_text: requestText }, trace);
+    const interpretedDuration = interpretation.requirements?.fields?.duration_days?.value;
+    if (!browseScenario && locale === 'fa-IR' && interpretedDuration !== 15) {
+      throw new Error(`qa_real_geo_interpretation_duration_${String(interpretedDuration ?? 'null')}`);
+    }
+    const extracted = fixtureRequirements(requestText, locale);
+    extracted.destinations = browseScenario
+      ? { value: null, status: 'unknown', evidence: null }
+      : { value: names, status: 'extracted',
+        evidence: 'selected seeded canonical Fars POIs in disposable QA' };
+    const started = await requestBrowserJson(page, '/api/v1/conversations', 'POST', csrf, {
+      locale, request_text: requestText, extracted_requirements: extracted,
+      idempotency_key: randomUUID(),
+    }, trace);
+    const trip = started.trip;
+    const conversationId = started.conversation?.conversation_id;
+    // Intake is advisory until explicit profile confirmation, so the legacy
+    // confirmed trip.duration_days column is correctly NULL at creation time.
+    // Assert the persisted extracted requirement instead of treating it as a
+    // confirmed value prematurely.
+    if (!conversationId || !trip?.trip_id || trip.extracted_requirements?.durationDays?.value !== 15) {
+      const persisted = trip?.extracted_requirements;
+      const canonicalDuration = persisted?.requirements_v1?.fields?.duration_days?.value;
+      const duration = persisted?.durationDays;
+      const canonical = persisted?.requirements_v1?.fields?.duration_days;
+      throw new Error(`qa_real_geo_conversation_not_persisted_trip_${Boolean(trip?.trip_id)}_conversation_${Boolean(conversationId)}_duration_${String(duration?.value ?? 'null')}_${duration?.status ?? 'no_status'}_canonical_${String(canonicalDuration ?? 'null')}_${canonical?.status ?? 'no_status'}_preflight_${String(interpretedDuration ?? 'null')}_locale_${locale}`);
+    }
+    const tripPath = '/api/v1/trips/' + trip.trip_id;
+    if (!browseScenario) {
+      await requestBrowserJson(page, tripPath, 'PATCH', csrf, {
+        expected_version: trip.version,
+        confirmed_requirements: {
+          confirmation_source: 'traveler_reviewed', duration_days: 15,
+          destinations: names, constraints: [],
+        },
+        destination_ids: selectedIds,
+      }, trace);
+    }
+
+    const historyWait = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'GET');
+    await page.locator('.trip-history-heading button').click();
+    await historyWait;
+    await page.getByRole('button', { name: requestText, exact: true }).click();
+    await page.waitForFunction(expected => document.querySelector('#trip-prompt')?.value === expected, requestText);
+    await page.locator('#profile-duration').waitFor({ state: 'visible' });
+    if (browseScenario) {
+      if (locale !== 'fa-IR') throw new Error('geo_browse_scenario_requires_persian_locale');
+      if (await page.locator('.recommendation-controls').count()) {
+        throw new Error('geo_browse_recommendations_visible_before_explicit_review');
+      }
+      await page.getByRole('button', { name: 'دیدن مقصدهای تأییدشده', exact: true }).click();
+      await page.locator('#approved-destination-search').waitFor({ state: 'visible' });
+      const browser = page.locator('#approved-destination-browser');
+      if (await browser.locator('.location-reference').count() !== 4
+          || !(await browser.textContent())?.includes('نقطهٔ تقریبی برای نمایش موقعیت؛ ورودی بازدیدکنندگان یا مسیر نیست.')) {
+        throw new Error('geo_browse_approximate_reference_warning_missing');
+      }
+      const firstName = selected[0].localized_names?.[locale] ?? selected[0].canonical_name;
+      await page.locator('#approved-destination-search').fill(firstName);
+      if (await browser.locator('li').count() !== 1) throw new Error('geo_browse_search_did_not_filter');
+      await page.locator('#approved-destination-search').fill('');
+      for (const destination of selected) {
+        const name = destination.localized_names?.[locale] ?? destination.canonical_name;
+        const locality = destination.city_name ?? destination.province_name ?? '';
+        const button = page.getByRole('button', { name: `افزودن به سفر: ${name} · ${locality}`, exact: true });
+        await button.click();
+        await button.waitFor({ state: 'visible' });
+        await page.waitForFunction(label => {
+          const match = [...document.querySelectorAll('#approved-destination-browser button')]
+            .find(item => item.getAttribute('aria-label') === label);
+          return match?.disabled === true;
+        }, `افزودن به سفر: ${name} · ${locality}`);
+      }
+      if (await page.locator('.recommendation-controls').count()) {
+        throw new Error('geo_browse_add_silently_confirmed_profile');
+      }
+    }
+    const mandatory = page.locator('.requirement-consent-field input[value="must_have"]');
+    for (let i = 0; i < await mandatory.count(); i += 1) {
+      await mandatory.nth(i).check({ force: true });
+    }
+    const confirmWait = page.waitForResponse(response =>
+      new URL(response.url()).pathname === tripPath && response.request().method() === 'PATCH');
+    await page.getByRole('button', { name: localeCopy[locale].confirm, exact: true }).click();
+    const confirmResponse = await confirmWait;
+    if (confirmResponse.status() !== 200) throw new Error('qa_real_geo_ui_confirmation_failed');
+    const confirmed = await confirmResponse.json();
+    const consent = confirmed.confirmed_requirements?.requirement_consent;
+    if (consent?.contract_version !== 'recommendation-consent-v1') {
+      throw new Error('qa_real_geo_consent_missing');
+    }
+    let finalTrip = confirmed;
+    if (!browseScenario) {
+      const finalProfile = { ...confirmed.confirmed_requirements };
+      delete finalProfile.requirement_consent;
+      const consentRequest = { ...consent };
+      delete consentRequest.profile_version;
+      finalTrip = await requestBrowserJson(page, tripPath, 'PATCH', csrf, {
+        expected_version: confirmed.version, confirmed_requirements: finalProfile,
+        destination_ids: selectedIds, requirement_consent: consentRequest,
+      }, trace);
+    }
+    if (finalTrip.destination_ids?.join(',') !== selectedIds.join(',')
+        || finalTrip.confirmed_requirements?.requirement_consent?.profile_version !== finalTrip.version) {
+      throw new Error('qa_real_geo_selected_ids_or_consent_changed');
+    }
+
+    const recommendationPath = tripPath + '/recommendations';
+    const recommendationWait = page.waitForResponse(response =>
+      new URL(response.url()).pathname === recommendationPath
+      && response.request().method() === 'POST');
+    await page.getByRole('button', { name: localeCopy[locale].find, exact: true }).click();
+    const recommendationResponse = await recommendationWait;
+    const recommendation = await recommendationResponse.json();
+    if (recommendationResponse.status() !== 201
+        || recommendation.status !== 'available' || recommendation.items?.length !== 4
+        || !selectedIds.every(id => recommendation.items.some(item => item.destination_id === id))
+        || recommendation.items.some(item => !item.evidence?.length || item.evidence.some(source =>
+          !source.source_url?.startsWith('https://') || source.source_url.includes('.invalid')
+          || source.source_role === 'test_fixture'))) {
+      throw new Error('qa_real_geo_recommendation_not_real_canonical');
+    }
+    trace.push({ method: 'POST', path: recommendationPath, status: 201 });
+    await page.locator('#journey-day-count').waitFor({ state: 'visible' });
+    if (await page.locator('#journey-day-count').inputValue() !== '15') {
+      throw new Error('qa_real_geo_trip_duration_wrong');
+    }
+    const planPath = tripPath + '/itineraries';
+    const planWait = page.waitForResponse(response =>
+      new URL(response.url()).pathname === planPath && response.request().method() === 'POST');
+    await page.getByRole('button', { name: localeCopy[locale].createPlan, exact: true }).click();
+    const planResponse = await planWait;
+    const created = await planResponse.json();
+    if (planResponse.status() !== 201 || !created.itinerary_id
+        || created.day_count !== 15 || created.stops?.length !== 4
+        || created.status !== 'partial' || created.unplanned_days?.length !== 13) {
+      throw new Error('qa_real_geo_plan_not_created');
+    }
+    const days = new Map(created.stops.map(stop => [String(stop.destination_id), stop.day_number]));
+    const cityDays = new Set(selectedIds.slice(0, 3).map(id => days.get(id)));
+    const cityDay = cityDays.size === 1 ? [...cityDays][0] : null;
+    const regionalDay = days.get(selectedIds[3]);
+    if (cityDay == null || regionalDay == null || cityDay === regionalDay) {
+      throw new Error('qa_real_geo_grouping_wrong');
+    }
+    assertNoInventedSchedule(created, { coordinateAware: true });
+    trace.push({ method: 'POST', path: planPath, status: 201 });
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const restoreWait = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'GET');
+    await page.locator('.trip-history-heading button').click();
+    await restoreWait;
+    await page.getByRole('button', { name: requestText, exact: true }).click();
+    await page.locator('#itinerary-day-15').waitFor({ state: 'visible' });
+    if (await page.locator('.saved-stop').count() !== 4
+        || await page.locator('.unplanned-day').count() !== 13) {
+      throw new Error('qa_real_geo_plan_not_reopened_in_pwa');
+    }
+    await page.locator('#stop-day-' + created.stops[0].recommendation_id).selectOption('5');
+    await page.locator('.saved-stop').nth(1).locator('.stop-actions button').last().click();
+    const localeDir = resolve(artifactRoot, locale);
+    mkdirSync(localeDir, { recursive: true });
+    await sanitizeAndCapture(page, resolve(localeDir, 'qa-real-geo-' + locale + '.png'),
+      locale, 390, 844);
+    const editPath = '/api/v1/itineraries/' + created.itinerary_id;
+    const editWait = page.waitForResponse(response =>
+      new URL(response.url()).pathname === editPath && response.request().method() === 'PUT');
+    await page.locator('.saved-itinerary > button').last().click();
+    const editResponse = await editWait;
+    const saved = await editResponse.json();
+    if (editResponse.status() !== 200 || saved.revision !== 2 || saved.stops?.length !== 3) {
+      throw new Error('qa_real_geo_plan_edit_not_saved');
+    }
+    const reopened = await requestBrowserJson(page, editPath, 'GET', undefined, undefined, trace);
+    assertNoInventedSchedule(reopened, { coordinateAware: true });
+    if (reopened.revision !== 2 || reopened.day_count !== 15
+        || reopened.stops?.length !== 3 || reopened.unplanned_days?.length !== 12) {
+      throw new Error('qa_real_geo_plan_reopen_mismatch');
+    }
+    trace.push({ method: 'PUT', path: editPath, status: 200 });
+    await requestBrowserJson(page, '/api/v1/conversations/' + conversationId, 'DELETE', csrf);
+    return {
+      locale, mode: browseScenario ? 'canonical_Fars_browse_and_explicit_review_disposable_QA'
+        : 'canonical_Fars_IDs_in_disposable_QA_database',
+      canonicalKeys: keys, coordinatesRoles: roles,
+      dayCount: 15, cityDay, regionalDay,
+      initialStops: 4, finalStops: 3,
+      initialUnplannedDays: 13, finalUnplannedDays: 12,
+      saveEditReopen: true, verifiedEntrance: false, verifiedRoadETA: false,
+      apiTrace: trace.filter(row => /recommendations|itineraries/.test(row.path)),
+    };
+  } finally {
+    if (authenticated) {
+      try {
+        await checkedControl(api.controlPort, api.controlToken,
+          { action: 'cleanup_phones', phones: [phone] });
+      } catch { /* only QA data; disposable container cleanup follows */ }
+    }
+    await page.close().catch(() => {});
+    await context.close().catch(() => {});
+  }
+}
+
+// Browser -> real authenticated assistant endpoint -> durable PostgreSQL rows.
+// Only the external LLM is simulated by the guarded API server dependency.
+// The candidate is deliberately unverified and MUST NOT change the trip.
+async function appendPersianFollowUp(page, conversationId, tripId, content) {
+  await page.locator('#trip-follow-up').fill(content);
+  const path = `/api/v1/conversations/${conversationId}/messages`;
+  const responsePending = page.waitForResponse(response =>
+    new URL(response.url()).pathname === path && response.request().method() === 'POST');
+  await page.locator('.conversation-local-action button').click();
+  const response = await responsePending;
+  const body = await response.json();
+  const submitted = response.request().postDataJSON()?.extracted_requirements;
+  if (response.status() !== 201 || !response.headers()['cache-control']?.includes('no-store')
+      || body.trip?.original_request !== localeCopy['fa-IR'].prompt
+      || body.message?.content !== content) {
+    throw new Error('persian_follow_up_not_persisted_or_original_request_changed');
+  }
+  if (/(?:45|۴۵)\s*میلیون/u.test(content)
+      && Number(submitted?.budget?.value?.amount) !== 45) {
+    throw new Error(`persian_budget_correction_not_extracted_amount=${submitted?.budget?.value?.amount ?? 'missing'}`);
+  }
+  if (/(?:45|۴۵)\s*میلیون/u.test(content)
+      && Number(body.trip?.extracted_requirements?.budget?.value?.amount) !== 45) {
+    throw new Error(`persian_budget_correction_not_persisted_amount=${body.trip?.extracted_requirements?.budget?.value?.amount ?? 'missing'}`);
+  }
+  return body;
+}
+
+async function verifySimulatedAssistant(page, api, locale, conversationId, tripId, csrf, expectedTripVersion, expectedConversationVersion, expectedDuration) {
+  const before = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
+  const assistantButton = page.locator('.assistant-controls > button');
+  if (!(await assistantButton.isEnabled())) throw new Error('assistant_blocked_without_redundant_ai_consent');
+  const destinationByLocale = { 'fa-IR': '\u0634\u06cc\u0631\u0627\u0632', 'en-US': 'Shiraz', ar: 'Shiraz' };
+  const prompt = {
+    'fa-IR': '\u0628\u0631\u0627\u06cc \u0633\u0641\u0631 2 \u0631\u0648\u0632 \u0633\u0641\u0631 \u0628\u0647 \u0634\u06cc\u0631\u0627\u0632 \u067e\u06cc\u0634\u0646\u0647\u0627\u062f \u0628\u062f\u0647.',
+    'en-US': 'Please suggest a 2-day trip to Shiraz.',
+    ar: '\u0627\u0642\u062a\u0631\u062d \u0631\u062d\u0644\u0629 \u0644\u0645\u062f\u0629 2 \u064a\u0648\u0645 \u0625\u0644\u0649 Shiraz.',
+  }[locale];
+  const expectedCandidateDestination = destinationByLocale[locale];
+  await page.locator('#trip-follow-up').fill(prompt);
+  const path = '/api/v1/conversations/' + conversationId + '/assistant-turns';
+  const responsePending = page.waitForResponse(response =>
+    new URL(response.url()).pathname === path && response.request().method() === 'POST');
+  await assistantButton.click();
+  const response = await responsePending;
+  const body = await response.json();
+  const candidateFields = body.candidate_requirements?.fields;
+  if (response.status() !== 200 || !response.headers()['cache-control']?.includes('no-store')
+      || body.replayed || body.candidate_requirements?.contract_version !== 'trip-requirements-v1'
+      || candidateFields?.destination?.value !== expectedCandidateDestination
+      || candidateFields?.duration_days?.value !== 2
+      || body.trip?.version !== expectedTripVersion
+      || Object.keys(body.trip?.confirmed_requirements ?? {}).length !== 0) {
+    throw new Error(`simulated_assistant_endpoint_or_trip_invariant_failed_${locale}_status=${response.status()}_no_store=${response.headers()['cache-control']?.includes('no-store')}_replayed=${body.replayed}_candidate_version=${body.candidate_requirements?.contract_version}_candidate_destination=${candidateFields?.destination?.value}_candidate_duration=${candidateFields?.duration_days?.value}_trip_version=${body.trip?.version}_expected_trip_version=${expectedTripVersion}_confirmed_keys=${Object.keys(body.trip?.confirmed_requirements ?? {}).length}`);
+  }
+  await page.locator('.saved-message-assistant p').first().waitFor({ state: 'visible' });
+  await page.locator('.assistant-candidate').waitFor({ state: 'visible' });
+  if (await page.locator('#profile-duration').inputValue() !== String(expectedDuration)) {
+    throw new Error('assistant_changed_profile_without_confirmation_' + locale);
+  }
+  const stored = await page.request.get(webOrigin + '/api/v1/conversations/' + conversationId);
+  const conversation = await stored.json();
+  const saved = conversation.messages?.filter(m => m.role === 'assistant' && m.trip_id === tripId);
+  const savedAssistantTurn = saved?.find(m => m.message_id === body.message?.message_id);
+  if (stored.status() !== 200 || !savedAssistantTurn
+      || savedAssistantTurn.candidate_requirements?.fields?.destination?.value !== expectedCandidateDestination
+      || savedAssistantTurn.candidate_requirements?.fields?.duration_days?.value !== 2
+      || 'metadata' in savedAssistantTurn) {
+    throw new Error(`assistant_advisory_not_reopenable_or_metadata_exposed_${locale}_status=${stored.status()}_saved=${saved?.length}_destination=${savedAssistantTurn?.candidate_requirements?.fields?.destination?.value}_duration=${savedAssistantTurn?.candidate_requirements?.fields?.duration_days?.value}_metadata=${'metadata' in (savedAssistantTurn ?? {})}`);
+  }
+  // Same idempotency key must replay durable state, not call the simulated
+  // gateway again or create another assistant message.
+  const originalRequest = response.request().postDataJSON();
+  const replay = await page.evaluate(async ({ path, payload, csrfToken }) => {
+    const result = await fetch(path, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify(payload),
+    });
+    const data = await result.json();
+    return { status: result.status, replayed: data.replayed,
+      tripVersion: data.trip?.version, messageId: data.message?.message_id };
+  }, { path, payload: originalRequest, csrfToken: csrf });
+  const after = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
+  if (replay.status !== 200 || !replay.replayed || replay.tripVersion !== expectedTripVersion
+      || replay.messageId !== body.message?.message_id || after.count !== before.count + 1) {
+    throw new Error('simulated_assistant_idempotency_or_call_budget_failed_' + locale);
+  }
+  const profileBeforeDismissal = await page.locator('#profile-duration').inputValue();
+  await page.locator('.assistant-candidate button').last().click(); // Reject suggestion.
+  if (await page.locator('.assistant-candidate').count() !== 0
+      || await page.locator('#profile-duration').inputValue() !== profileBeforeDismissal) {
+    throw new Error('assistant_suggestion_dismissal_mutated_profile_' + locale);
+  }
+
+  // A second simulated turn provides a bounded candidate
+  // that the traveler applies only to the editable draft; confirmation remains
+  // gated until the profile and requirement decisions are reviewed.
+  const secondPrompt = prompt;
+  await page.locator('#trip-follow-up').fill(secondPrompt);
+  const secondPending = page.waitForResponse(response =>
+    new URL(response.url()).pathname === path && response.request().method() === 'POST');
+  await assistantButton.click();
+  const secondResponse = await secondPending;
+  const secondBody = await secondResponse.json();
+  if (secondResponse.status() !== 200 || secondBody.trip?.version !== expectedTripVersion
+      || secondBody.candidate_requirements?.fields?.duration_days?.value !== 2) {
+    throw new Error('second_simulated_assistant_turn_invalid_' + locale);
+  }
+  await page.locator('.assistant-candidate button').first().click(); // Apply only as an editable suggestion.
+  const confirmButton = page.getByRole('button', { name: localeCopy[locale].confirm });
+  // Applying an AI suggestion may enable the explicit confirmation action.
+  // The safety invariant is that it must NOT confirm the profile by itself.
+  if (await page.locator('#profile-duration').inputValue() !== '2'
+      || await page.locator('.recommendation-controls').count() !== 0) {
+    throw new Error('applied_ai_suggestion_auto_confirmed_profile_' + locale);
+  }
+  await page.locator('#profile-duration').fill(String(expectedDuration));
+  await page.locator('#profile-destination-0').fill(destinationByLocale[locale]);
+  if (locale === 'fa-IR') {
+    if (await page.locator('#profile-duration').inputValue() !== '15'
+        || await page.locator('#profile-travelers').inputValue() !== '4'
+        || !containsFortyFive(await page.locator('#profile-budget').inputValue())
+        || !containsToman(await page.locator('#profile-budget').inputValue())
+        || await page.locator('.recommendation-controls').count() !== 0) {
+      throw new Error('traveler_correction_auto_confirmed_profile_fa-IR');
+    }
+  } else if (await page.locator('#profile-duration').inputValue() !== String(expectedDuration)
+      || await page.locator('.recommendation-controls').count() !== 0) {
+    throw new Error(`traveler_duration_restore_auto_confirmed_profile_${locale}`);
+  }
+  const finalCallCount = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
+  if (finalCallCount.count !== before.count + 2) throw new Error('simulated_gateway_call_budget_not_two_' + locale);
+  return true;
 }
 
 async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
   const copy = localeCopy[locale];
+  const assistantCallsBeforeLocale = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
   const phones = [syntheticPhone(), syntheticPhone()];
   let safeToCleanup = false;
   let contextA;
@@ -527,6 +1716,11 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
   let localeChecks = false;
   let consentSnapshotVerified = false;
   let emptyResultVerified = false;
+  let productionCatalogueCount = null;
+  let recommendationOutcome = null;
+  let recommendationReasonCode = null;
+  let unresolvedFields = [];
+  let correctedPersistedDurationDays = null;
   let ownerAndCsrfVerified = false;
   let deletionVerified = false;
 
@@ -548,6 +1742,7 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     if (destinations.status() !== 200 || emptyCatalogue.count !== 0 || emptyCatalogue.status !== 'available') {
       throw new Error(`production_catalogue_not_honestly_empty_${locale}`);
     }
+    productionCatalogueCount = emptyCatalogue.count;
     const culinaryResponse = await pageA.request.get(
       `${webOrigin}/api/v1/catalog/culinary?locale=${encodeURIComponent(locale)}`,
       { timeout: 10_000 },
@@ -571,15 +1766,15 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       throw new Error(`credential_in_browser_storage_${locale}`);
     }
 
+    const initialPersist = pageA.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
+      && response.request().method() === 'POST' && response.status() === 201);
+    const automaticAssistant = pageA.waitForResponse(response =>
+      new URL(response.url()).pathname.endsWith('/assistant-turns') && response.request().method() === 'POST');
     await pageA.locator('#trip-prompt').fill(copy.prompt);
     const inputDirection = await pageA.locator('#trip-prompt').evaluate(element => getComputedStyle(element).direction);
     if (inputDirection !== (locale === 'en-US' ? 'ltr' : 'rtl')) throw new Error(`locale_input_direction_${locale}`);
     await pageA.locator('.trip-form button[type="submit"]').click();
-    await pageA.locator('.journey-action').waitFor({ state: 'visible' });
-    const persist = pageA.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/conversations'
-      && response.request().method() === 'POST');
-    await pageA.locator('.journey-action').click();
-    const persisted = await persist;
+    const persisted = await initialPersist;
     firstTripResponseBody = await persisted.json();
     tripId = firstTripResponseBody?.trip?.trip_id;
     conversationId = firstTripResponseBody?.conversation?.conversation_id;
@@ -588,22 +1783,95 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       || firstTripResponseBody.trip.original_request !== copy.prompt) {
       throw new Error(`conversation_trip_persistence_failed_${locale}_${persisted.status()}`);
     }
+    const initialDuration = locale === 'fa-IR' ? 15 : 10;
+    let assistantTripVersion = firstTripResponseBody.trip.version;
+    let assistantConversationVersion = firstTripResponseBody.conversation.version;
+    const initialAssistant = await automaticAssistant;
+    const initialAssistantBody = await initialAssistant.json();
+    if (initialAssistant.status() !== 200) {
+      const safeCode = typeof initialAssistantBody?.error?.code === 'string' ? initialAssistantBody.error.code : 'unknown';
+      throw new Error(`automatic_initial_assistant_turn_failed_${locale}_${initialAssistant.status()}_${safeCode}_${api.safeAssistantFailure() || 'no_safe_failure_log'}`);
+    }
+    if (!initialAssistantBody.message?.content || initialAssistantBody.trip?.trip_id !== tripId
+        || initialAssistantBody.trip?.original_request !== copy.prompt) {
+      throw new Error(`automatic_initial_assistant_result_not_persisted_${locale}`);
+    }
+    assistantTripVersion = initialAssistantBody.trip.version;
+    assistantConversationVersion = initialAssistantBody.conversation.version;
+    conversationVersion = assistantConversationVersion;
+    await pageA.locator('.saved-message-assistant p').first().waitFor({ state: 'visible' });
+    const initialAssistantCallCount = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
+    if (initialAssistantCallCount.count !== assistantCallsBeforeLocale.count + 1) {
+      throw new Error(`initial_request_did_not_use_exactly_one_assistant_turn_${locale}`);
+    }
+    const initialTripRead = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
+    const initialTripRecord = await initialTripRead.json();
+    if (initialTripRead.status() !== 200
+        || initialTripRecord.extracted_requirements?.durationDays?.value !== initialDuration
+        || await pageA.locator('#profile-duration').inputValue() !== String(initialDuration)) {
+      throw new Error(`persisted_initial_duration_mismatch_${locale}_${initialDuration}`);
+    }
+    if (locale === 'fa-IR') {
+      const corrections = [
+        'مدت سفر را دوازده روز کنید؛ چهار نفر هستیم و بودجه ۳۰ میلیون تومان است.',
+        'اصلاح نهایی: مدت سفر پانزده روز است و بودجه ۴۵ میلیون تومان؛ ما چهار نفر هستیم.',
+        ...Array.from({ length: 10 }, (_, index) =>
+          `برای همان سفر پانزده‌روزه به شیراز، اطلاعات پیشین را نگه دارید؛ ادامهٔ گفت‌وگو ${index + 1}.`),
+      ];
+      let latest;
+      for (const turn of corrections) {
+        latest = await appendPersianFollowUp(pageA, conversationId, tripId, turn);
+      }
+      const correctedTripRead = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
+      const correctedTrip = await correctedTripRead.json();
+      const extracted = correctedTrip.extracted_requirements;
+      const budget = extracted?.budget?.value;
+      const accessibility = extracted?.accessibility?.value ?? [];
+      const constraints = extracted?.constraints?.value ?? [];
+      const persistedConversation = await pageA.request.get(`${webOrigin}/api/v1/conversations/${conversationId}`);
+      const persistedMessages = await persistedConversation.json();
+      if (correctedTripRead.status() !== 200 || correctedTrip.original_request !== copy.prompt
+          || extracted?.durationDays?.value !== 15 || extracted?.travelerCount?.value !== 4
+          || Number(budget?.amount) !== 45 || !containsToman(budget?.raw)
+          || !containsMillion(budget?.unit) || budget.currency !== 'TOMAN'
+          || !accessibility.includes('wheelchair_access')
+          || !constraints.some(value => /rough|terrain|ناهموار/iu.test(value))
+          || persistedConversation.status() !== 200
+          || persistedMessages.messages?.filter(message => message.role === 'user').length < 13
+          || latest?.trip?.extracted_requirements?.durationDays?.value !== 15) {
+        throw new Error(`persian_15_day_corrections_or_long_history_not_persisted_status=${correctedTripRead.status()}_duration=${extracted?.durationDays?.value}_travelers=${extracted?.travelerCount?.value}_budget_amount=${budget?.amount}_budget_currency=${budget?.currency}_budget_toman=${containsToman(budget?.raw)}_budget_raw_length=${String(budget?.raw ?? '').length}_budget_unit=${budget?.unit || 'missing'}_accessibility=${accessibility.length}_constraints=${constraints.length}_conversation=${persistedConversation.status()}_user_messages=${persistedMessages.messages?.filter(message => message.role === 'user').length ?? -1}_latest_duration=${latest?.trip?.extracted_requirements?.durationDays?.value}`);
+      }
+      correctedPersistedDurationDays = extracted.durationDays.value;
+      if (await pageA.locator('#profile-duration').inputValue() !== '15'
+          || await pageA.locator('#profile-travelers').inputValue() !== '4'
+          || !containsFortyFive(await pageA.locator('#profile-budget').inputValue())
+          || !containsToman(await pageA.locator('#profile-budget').inputValue())) {
+        throw new Error('persian_corrected_profile_not_visible');
+      }
+      assistantTripVersion = correctedTrip.version;
+      assistantConversationVersion = persistedMessages.version;
+      conversationVersion = assistantConversationVersion;
+    }
     await pageA.locator('.history-trip > button').first().waitFor({ state: 'visible' });
-    await pageA.locator('#requirement-consent-budget-advisory').waitFor({ state: 'visible' });
+    const assistantIntegrationVerified = await verifySimulatedAssistant(
+      pageA, api, locale, conversationId, tripId, csrfA,
+      assistantTripVersion, assistantConversationVersion, initialDuration,
+    );
+    if (await pageA.locator('.requirement-accessibility-mandatory').count() === 0) {
+      const diagnosticResponse = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
+      const diagnosticTrip = await diagnosticResponse.json();
+      const diagnosticFields = diagnosticTrip.extracted_requirements?.accessibility;
+      throw new Error(`mandatory_accessibility_not_rendered_${locale}_trip=${diagnosticResponse.status()}_field_status=${diagnosticFields?.status}_values=${JSON.stringify(diagnosticFields?.value ?? [])}`);
+    }
     await pageA.locator('.requirement-accessibility-mandatory').waitFor({ state: 'visible' });
     if (await pageA.locator('#requirement-consent-accessibility-must, #requirement-consent-accessibility-advisory').count() !== 0) {
       throw new Error(`mandatory_access_field_was_offered_consent_downgrade_${locale}`);
     }
-    const consentRadio = pageA.locator('#requirement-consent-budget-advisory');
-    if (await consentRadio.isChecked()) throw new Error(`advisory_consent_was_preselected_${locale}`);
+    if (await pageA.locator('.requirement-consent').count() !== 0) {
+      throw new Error(`routine_profile_confirmation_prompt_was_rendered_${locale}`);
+    }
     const confirmButton = pageA.getByRole('button', { name: copy.confirm });
-    if (await confirmButton.isEnabled()) throw new Error(`profile_confirm_enabled_without_explicit_choice_${locale}`);
-    await consentRadio.check();
-    const advisoryAcknowledgement = pageA.locator('#requirement-consent-budget-ack');
-    await advisoryAcknowledgement.check();
-    await pageA.locator('#requirement-consent-soft_preference-advisory').check();
-    await pageA.locator('#requirement-consent-soft_preference-ack').check();
-    if (await confirmButton.isDisabled()) throw new Error(`explicit_advisory_choice_not_accepted_${locale}`);
+    if (await confirmButton.isDisabled()) throw new Error(`profile_confirmation_unnecessarily_blocked_${locale}`);
 
     const confirmResponsePromise = pageA.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/trips/${tripId}`
       && response.request().method() === 'PATCH');
@@ -612,6 +1880,11 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     if (confirmResponse.status() !== 200) throw new Error(`profile_confirmation_failed_${locale}`);
     const confirmedProfileResponse = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
     const confirmedProfile = (await confirmedProfileResponse.json()).confirmed_requirements;
+    if (locale === 'fa-IR' && (confirmedProfileResponse.status() !== 200
+        || confirmedProfile?.duration_days !== 15 || confirmedProfile?.traveler_count !== 4
+        || confirmedProfile?.confirmation_source !== 'traveler_reviewed')) {
+      throw new Error('get_trip_did_not_return_confirmed_persian_15_day_profile');
+    }
     const confirmedProfileShape = Object.fromEntries(Object.entries(confirmedProfile ?? {}).map(([key, value]) => [
       key,
       key === 'budget' && value && typeof value === 'object'
@@ -622,14 +1895,24 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     ]));
     const confirmedTrip = await confirmResponse.json();
     firstTripVersion = confirmedTrip.version;
+    if (locale === 'fa-IR') {
+      const reviewed = confirmedTrip.confirmed_requirements ?? {};
+      const reviewedBudget = reviewed.budget;
+      if (reviewed.duration_days !== 15 || reviewed.traveler_count !== 4
+          || reviewed.confirmation_source !== 'traveler_reviewed'
+          || Number(reviewedBudget?.amount) !== 45 || !containsToman(reviewedBudget?.raw)
+          || !containsMillion(reviewedBudget?.unit)
+          || reviewedBudget.currency !== 'TOMAN') {
+        throw new Error('confirmed_persian_15_day_profile_or_budget_denomination_changed');
+      }
+    }
     const persistedConsent = confirmedTrip.confirmed_requirements?.requirement_consent;
+    const consentDecisionFields = Object.keys(persistedConsent?.field_decisions ?? {}).sort();
+    const acknowledgedConsentFields = [...(persistedConsent?.advisory_acknowledged_fields ?? [])].sort();
     if (persistedConsent?.contract_version !== 'recommendation-consent-v1'
       || persistedConsent?.profile_version !== confirmedTrip.version
-      || persistedConsent?.field_decisions?.budget !== 'advisory'
-      || persistedConsent?.field_decisions?.soft_preference !== 'advisory'
-      || Object.keys(persistedConsent?.field_decisions ?? {}).sort().join(',') !== 'budget,soft_preference'
-      || !persistedConsent?.advisory_acknowledged_fields?.includes('budget')
-      || !persistedConsent?.advisory_acknowledged_fields?.includes('soft_preference')) {
+      || consentDecisionFields.length !== 0
+      || acknowledgedConsentFields.length !== 0) {
       throw new Error(`server_bound_consent_snapshot_missing_${locale}`);
     }
     consentSnapshotVerified = true;
@@ -649,33 +1932,32 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     const preferenceAssessment = recommendation.requirement_assessments?.find(item => item.field === 'soft_preference');
     const accessibilityAssessment = recommendation.requirement_assessments?.find(item => item.field === 'accessibility');
     const hardConstraintAssessment = recommendation.requirement_assessments?.find(item => item.field === 'hard_constraint');
+    const assessmentsByField = Object.fromEntries((recommendation.requirement_assessments ?? []).map(item => [item.field, item]));
     if (recommendationResponse.status() !== 201 || !recommendationResponse.headers()['cache-control']?.includes('no-store')
       || recommendation.status !== 'needs_confirmation' || recommendation.reason_code !== 'hard_constraints_unverifiable'
-      || !recommendation.waived_fields?.includes('budget') || !recommendation.not_evaluated_fields?.includes('budget')
-      || !recommendation.waived_fields?.includes('soft_preference') || !recommendation.not_evaluated_fields?.includes('soft_preference')
-      || recommendation.waived_fields?.length !== 2 || recommendation.not_evaluated_fields?.length !== 2
-      || budgetAssessment?.decision !== 'advisory' || budgetAssessment.status !== 'not_evaluated'
-      || preferenceAssessment?.decision !== 'advisory' || preferenceAssessment.status !== 'not_evaluated'
-      || preferenceAssessment.reason_code !== 'preference_unverifiable'
+      || recommendation.waived_fields?.length !== 0 || recommendation.not_evaluated_fields?.length !== 0
+      || ['duration_days', 'budget', 'soft_preference', 'destination'].some(field => assessmentsByField[field]?.status !== 'known')
+      || budgetAssessment?.status !== 'known'
+      || (preferenceAssessment && preferenceAssessment.status !== 'known')
       || accessibilityAssessment?.decision !== 'must_have' || accessibilityAssessment.status !== 'unresolved'
       || !['access_unverifiable', 'accessibility_unverifiable'].includes(accessibilityAssessment.reason_code)
       || hardConstraintAssessment?.decision !== 'must_have' || hardConstraintAssessment.status !== 'unresolved'
       || !recommendation.unresolved_fields?.includes('hard_constraint') || recommendation.items?.length !== 0) {
-      throw new Error(`empty_or_advisory_result_contract_failed_${locale}_${JSON.stringify({
-        http: recommendationResponse.status(), status: recommendation.status,
-        reason: recommendation.reason_code, waived: recommendation.waived_fields,
-        notEvaluated: recommendation.not_evaluated_fields,
+      throw new Error(`recommendation_contract_failed_${locale}_${JSON.stringify({
+        http: recommendationResponse.status(), status: recommendation.status, reason: recommendation.reason_code,
+        waived: recommendation.waived_fields, notEvaluated: recommendation.not_evaluated_fields,
         assessments: recommendation.requirement_assessments?.map(item => [item.field, item.decision, item.status, item.reason_code]),
-        unresolved: recommendation.unresolved_fields,
-        profileShape: confirmedProfileShape,
+        unresolved: recommendation.unresolved_fields, items: recommendation.items?.length,
       })}`);
     }
+    // This is a needs_confirmation result because mandatory fields remain
+    // unresolved. It is not an empty/no_evidence recommendation response;
+    // the independent catalogue read above is what proves the production
+    // catalogue has zero approved destinations for this disposable DB.
+    recommendationOutcome = recommendation.status;
+    recommendationReasonCode = recommendation.reason_code;
+    unresolvedFields = [...recommendation.unresolved_fields];
     if (await pageA.locator('.itinerary-start').count()) throw new Error(`itinerary_offered_without_eligible_candidate_${locale}`);
-    const notEvaluated = pageA.locator('.not-evaluated-warning');
-    await notEvaluated.waitFor({ state: 'visible' });
-    const warningText = await notEvaluated.textContent();
-    const localizedBudget = { 'fa-IR': 'بودجه', 'en-US': 'Budget', ar: 'الميزانية' }[locale];
-    if (!warningText?.includes(localizedBudget)) throw new Error(`advisory_warning_not_localized_${locale}`);
     const unresolved = pageA.locator('.unresolved-requirements');
     await unresolved.waitFor({ state: 'visible' });
     const unresolvedCopy = await unresolved.textContent();
@@ -690,21 +1972,31 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     await pageA.locator('.auth-signed-in').waitFor({ state: 'visible' });
     if (!(await reloadMe).headers()['cache-control']?.includes('no-store')) throw new Error(`auth_me_not_no_store_${locale}`);
     await pageA.locator('.history-trip > button').first().click();
-    await pageA.locator('.saved-message-user p').waitFor({ state: 'visible' });
-    if (!(await pageA.locator('.saved-message-user p').first().textContent())?.includes(copy.prompt)) {
+    // The initial request and the assistant follow-up are two distinct user
+    // messages. Check both explicitly instead of waiting on an ambiguous
+    // multi-element locator (Playwright strict mode).
+    const savedUserMessages = pageA.locator('.saved-message-user p');
+    await savedUserMessages.nth(1).waitFor({ state: 'visible' });
+    if (await savedUserMessages.count() < (locale === 'fa-IR' ? 13 : 2)
+      || !(await savedUserMessages.first().textContent())?.includes(copy.prompt)) {
       throw new Error(`history_request_not_restored_${locale}`);
     }
-    if (!(await pageA.locator('#requirement-consent-budget-advisory').isChecked())
-      || !(await pageA.locator('#requirement-consent-budget-ack').isChecked())
-      || !(await pageA.locator('#requirement-consent-soft_preference-advisory').isChecked())
-      || !(await pageA.locator('#requirement-consent-soft_preference-ack').isChecked())) {
-      throw new Error(`history_consent_not_restored_${locale}`);
+    await pageA.locator('.saved-message-assistant button').first().click();
+    await pageA.locator('.assistant-candidate').waitFor({ state: 'visible' });
+    const restoredCandidateText = await pageA.locator('.assistant-candidate').textContent();
+    const expectedDestination = locale === 'fa-IR' ? '\u0634\u06cc\u0631\u0627\u0632' : 'Shiraz';
+    if (!restoredCandidateText?.includes(expectedDestination)) {
+      throw new Error('restored_assistant_candidate_missing_' + locale);
+    }
+    await pageA.locator('.assistant-candidate button').last().click();
+    if (await pageA.locator('.requirement-consent').count() !== 0) {
+      throw new Error(`routine_consent_prompt_reappeared_after_restore_${locale}`);
     }
     const reopenedTrip = await pageA.request.get(`${webOrigin}/api/v1/trips/${tripId}`);
     const reopenedRecord = await reopenedTrip.json();
     if (reopenedRecord.confirmed_requirements?.requirement_consent?.profile_version !== reopenedRecord.version
-      || reopenedRecord.confirmed_requirements?.requirement_consent?.field_decisions?.budget !== 'advisory') {
-      throw new Error(`history_consent_version_changed_${locale}`);
+      || Object.keys(reopenedRecord.confirmed_requirements?.requirement_consent?.field_decisions ?? {}).length !== 0) {
+      throw new Error(`history_confirmation_version_changed_${locale}`);
     }
     if (await apiStatus(pageA, `/api/v1/trips/${tripId}/recommendations`, 'GET') !== 200) {
       throw new Error(`saved_empty_recommendation_not_reopenable_${locale}`);
@@ -741,23 +2033,28 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
       trip_id: tripId, content: 'Cross-owner authorization probe', idempotency_key: randomUUID(),
       expected_version: conversationVersion,
     });
+    const assistantDenied = await apiStatus(pageB,
+      '/api/v1/conversations/' + conversationId + '/assistant-turns', 'POST',
+      { 'X-CSRF-Token': csrfB }, {
+        trip_id: tripId, content: 'Cross-owner assistant probe',
+        idempotency_key: randomUUID(), expected_version: conversationVersion,
+      });
     const conversationDeleteDenied = await apiStatus(pageB, `/api/v1/conversations/${conversationId}`, 'DELETE', {
       'X-CSRF-Token': csrfB,
     });
     if (csrfDenied !== 403 || badOriginDenied !== 403 || ownerReadDenied !== 404 || ownerDeleteDenied !== 404
-      || appendDenied !== 404 || conversationDeleteDenied !== 404) {
+      || appendDenied !== 404 || assistantDenied !== 404 || conversationDeleteDenied !== 404) {
       throw new Error(`real_http_owner_csrf_boundary_failed_${locale}`);
     }
     ownerAndCsrfVerified = true;
 
-    // A separate, explicitly labeled browser fixture exercises the partial
-    // ten-day editor. Its API routes are intercepted in this test process and
-    // never write fixture identities or facts into PostgreSQL production views.
-    await runPartialFixture(pageA, locale, tripId, firstTripVersion, artifactLocale);
+    // A separate test-only 15-day journey goes through real FastAPI and
+    // PostgreSQL. Its four synthetic identities exist only in the isolated
+    // traveler dependency; no positive API calls are intercepted.
+    const positiveItinerary = await runPersistedFifteenDayFixture(
+      pageA, api, csrfA, locale, artifactLocale, copy.prompt,
+    );
     localeChecks = true;
-    await pageA.unroute(`${webOrigin}/api/v1/trips/${tripId}/recommendations`);
-    await pageA.unroute(`${webOrigin}/api/v1/trips/${tripId}/itineraries`);
-    await pageA.unroute(`${webOrigin}/api/v1/itineraries/**`);
     const productionAgain = await pageA.request.get(`${webOrigin}/api/v1/catalog/destinations`);
     const productionAgainBody = await productionAgain.json();
     if (productionAgain.status() !== 200 || productionAgainBody.count !== 0) {
@@ -769,15 +2066,17 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     await pageA.locator('.journey-new-actions button').first().click();
     const secondPrompt = `${copy.prompt} — ${locale === 'en-US' ? 'second draft' : locale === 'ar' ? 'مسودة ثانية' : 'پیش‌نویس دوم'}`;
     await pageA.locator('#trip-prompt').fill(secondPrompt);
+    const secondPersist = pageA.waitForResponse(response => {
+      const path = new URL(response.url()).pathname;
+      return response.request().method() === 'POST'
+        && (path === '/api/v1/conversations' || path === `/api/v1/conversations/${conversationId}/trips`);
+    });
     await pageA.locator('.trip-form button[type="submit"]').click();
-    await pageA.locator('.journey-action').waitFor({ state: 'visible' });
-    const secondPersist = pageA.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/conversations/${conversationId}/trips`
-      && response.request().method() === 'POST' && response.status() === 201);
-    await pageA.locator('.journey-action').click();
     const secondResponse = await secondPersist;
     const secondTrip = await secondResponse.json();
-    if (!secondTrip?.trip?.trip_id || secondTrip.conversation.conversation_id !== conversationId) {
-      throw new Error(`second_trip_not_persisted_${locale}`);
+    if (secondResponse.status() !== 201 || !secondTrip?.trip?.trip_id
+        || secondTrip.conversation?.conversation_id !== conversationId) {
+      throw new Error(`second_trip_not_persisted_${locale}_status=${secondResponse.status()}_path=${new URL(secondResponse.url()).pathname}_code=${secondTrip?.error?.code ?? 'none'}`);
     }
     const rows = await pageA.locator('.history-trip').evaluateAll(nodes => nodes.map(node => node.querySelector('button')?.textContent?.trim() ?? ''));
     const originalIndex = rows.findIndex(text => text === copy.prompt);
@@ -826,7 +2125,7 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     // Logout and reauthentication are checked for the second test identity
     // before account deletion, proving server-side session invalidation.
     await pageB.locator('.auth-signed-in button').first().click();
-    await pageB.locator('.auth-entry > button').waitFor({ state: 'visible' });
+    await pageB.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
     if (await apiStatus(pageB, '/api/v1/auth/me', 'GET') !== 401) throw new Error(`logout_did_not_revoke_session_${locale}`);
     const renewedIdentityB = await signIn(pageB, api.controlPort, api.controlToken, phones[1]);
     if (renewedIdentityB.userId !== ownerB) throw new Error(`account_identity_changed_on_relogin_${locale}`);
@@ -843,7 +2142,22 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     deletionVerified = true;
 
     return {
-      locale, emptyProductionCatalogue: emptyResultVerified, consentSnapshotVerified,
+      locale, productionCatalogueEmptyVerified: emptyResultVerified,
+      productionCatalogueCount,
+      recommendationOutcome, recommendationReasonCode, unresolvedFields,
+      consentSnapshotVerified,
+      requestedDurationDays: initialDuration,
+      persistedDurationDays: initialTripRecord.extracted_requirements?.durationDays?.value,
+      correctedPersistedDurationDays,
+      persistedUserTurnCount: locale === 'fa-IR' ? 13 : 2,
+      simulatedAssistantIntegrationVerified: assistantIntegrationVerified,
+      simulatedGatewayCalls: 2,
+      partialFixtureDays: positiveItinerary.dayCount,
+      partialFixtureInitialStops: positiveItinerary.initialStops,
+      partialFixtureInitialUnplannedDays: positiveItinerary.initialUnplannedDays,
+      partialFixtureStops: positiveItinerary.finalStops,
+      partialFixtureUnplannedDays: positiveItinerary.finalUnplannedDays,
+      positiveItinerary,
       historyReopenVerified: true, ownerAndCsrfVerified, deletionVerified, localeChecks,
       noStoreMe, noStoreVerify: true, externalRequestsBlocked: true,
     };
@@ -865,8 +2179,8 @@ async function main() {
     throw new Error('invalid_or_forbidden_test_ports');
   }
   const runName = `run-${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}`;
-  const artifactRoot = resolve(root, 'artifacts/visual-qa-task32', runName);
-  if (existsSync(artifactRoot)) throw new Error('task32_artifact_path_collision');
+  const artifactRoot = resolve(root, 'artifacts/visual-qa-task15d', runName);
+  if (existsSync(artifactRoot)) throw new Error('task15d_artifact_path_collision');
   mkdirSync(artifactRoot, { recursive: true });
   const audit = { externalRequests: 0, successfulExternalResponses: 0, pageErrors: 0 };
   let api;
@@ -882,27 +2196,109 @@ async function main() {
       // process budget while still exercising the real installed Chromium.
       args: ['--disable-gpu', '--renderer-process-limit=2', '--disable-background-networking', '--no-first-run'],
     });
+    if (process.env.RAHGARD_NATIONAL_CATALOGUE_E2E === '1') {
+      if (process.env.RAHGARD_OWNER_ARCHIVE_PATH == null || process.env.AUTH_TEST_DATABASE_OWNER_PASSWORD == null
+          || process.env.RAHGARD_REAL_GEO_E2E === '1' || api.ownerRagEnabled) {
+        throw new Error('national_catalogue_mode_requires_local_archive_and_isolated_owner_access');
+      }
+      const journeys = await runNationalCatalogueAcceptance(browser, api, audit, artifactRoot);
+      if (audit.successfulExternalResponses || audit.pageErrors) throw new Error('national_catalogue_browser_runtime_failure');
+      const report = {
+        status: 'passed', mode: 'full_application_archive_operator_partner_traveler_isolated_acceptance',
+        browser: `Chromium ${browser.version()}`,
+        database: { name: process.env.AUTH_TEST_DATABASE_NAME, host: '127.0.0.1', majorVersion: 17, markerValidated: true },
+        integrations: journeys.simulatedComponents,
+        archive: { sha256: journeys.archiveStaging.archive_sha256, staging: journeys.archiveStaging,
+          noLiveDatabaseOrVps: true },
+        journeys: { operator: journeys.operator, partner: journeys.partner, traveler: journeys.traveler },
+        databaseCounts: journeys.databaseCounts,
+        trace: journeys.apiTrace,
+        screenshots: ['national-catalogue/operator-candidate-review.png','national-catalogue/partner-workspace-persisted.png','national-catalogue/traveler-archive-itinerary-reopened.png'],
+        audit: { externalRequestsBlocked: audit.externalRequests, successfulExternalResponses: 0, browserPageErrors: 0 },
+        note: 'Fake OTP and an in-process simulated Chat Gateway were used. All archive staging, source review, candidate evidence, identity decision, publication, partner records, recommendation and itinerary requests used the actual authenticated FastAPI and isolated PostgreSQL 17. No live provider or production data was used.',
+      };
+      writeFileSync(resolve(artifactRoot, 'report.json'), `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+      console.log(JSON.stringify({ status: report.status, mode: report.mode, archive: report.archive.staging.candidate_rows_by_kind,
+        published: journeys.databaseCounts.published_destinations, operator: 'passed', partner: 'passed', traveler: 'passed', artifactRoot }));
+      return;
+    }
+    if (process.env.RAHGARD_REAL_GEO_E2E === '1') {
+      if (process.env.RAHGARD_RUN_GEO_QA !== '1' || api.ownerRagEnabled) {
+        throw new Error('qa_real_geo_requires_explicit_disposable_opt_in_and_rag_off');
+      }
+      const results = [];
+      const locales = process.env.RAHGARD_GEO_BROWSE_E2E === '1' ? ['fa-IR'] : ['fa-IR', 'en-US', 'ar'];
+      for (const locale of locales) {
+        results.push(await runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot));
+      }
+      if (audit.successfulExternalResponses || audit.pageErrors) {
+        throw new Error('qa_real_geo_external_response_or_browser_error');
+      }
+      const report = {
+        status: 'passed',
+        mode: 'real_canonical_Fars_PG17_QA_only_not_public_approval',
+        browser: 'Chromium ' + browser.version(),
+        database: { name: process.env.AUTH_TEST_DATABASE_NAME, host: '127.0.0.1',
+          majorVersion: 17, markerValidated: true },
+        chat: { mode: 'simulated', liveProviderCalls: 0 },
+        ownerRag: { mode: 'disabled', calls: 0 },
+        locales: results,
+        screenshots: results.map(result => ({
+          locale: result.locale, kind: 'disposable QA canonical-place itinerary',
+          path: result.locale + '/qa-real-geo-' + result.locale + '.png',
+        })),
+        audit: { externalRequestsBlocked: audit.externalRequests,
+          successfulExternalResponses: 0, pageErrors: 0 },
+        ownerApproval: false,
+        safety: 'Only four existing canonical POIs were activated in marked disposable QA PG17. This is neither persistent pilot publication nor evidence of visitor entrances, route feasibility, operating hours, or live remote Chat.',
+      };
+      writeFileSync(resolve(artifactRoot, 'report.json'), JSON.stringify(report, null, 2) + '\n',
+        { encoding: 'utf8', flag: 'wx' });
+      console.log(JSON.stringify({ status: report.status, mode: report.mode,
+        locales: results.map(result => result.locale), artifactRoot }));
+      return;
+    }
     const results = [];
     for (const locale of ['fa-IR', 'en-US', 'ar']) {
       results.push(await runLocaleJourney(browser, api, locale, audit, artifactRoot));
     }
     if (audit.successfulExternalResponses || audit.pageErrors) throw new Error('external_response_or_browser_runtime_error');
+    const ownerRagCounts = await checkedControl(api.controlPort, api.controlToken, {
+      action: 'owner_rag_call_counts',
+    });
     const report = {
       status: 'passed',
       browser: `Chromium ${browser.version()}`,
-      environment: 'live Vite same-origin proxy + FastAPI + guarded disposable PostgreSQL 17; fake SMS only',
+      environment: 'live Vite proxy + FastAPI + guarded disposable PostgreSQL 17; fake SMS; simulated Chat gateway (no remote model)',
+      database: {
+        name: process.env.AUTH_TEST_DATABASE_NAME,
+        host: process.env.AUTH_TEST_DATABASE_HOST,
+        port: Number(process.env.AUTH_TEST_DATABASE_PORT),
+        majorVersion: 17,
+        markerValidated: true,
+      },
+      integrations: {
+        chat: { mode: 'simulated', liveProviderCalls: 0 },
+        ownerRag: {
+          mode: api.ownerRagEnabled ? 'real_owner_http' : 'disabled',
+          enabled: ownerRagCounts.enabled,
+          calls: ownerRagCounts.calls,
+          outcomes: ownerRagCounts.outcomes,
+          travelerEvidenceTextReturned: false,
+        },
+      },
       locales: results,
       screenshots: [
         ...['fa-IR', 'en-US', 'ar'].flatMap(locale => [
           { locale, width: 390, height: 844, kind: 'live empty production catalogue', path: `${locale}/empty-${locale}-390.png` },
           { locale, width: 1440, height: 1000, kind: 'live empty production catalogue', path: `${locale}/empty-${locale}-1440.png` },
-          { locale, width: 390, height: 844, kind: 'test-only four-stop partial ten-day fixture', path: `${locale}/partial-${locale}-390.png` },
-          { locale, width: 1440, height: 1000, kind: 'test-only four-stop partial ten-day fixture', path: `${locale}/partial-${locale}-1440.png` },
+          { locale, width: 390, height: 844, dayCount: 15, kind: 'real API/DB edited test-only three-stop partial itinerary', path: `${locale}/partial-${locale}-390.png` },
+          { locale, width: 1440, height: 1000, dayCount: 15, kind: 'real API/DB edited test-only three-stop partial itinerary', path: `${locale}/partial-${locale}-1440.png` },
         ]),
       ],
       audit: { externalRequestsBlocked: audit.externalRequests, successfulExternalResponses: 0, browserPageErrors: 0 },
       screenshotPolicy: 'Traveler-authored text is replaced in screenshot-only DOM captures; no phone, OTP, cookie, token, or request text is recorded.',
-      fixturePolicy: 'The partial ten-day fixture is intercepted in Playwright, marked test-only, and never written to PostgreSQL or production views.',
+      fixturePolicy: 'The simulated Chat gateway makes no HTTP requests. Positive 15-day itinerary requests use real FastAPI and PostgreSQL with four existing synthetic-only identities exposed through a private loopback test control. Pending Shiraz/Fars proposal points are attached only in memory to these synthetic identities to exercise grouping; they are not canonical, approved, stored, or returned as traveler coordinates. No positive recommendation or itinerary API call is intercepted, and production catalogue views remain empty. When explicitly enabled, one real owner-RAG HTTP probe exercises the empty approved index; retrieved text is withheld from the response and report.',
     };
     writeFileSync(resolve(artifactRoot, 'report.json'), `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
     console.log(JSON.stringify({ status: report.status, browser: report.browser, locales: results.map(result => result.locale), screenshots: report.screenshots.length, artifactRoot: artifactRoot.replaceAll('\\', '/') }));

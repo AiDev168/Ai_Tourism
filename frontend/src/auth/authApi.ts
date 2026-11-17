@@ -1,5 +1,15 @@
-export type AuthUser = { user_id: string; phone_e164: string; phone_verified: true };
+export type AuthUser = {
+  user_id: string;
+  phone_e164: string | null;
+  phone_verified: boolean | null;
+  auth_method?: 'otp' | 'local_owner' | 'staging_invite';
+};
 export type AuthSession = { user: AuthUser; csrf_token: string };
+export type AuthCapabilities = {
+  methods: Array<'otp' | 'local_owner' | 'staging_invite'>;
+  otp_delivery: 'available' | 'unavailable';
+  staging_email_signup: boolean;
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/v1/auth${path}`, {
@@ -20,7 +30,20 @@ export class AuthApiError extends Error {
 }
 
 export const authApi = {
+  method: () => request<AuthCapabilities>('/method'),
   me: () => request<AuthSession>('/me'),
+  loginLocalOwner: (login_name: string, password: string) => request<AuthSession>(
+    '/local-owner/login', { method: 'POST', body: JSON.stringify({ login_name, password }) },
+  ),
+  stagingLogin: (email: string, password: string) => request<AuthSession>(
+    '/staging/login', { method: 'POST', body: JSON.stringify({ email, password }) },
+  ),
+  registerStagingEmail: (email: string, password: string) => request<AuthSession>(
+    '/staging/register', { method: 'POST', body: JSON.stringify({ email, password }) },
+  ),
+  redeemStagingInvite: (invite_code: string, email: string, password: string) => request<AuthSession>(
+    '/staging/redeem', { method: 'POST', body: JSON.stringify({ invite_code, email, password }) },
+  ),
   requestCode: (phone_number: string, locale: string) => request<{
     challenge_id: string | null; status: 'accepted' | 'unavailable'; message: string;
   }>(

@@ -1,0 +1,278 @@
+{
+  "status": "passed",
+  "browser": "Chromium 156.0.8078.47",
+  "environment": "live Vite proxy + FastAPI + guarded disposable PostgreSQL 17; fake SMS; simulated Chat gateway (no remote model)",
+  "integrations": {
+    "chat": {
+      "mode": "simulated",
+      "liveProviderCalls": 0
+    },
+    "ownerRag": {
+      "mode": "real_owner_http",
+      "enabled": true,
+      "calls": 3,
+      "outcomes": {
+        "ok": 0,
+        "no_evidence": 3,
+        "unavailable": 0,
+        "invalid_request": 0,
+        "authentication_failed": 0
+      },
+      "travelerEvidenceTextReturned": false
+    }
+  },
+  "locales": [
+    {
+      "locale": "fa-IR",
+      "productionCatalogueEmptyVerified": true,
+      "productionCatalogueCount": 0,
+      "recommendationOutcome": "needs_confirmation",
+      "recommendationReasonCode": "hard_constraints_unverifiable",
+      "unresolvedFields": [
+        "accessibility",
+        "hard_constraint",
+        "destination_resolution"
+      ],
+      "consentSnapshotVerified": true,
+      "requestedDurationDays": 15,
+      "persistedDurationDays": 15,
+      "correctedPersistedDurationDays": 15,
+      "persistedUserTurnCount": 13,
+      "simulatedAssistantIntegrationVerified": true,
+      "simulatedGatewayCalls": 2,
+      "partialFixtureDays": 15,
+      "partialFixtureInitialStops": 4,
+      "partialFixtureInitialUnplannedDays": 11,
+      "partialFixtureStops": 3,
+      "partialFixtureUnplannedDays": 12,
+      "positiveItinerary": {
+        "itineraryId": "cd725b32-c447-4b67-a164-c0f5b7d3960b",
+        "dayCount": 15,
+        "initialStops": 4,
+        "finalStops": 3,
+        "initialUnplannedDays": 11,
+        "finalUnplannedDays": 12,
+        "ownerRagProbe": {
+          "enabled": true,
+          "calls": 1,
+          "outcomes": {
+            "ok": 0,
+            "no_evidence": 1,
+            "unavailable": 0,
+            "invalid_request": 0,
+            "authentication_failed": 0
+          },
+          "travelerEvidenceTextReturned": false
+        }
+      },
+      "historyReopenVerified": true,
+      "ownerAndCsrfVerified": true,
+      "deletionVerified": true,
+      "localeChecks": true,
+      "noStoreMe": true,
+      "noStoreVerify": true,
+      "externalRequestsBlocked": true
+    },
+    {
+      "locale": "en-US",
+      "productionCatalogueEmptyVerified": true,
+      "productionCatalogueCount": 0,
+      "recommendationOutcome": "needs_confirmation",
+      "recommendationReasonCode": "hard_constraints_unverifiable",
+      "unresolvedFields": [
+        "accessibility",
+        "hard_constraint",
+        "destination_resolution"
+      ],
+      "consentSnapshotVerified": true,
+      "requestedDurationDays": 10,
+      "persistedDurationDays": 10,
+      "correctedPersistedDurationDays": null,
+      "persistedUserTurnCount": 2,
+      "simulatedAssistantIntegrationVerified": true,
+      "simulatedGatewayCalls": 2,
+      "partialFixtureDays": 15,
+      "partialFixtureInitialStops": 4,
+      "partialFixtureInitialUnplannedDays": 11,
+      "partialFixtureStops": 3,
+      "partialFixtureUnplannedDays": 12,
+      "positiveItinerary": {
+        "itineraryId": "2eb25e44-2467-4940-9c33-c58be0674fdd",
+        "dayCount": 15,
+        "initialStops": 4,
+        "finalStops": 3,
+        "initialUnplannedDays": 11,
+        "finalUnplannedDays": 12,
+        "ownerRagProbe": {
+          "enabled": true,
+          "calls": 1,
+          "outcomes": {
+            "ok": 0,
+            "no_evidence": 1,
+            "unavailable": 0,
+            "invalid_request": 0,
+            "authentication_failed": 0
+          },
+          "travelerEvidenceTextReturned": false
+        }
+      },
+      "historyReopenVerified": true,
+      "ownerAndCsrfVerified": true,
+      "deletionVerified": true,
+      "localeChecks": true,
+      "noStoreMe": true,
+      "noStoreVerify": true,
+      "externalRequestsBlocked": true
+    },
+    {
+      "locale": "ar",
+      "productionCatalogueEmptyVerified": true,
+      "productionCatalogueCount": 0,
+      "recommendationOutcome": "needs_confirmation",
+      "recommendationReasonCode": "hard_constraints_unverifiable",
+      "unresolvedFields": [
+        "accessibility",
+        "hard_constraint",
+        "destination_resolution"
+      ],
+      "consentSnapshotVerified": true,
+      "requestedDurationDays": 10,
+      "persistedDurationDays": 10,
+      "correctedPersistedDurationDays": null,
+      "persistedUserTurnCount": 2,
+      "simulatedAssistantIntegrationVerified": true,
+      "simulatedGatewayCalls": 2,
+      "partialFixtureDays": 15,
+      "partialFixtureInitialStops": 4,
+      "partialFixtureInitialUnplannedDays": 11,
+      "partialFixtureStops": 3,
+      "partialFixtureUnplannedDays": 12,
+      "positiveItinerary": {
+        "itineraryId": "29e5ba23-1c99-4aa2-a38b-6bd06bef4fc6",
+        "dayCount": 15,
+        "initialStops": 4,
+        "finalStops": 3,
+        "initialUnplannedDays": 11,
+        "finalUnplannedDays": 12,
+        "ownerRagProbe": {
+          "enabled": true,
+          "calls": 1,
+          "outcomes": {
+            "ok": 0,
+            "no_evidence": 1,
+            "unavailable": 0,
+            "invalid_request": 0,
+            "authentication_failed": 0
+          },
+          "travelerEvidenceTextReturned": false
+        }
+      },
+      "historyReopenVerified": true,
+      "ownerAndCsrfVerified": true,
+      "deletionVerified": true,
+      "localeChecks": true,
+      "noStoreMe": true,
+      "noStoreVerify": true,
+      "externalRequestsBlocked": true
+    }
+  ],
+  "screenshots": [
+    {
+      "locale": "fa-IR",
+      "width": 390,
+      "height": 844,
+      "kind": "live empty production catalogue",
+      "path": "fa-IR/empty-fa-IR-390.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 1440,
+      "height": 1000,
+      "kind": "live empty production catalogue",
+      "path": "fa-IR/empty-fa-IR-1440.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 390,
+      "height": 844,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "fa-IR/partial-fa-IR-390.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 1440,
+      "height": 1000,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "fa-IR/partial-fa-IR-1440.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 390,
+      "height": 844,
+      "kind": "live empty production catalogue",
+      "path": "en-US/empty-en-US-390.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 1440,
+      "height": 1000,
+      "kind": "live empty production catalogue",
+      "path": "en-US/empty-en-US-1440.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 390,
+      "height": 844,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "en-US/partial-en-US-390.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 1440,
+      "height": 1000,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "en-US/partial-en-US-1440.png"
+    },
+    {
+      "locale": "ar",
+      "width": 390,
+      "height": 844,
+      "kind": "live empty production catalogue",
+      "path": "ar/empty-ar-390.png"
+    },
+    {
+      "locale": "ar",
+      "width": 1440,
+      "height": 1000,
+      "kind": "live empty production catalogue",
+      "path": "ar/empty-ar-1440.png"
+    },
+    {
+      "locale": "ar",
+      "width": 390,
+      "height": 844,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "ar/partial-ar-390.png"
+    },
+    {
+      "locale": "ar",
+      "width": 1440,
+      "height": 1000,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "ar/partial-ar-1440.png"
+    }
+  ],
+  "audit": {
+    "externalRequestsBlocked": 0,
+    "successfulExternalResponses": 0,
+    "browserPageErrors": 0
+  },
+  "screenshotPolicy": "Traveler-authored text is replaced in screenshot-only DOM captures; no phone, OTP, cookie, token, or request text is recorded.",
+  "fixturePolicy": "The simulated Chat gateway makes no HTTP requests. Positive 15-day itinerary requests use real FastAPI and PostgreSQL with four existing synthetic-only identities exposed through a private loopback test control; no positive recommendation or itinerary API call is intercepted, and production catalogue views remain empty. When explicitly enabled, one real owner-RAG HTTP probe exercises the empty approved index; retrieved text is withheld from the response and report."
+}

@@ -1,0 +1,432 @@
+{
+  "status": "passed",
+  "browser": "Chromium 156.0.8078.47",
+  "environment": "live Vite proxy + FastAPI + guarded disposable PostgreSQL 17; fake SMS; simulated Chat gateway (no remote model)",
+  "database": {
+    "name": "ai_tourism_auth_test_mvp_2b379a90dab8",
+    "host": "127.0.0.1",
+    "port": 54604,
+    "majorVersion": 17,
+    "markerValidated": true
+  },
+  "integrations": {
+    "chat": {
+      "mode": "simulated",
+      "liveProviderCalls": 0
+    },
+    "ownerRag": {
+      "mode": "disabled",
+      "enabled": false,
+      "calls": 0,
+      "outcomes": {
+        "ok": 0,
+        "no_evidence": 0,
+        "unavailable": 0,
+        "invalid_request": 0,
+        "authentication_failed": 0
+      },
+      "travelerEvidenceTextReturned": false
+    }
+  },
+  "locales": [
+    {
+      "locale": "fa-IR",
+      "productionCatalogueEmptyVerified": true,
+      "productionCatalogueCount": 0,
+      "recommendationOutcome": "needs_confirmation",
+      "recommendationReasonCode": "hard_constraints_unverifiable",
+      "unresolvedFields": [
+        "accessibility",
+        "hard_constraint",
+        "destination_resolution"
+      ],
+      "consentSnapshotVerified": true,
+      "requestedDurationDays": 15,
+      "persistedDurationDays": 15,
+      "correctedPersistedDurationDays": 15,
+      "persistedUserTurnCount": 13,
+      "simulatedAssistantIntegrationVerified": true,
+      "simulatedGatewayCalls": 2,
+      "partialFixtureDays": 15,
+      "partialFixtureInitialStops": 4,
+      "partialFixtureInitialUnplannedDays": 13,
+      "partialFixtureStops": 3,
+      "partialFixtureUnplannedDays": 12,
+      "positiveItinerary": {
+        "itineraryId": "014dbb80-6f22-439a-b355-e7743a84c4cd",
+        "dayCount": 15,
+        "initialStops": 4,
+        "initialDayGroupSizes": [
+          1,
+          3
+        ],
+        "finalStops": 3,
+        "initialUnplannedDays": 13,
+        "finalUnplannedDays": 12,
+        "geographicDayAssignments": {
+          "cityClusterDay": 1,
+          "regionalDay": 2,
+          "cityClusterStops": 3,
+          "regionalStops": 1
+        },
+        "ownerRagProbe": {
+          "enabled": false,
+          "calls": 0,
+          "outcomes": {
+            "ok": 0,
+            "no_evidence": 0,
+            "unavailable": 0,
+            "invalid_request": 0,
+            "authentication_failed": 0
+          },
+          "travelerEvidenceTextReturned": false
+        },
+        "apiTrace": [
+          {
+            "method": "POST",
+            "path": "/api/v1/trips/2787c7d6-f82e-483c-9621-fbe785fb0338/recommendations",
+            "status": 201,
+            "cacheControl": "no-store",
+            "transport": "traveler-ui-to-local-vite-origin"
+          },
+          {
+            "method": "POST",
+            "path": "/api/v1/trips/2787c7d6-f82e-483c-9621-fbe785fb0338/itineraries",
+            "status": 201,
+            "cacheControl": "no-store",
+            "transport": "traveler-ui-to-local-vite-origin"
+          },
+          {
+            "method": "PUT",
+            "path": "/api/v1/itineraries/014dbb80-6f22-439a-b355-e7743a84c4cd",
+            "status": 200,
+            "cacheControl": "no-store",
+            "transport": "browser-page-request-to-local-vite-origin"
+          },
+          {
+            "method": "GET",
+            "path": "/api/v1/itineraries/014dbb80-6f22-439a-b355-e7743a84c4cd",
+            "status": 200,
+            "cacheControl": "no-store",
+            "transport": "playwright-api-request-to-local-vite-origin"
+          }
+        ],
+        "noInventedScheduleFields": true,
+        "geoGrouping": "three pending Shiraz proposal points grouped together and one pending Marvdasht property-reference point grouped separately; coordinates were used only by synthetic in-memory test identities and were not published or returned to travelers",
+        "warningCodes": [
+          "approximate_order_only",
+          "geodesic_grouping_heuristic_only",
+          "no_hours_or_routes_inferred",
+          "position_not_entrance",
+          "some_days_unplanned_insufficient_candidates"
+        ]
+      },
+      "historyReopenVerified": true,
+      "ownerAndCsrfVerified": true,
+      "deletionVerified": true,
+      "localeChecks": true,
+      "noStoreMe": true,
+      "noStoreVerify": true,
+      "externalRequestsBlocked": true
+    },
+    {
+      "locale": "en-US",
+      "productionCatalogueEmptyVerified": true,
+      "productionCatalogueCount": 0,
+      "recommendationOutcome": "needs_confirmation",
+      "recommendationReasonCode": "hard_constraints_unverifiable",
+      "unresolvedFields": [
+        "accessibility",
+        "hard_constraint",
+        "destination_resolution"
+      ],
+      "consentSnapshotVerified": true,
+      "requestedDurationDays": 10,
+      "persistedDurationDays": 10,
+      "correctedPersistedDurationDays": null,
+      "persistedUserTurnCount": 2,
+      "simulatedAssistantIntegrationVerified": true,
+      "simulatedGatewayCalls": 2,
+      "partialFixtureDays": 15,
+      "partialFixtureInitialStops": 4,
+      "partialFixtureInitialUnplannedDays": 13,
+      "partialFixtureStops": 3,
+      "partialFixtureUnplannedDays": 12,
+      "positiveItinerary": {
+        "itineraryId": "b07439ad-6bec-4bad-b5d1-a54e3ea3d6ad",
+        "dayCount": 15,
+        "initialStops": 4,
+        "initialDayGroupSizes": [
+          1,
+          3
+        ],
+        "finalStops": 3,
+        "initialUnplannedDays": 13,
+        "finalUnplannedDays": 12,
+        "geographicDayAssignments": {
+          "cityClusterDay": 1,
+          "regionalDay": 2,
+          "cityClusterStops": 3,
+          "regionalStops": 1
+        },
+        "ownerRagProbe": {
+          "enabled": false,
+          "calls": 0,
+          "outcomes": {
+            "ok": 0,
+            "no_evidence": 0,
+            "unavailable": 0,
+            "invalid_request": 0,
+            "authentication_failed": 0
+          },
+          "travelerEvidenceTextReturned": false
+        },
+        "apiTrace": [
+          {
+            "method": "POST",
+            "path": "/api/v1/trips/735fe558-2fe5-46b6-b214-bc9405245459/recommendations",
+            "status": 201,
+            "cacheControl": "no-store",
+            "transport": "traveler-ui-to-local-vite-origin"
+          },
+          {
+            "method": "POST",
+            "path": "/api/v1/trips/735fe558-2fe5-46b6-b214-bc9405245459/itineraries",
+            "status": 201,
+            "cacheControl": "no-store",
+            "transport": "traveler-ui-to-local-vite-origin"
+          },
+          {
+            "method": "PUT",
+            "path": "/api/v1/itineraries/b07439ad-6bec-4bad-b5d1-a54e3ea3d6ad",
+            "status": 200,
+            "cacheControl": "no-store",
+            "transport": "browser-page-request-to-local-vite-origin"
+          },
+          {
+            "method": "GET",
+            "path": "/api/v1/itineraries/b07439ad-6bec-4bad-b5d1-a54e3ea3d6ad",
+            "status": 200,
+            "cacheControl": "no-store",
+            "transport": "playwright-api-request-to-local-vite-origin"
+          }
+        ],
+        "noInventedScheduleFields": true,
+        "geoGrouping": "three pending Shiraz proposal points grouped together and one pending Marvdasht property-reference point grouped separately; coordinates were used only by synthetic in-memory test identities and were not published or returned to travelers",
+        "warningCodes": [
+          "approximate_order_only",
+          "geodesic_grouping_heuristic_only",
+          "no_hours_or_routes_inferred",
+          "position_not_entrance",
+          "some_days_unplanned_insufficient_candidates"
+        ]
+      },
+      "historyReopenVerified": true,
+      "ownerAndCsrfVerified": true,
+      "deletionVerified": true,
+      "localeChecks": true,
+      "noStoreMe": true,
+      "noStoreVerify": true,
+      "externalRequestsBlocked": true
+    },
+    {
+      "locale": "ar",
+      "productionCatalogueEmptyVerified": true,
+      "productionCatalogueCount": 0,
+      "recommendationOutcome": "needs_confirmation",
+      "recommendationReasonCode": "hard_constraints_unverifiable",
+      "unresolvedFields": [
+        "accessibility",
+        "hard_constraint",
+        "destination_resolution"
+      ],
+      "consentSnapshotVerified": true,
+      "requestedDurationDays": 10,
+      "persistedDurationDays": 10,
+      "correctedPersistedDurationDays": null,
+      "persistedUserTurnCount": 2,
+      "simulatedAssistantIntegrationVerified": true,
+      "simulatedGatewayCalls": 2,
+      "partialFixtureDays": 15,
+      "partialFixtureInitialStops": 4,
+      "partialFixtureInitialUnplannedDays": 13,
+      "partialFixtureStops": 3,
+      "partialFixtureUnplannedDays": 12,
+      "positiveItinerary": {
+        "itineraryId": "4eb6fbdd-dc8e-4933-82cf-cc531165c9fc",
+        "dayCount": 15,
+        "initialStops": 4,
+        "initialDayGroupSizes": [
+          1,
+          3
+        ],
+        "finalStops": 3,
+        "initialUnplannedDays": 13,
+        "finalUnplannedDays": 12,
+        "geographicDayAssignments": {
+          "cityClusterDay": 1,
+          "regionalDay": 2,
+          "cityClusterStops": 3,
+          "regionalStops": 1
+        },
+        "ownerRagProbe": {
+          "enabled": false,
+          "calls": 0,
+          "outcomes": {
+            "ok": 0,
+            "no_evidence": 0,
+            "unavailable": 0,
+            "invalid_request": 0,
+            "authentication_failed": 0
+          },
+          "travelerEvidenceTextReturned": false
+        },
+        "apiTrace": [
+          {
+            "method": "POST",
+            "path": "/api/v1/trips/f0530263-1939-44aa-85c6-f6cd0e5bbd43/recommendations",
+            "status": 201,
+            "cacheControl": "no-store",
+            "transport": "traveler-ui-to-local-vite-origin"
+          },
+          {
+            "method": "POST",
+            "path": "/api/v1/trips/f0530263-1939-44aa-85c6-f6cd0e5bbd43/itineraries",
+            "status": 201,
+            "cacheControl": "no-store",
+            "transport": "traveler-ui-to-local-vite-origin"
+          },
+          {
+            "method": "PUT",
+            "path": "/api/v1/itineraries/4eb6fbdd-dc8e-4933-82cf-cc531165c9fc",
+            "status": 200,
+            "cacheControl": "no-store",
+            "transport": "browser-page-request-to-local-vite-origin"
+          },
+          {
+            "method": "GET",
+            "path": "/api/v1/itineraries/4eb6fbdd-dc8e-4933-82cf-cc531165c9fc",
+            "status": 200,
+            "cacheControl": "no-store",
+            "transport": "playwright-api-request-to-local-vite-origin"
+          }
+        ],
+        "noInventedScheduleFields": true,
+        "geoGrouping": "three pending Shiraz proposal points grouped together and one pending Marvdasht property-reference point grouped separately; coordinates were used only by synthetic in-memory test identities and were not published or returned to travelers",
+        "warningCodes": [
+          "approximate_order_only",
+          "geodesic_grouping_heuristic_only",
+          "no_hours_or_routes_inferred",
+          "position_not_entrance",
+          "some_days_unplanned_insufficient_candidates"
+        ]
+      },
+      "historyReopenVerified": true,
+      "ownerAndCsrfVerified": true,
+      "deletionVerified": true,
+      "localeChecks": true,
+      "noStoreMe": true,
+      "noStoreVerify": true,
+      "externalRequestsBlocked": true
+    }
+  ],
+  "screenshots": [
+    {
+      "locale": "fa-IR",
+      "width": 390,
+      "height": 844,
+      "kind": "live empty production catalogue",
+      "path": "fa-IR/empty-fa-IR-390.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 1440,
+      "height": 1000,
+      "kind": "live empty production catalogue",
+      "path": "fa-IR/empty-fa-IR-1440.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 390,
+      "height": 844,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "fa-IR/partial-fa-IR-390.png"
+    },
+    {
+      "locale": "fa-IR",
+      "width": 1440,
+      "height": 1000,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "fa-IR/partial-fa-IR-1440.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 390,
+      "height": 844,
+      "kind": "live empty production catalogue",
+      "path": "en-US/empty-en-US-390.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 1440,
+      "height": 1000,
+      "kind": "live empty production catalogue",
+      "path": "en-US/empty-en-US-1440.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 390,
+      "height": 844,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "en-US/partial-en-US-390.png"
+    },
+    {
+      "locale": "en-US",
+      "width": 1440,
+      "height": 1000,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "en-US/partial-en-US-1440.png"
+    },
+    {
+      "locale": "ar",
+      "width": 390,
+      "height": 844,
+      "kind": "live empty production catalogue",
+      "path": "ar/empty-ar-390.png"
+    },
+    {
+      "locale": "ar",
+      "width": 1440,
+      "height": 1000,
+      "kind": "live empty production catalogue",
+      "path": "ar/empty-ar-1440.png"
+    },
+    {
+      "locale": "ar",
+      "width": 390,
+      "height": 844,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "ar/partial-ar-390.png"
+    },
+    {
+      "locale": "ar",
+      "width": 1440,
+      "height": 1000,
+      "dayCount": 15,
+      "kind": "real API/DB edited test-only three-stop partial itinerary",
+      "path": "ar/partial-ar-1440.png"
+    }
+  ],
+  "audit": {
+    "externalRequestsBlocked": 0,
+    "successfulExternalResponses": 0,
+    "browserPageErrors": 0
+  },
+  "screenshotPolicy": "Traveler-authored text is replaced in screenshot-only DOM captures; no phone, OTP, cookie, token, or request text is recorded.",
+  "fixturePolicy": "The simulated Chat gateway makes no HTTP requests. Positive 15-day itinerary requests use real FastAPI and PostgreSQL with four existing synthetic-only identities exposed through a private loopback test control. Pending Shiraz/Fars proposal points are attached only in memory to these synthetic identities to exercise grouping; they are not canonical, approved, stored, or returned as traveler coordinates. No positive recommendation or itinerary API call is intercepted, and production catalogue views remain empty. When explicitly enabled, one real owner-RAG HTTP probe exercises the empty approved index; retrieved text is withheld from the response and report."
+}

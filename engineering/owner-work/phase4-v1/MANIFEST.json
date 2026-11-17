@@ -1,0 +1,71 @@
+{
+  "package": "AI_TOURISM_OWNER_WORK_PHASE4_V1",
+  "created_at": "2026-11-09",
+  "files": [
+    {
+      "path": "01_rag_contract/OWNER_RAG_RETRIEVAL_PORT_CONTRACT_v1.0.md",
+      "bytes": 12126,
+      "sha256": "801f16f4741807ec626f1a0ccbfa536650f02a49b4491e749fa1dbcdc1e56168"
+    },
+    {
+      "path": "02_rag_evaluation/RAG_EVALUATION_PROTOCOL_v1.0.md",
+      "bytes": 6519,
+      "sha256": "554cba106b5dde5bdd07e883582f5034de91b48523dce3e16c7d0dcd14b4cda3"
+    },
+    {
+      "path": "02_rag_evaluation/RAG_EVALUATION_SET_v1.0.json",
+      "bytes": 60353,
+      "sha256": "57d5bb3c822b2c185831145b0521071a15e79c38c095b1641a6b66eced01e602"
+    },
+    {
+      "path": "03_content_research/CONTENT_RESEARCH_NOTES_FA_v1.0.md",
+      "bytes": 9168,
+      "sha256": "73be0563711ce763ad8043aa47a4181af7d1c8016fb00d42e6284f4374af554c"
+    },
+    {
+      "path": "03_content_research/CULINARY_DISCOVERY_QUEUE_v1.0.csv",
+      "bytes": 3094,
+      "sha256": "5515bb358d2b17dbb912ecd8a4ab98aabf13cba179a1e701cacf8ccb50f87232"
+    },
+    {
+      "path": "03_content_research/REGIONAL_DESTINATION_DISCOVERY_QUEUE_v1.0.csv",
+      "bytes": 10516,
+      "sha256": "68d1a1198ea073c2a1294e661b1bfea9c441b2e134c880332921ccec9b338307"
+    },
+    {
+      "path": "03_content_research/REGIONAL_FACTS_ADDENDUM_v1.0.json",
+      "bytes": 20230,
+      "sha256": "68d14bc58d6b57eef3ce6e4a3cb1edfad8cddbe08bc614d986058ff5019fb6d5"
+    },
+    {
+      "path": "03_content_research/SHIRAZ_FARS_RESEARCH_ADDENDUM_v1.0.json",
+      "bytes": 1264,
+      "sha256": "281a4b2c283baea9454544a640e030967ff1a07c6cf9b4f2749d6abbb58b7018"
+    },
+    {
+      "path": "03_content_research/SOURCE_REGISTER_ADDENDUM_v1.0.csv",
+      "bytes": 3628,
+      "sha256": "62949f383f0dec2229a680162c150b1a5b375919bb24adc8e408d971faffc195"
+    },
+    {
+      "path": "04_coverage/CONTENT_COVERAGE_MATRIX_v1.0.csv",
+      "bytes": 3519,
+      "sha256": "5017904860c653702a4d97df5c098725780b9e03cd8b997be2982ac247f9ba38"
+    },
+    {
+      "path": "04_coverage/CONTENT_COVERAGE_REPORT_FA_v1.0.md",
+      "bytes": 5922,
+      "sha256": "f07246c3dc43908f9080b95ea257dd7696ffc9eac2d5e55f573eb3f207515287"
+    },
+    {
+      "path": "05_ux_architecture/RECOMMENDATION_EVIDENCE_UX_ARCHITECTURE_v1.0.md",
+      "bytes": 8742,
+      "sha256": "029fa8e79404530e92d90e6a08f7d25e2c2f5382c8f82a888f2bbb272a45dce7"
+    },
+    {
+      "path": "README_FA.md",
+      "bytes": 5130,
+      "sha256": "8f9c6dea5a5475080fbbd4062e64155bffe851ba1a3827ea09357a07160de61a"
+    }
+  ]
+}

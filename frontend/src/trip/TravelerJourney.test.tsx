@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthSession } from '../auth/authApi';
 import { journeyMessages, localizeRecommendationCode } from '../i18n/journeyMessages';
-import { createTripRequirements } from './tripIntake';
-import { TravelerJourney } from './TravelerJourney';
+import { createTripRequirements, type TripRequirements } from './tripIntake';
+import { ApiDestinationCatalogPort } from './destinationCatalogApi';
+import { LocationReference, TravelerJourney } from './TravelerJourney';
 
 const session: AuthSession = {
   user: { user_id: 'traveler-1', phone_e164: '+989120000001', phone_verified: true },
@@ -38,7 +39,175 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('persisted traveler journey', () => {
-  it('persists the exact signed-in request, then shows an honest empty result without creating an itinerary', async () => {
+  it('automatically starts exactly one first AI turn without duplicating the initial user message', async () => {
+    const requestText = 'Plan a trip to Shiraz for five people tomorrow';
+    const parsed = createTripRequirements({ requestText, locale: 'en-US' });
+    if (parsed.kind === 'invalid') throw new Error('Expected a valid request');
+    const trip = tripRecord(requestText, parsed);
+    const initialMessage = { message_id: 'initial-user-message', trip_id: trip.trip_id, role: 'user', content: requestText, created_at: trip.created_at };
+    const conversation = {
+      conversation_id: 'conversation-1', locale: 'en-US', version: 1,
+      started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
+      trips: [trip], messages: [initialMessage],
+    };
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input); const method = init?.method ?? 'GET';
+      calls.push({ url, init });
+      if (url === '/api/v1/assistant/status') return response({ state: 'configured', user_used: 0, user_remaining: 8, user_limit: 8, global_used: 0, global_remaining: 100, global_limit: 100 });
+      if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
+      if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: initialMessage }, 201);
+      if (url.endsWith('/assistant-turns') && method === 'POST') return response({
+        conversation: { ...conversation, version: 2 }, trip: { ...trip, version: 2 },
+        message: { message_id: 'assistant-1', trip_id: trip.trip_id, role: 'assistant', content: 'How many nights would you like to stay?', created_at: trip.created_at },
+        candidate_requirements: {}, clarification: 'How many nights would you like to stay?', replayed: false,
+      });
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => root.render(<TravelerJourney locale="en-US" session={session} online requirements={parsed.requirements}
+      assistantConfigured autoStartConversation travelerTimezone="Asia/Tehran" onSessionExpired={() => undefined}
+      onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
+    await settle();
+    await settle();
+    const create = calls.find(call => call.url === '/api/v1/conversations')!;
+    const savedBody = JSON.parse(String(create.init?.body));
+    expect(savedBody.traveler_timezone).toBe('Asia/Tehran');
+    expect(savedBody.traveler_reference_date).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+    const assistant = calls.find(call => call.url.endsWith('/assistant-turns'))!;
+    const turnBody = JSON.parse(String(assistant.init?.body));
+    expect(turnBody.content).toBe(requestText);
+    expect(turnBody.existing_user_message_id).toBe(initialMessage.message_id);
+    expect(turnBody.expected_version).toBe(1);
+    expect(calls.filter(call => call.url === '/api/v1/conversations').length).toBe(1);
+    expect(host.textContent).toContain('assistant replied');
+  });
+
+  it('labels catalogue reference points separately from entrances in all locales', async () => {
+    for (const locale of ['fa-IR', 'en-US', 'ar'] as const) {
+      await act(async () => root.render(<LocationReference locale={locale} coordinate={{
+        latitude: 29.93444, longitude: 52.89028, role: 'property_reference',
+      }} />));
+      expect(host.textContent).toContain(journeyMessages[locale].pointReference);
+      expect(host.textContent).not.toContain(journeyMessages[locale].pointEntrance);
+      expect(host.querySelector('a')).toBeNull();
+      await act(async () => root.render(<LocationReference locale={locale} coordinate={{
+        latitude: 29.93444, longitude: 52.89028, role: 'visitor_entrance',
+      }} />));
+      expect(host.textContent).toContain(journeyMessages[locale].pointEntrance);
+      expect(host.textContent).not.toContain(journeyMessages[locale].pointReference);
+    }
+    await act(async () => root.render(<LocationReference locale="en-US" />));
+    expect(host.textContent).toBe('');
+  });
+
+  it('lets a traveler search and add an approved catalogue destination for review', async () => {
+    const requestText = 'Plan a 3-day trip';
+    const parsed = createTripRequirements({ requestText, locale: 'en-US' });
+    if (parsed.kind === 'invalid') throw new Error('Expected valid trip request');
+    const trip = tripRecord(requestText, parsed);
+    const conversation = {
+      conversation_id: 'conversation-1', locale: 'en-US', version: 1,
+      started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
+      trips: [trip], messages: [],
+    };
+    vi.spyOn(ApiDestinationCatalogPort.prototype, 'load').mockResolvedValue({
+      kind: 'available', boundary: 'knowledge.production_destinations', destinations: [{
+        destinationId: '7421', destinationKey: 'test-garden', canonicalName: 'Garden',
+        localizedNames: { 'en-US': 'Garden' }, aliases: [], destinationType: 'heritage_site',
+        provinceName: 'Fars', cityName: 'Shiraz',
+        coordinate: { latitude: 29.6, longitude: 52.5, role: 'representative_point' },
+      }, {
+        destinationId: '7422', destinationKey: 'test-museum', canonicalName: 'Museum',
+        localizedNames: { 'en-US': 'Museum' }, aliases: [], destinationType: 'museum',
+        provinceName: 'Fars', cityName: 'Shiraz',
+      }, {
+        destinationId: '7423', destinationKey: 'test-garden-two', canonicalName: 'Garden',
+        localizedNames: { 'en-US': 'Garden' }, aliases: [], destinationType: 'heritage_site',
+        provinceName: 'Gilan', cityName: 'Lahijan',
+      }],
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input); const method = init?.method ?? 'GET';
+      if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
+      if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: null }, 201);
+      if (url === `/api/v1/trips/${trip.trip_id}` && method === 'PATCH') return response({ ...trip, version: 2, confirmed_requirements: { confirmation_source: 'traveler_reviewed' } });
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => root.render(<TravelerJourney locale="en-US" session={session} online requirements={parsed.requirements}
+      onSessionExpired={() => undefined} onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
+    await settle();
+    await act(async () => { host.querySelector<HTMLButtonElement>('.journey-action')!.click(); }); await settle();
+    const browse = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].browseDestinations)!;
+    await act(async () => { browse.click(); }); await settle();
+    const search = host.querySelector<HTMLInputElement>('#approved-destination-search')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, 'Garden');
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(host.querySelector('#approved-destination-browser')?.textContent).not.toContain('Museum');
+    const add = host.querySelector<HTMLButtonElement>('button[aria-label="Add to trip: Garden · Shiraz"]')!;
+    await act(async () => { add.click(); }); await settle();
+    expect(host.querySelector<HTMLInputElement>('#profile-destination-0')?.value).toBe('Garden');
+    expect(fetchMock.mock.calls.some(call => (call[1] as RequestInit | undefined)?.method === 'PATCH')).toBe(false);
+    const second = host.querySelector<HTMLButtonElement>('button[aria-label="Add to trip: Garden · Lahijan"]')!;
+    expect(second.disabled).toBe(false);
+    await act(async () => { second.click(); }); await settle();
+    expect(host.querySelector<HTMLInputElement>('#profile-destination-1')?.value).toBe('Garden');
+    const confirm = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].confirmProfile)!;
+    await act(async () => { confirm.click(); }); await settle();
+    const patchCall = fetchMock.mock.calls.find(call => (call[1] as RequestInit | undefined)?.method === 'PATCH')!;
+    expect(JSON.parse(String((patchCall[1] as RequestInit).body)).destination_ids).toEqual(['7421', '7423']);
+  });
+
+  it('does not let an older catalogue lookup overwrite a newer destination edit', async () => {
+    const requestText = 'Plan a 3-day trip to Shiraz';
+    const parsed = createTripRequirements({ requestText, locale: 'en-US' });
+    if (parsed.kind === 'invalid') throw new Error('Expected valid trip request');
+    const trip = tripRecord(requestText, parsed);
+    const conversation = {
+      conversation_id: 'conversation-1', locale: 'en-US', version: 1,
+      started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
+      trips: [trip], messages: [],
+    };
+    const catalogue = { kind: 'available' as const, boundary: 'knowledge.production_destinations', destinations: [
+      { destinationId: '1', destinationKey: 'shiraz', canonicalName: 'Shiraz', localizedNames: {}, aliases: [], destinationType: 'city', provinceName: 'Fars', cityName: 'Shiraz' },
+      { destinationId: '2', destinationKey: 'museum', canonicalName: 'Museum', localizedNames: {}, aliases: [], destinationType: 'museum', provinceName: 'Fars', cityName: 'Shiraz' },
+      { destinationId: '3', destinationKey: 'garden', canonicalName: 'Garden', localizedNames: {}, aliases: [], destinationType: 'garden', provinceName: 'Fars', cityName: 'Shiraz' },
+    ] };
+    const load = vi.spyOn(ApiDestinationCatalogPort.prototype, 'load').mockResolvedValue(catalogue);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input); const method = init?.method ?? 'GET';
+      if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
+      if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: null }, 201);
+      if (url === `/api/v1/trips/${trip.trip_id}` && method === 'PATCH') return response({ ...trip, version: 2, confirmed_requirements: { confirmation_source: 'traveler_reviewed' } });
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => root.render(<TravelerJourney locale="en-US" session={session} online requirements={parsed.requirements}
+      onSessionExpired={() => undefined} onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
+    await settle();
+    await act(async () => { host.querySelector<HTMLButtonElement>('.journey-action')!.click(); }); await settle();
+    let finishOld!: (value: typeof catalogue) => void;
+    let finishNew!: (value: typeof catalogue) => void;
+    load.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }))
+      .mockImplementationOnce(() => new Promise(resolve => { finishNew = resolve; }));
+    const input = host.querySelector<HTMLInputElement>('#profile-destination-0')!;
+    const change = async (value: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await change('Museum');
+    await change('Garden');
+    await act(async () => { finishNew(catalogue); }); await settle();
+    await act(async () => { finishOld(catalogue); }); await settle();
+    const confirm = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].confirmProfile)!;
+    await act(async () => { confirm.click(); }); await settle();
+    const patchCall = fetchMock.mock.calls.find(call => (call[1] as RequestInit | undefined)?.method === 'PATCH')!;
+    expect(JSON.parse(String((patchCall[1] as RequestInit).body)).destination_ids).toEqual(['3']);
+  });
+  it('offers an AI provisional plan and a working manual draft when the approved catalogue is empty', async () => {
     const requestText = 'Plan a 3-day trip to Shiraz';
     const parsed = createTripRequirements({ requestText, locale: 'en-US' });
     expect(parsed.kind).not.toBe('invalid');
@@ -49,10 +218,12 @@ describe('persisted traveler journey', () => {
       started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
       trips: [trip], messages: [{ message_id: 'message-1', trip_id: trip.trip_id, role: 'user', content: requestText, created_at: trip.created_at }],
     };
+    let savedPlan: Record<string, unknown> | null = null;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); const method = init?.method ?? 'GET';
+      if (url === '/api/v1/assistant/status') return response({ state: 'configured', user_used: 0, user_remaining: 8, user_limit: 8, global_used: 0, global_remaining: 100, global_limit: 100 });
       if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: conversation.messages[0] }, 201);
       if (url === `/api/v1/trips/${trip.trip_id}` && method === 'PATCH') return response({ ...trip, version: 2, confirmed_requirements: { confirmation_source: 'traveler_reviewed' } });
       if (url === `/api/v1/trips/${trip.trip_id}/recommendations` && method === 'POST') return response({
@@ -60,6 +231,30 @@ describe('persisted traveler journey', () => {
         unresolved_fields: [], algorithm_version: 'deterministic-v1', trip_version: 2, items: [],
       });
       if (url === `/api/v1/trips/${trip.trip_id}` && method === 'GET') return response({ ...trip, version: 2 });
+      if (url === `/api/v1/trips/${trip.trip_id}/provisional-itineraries` && method === 'GET') return response({ error: { code: 'not_found' } }, 404);
+      if (url === `/api/v1/conversations/${conversation.conversation_id}/assistant-turns` && method === 'POST') {
+        const body = JSON.parse(String(init?.body));
+        return response({ conversation: { ...conversation, version: 2 }, trip: { ...trip, version: 2 },
+          message: { message_id: 'assistant-1', trip_id: trip.trip_id, role: 'assistant', content: 'I replied but did not return a structured itinerary.', created_at: trip.created_at },
+          candidate_requirements: {}, extraction_path: 'llm', replayed: false, received_test_turn: body });
+      }
+      if (url === `/api/v1/trips/${trip.trip_id}/provisional-itineraries` && method === 'POST') {
+        const body = JSON.parse(String(init?.body));
+        savedPlan = { provisional_itinerary_id: 'provisional-1', trip_id: trip.trip_id, revision: 1,
+          day_count: body.day_count, locale: body.locale, title_by_locale: body.title_by_locale,
+          status: 'provisional_unverified', days: body.days.map((day: { day_number: number; stops: unknown[] }) => ({
+            day_number: day.day_number, stops: day.stops,
+          })), unplanned_days: body.days.filter((day: { stops: unknown[] }) => day.stops.length === 0).map((day: { day_number: number }) => day.day_number),
+          updated_at: trip.updated_at };
+        return response(savedPlan, 201);
+      }
+      if (url === '/api/v1/provisional-itineraries/provisional-1' && method === 'PUT') {
+        const body = JSON.parse(String(init?.body));
+        savedPlan = { ...(savedPlan as Record<string, unknown>), revision: 2,
+          days: body.days.map((day: { day_number: number; stops: unknown[] }) => ({ day_number: day.day_number, stops: day.stops })),
+          unplanned_days: body.days.filter((day: { stops: unknown[] }) => day.stops.length === 0).map((day: { day_number: number }) => day.day_number) };
+        return response(savedPlan);
+      }
       throw new Error(`Unexpected request: ${method} ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -84,8 +279,31 @@ describe('persisted traveler journey', () => {
     const recommendations = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].findRecommendations)!;
     await act(async () => { recommendations.click(); }); await settle();
     expect(host.textContent).toContain(journeyMessages['en-US'].recommendationEmpty);
-    expect(host.querySelector('button')?.textContent).not.toBe(journeyMessages['en-US'].createItinerary);
-    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/itineraries'))).toBe(false);
+
+    const aiPlan = [...host.querySelectorAll('button')].find(button => button.textContent === 'Generate preliminary AI itinerary')!;
+    const blankPlan = [...host.querySelectorAll('button')].find(button => button.textContent === 'Create an editable blank itinerary')!;
+    expect(aiPlan).toBeTruthy();
+    expect(blankPlan).toBeTruthy();
+    await act(async () => { aiPlan.click(); }); await settle();
+    const assistantCall = fetchMock.mock.calls.filter(call => String(call[0]).endsWith('/assistant-turns')).at(-1)!;
+    expect(JSON.parse(String(assistantCall[1]?.body)).content).toContain('provisional_itinerary');
+    expect(host.textContent).toContain('assistant replied without a day-by-day draft');
+
+    await act(async () => { blankPlan.click(); }); await settle();
+    expect(savedPlan).toMatchObject({ day_count: 3, status: 'provisional_unverified', unplanned_days: [1, 2, 3] });
+    expect(host.querySelectorAll('.provisional-itinerary .itinerary-day')).toHaveLength(3);
+    const addInput = host.querySelector<HTMLInputElement>('#provisional-add-1')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(addInput, 'Traveler-selected museum');
+      addInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const addButton = [...host.querySelectorAll('button')].find(button => button.textContent === 'Add a place you provide')!;
+    await act(async () => { addButton.click(); }); await settle();
+    const saveEdits = [...host.querySelectorAll('button')].find(button => button.textContent === 'Save edits')!;
+    await act(async () => { saveEdits.click(); }); await settle();
+    const updateCall = fetchMock.mock.calls.find(call => String(call[0]) === '/api/v1/provisional-itineraries/provisional-1' && call[1]?.method === 'PUT')!;
+    expect(JSON.parse(String(updateCall[1]?.body)).days[0].stops[0]).toMatchObject({ name: 'Traveler-selected museum', role: 'traveler_provided' });
+    expect(host.textContent).toContain('Save edits');
   });
 
   it('renders the privacy notice in all supported directions/locales and keeps anonymous intake transient', async () => {
@@ -130,7 +348,7 @@ describe('persisted traveler journey', () => {
     }
   });
 
-  it('requires an explicit field choice and a separate advisory acknowledgement before saving consent', async () => {
+  it('keeps supplied planning values known without an extra consent gate', async () => {
     const requestText = 'Plan a 3-day trip to Shiraz with a budget of 100000 toman; I prefer paved paths';
     const parsed = createTripRequirements({ requestText, locale: 'en-US' });
     expect(parsed.kind).not.toBe('invalid');
@@ -155,15 +373,15 @@ describe('persisted traveler journey', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); const method = init?.method ?? 'GET';
       if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: null }, 201);
       if (url === `/api/v1/trips/${trip.trip_id}` && method === 'PATCH') return response(savedTrip);
       if (url === `/api/v1/trips/${trip.trip_id}/recommendations` && method === 'POST') return response({
         recommendation_request_id: 'recommendation-request-1', status: 'empty', reason_code: 'no_eligible_candidates',
-        unresolved_fields: [], waived_fields: ['budget', 'soft_preference'], not_evaluated_fields: ['budget', 'soft_preference'],
+        unresolved_fields: [], waived_fields: [], not_evaluated_fields: [],
         requirement_assessments: [
-          { field: 'budget', decision: 'advisory', status: 'not_evaluated', reason_code: 'budget_unverifiable' },
-          { field: 'soft_preference', decision: 'advisory', status: 'not_evaluated', reason_code: 'preference_unverifiable' },
+          { field: 'budget', decision: null, status: 'known', reason_code: 'traveler_value_known' },
+          { field: 'soft_preference', decision: null, status: 'known', reason_code: 'traveler_value_known' },
         ],
         algorithm_version: 'structured-catalogue-ranking-v3', retrieval_version: 'approved-structured-catalogue-v2',
         trip_version: 2, items: [],
@@ -178,36 +396,23 @@ describe('persisted traveler journey', () => {
     await act(async () => { host.querySelector<HTMLButtonElement>('.journey-action')!.click(); }); await settle();
 
     const confirm = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].confirmProfile)!;
-    const must = host.querySelector<HTMLInputElement>('#requirement-consent-budget-must')!;
-    const advisory = host.querySelector<HTMLInputElement>('#requirement-consent-budget-advisory')!;
-    const softPreferenceAdvisory = host.querySelector<HTMLInputElement>('#requirement-consent-soft_preference-advisory')!;
-    expect(must.checked).toBe(false);
-    expect(advisory.checked).toBe(false);
-    expect(softPreferenceAdvisory.checked).toBe(false);
+    expect(host.querySelector('.requirement-consent')).toBeNull();
     expect(host.querySelector('.soft-preference-value')?.textContent).toContain('paved paths');
-    expect(confirm.disabled).toBe(true);
-    await act(async () => { advisory.click(); }); await settle();
-    expect(host.textContent).toContain(journeyMessages['en-US'].requirementAdvisoryWarning);
-    expect(confirm.disabled).toBe(true);
-    await act(async () => { host.querySelector<HTMLInputElement>('#requirement-consent-budget-ack')!.click(); }); await settle();
-    expect(confirm.disabled).toBe(true);
-    await act(async () => { softPreferenceAdvisory.click(); }); await settle();
-    await act(async () => { host.querySelector<HTMLInputElement>('#requirement-consent-soft_preference-ack')!.click(); }); await settle();
     expect(confirm.disabled).toBe(false);
     await act(async () => { confirm.click(); }); await settle();
     const patchCall = fetchMock.mock.calls.find(call => String(call[0]) === `/api/v1/trips/${trip.trip_id}` && (call[1] as RequestInit).method === 'PATCH')!;
     const patchBody = JSON.parse(String((patchCall[1] as RequestInit).body));
     expect(patchBody.requirement_consent).toEqual({
       contract_version: 'recommendation-consent-v1',
-      field_decisions: { budget: 'advisory', soft_preference: 'advisory' },
-      advisory_acknowledged_fields: ['budget', 'soft_preference'],
+      field_decisions: {},
+      advisory_acknowledged_fields: [],
     });
     expect(patchBody.confirmed_requirements.soft_preferences).toEqual(['paved paths']);
     await act(async () => {
       [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].findRecommendations)!.click();
     }); await settle();
-    expect(host.textContent).toContain(journeyMessages['en-US'].requirementNotEvaluatedTitle);
-    expect(host.textContent).toContain(journeyMessages['en-US'].requirementAdvisoryWarning);
+    expect(host.textContent).not.toContain(journeyMessages['en-US'].requirementNotEvaluatedTitle);
+    expect(host.textContent).not.toContain(journeyMessages['en-US'].requirementAdvisoryWarning);
     expect(host.textContent).toContain(journeyMessages['en-US'].recommendationEmpty);
   });
 
@@ -230,7 +435,7 @@ describe('persisted traveler journey', () => {
       if (url.endsWith('/conversations?limit=50')) return response({ items: [conversation], next_cursor: null });
       if (url === '/api/v1/conversations/conversation-1') return response(conversation);
       if (url === `/api/v1/trips/${trip.trip_id}`) return response(trip);
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -243,6 +448,100 @@ describe('persisted traveler journey', () => {
     expect(host.querySelector('.recommendation-controls')).toBeNull();
     expect(host.textContent).toContain(journeyMessages['en-US'].profileTitle);
     expect(host.textContent).not.toContain(journeyMessages['en-US'].findRecommendations);
+  });
+
+  it('restores persisted relative start and duration to the correct inclusive date range', async () => {
+    vi.spyOn(ApiDestinationCatalogPort.prototype, 'load').mockResolvedValue({ kind: 'available', boundary: 'knowledge.production_destinations', destinations: [] });
+    const requestText = '\u0627\u0632 \u067e\u0633\u200c\u0641\u0631\u062f\u0627 \u0628\u0631\u0627\u06cc \u067e\u0646\u062c \u0631\u0648\u0632 \u0628\u0627 \u067e\u0646\u062c \u0646\u0641\u0631 \u0628\u0647 \u0634\u06cc\u0631\u0627\u0632';
+    const missing = { status: 'missing', value: null, source: 'fallback' };
+    const known = (value: unknown) => ({ status: 'known', value, evidence_span: null, source: 'fallback' });
+    const requirementsV1 = {
+      contract_version: 'trip-requirements-v1', original_text: requestText, locale: 'fa-IR',
+      fields: {
+        destination: known('Shiraz'), origin: missing,
+        relative_start_date: known({ offset_days: 2, anchor_date: '2026-11-17', timezone: 'Asia/Tehran' }),
+        duration_days: missing, travel_dates: missing, travelers: known(5), budget: missing,
+        interests: missing, soft_preferences: missing, hard_constraints: missing, accessibility: missing,
+      },
+      clarification: { missing_fields: [], ambiguous_fields: [], question_fields: [] },
+    };
+    const trip = {
+      ...tripRecord(requestText, createTripRequirements({ requestText, locale: 'fa-IR' })),
+      locale: 'fa-IR' as const,
+      extracted_requirements: { requirements_v1: requirementsV1 },
+      confirmed_requirements: {},
+      duration_days: 5,
+      traveler_count: 5,
+    };
+    const conversation = {
+      conversation_id: trip.conversation_id, locale: 'fa-IR', version: 1,
+      started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
+      trips: [trip], messages: [],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/conversations?limit=50')) return response({ items: [conversation], next_cursor: null });
+      if (url === '/api/v1/conversations/' + trip.conversation_id) return response(conversation);
+      if (url === '/api/v1/trips/' + trip.trip_id) return response(trip);
+      throw new Error('Unexpected request: ' + url);
+    }));
+    function RestoreHarness() {
+      const [parentRequirements, setParentRequirements] = useState<TripRequirements | null>(null);
+      return <TravelerJourney locale="fa-IR" session={session} online requirements={parentRequirements}
+        onSessionExpired={() => undefined} onRestoreRequest={(_text, restored) => setParentRequirements(restored)}
+        onStartNewDraft={() => undefined} />;
+    }
+    await act(async () => root.render(<RestoreHarness />));
+    await settle();
+    await act(async () => { host.querySelector<HTMLButtonElement>('.history-trip[data-trip-id="' + trip.trip_id + '"] button')!.click(); });
+    await settle();
+
+    expect(host.querySelector<HTMLInputElement>('#profile-duration')?.value).toBe('5');
+    expect(host.querySelector<HTMLInputElement>('#profile-travelers')?.value).toBe('5');
+    expect(host.querySelector<HTMLInputElement>('#profile-travel-start')?.value).toBe('2026-11-17');
+    expect(host.querySelector<HTMLInputElement>('#profile-travel-end')?.value).toBe('2026-11-21');
+  });
+
+  it('reopens both legacy extracted-requirement shapes without a blank page or data write', async () => {
+    vi.spyOn(ApiDestinationCatalogPort.prototype, 'load').mockResolvedValue({ kind: 'available', boundary: 'knowledge.production_destinations', destinations: [] });
+    const requests = ['Plan a trip to Shiraz', 'Plan a 10-day trip to Shiraz'];
+    const trips = requests.map((requestText, index) => ({
+      ...tripRecord(requestText, createTripRequirements({ requestText, locale: 'en-US' })),
+      trip_id: `legacy-${index + 1}`,
+      extracted_requirements: index === 0
+        ? { difficulty: null, season: null, transport: null, travel_style: null }
+        : { requestText, destinations: { value: ['Shiraz'], status: 'extracted', evidence: 'Shiraz' },
+            durationDays: { value: 10, status: 'extracted', evidence: '10 days' },
+            origin: { value: null, status: 'unknown', evidence: null },
+            interests: { value: null, status: 'unknown', evidence: null },
+            budget: { value: null, status: 'unknown', evidence: null } },
+    }));
+    const conversation = {
+      conversation_id: 'conversation-1', locale: 'en-US', version: 1,
+      started_at: trips[0].created_at, updated_at: trips[0].updated_at, last_message_at: trips[0].updated_at,
+      trips, messages: [],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/conversations?limit=50')) return response({ items: [conversation], next_cursor: null });
+      if (url === '/api/v1/conversations/conversation-1') return response(conversation);
+      const trip = trips.find(item => url === `/api/v1/trips/${item.trip_id}`);
+      if (trip) return response(trip);
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
+      throw new Error(`Unexpected request: ${init?.method ?? 'GET'} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => root.render(<TravelerJourney locale="en-US" session={session} online requirements={null}
+      onSessionExpired={() => undefined} onRestoreRequest={() => undefined} onStartNewDraft={() => undefined} />));
+    await settle();
+    for (const requestText of requests) {
+      await act(async () => { [...host.querySelectorAll('button')].find(button => button.textContent === requestText)!.click(); });
+      await settle();
+      expect(host.textContent).toContain(journeyMessages['en-US'].profileTitle);
+      expect(host.textContent).toContain(requestText);
+      expect(host.querySelector('.journey-error')).toBeNull();
+    }
+    expect(fetchMock.mock.calls.every(call => (call[1]?.method ?? 'GET') === 'GET')).toBe(true);
   });
 
   it('renders needs-confirmation guidance when the backend reason code is null', async () => {
@@ -274,7 +573,7 @@ describe('persisted traveler journey', () => {
         algorithm_version: 'structured-catalogue-ranking-v3', retrieval_version: 'approved-structured-catalogue-v2',
         trip_version: 2, items: [],
       });
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -302,7 +601,7 @@ describe('persisted traveler journey', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); const method = init?.method ?? 'GET';
       if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: null }, 201);
       throw new Error(`Unexpected request: ${method} ${url}`);
     });
@@ -327,6 +626,14 @@ describe('persisted traveler journey', () => {
     expect(parsed.kind).not.toBe('invalid');
     if (parsed.kind === 'invalid') return;
     const trip = tripRecord(requestText, parsed);
+    vi.spyOn(ApiDestinationCatalogPort.prototype, 'load').mockResolvedValue({
+      kind: 'available', boundary: 'knowledge.production_destinations', destinations: [{
+        destinationId: '7421', destinationKey: 'test-shiraz', canonicalName: 'Shiraz',
+        localizedNames: { 'en-US': 'Shiraz' }, aliases: [], destinationType: 'city',
+        provinceName: 'Fars', cityName: 'Shiraz',
+        coordinate: { latitude: 29.63583, longitude: 52.52528, role: 'representative_point' },
+      }],
+    });
     const conversation = {
       conversation_id: 'conversation-1', locale: 'en-US', version: 1,
       started_at: trip.created_at, updated_at: trip.updated_at, last_message_at: trip.updated_at,
@@ -339,11 +646,26 @@ describe('persisted traveler journey', () => {
         source_id: 1, source_name: 'Approved source', source_url: 'https://example.test/source', source_role: 'official',
         evidence_note: null, retrieved_at: null, valid_from: null, valid_until: null, reliability_score: null,
       }], canonical_name: 'Shiraz Garden', localized_names: { 'en-US': 'Shiraz Garden' },
+      retrieval_evidence: [{
+        evidence_id: 'owner-evidence-1', canonical_entity_key: 'shiraz-eram-garden-v1', destination_id: 7421,
+        document_id: 'published-document-1', claim_key: 'garden_identity', content_hash: 'a'.repeat(64),
+        locale: 'en-US', corpus: 'spatial_destinations', text: 'The cited source identifies this garden by name.',
+        sources: [{ source_id: '42', source_name: 'Reviewed heritage source', source_url: 'https://example.test/eram',
+          source_role: 'site_identity', license: null, retrieved_at: '2026-11-09T00:00:00Z',
+          valid_from: null, valid_until: null }],
+      }],
       city_name: 'Shiraz', province_name: 'Fars', destination_type: 'attraction',
+    };
+    const noCitationRecommendation = {
+      ...recommendation,
+      recommendation_id: 'recommendation-2', destination_id: '7422',
+      canonical_name: 'No Citation Destination', localized_names: { 'en-US': 'No Citation Destination' },
+      retrieval_evidence: [],
     };
     const itinerary = {
       itinerary_id: 'itinerary-1', trip_id: trip.trip_id, revision: 1, version: 1, day_count: 10,
       status: 'partial', unplanned_days: [2, 3, 4, 5, 6, 7, 8, 9, 10],
+      warning_codes: ['stop_location_unknown', 'no_hours_or_routes_inferred'],
       title_by_locale: { 'en-US': 'Editable day plan' },
       stops: [{ recommendation_id: 'recommendation-1', day_number: 1, stop_order: 1, notes_by_locale: {},
         destination_id: '7421', canonical_name: 'Shiraz Garden', localized_names: { 'en-US': 'Shiraz Garden' } }],
@@ -352,12 +674,13 @@ describe('persisted traveler journey', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); const method = init?.method ?? 'GET';
       if (url.endsWith('/conversations?limit=50')) return response({ items: [], next_cursor: null });
-      if (url === '/api/v1/catalog/destinations') return response({ status: 'available', complete: true, count: 0, items: [] });
+      if (url === '/api/v2/catalog/destinations') return response({ status: 'available', items: [], next_cursor: null });
       if (url === '/api/v1/conversations' && method === 'POST') return response({ conversation, trip, initial_message: null }, 201);
       if (url === `/api/v1/trips/${trip.trip_id}` && method === 'PATCH') return response({ ...trip, version: 2, confirmed_requirements: { duration_days: 10 } });
       if (url === `/api/v1/trips/${trip.trip_id}/recommendations` && method === 'POST') return response({
         recommendation_request_id: 'recommendation-request-1', status: 'available', reason_code: 'available',
-        unresolved_fields: [], algorithm_version: 'structured-catalogue-ranking-v2', trip_version: 2, items: [recommendation],
+        unresolved_fields: [], algorithm_version: 'structured-catalogue-ranking-v2', trip_version: 2,
+        items: [recommendation, noCitationRecommendation],
       });
       if (url === `/api/v1/trips/${trip.trip_id}` && method === 'GET') return response({ ...trip, version: 2, latest_itinerary_id: itinerary.itinerary_id });
       if (url === `/api/v1/trips/${trip.trip_id}/itineraries` && method === 'POST') return response(itinerary, 201);
@@ -372,6 +695,14 @@ describe('persisted traveler journey', () => {
     await act(async () => { confirm.click(); }); await settle();
     const recommendations = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].findRecommendations)!;
     await act(async () => { recommendations.click(); }); await settle();
+    expect(host.querySelector('.evidence-card .location-reference')?.textContent).toContain(journeyMessages['en-US'].pointReference);
+
+    const retrievalCitations = host.querySelector('.retrieval-citations-list')!;
+    expect(retrievalCitations.textContent).toContain('The cited source identifies this garden by name.');
+    expect(retrievalCitations.textContent).toContain(journeyMessages['en-US'].retrievalEvidenceBoundary);
+    expect(retrievalCitations.querySelector('a')?.href).toBe('https://example.test/eram');
+    expect(retrievalCitations.querySelectorAll('.retrieval-citation')).toHaveLength(1);
+    expect(retrievalCitations.textContent).not.toContain('No Citation Destination');
 
     const daysInput = host.querySelector<HTMLInputElement>('#journey-day-count')!;
     expect(daysInput.value).toBe('10');
@@ -381,7 +712,21 @@ describe('persisted traveler journey', () => {
     expect(JSON.parse(String((createCall[1] as RequestInit).body)).day_count).toBe(10);
     expect(host.textContent).toContain(journeyMessages['en-US'].itineraryPartial);
     expect(host.textContent).toContain(journeyMessages['en-US'].unplannedDay);
+    expect(host.textContent).toContain(journeyMessages['en-US'].itineraryWarnings.stop_location_unknown);
+    expect(host.textContent).toContain(journeyMessages['en-US'].itineraryWarnings.no_hours_or_routes_inferred);
     expect(host.querySelectorAll('.itinerary-day')).toHaveLength(10);
     expect(host.querySelectorAll('.unplanned-day')).toHaveLength(9);
+    expect(host.querySelector('.saved-stop .location-reference')?.textContent).toContain(journeyMessages['en-US'].pointReference);
+  });
+
+  it('provides distinct itinerary location and routing caveats in all traveler locales', () => {
+    for (const locale of ['fa-IR', 'en-US', 'ar'] as const) {
+      const warnings = journeyMessages[locale].itineraryWarnings;
+      expect(warnings.stop_location_unknown.length).toBeGreaterThan(20);
+      expect(warnings.no_hours_or_routes_inferred.length).toBeGreaterThan(20);
+      expect(warnings.geodesic_grouping_heuristic_only.length).toBeGreaterThan(20);
+      expect(warnings.position_not_entrance.length).toBeGreaterThan(20);
+      expect(warnings.stop_location_unknown).not.toContain('stop_location_unknown');
+    }
   });
 });

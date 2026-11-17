@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ApprovedDestinationAlias(BaseModel):
@@ -25,6 +25,21 @@ class ProductionDestinationItem(BaseModel):
     destination_type: str = Field(min_length=1, max_length=64)
     province_name: str = Field(min_length=1, max_length=240)
     city_name: str | None = Field(default=None, max_length=240)
+    # This point is the coordinate role recorded for the approved spatial row.
+    # It is deliberately not renamed to "entrance" or interpreted as a route.
+    latitude: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
+    longitude: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
+    coordinate_role: Literal[
+        "unknown", "property_reference", "representative_point", "visitor_entrance"
+    ] | None = None
+
+    @model_validator(mode="after")
+    def validate_coordinate_contract(self) -> "ProductionDestinationItem":
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("latitude and longitude must both be present or both be null")
+        if self.latitude is not None and self.coordinate_role in {None, "unknown"}:
+            raise ValueError("a coordinate must preserve its known coordinate role")
+        return self
 
 
 class ProductionDestinationSource(BaseModel):
