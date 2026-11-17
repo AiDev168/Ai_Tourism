@@ -44,8 +44,16 @@ chmod 0700 "$plain_dir"
 plain="$plain_dir/database.dump"
 isolated="rahgard-restore-$(date -u +%Y%m%d%H%M%S)-$$"
 image=rahgard-postgres:17-postgis36-vector087
+api_image=""
+api_name=""
+api_image_created=false
 cleanup() {
   status=$?
+  if [[ -n "$api_name" ]] && docker inspect "$api_name" >/dev/null 2>&1; then
+    labels=$(docker inspect -f '{{index .Config.Labels "rahgard.restore.target"}}|{{index .Config.Labels "rahgard.environment"}}' "$api_name" 2>/dev/null || true)
+    if [[ "$labels" == 'isolated|restore-test' ]]; then docker rm -f "$api_name" >/dev/null 2>&1 || true; fi
+  fi
+  if [[ "$api_image_created" == true ]]; then docker image rm "$api_image" >/dev/null 2>&1 || true; fi
   if docker inspect "$isolated" >/dev/null 2>&1; then
     labels=$(docker inspect -f '{{index .Config.Labels "rahgard.restore.target"}}|{{index .Config.Labels "rahgard.environment"}}' "$isolated" 2>/dev/null || true)
     if [[ "$labels" == 'isolated|restore-test' ]]; then docker rm -f "$isolated" >/dev/null 2>&1 || true; fi
@@ -102,6 +110,8 @@ pre_hash=$(sha256sum "$release_dir/engineering/pilot/sql/017_provisional_itinera
 [[ "$(db_scalar "SELECT sha256 FROM system.schema_migrations WHERE migration_id='0017_provisional_itineraries'")" == "$pre_hash" ]] || { echo 'Restored 0017 checksum differs from target source.' >&2; exit 3; }
 counts_sql="SELECT 'users',count(*) FROM identity.users UNION ALL SELECT 'conversations',count(*) FROM conversation.conversations UNION ALL SELECT 'messages',count(*) FROM conversation.messages UNION ALL SELECT 'trips',count(*) FROM travel.trips UNION ALL SELECT 'itineraries',count(*) FROM travel.itineraries UNION ALL SELECT 'itinerary_stops',count(*) FROM travel.itinerary_stops UNION ALL SELECT 'provisional_itineraries',count(*) FROM travel.provisional_itineraries UNION ALL SELECT 'destinations',count(*) FROM knowledge.destinations UNION ALL SELECT 'destination_sources',count(*) FROM knowledge.destination_sources UNION ALL SELECT 'knowledge_sources',count(*) FROM knowledge.knowledge_sources UNION ALL SELECT 'documents',count(*) FROM knowledge.knowledge_documents UNION ALL SELECT 'chunks',count(*) FROM knowledge.knowledge_chunks UNION ALL SELECT 'published_view',count(*) FROM knowledge.production_destinations ORDER BY 1"
 counts_before=$(db_rows "$counts_sql")
+source_count=$(awk -F'|' '$1=="published_view"{print $2}' <<<"$counts_before")
+[[ "$source_count" =~ ^[0-9]+$ ]] || { echo 'Could not determine the restored publication-view count.' >&2; exit 3; }
 echo 'RESTORE_PASS backup_sha256_and_hmac=verified decrypt=pass pg_restore_list=pass isolated_pg17=pass'
 echo "RESTORED_LEDGER rows=$ledger_before tip=0017_provisional_itineraries"
 echo 'RESTORED_COUNTS_BEGIN'; printf '%s\n' "$counts_before"; echo 'RESTORED_COUNTS_END'
@@ -142,4 +152,40 @@ policy_count=$(db_scalar "SELECT count(*) FROM pg_policies WHERE schemaname IN (
 [[ "$policy_count" =~ ^[0-9]+$ && "$policy_count" -gt 0 ]] || { echo 'Expected migration-defined review/tenant policies were not found.' >&2; exit 3; }
 echo 'REHEARSAL_PASS migrations=20 critical_counts_unchanged=true candidates=0 partner_rows=0 publications=0'
 echo "SECURITY_REHEARSAL_PASS protected_rls_tables=$rls_count policies=$policy_count app_role_bypass=false"
+
+# Build and start the exact candidate API against the restored database in the
+# same network namespace. Networking is disabled by the PG target, so this
+# check cannot reach SMS, Chat, RAG, or any external service.
+release_sha=$(cat "$release_dir/RELEASE_COMMIT")
+suffix="${release_sha:0:8}-$$"
+api_image="rahgard-restore-api:$suffix"
+api_name="rahgard-restore-app-$suffix"
+[[ "$suffix" =~ ^[0-9a-f]{8}-[0-9]+$ && "$api_name" =~ ^rahgard-restore-app-[0-9a-f]{8}-[0-9]+$ ]] || { echo 'Invalid isolated API test identity.' >&2; exit 2; }
+[[ -z "$(docker ps -aq --filter "name=^/${api_name}$")" ]] || { echo 'Isolated API test container name already exists.' >&2; exit 2; }
+[[ -z "$(docker image ls -q --filter "reference=$api_image")" ]] || { echo 'Isolated API test image tag already exists.' >&2; exit 2; }
+docker build --pull=false -f "$release_dir/deploy/staging/Dockerfile.api" -t "$api_image" "$release_dir" >/dev/null
+api_image_created=true
+docker run -d --rm --name "$api_name" --network "container:$isolated" \
+  --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m --tmpfs /run/secrets:rw,noexec,nosuid,size=1m \
+  --security-opt no-new-privileges:true --cap-drop ALL \
+  --label rahgard.restore.target=isolated --label rahgard.environment=restore-test \
+  -e APP_ENV=test -e APP_HOST=127.0.0.1 -e APP_PORT=8000 -e LOG_LEVEL=WARNING \
+  -e DATABASE_HOST=127.0.0.1 -e DATABASE_PORT=5432 -e DATABASE_NAME="$database" \
+  -e DATABASE_USER=ai_tourism_app -e DATABASE_CONNECT_TIMEOUT_SECONDS=3 \
+  -e AUTH_ENABLED=false -e AUTH_LOCAL_OWNER_ENABLED=false -e STAGING_AUTH_ENABLED=false \
+  -e AUTH_SMS_ADAPTER=disabled -e INTERNAL_CHAT_ENABLED=false -e TOURISM_RAG_ENABLED=false \
+  -e AI_PROVIDER_ADMIN_ENABLED=false --entrypoint /bin/sh "$api_image" \
+  -c 'while :; do sleep 3600; done' >/dev/null
+docker exec -u 0 "$api_name" python -c 'from pathlib import Path; import secrets; p=Path("/run/secrets"); names=("app_db_password","auth_otp_hmac_secret","auth_csrf_secret","auth_rate_limit_secret"); [(p.joinpath(n).write_text(secrets.token_urlsafe(48)),p.joinpath(n).chmod(0o444)) for n in names]'
+docker exec -d -w /app/backend "$api_name" /usr/local/bin/rahgard-entrypoint \
+  uvicorn app.main:app --host 127.0.0.1 --port 8000 >/dev/null
+api_ready=false
+for _ in $(seq 1 40); do
+  if docker exec "$api_name" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health/ready",timeout=2)' >/dev/null 2>&1; then api_ready=true; break; fi
+  sleep 1
+done
+[[ "$api_ready" == true ]] || { echo 'Candidate API did not become ready against the restored, migrated database.' >&2; exit 3; }
+api_catalogue=$(docker exec "$api_name" python -c 'import json,urllib.request; r=urllib.request.urlopen("http://127.0.0.1:8000/api/v1/catalog/destinations",timeout=5); print(json.load(r)["count"])')
+[[ "$api_catalogue" == "$source_count" ]] || { echo 'Candidate API catalogue count differs from the restored database view.' >&2; exit 3; }
+echo "API_REHEARSAL_PASS release=$release_sha health=ready catalogue_count=$api_catalogue auth=disabled chat=disabled rag=disabled sms=disabled network=none"
 echo 'The isolated container and plaintext dump will now be removed; the encrypted backup remains retained.'

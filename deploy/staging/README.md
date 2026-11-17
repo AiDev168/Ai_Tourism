@@ -151,13 +151,19 @@ prefix from the 0017 baseline through 0021, and checks that schema objects agree
 with the recorded ledger. It does not modify the database or services.
 
 `rehearse-018-021.sh <encrypted-backup-basename>` authenticates and decrypts a
-routine database backup only into a mode-0700 `/run` temporary directory. It
+routine database backup only into a mode-0700 `/dev/shm` tmpfs directory. It
 restores into a uniquely named PostgreSQL 17 container using `--network none`,
 no published ports or persistent mounts, and a `tmpfs` PGDATA. It verifies the
 restored 0017 ledger and privacy-safe critical row counts, applies migrations
 0018–0021 only to that disposable copy, and confirms all retained counts are
 unchanged, the new candidate/partner/publication data stays empty, and the
-container is removed. No production service is stopped or restarted.
+container is removed. It then builds the exact candidate API image and starts
+it in the restored database container's network namespace, which remains
+network-isolated. Test-only secrets live in that API container's tmpfs; auth,
+Chat, RAG, and SMS are disabled. Readiness and the ordinary catalogue response
+are checked against the restored, migrated data, then only the uniquely labeled
+test API container/image is removed. No production service is stopped or
+restarted.
 
 `upgrade-018-021.sh` is the future, separately approved live-schema command.
 It refuses to run without the expected current SHA, the explicitly approved
