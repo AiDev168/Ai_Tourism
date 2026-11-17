@@ -57,7 +57,7 @@ trap cleanup EXIT
 openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -pass file:"$root/secrets/backup_encryption_passphrase" -in "$backup" -out "$plain"
 test -s "$plain"
 docker image inspect "$image" >/dev/null
-docker exec "$(docker compose --env-file "$root/.env" -f "$root/current/deploy/staging/compose.yaml" ps -q db)" pg_restore --list < "$plain" >/dev/null
+docker exec -i "$(docker compose --env-file "$root/.env" -f "$root/current/deploy/staging/compose.yaml" ps -q db)" pg_restore --list < "$plain" >/dev/null
 
 # --network none, no -p/--publish, and one explicitly sized tmpfs are enforced
 # again by inspection before the restore. This container has no persistent or
