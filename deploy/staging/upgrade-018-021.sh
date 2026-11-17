@@ -59,7 +59,8 @@ with open(archive, 'rb') as stream:
     for block in iter(lambda: stream.read(1024 * 1024), b''): mac.update(block)
 if not hmac.compare_digest(mac.hexdigest(), m.group(1)): raise SystemExit('Backup HMAC verification failed.')
 PY
-plain_dir=$(mktemp -d /run/rahgard-migration.XXXXXX)
+[[ "$(findmnt -T /dev/shm -n -o FSTYPE)" == tmpfs && -w /dev/shm ]] || { echo 'A writable tmpfs is required for the decrypted backup check.' >&2; exit 2; }
+plain_dir=$(mktemp -d /dev/shm/rahgard-migration.XXXXXX)
 chmod 0700 "$plain_dir"
 trap 'rm -rf -- "$plain_dir"' EXIT
 plain="$plain_dir/backup.dump"

@@ -38,7 +38,8 @@ with open(archive, 'rb') as stream:
 if not hmac.compare_digest(mac.hexdigest(), m.group(1)): raise SystemExit('Backup HMAC verification failed.')
 PY
 
-plain_dir=$(mktemp -d /run/rahgard-restore-rehearsal.XXXXXX)
+[[ "$(findmnt -T /dev/shm -n -o FSTYPE)" == tmpfs && -w /dev/shm ]] || { echo 'A writable tmpfs is required for the decrypted rehearsal dump.' >&2; exit 2; }
+plain_dir=$(mktemp -d /dev/shm/rahgard-restore-rehearsal.XXXXXX)
 chmod 0700 "$plain_dir"
 plain="$plain_dir/database.dump"
 isolated="rahgard-restore-$(date -u +%Y%m%d%H%M%S)-$$"
