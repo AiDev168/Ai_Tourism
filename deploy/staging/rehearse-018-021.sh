@@ -92,6 +92,7 @@ SQL
 docker exec -i "$isolated" pg_restore -U "$owner" -d "$database" --exit-on-error --single-transaction < "$plain"
 
 db_scalar() { docker exec "$isolated" psql -X -q -A -t -h 127.0.0.1 -p 5432 -U "$owner" -d "$database" -v ON_ERROR_STOP=1 -c "BEGIN READ ONLY; $1; COMMIT;" | tr -d '\r' | tail -n 1; }
+db_rows() { docker exec "$isolated" psql -X -q -A -t -h 127.0.0.1 -p 5432 -U "$owner" -d "$database" -v ON_ERROR_STOP=1 -c "BEGIN READ ONLY; $1; COMMIT;" | tr -d '\r' | sed '/^[[:space:]]*$/d'; }
 marker=$(db_scalar "SELECT marker_value FROM public.rahgard_private_pilot_marker")
 [[ "$marker" =~ ^[a-fA-F0-9]{48}$ ]] || { echo 'Restored marker is invalid.' >&2; exit 3; }
 [[ "$(db_scalar "SELECT current_database()")" == "$database" && "$(db_scalar "SELECT current_setting('server_version_num')::integer BETWEEN 170000 AND 179999")" == t ]] || { echo 'Restored database identity/version mismatch.' >&2; exit 3; }
@@ -100,7 +101,7 @@ ledger_before=$(db_scalar "SELECT count(*) FROM system.schema_migrations")
 pre_hash=$(sha256sum "$release_dir/engineering/pilot/sql/017_provisional_itineraries.sql" | cut -d' ' -f1)
 [[ "$(db_scalar "SELECT sha256 FROM system.schema_migrations WHERE migration_id='0017_provisional_itineraries'")" == "$pre_hash" ]] || { echo 'Restored 0017 checksum differs from target source.' >&2; exit 3; }
 counts_sql="SELECT 'users',count(*) FROM identity.users UNION ALL SELECT 'conversations',count(*) FROM conversation.conversations UNION ALL SELECT 'messages',count(*) FROM conversation.messages UNION ALL SELECT 'trips',count(*) FROM travel.trips UNION ALL SELECT 'itineraries',count(*) FROM travel.itineraries UNION ALL SELECT 'itinerary_stops',count(*) FROM travel.itinerary_stops UNION ALL SELECT 'provisional_itineraries',count(*) FROM travel.provisional_itineraries UNION ALL SELECT 'destinations',count(*) FROM knowledge.destinations UNION ALL SELECT 'destination_sources',count(*) FROM knowledge.destination_sources UNION ALL SELECT 'knowledge_sources',count(*) FROM knowledge.knowledge_sources UNION ALL SELECT 'documents',count(*) FROM knowledge.knowledge_documents UNION ALL SELECT 'chunks',count(*) FROM knowledge.knowledge_chunks UNION ALL SELECT 'published_view',count(*) FROM knowledge.production_destinations ORDER BY 1"
-counts_before=$(db_scalar "$counts_sql")
+counts_before=$(db_rows "$counts_sql")
 echo 'RESTORE_PASS backup_sha256_and_hmac=verified decrypt=pass pg_restore_list=pass isolated_pg17=pass'
 echo "RESTORED_LEDGER rows=$ledger_before tip=0017_provisional_itineraries"
 echo 'RESTORED_COUNTS_BEGIN'; printf '%s\n' "$counts_before"; echo 'RESTORED_COUNTS_END'
@@ -120,14 +121,14 @@ for i in "${!files[@]}"; do
   {
     printf '%s\n%s\n%s\n' "$marker" "$prior_hash" "$hash"
     cat "$path"
-  } | docker exec -i "$isolated" sh -lc "IFS= read -r marker; IFS= read -r prior; IFS= read -r migration; export RAHGARD_PILOT_DATABASE_MARKER=\"\$marker\" $prior_env=\"\$prior\" $current_env=\"\$migration\"; exec psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 5432 -U '$owner' -d '$database'"
+  } | docker exec -i "$isolated" sh -lc "IFS= read -r marker; IFS= read -r prior; IFS= read -r migration; export RAHGARD_PILOT_DATABASE_MARKER=\"\$marker\" $prior_env=\"\$prior\" $current_env=\"\$migration\"; exec psql -X -q -A -t -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 5432 -U '$owner' -d '$database'"
   [[ "$(db_scalar "SELECT sha256 FROM system.schema_migrations WHERE migration_id='${ids[$i]}'")" == "$hash" ]] || { echo "Migration checksum failed: ${ids[$i]}" >&2; exit 3; }
   printf 'MIGRATION_REHEARSAL_PASS %s sha256=%s\n' "${ids[$i]}" "$hash"
   prior_hash="$hash"
 done
 
 [[ "$(db_scalar "SELECT count(*) FROM system.schema_migrations")" == 20 ]] || { echo 'Final migration count is not 20.' >&2; exit 3; }
-counts_after=$(db_scalar "$counts_sql")
+counts_after=$(db_rows "$counts_sql")
 [[ "$counts_after" == "$counts_before" ]] || { echo 'Critical restored row counts changed during migration rehearsal.' >&2; exit 3; }
 [[ "$(db_scalar "SELECT count(*) FROM knowledge.destination_candidates")" == 0 \
   && "$(db_scalar "SELECT count(*) FROM partner.organizations")" == 0 \
