@@ -134,5 +134,12 @@ counts_after=$(db_rows "$counts_sql")
   && "$(db_scalar "SELECT count(*) FROM partner.organizations")" == 0 \
   && "$(db_scalar "SELECT count(*) FROM knowledge.catalogue_publication_events")" == 0 \
   && "$(db_scalar "SELECT count(*) FROM knowledge.production_destinations")" == "$(awk -F'|' '$1=="published_view"{print $2}' <<<"$counts_before")" ]] || { echo 'Unexpected candidate, partner or publication data appeared in the rehearsal.' >&2; exit 3; }
+protected_tables="'operations.dataset_import_files','knowledge.destination_candidates','knowledge.destination_candidate_reviews','knowledge.source_candidates','knowledge.source_candidate_reviews','knowledge.destination_localizations','knowledge.destination_aliases','knowledge.destination_access_points','knowledge.destination_visit_duration_evidence','knowledge.destination_operational_assertions','partner.organizations','partner.memberships','partner.invitations','partner.verification_cases','partner.branches','partner.services','partner.service_localizations','partner.service_destinations','partner.schedules','partner.offers','partner.prices','partner.availability_snapshots','partner.review_events','knowledge.source_verification_reviews','knowledge.source_registry_registration_events','knowledge.destination_candidate_evidence','knowledge.catalogue_publication_events'"
+rls_count=$(db_scalar "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind='r' AND c.relrowsecurity AND n.nspname||'.'||c.relname IN ($protected_tables)")
+[[ "$rls_count" == 27 ]] || { echo "Expected RLS on 27 new review/partner tables, got $rls_count." >&2; exit 3; }
+[[ "$(db_scalar "SELECT NOT rolsuper AND NOT rolbypassrls FROM pg_roles WHERE rolname='ai_tourism_app'")" == t ]] || { echo 'Application role has superuser or RLS-bypass privilege in the rehearsal.' >&2; exit 3; }
+policy_count=$(db_scalar "SELECT count(*) FROM pg_policies WHERE schemaname IN ('geo','knowledge','operations','partner')")
+[[ "$policy_count" =~ ^[0-9]+$ && "$policy_count" -gt 0 ]] || { echo 'Expected migration-defined review/tenant policies were not found.' >&2; exit 3; }
 echo 'REHEARSAL_PASS migrations=20 critical_counts_unchanged=true candidates=0 partner_rows=0 publications=0'
+echo "SECURITY_REHEARSAL_PASS protected_rls_tables=$rls_count policies=$policy_count app_role_bypass=false"
 echo 'The isolated container and plaintext dump will now be removed; the encrypted backup remains retained.'
