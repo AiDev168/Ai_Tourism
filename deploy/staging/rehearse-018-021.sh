@@ -46,9 +46,14 @@ isolated="rahgard-restore-$(date -u +%Y%m%d%H%M%S)-$$"
 image=rahgard-postgres:17-postgis36-vector087
 api_image=""
 api_name=""
+api_helper=""
 api_image_created=false
 cleanup() {
   status=$?
+  if [[ -n "$api_helper" ]] && docker inspect "$api_helper" >/dev/null 2>&1; then
+    labels=$(docker inspect -f '{{index .Config.Labels "rahgard.restore.target"}}|{{index .Config.Labels "rahgard.environment"}}' "$api_helper" 2>/dev/null || true)
+    if [[ "$labels" == 'isolated|restore-test' ]]; then docker rm -f "$api_helper" >/dev/null 2>&1 || true; fi
+  fi
   if [[ -n "$api_name" ]] && docker inspect "$api_name" >/dev/null 2>&1; then
     labels=$(docker inspect -f '{{index .Config.Labels "rahgard.restore.target"}}|{{index .Config.Labels "rahgard.environment"}}' "$api_name" 2>/dev/null || true)
     if [[ "$labels" == 'isolated|restore-test' ]]; then docker rm -f "$api_name" >/dev/null 2>&1 || true; fi
@@ -155,7 +160,7 @@ echo "SECURITY_REHEARSAL_PASS protected_rls_tables=$rls_count policies=$policy_c
 
 # Start the candidate API source against the restored database in the same
 # network namespace. The VPS's authorized Docker Hub request returned 403 for
-# the pinned Python base image, so build the source layer from the running API
+# the pinned Python base image, so create a source layer from the running API
 # image instead. The dependency lock and entrypoint must match; this exercises
 # the exact candidate backend source without an external image pull.
 release_sha=$(cat "$release_dir/RELEASE_COMMIT")
@@ -170,20 +175,24 @@ live_api_id=$("${compose[@]}" ps -q api)
 [[ -n "$live_api_id" && "$(docker inspect -f '{{.State.Running}}' "$live_api_id")" == true ]] || { echo 'Cannot identify the running managed API runtime.' >&2; exit 3; }
 runtime_image_id=$(docker inspect -f '{{.Image}}' "$live_api_id")
 [[ "$runtime_image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Managed API runtime image identity is invalid.' >&2; exit 3; }
+runtime_image=$(docker inspect -f '{{.Config.Image}}' "$live_api_id")
+[[ "$runtime_image" =~ ^rahgard-api:[0-9a-f]{40}$ ]] || { echo 'Managed API runtime tag is not the expected immutable release tag.' >&2; exit 3; }
+docker image inspect "$runtime_image" >/dev/null
 cmp -s "$root/current/uv.lock" "$release_dir/uv.lock" || { echo 'Candidate dependency lock differs from the active runtime; refusing a derived API rehearsal.' >&2; exit 3; }
 cmp -s "$root/current/deploy/staging/api-entrypoint.sh" "$release_dir/deploy/staging/api-entrypoint.sh" || { echo 'Candidate entrypoint differs from the active runtime; refusing a derived API rehearsal.' >&2; exit 3; }
-cat > "$plain_dir/Dockerfile.api.restore" <<EOF
-FROM $runtime_image_id
-COPY --chown=rahgard:rahgard backend/app /app/backend/app
-COPY --chown=rahgard:rahgard backend/scripts /app/backend/scripts
-COPY --chown=rahgard:rahgard scripts/rahgard_archive_preflight.py /app/backend/scripts/rahgard_archive_preflight.py
-USER rahgard
-WORKDIR /app/backend
-ENTRYPOINT ["/usr/local/bin/rahgard-entrypoint"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-EOF
-docker build --network=none --pull=false -f "$plain_dir/Dockerfile.api.restore" -t "$api_image" "$release_dir" >/dev/null
+api_helper="rahgard-restore-layer-${release_sha:0:8}-$$"
+[[ "$api_helper" =~ ^rahgard-restore-layer-[0-9a-f]{8}-[0-9]+$ ]] || { echo 'Invalid candidate-layer helper identity.' >&2; exit 2; }
+[[ -z "$(docker ps -aq --filter "name=^/${api_helper}$")" ]] || { echo 'Candidate-layer helper container already exists.' >&2; exit 2; }
+docker create --name "$api_helper" --network none \
+  --label rahgard.restore.target=isolated --label rahgard.environment=restore-test \
+  "$runtime_image" /bin/sh -c 'while :; do sleep 3600; done' >/dev/null
+docker cp "$release_dir/backend/app/." "$api_helper:/app/backend/app/"
+docker cp "$release_dir/backend/scripts/." "$api_helper:/app/backend/scripts/"
+docker cp "$release_dir/scripts/rahgard_archive_preflight.py" "$api_helper:/app/backend/scripts/rahgard_archive_preflight.py"
+docker commit "$api_helper" "$api_image" >/dev/null
 api_image_created=true
+docker rm "$api_helper" >/dev/null
+api_helper=""
 docker run -d --rm --name "$api_name" --network "container:$isolated" \
   --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m --tmpfs /run/secrets:rw,noexec,nosuid,size=1m \
   --security-opt no-new-privileges:true --cap-drop ALL \
@@ -206,5 +215,5 @@ done
 [[ "$api_ready" == true ]] || { echo 'Candidate API did not become ready against the restored, migrated database.' >&2; exit 3; }
 api_catalogue=$(docker exec "$api_name" python -c 'import json,urllib.request; r=urllib.request.urlopen("http://127.0.0.1:8000/api/v1/catalog/destinations",timeout=5); print(json.load(r)["count"])')
 [[ "$api_catalogue" == "$source_count" ]] || { echo 'Candidate API catalogue count differs from the restored database view.' >&2; exit 3; }
-echo "API_REHEARSAL_PASS release=$release_sha runtime_image_id=$runtime_image_id lock_match=true health=ready catalogue_count=$api_catalogue auth=disabled chat=disabled rag=disabled sms=disabled network=none"
+echo "API_REHEARSAL_PASS release=$release_sha runtime_image_id=$runtime_image_id runtime_tag=$runtime_image lock_match=true health=ready catalogue_count=$api_catalogue auth=disabled chat=disabled rag=disabled sms=disabled network=none"
 echo 'The isolated container and plaintext dump will now be removed; the encrypted backup remains retained.'
