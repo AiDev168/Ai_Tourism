@@ -1,12 +1,6 @@
 name: Build Rahgard d5 Linux amd64 release images
 
 on:
-  # One narrowly scoped build trigger for workflow-tooling updates on main.
-  # Fresh push runs validate explicit public CA bundles and fail-closed private-file scanning.
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/rahgard-release-image-build.yml'
   workflow_dispatch:
     inputs:
       source_sha:
