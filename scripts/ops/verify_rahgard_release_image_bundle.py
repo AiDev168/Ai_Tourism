@@ -83,7 +83,13 @@ def assert_safe_member(name: str, *, is_directory: bool = False) -> None:
     # application private keys. Allow only PEMs in the standard CA trust store.
     public_ca_pem = (
         basename.endswith(".pem") and (
-            lower_parts in (["etc", "ssl", "cert.pem"], ["usr", "lib", "ssl", "cert.pem"])
+            lower_parts in (
+                ["etc", "ssl", "cert.pem"],
+                ["etc", "ssl1.1", "cert.pem"],
+                ["usr", "lib", "ssl", "cert.pem"],
+                ["app", ".venv", "lib", "python3.13", "site-packages", "certifi", "cacert.pem"],
+                ["usr", "local", "lib", "python3.13", "site-packages", "pip", "_vendor", "certifi", "cacert.pem"],
+            )
             or (len(lower_parts) == 4 and lower_parts[:3] in (["etc", "ssl", "certs"], ["usr", "lib", "ssl"]))
         )
     )
