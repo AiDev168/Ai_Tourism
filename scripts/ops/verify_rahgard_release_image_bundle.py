@@ -83,8 +83,8 @@ def assert_safe_member(name: str, *, is_directory: bool = False) -> None:
     # application private keys. Allow only PEMs in the standard CA trust store.
     public_ca_pem = (
         basename.endswith(".pem") and (
-            lower_parts == ["etc", "ssl", "cert.pem"]  # Alpine trust bundle symlink.
-            or (len(lower_parts) == 4 and lower_parts[:3] == ["etc", "ssl", "certs"])
+            lower_parts in (["etc", "ssl", "cert.pem"], ["usr", "lib", "ssl", "cert.pem"])
+            or (len(lower_parts) == 4 and lower_parts[:3] in (["etc", "ssl", "certs"], ["usr", "lib", "ssl"]))
         )
     )
     if basename == ".env" or basename.startswith(".env.") or (
@@ -106,6 +106,7 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
             raise ValueError("Docker archive manifest cannot be read")
         records = json.load(manifest_file)
         observed_tags: set[str] = set()
+        violations: set[str] = set()
         for record in records:
             observed_tags.update(record.get("RepoTags") or [])
             config_name = record["Config"]
@@ -138,7 +139,16 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
                     raise ValueError(f"Image layer is missing: {layer_name}")
                 with tarfile.open(fileobj=layer, mode="r|*") as layer_archive:
                     for member in layer_archive:
-                        assert_safe_member(member.name, is_directory=member.isdir())
+                        try:
+                            assert_safe_member(member.name, is_directory=member.isdir())
+                        except ValueError as error:
+                            violations.add(str(error))
+        if violations:
+            ordered = sorted(violations)
+            raise ValueError(
+                f"Docker archive blocked {len(ordered)} suspicious paths; "
+                + "; ".join(ordered[:35])
+            )
         if observed_tags != expected_tags:
             raise ValueError(f"Docker archive tags differ: expected {sorted(expected_tags)}, got {sorted(observed_tags)}")
 
