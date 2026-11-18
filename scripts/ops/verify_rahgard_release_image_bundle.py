@@ -66,15 +66,36 @@ def image_record(reference: str) -> dict[str, Any]:
     return record
 
 
-def assert_safe_member(name: str) -> None:
+def assert_safe_member(name: str, *, is_directory: bool = False) -> None:
     path = PurePosixPath(name)
     if path.is_absolute() or ".." in path.parts:
         raise ValueError(f"Unsafe image archive member: {name}")
     lower_parts = [part.lower() for part in path.parts]
+    # Official base OS layers can contain the empty standard /var/backups
+    # directory. Permit only this exact directory entry, never files below
+    # it or any application/secret backup paths.
+    if is_directory and lower_parts == ["var", "backups"]:
+        return
     basename = lower_parts[-1] if lower_parts else ""
     if any(part == "secrets" or part == "backups" for part in lower_parts):
         raise ValueError(f"Sensitive path is present in image archive: {name}")
-    if basename == ".env" or basename.startswith(".env.") or basename.endswith(FORBIDDEN_SUFFIXES):
+    # Public CA certificates installed by an official OS base image are not
+    # application private keys. Allow only PEMs in the standard CA trust store.
+    public_ca_pem = (
+        basename.endswith(".pem") and (
+            lower_parts in (
+                ["etc", "ssl", "cert.pem"],
+                ["etc", "ssl1.1", "cert.pem"],
+                ["usr", "lib", "ssl", "cert.pem"],
+                ["app", ".venv", "lib", "python3.13", "site-packages", "certifi", "cacert.pem"],
+                ["usr", "local", "lib", "python3.13", "site-packages", "pip", "_vendor", "certifi", "cacert.pem"],
+            )
+            or (len(lower_parts) == 4 and lower_parts[:3] in (["etc", "ssl", "certs"], ["usr", "lib", "ssl"]))
+        )
+    )
+    if basename == ".env" or basename.startswith(".env.") or (
+        basename.endswith(FORBIDDEN_SUFFIXES) and not public_ca_pem
+    ):
         raise ValueError(f"Sensitive file is present in image archive: {name}")
     if "/run/secrets/" in f"/{'/'.join(lower_parts)}/":
         raise ValueError(f"Runtime-secret path is present in image archive: {name}")
@@ -91,6 +112,7 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
             raise ValueError("Docker archive manifest cannot be read")
         records = json.load(manifest_file)
         observed_tags: set[str] = set()
+        violations: set[str] = set()
         for record in records:
             observed_tags.update(record.get("RepoTags") or [])
             config_name = record["Config"]
@@ -99,7 +121,14 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
                 raise ValueError("Image config is missing from Docker archive")
             config_bytes = config_member.read()
             config_id = "sha256:" + hashlib.sha256(config_bytes).hexdigest()
-            if Path(config_name).name != config_id.removeprefix("sha256:") + ".json":
+            digest = config_id.removeprefix("sha256:")
+            # Docker archive manifests use either legacy <sha256>.json names or
+            # content-addressed blobs/sha256/<sha256> names. Validate both the
+            # exact path shape and the actual config bytes; never trust a name
+            # without hashing the underlying content.
+            legacy_config_path = digest + ".json"
+            content_addressed_path = f"blobs/sha256/{digest}"
+            if config_name not in (legacy_config_path, content_addressed_path):
                 raise ValueError("Image config digest does not match its Docker archive filename")
             config = json.loads(config_bytes)
             env = ((config.get("config") or {}).get("Env") or [])
@@ -116,7 +145,16 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
                     raise ValueError(f"Image layer is missing: {layer_name}")
                 with tarfile.open(fileobj=layer, mode="r|*") as layer_archive:
                     for member in layer_archive:
-                        assert_safe_member(member.name)
+                        try:
+                            assert_safe_member(member.name, is_directory=member.isdir())
+                        except ValueError as error:
+                            violations.add(str(error))
+        if violations:
+            ordered = sorted(violations)
+            raise ValueError(
+                f"Docker archive blocked {len(ordered)} suspicious paths; "
+                + "; ".join(ordered[:35])
+            )
         if observed_tags != expected_tags:
             raise ValueError(f"Docker archive tags differ: expected {sorted(expected_tags)}, got {sorted(observed_tags)}")
 
