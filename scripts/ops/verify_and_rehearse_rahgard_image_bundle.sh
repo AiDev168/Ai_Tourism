@@ -39,14 +39,28 @@ python3 "$verifier" verify \
   --image-archive "$image_archive" \
   --manifest "$manifest"
 
-for tag in "rahgard-api:$release_sha" "rahgard-web:$release_sha"; do
+expected_tags=("rahgard-api:$release_sha" "rahgard-web:$release_sha")
+existing_count=0
+for tag in "${expected_tags[@]}"; do
   if docker image inspect "$tag" >/dev/null 2>&1; then
-    echo "Refusing to replace an image tag that already exists: $tag" >&2
-    exit 2
+    existing_count=$((existing_count + 1))
   fi
 done
-
-docker load --input "$image_archive"
+case "$existing_count" in
+  0)
+    docker load --input "$image_archive"
+    ;;
+  2)
+    # A previous guarded attempt may have loaded the images before an engine
+    # compatibility check stopped the rehearsal. Never overwrite them; accept
+    # only if the corrected verifier proves they are exactly this bundle.
+    echo 'Found both prepared tags already loaded; verifying without replacing them.'
+    ;;
+  *)
+    echo 'Only one prepared image tag exists; refusing a partial/replacement load.' >&2
+    exit 2
+    ;;
+esac
 python3 "$verifier" verify \
   --source-sha "$release_sha" \
   --image-archive "$image_archive" \

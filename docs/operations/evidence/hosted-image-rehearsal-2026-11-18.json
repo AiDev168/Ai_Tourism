@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "run_date_utc": "2026-11-18",
+  "decision": "READY FOR OWNER PRODUCTION APPROVAL",
+  "production_rollout_authorized": false,
+  "production_rollout_performed": false,
+  "source": {
+    "repository": "AiDev168/Ai_Tourism",
+    "release_sha": "d5d9847373b20087a8a866449c6550d306f45b63",
+    "github_actions_run_id": "44228225648",
+    "artifact_id": "14393716721",
+    "artifact_name": "rahgard-release-images-d5d9847-linux-amd64"
+  },
+  "artifact": {
+    "zip_bytes": 292687935,
+    "zip_sha256": "956d3dd173e97f3d9f28cc530d18e434132d08eafac83e10db820ad8b10dd614",
+    "image_archive_bytes": 292683264,
+    "image_archive_sha256": "7977f63c5594f0586730984440ba8fbac181b9c0716094ba59f5e9171a44603b",
+    "manifest_sha256": "d98566dd9526e0ed01d8e1218a6f9a07567a562f22c21418c1215ec9c72cbce7",
+    "platform": "linux/amd64",
+    "secret_scan": "pass",
+    "archive_layer_diff_id_verification": "pass",
+    "api_config_image_id": "sha256:5973182df93899773a67ccc2f6429942560403a1120a2ba9ebe9c430dc6accdd",
+    "web_config_image_id": "sha256:23632593de6b81908b247f2b76fe70b719d12c1db4e3081d1f89022cab921bea",
+    "api_loaded_docker29_image_id": "sha256:88d060821b6d2bce3be3426b8012c76a411d68682939d9ca22f2947d861a2674",
+    "web_loaded_docker29_image_id": "sha256:14d97ad5616921231912ef4dd9e698140202d4017a1d07c3e9228163dfbc14d1",
+    "loaded_identity_check": "config digest and rootfs DiffIDs re-exported from exact loaded tags match verified bundle; complete config, platform, labels, entrypoint, command, rootfs inspection, and each layer-tar DiffID hash also pass"
+  },
+  "base_repo_digests": {
+    "python": "python@sha256:b685a4fa58bb19d1814d78a1ec0f0208f351452724f78b20212c984d6e124a34",
+    "node": "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944",
+    "nginx": "nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10"
+  },
+  "backup": {
+    "name": "rahgard-20261117T075028Z-Tbh9jK.dump.enc",
+    "sha256": "a464e750fd7902d82eed56b94d420449d70c9d12a4f31161907b6e1b79ef7e2f",
+    "sidecar_checksum": "pass",
+    "hmac": "pass",
+    "decryption": "pass",
+    "pg_restore_list": "pass",
+    "restore_target": "disposable PostgreSQL 17.11, tmpfs PGDATA, internal-only Docker bridge"
+  },
+  "migration_rehearsal": {
+    "before_count": 16,
+    "before_tip": "0017_provisional_itineraries",
+    "after_count": 20,
+    "after_tip": "0021_postgis_security_definer_publication",
+    "migrations_0018_to_0021": "pass",
+    "critical_counts_unchanged": true,
+    "protected_rls_tables": 27,
+    "policies": 67,
+    "application_role_superuser_or_bypassrls": false,
+    "new_candidates_partner_rows_publications": 0
+  },
+  "isolated_runtime": {
+    "hosted_api_ready": true,
+    "catalogue_count": 0,
+    "hosted_web_shell": true,
+    "hashed_assets_served": 2,
+    "web_reverse_proxy_catalogue_count": 0,
+    "previous_api_rollback_compatible": true,
+    "all_rehearsal_containers_removed": true,
+    "all_rehearsal_networks_removed": true,
+    "plaintext_restore_removed": true
+  },
+  "focused_validation": {
+    "unit_test_command": "uv run pytest -p no:cacheprovider tests/unit/test_rahgard_release_image_bundle.py -q",
+    "unit_test_passed": 9,
+    "unit_test_failed": 0,
+    "ruff": "pass",
+    "git_diff_check": "pass",
+    "bash_syntax_check_on_vps": "pass",
+    "local_and_vps_bundle_verification": "pass",
+    "isolated_wrapper_exit_code": 0
+  },
+  "rehearsal_tool_sha256": {
+    "verify_rahgard_release_image_bundle.py": "ef82f65008987b0397937755b46c32557c592e5c866a789cf96e3b764f40c932",
+    "verify_and_rehearse_rahgard_image_bundle.sh": "2418b50668b48c9c288dcf1fcd974ee62becef412eb42be4d825a478e42afc57",
+    "rehearse-018-021.sh": "2edd886c392aa06382d27f813f1028581118f8b8eaf19f41a3e366fdfcaee9b1"
+  },
+  "npm_audit": {
+    "source": "frontend/package.json and package-lock.json at release SHA",
+    "high_package_entries": 5,
+    "critical_package_entries": 0,
+    "packages": {
+      "fdir": "6.5.0",
+      "picomatch": "4.0.7",
+      "tinyglobby": "0.2.17",
+      "vite": "6.4.5",
+      "vitest": "4.1.12"
+    },
+    "underlying_advisory": "GHSA-fc5q-39xc-vjpf",
+    "all_findings_are_dev_dependencies": true,
+    "production_omit_dev_findings": 0,
+    "production_omit_dev_exit_code": 0,
+    "web_runtime_contains_node_modules": false,
+    "assessment": "build/test dependency risk; not in the final Nginx static-asset runtime image; separately review a patched lockfile"
+  },
+  "live_vps_after_rehearsal": {
+    "release_sha": "5e2664fb51e18f52549aa37a8b5793e12ace09b2",
+    "release_marker_unchanged": true,
+    "database_volume": "rahgard_staging_pgdata",
+    "containers_healthy": ["api", "web", "db"],
+    "image_ids": {
+      "api": "sha256:8017e31258b13adc0dcbd9e96e3bb8e40dc874394c4dfb75e391513fc449a3b3",
+      "web": "sha256:b22b15ebd05cdd2bb2e595cdde22b16a2976953cc8e284ede0fe6d729cc4bb3a",
+      "db": "sha256:a30c041297b2306a8bb79cc6ed737f16bfca3078a3024324bb8115b302e83535"
+    },
+    "migration_count": 16,
+    "aggregate_rows": {
+      "users": 12,
+      "sessions": 19,
+      "conversations": 6,
+      "messages": 33,
+      "trips": 6,
+      "itineraries": 1,
+      "itinerary_stops": 6,
+      "provisional_itineraries": 2,
+      "destinations": 66,
+      "destination_sources": 116,
+      "knowledge_sources": 58,
+      "documents": 52,
+      "chunks": 81,
+      "published_view": 0
+    },
+    "live_services_or_database_modified": false
+  }
+}

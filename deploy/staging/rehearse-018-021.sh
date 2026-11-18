@@ -59,12 +59,14 @@ plain_dir=$(mktemp -d /dev/shm/rahgard-restore-rehearsal.XXXXXX)
 chmod 0700 "$plain_dir"
 plain="$plain_dir/database.dump"
 isolated="rahgard-restore-$(date -u +%Y%m%d%H%M%S)-$$"
+isolated_network="rahgard-restore-net-${release_sha:0:8}-$$"
 image=rahgard-postgres:17-postgis36-vector087
 api_image=""
 api_name=""
 web_name=""
 api_helper=""
 api_image_created=false
+network_created=false
 cleanup() {
   status=$?
   if [[ -n "$web_name" ]] && docker inspect "$web_name" >/dev/null 2>&1; then
@@ -84,6 +86,10 @@ cleanup() {
     labels=$(docker inspect -f '{{index .Config.Labels "rahgard.restore.target"}}|{{index .Config.Labels "rahgard.environment"}}' "$isolated" 2>/dev/null || true)
     if [[ "$labels" == 'isolated|restore-test' ]]; then docker rm -f "$isolated" >/dev/null 2>&1 || true; fi
   fi
+  if [[ "$network_created" == true ]] && docker network inspect "$isolated_network" >/dev/null 2>&1; then
+    network_labels=$(docker network inspect -f '{{index .Labels "rahgard.restore.target"}}|{{index .Labels "rahgard.environment"}}' "$isolated_network" 2>/dev/null || true)
+    if [[ "$network_labels" == 'isolated|restore-test' ]]; then docker network rm "$isolated_network" >/dev/null 2>&1 || true; fi
+  fi
   rm -rf -- "$plain_dir"
   exit "$status"
 }
@@ -93,10 +99,24 @@ test -s "$plain"
 docker image inspect "$image" >/dev/null
 docker exec -i "$(docker compose --env-file "$root/.env" -f "$root/current/deploy/staging/compose.yaml" ps -q db)" pg_restore --list < "$plain" >/dev/null
 
-# --network none, no -p/--publish, and one explicitly sized tmpfs are enforced
-# again by inspection before the restore. This container has no persistent or
-# bind mounts and is removed by the guarded trap.
-docker run -d --rm --name "$isolated" --network none --memory 2g --cpus 2 \
+# An internal bridge is required so the exact API and Web images can be
+# exercised together. It has no external route; PGDATA remains tmpfs-only,
+# with no published ports or bind/persistent mounts.
+[[ "$isolated_network" =~ ^rahgard-restore-net-[0-9a-f]{8}-[0-9]+$ ]] || { echo 'Invalid isolated Docker network identity.' >&2; exit 2; }
+[[ -z "$(docker network ls -q --filter "name=^${isolated_network}$")" ]] || { echo 'Isolated Docker network name already exists.' >&2; exit 2; }
+docker network create --internal --driver bridge \
+  --label rahgard.restore.target=isolated --label rahgard.environment=restore-test \
+  "$isolated_network" >/dev/null
+network_created=true
+docker network inspect "$isolated_network" | python3 -c '
+import json,sys
+x=json.load(sys.stdin)
+if len(x)!=1: raise SystemExit("expected one isolated internal network")
+n=x[0]; labels=n.get("Labels") or {}
+if not n.get("Internal") or n.get("Driver")!="bridge": raise SystemExit("isolated network is not an internal bridge")
+if labels.get("rahgard.restore.target")!="isolated" or labels.get("rahgard.environment")!="restore-test": raise SystemExit("isolated network labels missing")
+'
+docker run -d --rm --name "$isolated" --network "$isolated_network" --network-alias db --memory 2g --cpus 2 \
   --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=1g \
   --label rahgard.restore.target=isolated --label rahgard.environment=restore-test \
   -e POSTGRES_USER="$owner" -e POSTGRES_DB="$database" -e POSTGRES_HOST_AUTH_METHOD=trust "$image" >/dev/null
@@ -106,11 +126,11 @@ x=json.load(sys.stdin)
 if len(x)!=1: raise SystemExit("expected one isolated restore container")
 c=x[0]; cfg=c.get("Config",{}); labels=cfg.get("Labels") or {}; host=c.get("HostConfig") or {}
 if labels.get("rahgard.restore.target")!="isolated" or labels.get("rahgard.environment")!="restore-test": raise SystemExit("isolation labels missing")
-if (host.get("NetworkMode")!="none" or host.get("PortBindings") or host.get("Binds") or host.get("Mounts")): raise SystemExit("network, published port, bind mount or persistent mount detected")
+if (host.get("NetworkMode")!=sys.argv[1] or host.get("PortBindings") or host.get("Binds") or host.get("Mounts")): raise SystemExit("network, published port, bind mount or persistent mount detected")
 tmpfs=host.get("Tmpfs") or {}
 if "/var/lib/postgresql/data" not in tmpfs: raise SystemExit("PGDATA is not tmpfs")
 if any(m.get("Type")!="tmpfs" for m in c.get("Mounts") or []): raise SystemExit("non-tmpfs mount detected")
-'
+' "$isolated_network"
 ready=false
 for _ in $(seq 1 60); do
   if docker exec "$isolated" psql -X -q -A -t -h 127.0.0.1 -p 5432 -U "$owner" -d "$database" -c 'SELECT 1' >/dev/null 2>&1; then ready=true; break; fi
@@ -227,12 +247,12 @@ else
   docker rm "$api_helper" >/dev/null
   api_helper=""
 fi
-docker run -d --rm --name "$api_name" --network "container:$isolated" \
+docker run -d --rm --name "$api_name" --network "$isolated_network" --network-alias api \
   --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m --tmpfs /run/secrets:rw,noexec,nosuid,size=1m \
   --security-opt no-new-privileges:true --cap-drop ALL \
   --label rahgard.restore.target=isolated --label rahgard.environment=restore-test \
-  -e APP_ENV=test -e APP_HOST=127.0.0.1 -e APP_PORT=8000 -e LOG_LEVEL=WARNING \
-  -e DATABASE_HOST=127.0.0.1 -e DATABASE_PORT=5432 -e DATABASE_NAME="$database" \
+  -e APP_ENV=test -e APP_HOST=0.0.0.0 -e APP_PORT=8000 -e LOG_LEVEL=WARNING \
+  -e DATABASE_HOST=db -e DATABASE_PORT=5432 -e DATABASE_NAME="$database" \
   -e DATABASE_USER=ai_tourism_app -e DATABASE_CONNECT_TIMEOUT_SECONDS=3 \
   -e AUTH_ENABLED=false -e AUTH_LOCAL_OWNER_ENABLED=false -e STAGING_AUTH_ENABLED=false \
   -e AUTH_SMS_ADAPTER=disabled -e INTERNAL_CHAT_ENABLED=false -e TOURISM_RAG_ENABLED=false \
@@ -240,7 +260,7 @@ docker run -d --rm --name "$api_name" --network "container:$isolated" \
   -c 'while :; do sleep 3600; done' >/dev/null
 docker exec -u 0 "$api_name" python -c 'from pathlib import Path; import secrets; p=Path("/run/secrets"); names=("app_db_password","auth_otp_hmac_secret","auth_csrf_secret","auth_rate_limit_secret"); [(p.joinpath(n).write_text(secrets.token_urlsafe(48)),p.joinpath(n).chmod(0o444)) for n in names]'
 docker exec -d -w /app/backend "$api_name" /usr/local/bin/rahgard-entrypoint \
-  uvicorn app.main:app --host 127.0.0.1 --port 8000 >/dev/null
+  uvicorn app.main:app --host 0.0.0.0 --port 8000 >/dev/null
 api_ready=false
 for _ in $(seq 1 40); do
   if docker exec "$api_name" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health/ready",timeout=2)' >/dev/null 2>&1; then api_ready=true; break; fi
@@ -249,7 +269,7 @@ done
 [[ "$api_ready" == true ]] || { echo 'Candidate API did not become ready against the restored, migrated database.' >&2; exit 3; }
 api_catalogue=$(docker exec "$api_name" python -c 'import json,urllib.request; r=urllib.request.urlopen("http://127.0.0.1:8000/api/v1/catalog/destinations",timeout=5); print(json.load(r)["count"])')
 [[ "$api_catalogue" == "$source_count" ]] || { echo 'Candidate API catalogue count differs from the restored database view.' >&2; exit 3; }
-echo "API_REHEARSAL_PASS release=$release_sha tested_image_id=$loaded_api_id tested_image_tag=$api_image rollback_image_id=$runtime_image_id rollback_tag=$runtime_image health=ready catalogue_count=$api_catalogue auth=disabled chat=disabled rag=disabled sms=disabled network=none"
+echo "API_REHEARSAL_PASS release=$release_sha tested_image_id=$loaded_api_id tested_image_tag=$api_image rollback_image_id=$runtime_image_id rollback_tag=$runtime_image health=ready catalogue_count=$api_catalogue auth=disabled chat=disabled rag=disabled sms=disabled network=internal-only"
 if [[ -n "$candidate_web_image" ]]; then
   web_name="rahgard-restore-web-$suffix"
   [[ "$web_name" =~ ^rahgard-restore-web-[0-9a-f]{8}-[0-9]+$ ]] || { echo 'Invalid isolated Web test identity.' >&2; exit 2; }
@@ -260,29 +280,35 @@ if [[ -n "$candidate_web_image" ]]; then
   [[ "$loaded_web_id" =~ ^sha256:[0-9a-f]{64}$ && "$loaded_web_os" == linux && "$loaded_web_arch" == amd64 && "$loaded_web_revision" == "$release_sha" ]] || {
     echo 'Loaded Web image identity, platform or source label is invalid.' >&2; exit 3;
   }
-  docker run -d --rm --name "$web_name" --network "container:$api_name" --add-host api:127.0.0.1 \
+  docker run -d --name "$web_name" --network "$isolated_network" --network-alias web \
     --read-only --tmpfs /var/cache/nginx:rw,noexec,nosuid,size=32m --tmpfs /var/run:rw,noexec,nosuid,size=4m \
-    --security-opt no-new-privileges:true --cap-drop ALL \
+    --security-opt no-new-privileges:true --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID \
     --label rahgard.restore.target=isolated --label rahgard.environment=restore-test \
     --entrypoint nginx "$candidate_web_image" -g 'daemon off;' >/dev/null
   web_ready=false
   for _ in $(seq 1 30); do
-    if docker exec "$api_name" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/",timeout=2)' >/dev/null 2>&1; then web_ready=true; break; fi
+    if docker exec "$api_name" python -c 'import urllib.request; urllib.request.urlopen("http://web:8080/",timeout=2)' >/dev/null 2>&1; then web_ready=true; break; fi
     sleep 1
   done
-  [[ "$web_ready" == true ]] || { echo 'Built Web image did not serve the static application in the isolated namespace.' >&2; exit 3; }
-  web_html=$(docker exec "$api_name" python -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:8080/",timeout=4).read().decode())')
+  if [[ "$web_ready" != true ]]; then
+    echo 'Built Web image did not serve the static application in the isolated namespace.' >&2
+    docker inspect --format 'WEB_DIAGNOSTIC state={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}} networks={{json .NetworkSettings.Networks}}' "$web_name" >&2 || true
+    docker logs --tail 200 "$web_name" 2>&1 | sed -n '1,100p' >&2 || true
+    docker exec "$api_name" python -c 'import socket,urllib.request; print("WEB_DNS",socket.getaddrinfo("web",8080)); print("WEB_HTTP",urllib.request.urlopen("http://web:8080/",timeout=3).status)' 2>&1 | sed -n '1,20p' >&2 || true
+    exit 3
+  fi
+  web_html=$(docker exec "$api_name" python -c 'import urllib.request; print(urllib.request.urlopen("http://web:8080/",timeout=4).read().decode())')
   [[ "$web_html" == *'<div id="root">'* ]] || { echo 'Built Web image did not return the application shell.' >&2; exit 3; }
   web_assets=$(grep -oE '/assets/[^" ]+\.(js|css)' <<<"$web_html" | sort -u)
   [[ -n "$web_assets" ]] || { echo 'Built Web image did not reference hashed application assets.' >&2; exit 3; }
   while IFS= read -r asset; do
     [[ -n "$asset" ]] || continue
-    docker exec "$api_name" python -c 'import sys,urllib.request; urllib.request.urlopen("http://127.0.0.1:8080"+sys.argv[1],timeout=4).read(1)' "$asset" >/dev/null
+    docker exec "$api_name" python -c 'import sys,urllib.request; urllib.request.urlopen("http://web:8080"+sys.argv[1],timeout=4).read(1)' "$asset" >/dev/null
   done <<<"$web_assets"
-  proxy_body=$(docker exec "$api_name" python -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:8080/api/v1/catalog/destinations",timeout=8).read().decode())')
+  proxy_body=$(docker exec "$api_name" python -c 'import urllib.request; print(urllib.request.urlopen("http://web:8080/api/v1/catalog/destinations",timeout=8).read().decode())')
   proxy_count=$(printf '%s' "$proxy_body" | docker exec -i "$api_name" python -c 'import json,sys; print(json.load(sys.stdin)["count"])')
   [[ "$proxy_count" == "$source_count" ]] || { echo 'Built Web reverse proxy catalogue count differs from the restored database.' >&2; exit 3; }
-  echo "WEB_REHEARSAL_PASS image_id=$loaded_web_id static_shell=ready hashed_assets=$(wc -l <<<"$web_assets" | tr -d ' ') reverse_proxy_catalogue_count=$proxy_count network=none"
+  echo "WEB_REHEARSAL_PASS image_id=$loaded_web_id static_shell=ready hashed_assets=$(wc -l <<<"$web_assets" | tr -d ' ') reverse_proxy_catalogue_count=$proxy_count network=internal-only"
   docker rm -f "$web_name" >/dev/null
   web_name=""
 fi
@@ -291,12 +317,12 @@ api_name=""
 api_name="rahgard-rollback-app-${release_sha:0:8}-$$"
 [[ "$api_name" =~ ^rahgard-rollback-app-[0-9a-f]{8}-[0-9]+$ ]] || { echo 'Invalid rollback API test identity.' >&2; exit 2; }
 [[ -z "$(docker ps -aq --filter "name=^/${api_name}$")" ]] || { echo 'Rollback API test container name already exists.' >&2; exit 2; }
-docker run -d --rm --name "$api_name" --network "container:$isolated" \
+docker run -d --rm --name "$api_name" --network "$isolated_network" --network-alias api \
   --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m --tmpfs /run/secrets:rw,noexec,nosuid,size=1m \
   --security-opt no-new-privileges:true --cap-drop ALL \
   --label rahgard.restore.target=isolated --label rahgard.environment=restore-test \
-  -e APP_ENV=test -e APP_HOST=127.0.0.1 -e APP_PORT=8000 -e LOG_LEVEL=WARNING \
-  -e DATABASE_HOST=127.0.0.1 -e DATABASE_PORT=5432 -e DATABASE_NAME="$database" \
+  -e APP_ENV=test -e APP_HOST=0.0.0.0 -e APP_PORT=8000 -e LOG_LEVEL=WARNING \
+  -e DATABASE_HOST=db -e DATABASE_PORT=5432 -e DATABASE_NAME="$database" \
   -e DATABASE_USER=ai_tourism_app -e DATABASE_CONNECT_TIMEOUT_SECONDS=3 \
   -e AUTH_ENABLED=false -e AUTH_LOCAL_OWNER_ENABLED=false -e STAGING_AUTH_ENABLED=false \
   -e AUTH_SMS_ADAPTER=disabled -e INTERNAL_CHAT_ENABLED=false -e TOURISM_RAG_ENABLED=false \
@@ -304,7 +330,7 @@ docker run -d --rm --name "$api_name" --network "container:$isolated" \
   -c 'while :; do sleep 3600; done' >/dev/null
 docker exec -u 0 "$api_name" python -c 'from pathlib import Path; import secrets; p=Path("/run/secrets"); names=("app_db_password","auth_otp_hmac_secret","auth_csrf_secret","auth_rate_limit_secret"); [(p.joinpath(n).write_text(secrets.token_urlsafe(48)),p.joinpath(n).chmod(0o444)) for n in names]'
 docker exec -d -w /app/backend "$api_name" /usr/local/bin/rahgard-entrypoint \
-  uvicorn app.main:app --host 127.0.0.1 --port 8000 >/dev/null
+  uvicorn app.main:app --host 0.0.0.0 --port 8000 >/dev/null
 rollback_ready=false
 for _ in $(seq 1 40); do
   if docker exec "$api_name" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health/ready",timeout=2)' >/dev/null 2>&1; then rollback_ready=true; break; fi
@@ -313,5 +339,5 @@ done
 [[ "$rollback_ready" == true ]] || { echo 'Previously active API did not become ready against the migrated restored database.' >&2; exit 3; }
 rollback_catalogue=$(docker exec "$api_name" python -c 'import json,urllib.request; r=urllib.request.urlopen("http://127.0.0.1:8000/api/v1/catalog/destinations",timeout=5); print(json.load(r)["count"])')
 [[ "$rollback_catalogue" == "$source_count" ]] || { echo 'Previously active API catalogue count differs from the restored database view.' >&2; exit 3; }
-echo "ROLLBACK_API_REHEARSAL_PASS previous_release=$current_sha health=ready catalogue_count=$rollback_catalogue data_rollback=not_performed network=none"
+echo "ROLLBACK_API_REHEARSAL_PASS previous_release=$current_sha health=ready catalogue_count=$rollback_catalogue data_rollback=not_performed network=internal-only"
 echo 'The isolated container and plaintext dump will now be removed; the encrypted backup remains retained.'

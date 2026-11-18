@@ -8,6 +8,7 @@ import json
 import re
 import subprocess
 import tarfile
+import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -38,7 +39,7 @@ def docker_inspect(reference: str) -> dict[str, Any]:
     return parsed[0]
 
 
-def image_record(reference: str) -> dict[str, Any]:
+def image_record(reference: str, *, include_runtime_details: bool = False) -> dict[str, Any]:
     image = docker_inspect(reference)
     config = image.get("Config") or {}
     env = config.get("Env") or []
@@ -61,6 +62,9 @@ def image_record(reference: str) -> dict[str, Any]:
         "command": config.get("Cmd"),
         "labels": labels,
     }
+    if include_runtime_details:
+        record["config"] = config
+        record["rootfs_layers"] = ((image.get("RootFS") or {}).get("Layers") or [])
     if not isinstance(record["image_id"], str) or not record["image_id"].startswith("sha256:"):
         raise ValueError(f"Image ID missing for {reference}")
     return record
@@ -101,7 +105,7 @@ def assert_safe_member(name: str, *, is_directory: bool = False) -> None:
         raise ValueError(f"Runtime-secret path is present in image archive: {name}")
 
 
-def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
+def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> dict[str, dict[str, Any]]:
     with tarfile.open(path, "r:") as archive:
         try:
             manifest_member = archive.getmember("manifest.json")
@@ -113,8 +117,10 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
         records = json.load(manifest_file)
         observed_tags: set[str] = set()
         violations: set[str] = set()
+        images: dict[str, dict[str, Any]] = {}
         for record in records:
-            observed_tags.update(record.get("RepoTags") or [])
+            record_tags = record.get("RepoTags") or []
+            observed_tags.update(record_tags)
             config_name = record["Config"]
             config_member = archive.extractfile(config_name)
             if config_member is None:
@@ -131,6 +137,14 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
             if config_name not in (legacy_config_path, content_addressed_path):
                 raise ValueError("Image config digest does not match its Docker archive filename")
             config = json.loads(config_bytes)
+            diff_ids = (config.get("rootfs") or {}).get("diff_ids") or []
+            if not isinstance(diff_ids, list) or any(
+                not isinstance(value, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value)
+                for value in diff_ids
+            ):
+                raise ValueError("Image rootfs diff IDs are missing or malformed")
+            if len(record.get("Layers") or []) != len(diff_ids):
+                raise ValueError("Image layer list does not match rootfs diff IDs")
             env = ((config.get("config") or {}).get("Env") or [])
             secret_env = [value.split("=", 1)[0] for value in env if SECRET_ENV.search(value.split("=", 1)[0])]
             if secret_env:
@@ -139,7 +153,15 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
             for tag in record.get("RepoTags") or []:
                 if tag.startswith(IMAGE_PREFIXES) and labels.get("org.opencontainers.image.revision") != EXPECTED_SHA:
                     raise ValueError(f"Image archive revision label mismatch for {tag}")
-            for layer_name in record.get("Layers") or []:
+            for index, layer_name in enumerate(record.get("Layers") or []):
+                layer_digest = hashlib.sha256()
+                layer_content = archive.extractfile(layer_name)
+                if layer_content is None:
+                    raise ValueError(f"Image layer is missing: {layer_name}")
+                for block in iter(lambda: layer_content.read(1024 * 1024), b""):
+                    layer_digest.update(block)
+                if diff_ids[index] != "sha256:" + layer_digest.hexdigest():
+                    raise ValueError("Image layer content digest does not match its rootfs DiffID")
                 layer = archive.extractfile(layer_name)
                 if layer is None:
                     raise ValueError(f"Image layer is missing: {layer_name}")
@@ -149,6 +171,15 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
                             assert_safe_member(member.name, is_directory=member.isdir())
                         except ValueError as error:
                             violations.add(str(error))
+            image_data = {
+                "config_digest": config_id,
+                "diff_ids": diff_ids,
+                "config": config.get("config") or {},
+            }
+            for tag in record_tags:
+                if tag in images:
+                    raise ValueError(f"Duplicate image tag in Docker archive: {tag}")
+                images[tag] = image_data
         if violations:
             ordered = sorted(violations)
             raise ValueError(
@@ -157,6 +188,40 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
             )
         if observed_tags != expected_tags:
             raise ValueError(f"Docker archive tags differ: expected {sorted(expected_tags)}, got {sorted(observed_tags)}")
+        return images
+
+
+def validate_loaded_image_identity(
+    expected: dict[str, Any],
+    actual: dict[str, Any],
+    archived: dict[str, Any],
+    roundtrip: dict[str, Any] | None = None,
+) -> str:
+    """Validate a loaded image across Docker's legacy and containerd stores.
+
+    Docker Engine 29's containerd image store can expose its manifest digest as
+    ``docker image inspect .Id`` while a Docker-save archive identifies the
+    exact image configuration by its SHA-256. When those IDs differ, accept the
+    load only if exporting the *loaded tag* recreates the same config digest
+    and rootfs diff IDs as the independently verified handoff archive.
+    """
+    for key in ("os", "architecture", "entrypoint", "command", "labels"):
+        if actual.get(key) != expected.get(key):
+            raise ValueError(f"Loaded image {key} differs from the handoff manifest")
+    if actual.get("config") is not None and archived.get("config") is not None:
+        if actual["config"] != archived["config"]:
+            raise ValueError("Loaded image configuration differs from the handoff archive")
+    if actual.get("rootfs_layers") != archived.get("diff_ids"):
+        raise ValueError("Loaded image rootfs differs from the handoff archive")
+    if actual.get("image_id") == expected.get("image_id"):
+        return "config-id"
+    if not roundtrip:
+        raise ValueError("Loaded image ID uses a different representation and no export check was provided")
+    if roundtrip.get("config_digest") != expected.get("image_id"):
+        raise ValueError("Loaded image export config digest differs from the handoff manifest")
+    if roundtrip.get("diff_ids") != archived.get("diff_ids"):
+        raise ValueError("Loaded image export rootfs differs from the handoff archive")
+    return "containerd-export-equivalent"
 
 
 def create_manifest(args: argparse.Namespace) -> None:
@@ -245,17 +310,46 @@ def verify(args: argparse.Namespace) -> None:
     expected_tags = {f"rahgard-api:{EXPECTED_SHA}", f"rahgard-web:{EXPECTED_SHA}"}
     if tags != expected_tags:
         raise ValueError("Manifest does not identify the exact API/Web release tags")
-    inspect_docker_save_archive(image_archive, expected_tags)
+    archived_images = inspect_docker_save_archive(image_archive, expected_tags)
     if args.check_loaded_images:
+        loaded_records: dict[str, dict[str, Any]] = {}
+        mismatched_ids: list[str] = []
         for name, record in manifest["application_images"].items():
-            actual = image_record(record["tag"])
-            for key in ("image_id", "os", "architecture", "entrypoint", "command"):
-                if actual[key] != record[key]:
-                    raise ValueError(f"Loaded {name} image {key} differs from the signed handoff manifest")
-            if actual["os"] != "linux" or actual["architecture"] != "amd64":
-                raise ValueError(f"Loaded {name} image is not linux/amd64")
-            if actual["labels"].get("org.opencontainers.image.revision") != EXPECTED_SHA:
-                raise ValueError(f"Loaded {name} image source revision label mismatch")
+            actual = image_record(record["tag"], include_runtime_details=True)
+            tag = record["tag"]
+            archived = archived_images.get(tag)
+            if archived is None:
+                raise ValueError(f"Loaded {name} image tag is absent from the verified handoff archive")
+            if actual["image_id"] != record["image_id"]:
+                mismatched_ids.append(tag)
+            loaded_records[tag] = actual
+
+        roundtrip_images: dict[str, dict[str, Any]] = {}
+        if mismatched_ids:
+            # Docker 29's containerd store may surface a manifest/index digest
+            # as .Id. Export the loaded tags and verify the config bytes and
+            # uncompressed layer identities against the original artifact.
+            with tempfile.TemporaryDirectory(prefix="rahgard-loaded-image-verify-") as temp_dir:
+                roundtrip_path = Path(temp_dir) / "loaded-images.tar"
+                subprocess.run(
+                    ["docker", "image", "save", "--output", str(roundtrip_path), *sorted(expected_tags)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                roundtrip_images = inspect_docker_save_archive(roundtrip_path, expected_tags)
+
+        identity_methods = []
+        for name, record in manifest["application_images"].items():
+            tag = record["tag"]
+            identity_methods.append(
+                f"{name}:{validate_loaded_image_identity(record, loaded_records[tag], archived_images[tag], roundtrip_images.get(tag))}"
+            )
+        loaded_ids = ",".join(
+            f"{name}={loaded_records[record['tag']]['image_id']}"
+            for name, record in sorted(manifest["application_images"].items())
+        )
+        print(f"LOADED_IMAGE_IDENTITY_PASS ids={loaded_ids} verification={','.join(identity_methods)}")
     print(f"IMAGE_BUNDLE_PASS source={EXPECTED_SHA} platform=linux/amd64 api_web_tags=exact checksums=pass secret_scan=pass")
 
 
