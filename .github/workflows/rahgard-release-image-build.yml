@@ -2,7 +2,7 @@ name: Build Rahgard d5 Linux amd64 release images
 
 on:
   # One narrowly scoped build trigger for workflow-tooling updates on main.
-  # Fresh push runs use the latest checked-in layer scanner; retry after OS directory false-positive fix.
+  # Fresh push runs use the latest checked-in scanner, including public CA certificate handling.
   push:
     branches: [main]
     paths:
