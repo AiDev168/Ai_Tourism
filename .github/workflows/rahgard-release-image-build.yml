@@ -2,7 +2,7 @@ name: Build Rahgard d5 Linux amd64 release images
 
 on:
   # One narrowly scoped build trigger for workflow-tooling updates on main.
-  # Fresh push runs use the latest scanner including Debian and Alpine CA trust paths.
+  # Fresh push runs exercise the aggregated fail-closed Docker layer audit.
   push:
     branches: [main]
     paths:
