@@ -66,11 +66,16 @@ def image_record(reference: str) -> dict[str, Any]:
     return record
 
 
-def assert_safe_member(name: str) -> None:
+def assert_safe_member(name: str, *, is_directory: bool = False) -> None:
     path = PurePosixPath(name)
     if path.is_absolute() or ".." in path.parts:
         raise ValueError(f"Unsafe image archive member: {name}")
     lower_parts = [part.lower() for part in path.parts]
+    # Official base OS layers can contain the empty standard /var/backups
+    # directory. Permit only this exact directory entry, never files below
+    # it or any application/secret backup paths.
+    if is_directory and lower_parts == ["var", "backups"]:
+        return
     basename = lower_parts[-1] if lower_parts else ""
     if any(part == "secrets" or part == "backups" for part in lower_parts):
         raise ValueError(f"Sensitive path is present in image archive: {name}")
@@ -123,7 +128,7 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> None:
                     raise ValueError(f"Image layer is missing: {layer_name}")
                 with tarfile.open(fileobj=layer, mode="r|*") as layer_archive:
                     for member in layer_archive:
-                        assert_safe_member(member.name)
+                        assert_safe_member(member.name, is_directory=member.isdir())
         if observed_tags != expected_tags:
             raise ValueError(f"Docker archive tags differ: expected {sorted(expected_tags)}, got {sorted(observed_tags)}")
 
