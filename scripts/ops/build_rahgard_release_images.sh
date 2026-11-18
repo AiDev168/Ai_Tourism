@@ -2,7 +2,6 @@
 set -Eeuo pipefail
 umask 077
 
-readonly expected_sha='d5d9847373b20087a8a866449c6550d306f45b63'
 readonly api_base='python:3.13.9-slim-bookworm'
 readonly node_base='node:22.14-alpine'
 readonly nginx_base='nginx:1.27-alpine'
@@ -10,8 +9,8 @@ source_dir="${1:-}"
 output_dir="${2:-}"
 release_sha="${RELEASE_SHA:-}"
 
-[[ "$release_sha" == "$expected_sha" ]] || {
-  echo 'RELEASE_SHA must equal the reviewed immutable release SHA.' >&2
+[[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || {
+  echo 'RELEASE_SHA must be a full immutable 40-character commit SHA.' >&2
   exit 2
 }
 [[ -d "$source_dir/.git" && -d "$source_dir/deploy/staging" ]] || {

@@ -1,4 +1,4 @@
-name: Build Rahgard d5 Linux amd64 release images
+name: Build Rahgard Linux amd64 release images
 
 on:
   workflow_dispatch:
@@ -7,7 +7,6 @@ on:
         description: Immutable prepared source commit to build
         required: true
         type: string
-        default: d5d9847373b20087a8a866449c6550d306f45b63
 
 permissions:
   contents: read
@@ -36,6 +35,14 @@ jobs:
           path: source
           persist-credentials: false
 
+      - name: Validate immutable source SHA
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.source_sha }}
+        run: |
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git -C source rev-parse HEAD)" == "$RELEASE_SHA" ]]
+
       - name: Build, inspect, and package pinned images
         shell: bash
         env:
@@ -48,7 +55,7 @@ jobs:
       - name: Upload checksummed Docker images and manifest
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: rahgard-release-images-d5d9847-linux-amd64
+          name: rahgard-release-images-${{ inputs.source_sha }}-linux-amd64
           path: ${{ runner.temp }}/rahgard-release-artifact/
           if-no-files-found: error
           compression-level: 0

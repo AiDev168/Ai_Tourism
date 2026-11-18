@@ -16,6 +16,7 @@ SPEC = importlib.util.spec_from_file_location("rahgard_image_bundle", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+TEST_SHA = "a" * 40
 
 
 def _add_file(archive: tarfile.TarFile, name: str, data: bytes) -> None:
@@ -26,13 +27,13 @@ def _add_file(archive: tarfile.TarFile, name: str, data: bytes) -> None:
 
 def _make_docker_archive(path: Path, *, secret_file: bool = False, layer_digest_mismatch: bool = False) -> set[str]:
     tags = {
-        f"rahgard-api:{MODULE.EXPECTED_SHA}",
-        f"rahgard-web:{MODULE.EXPECTED_SHA}",
+        f"rahgard-api:{TEST_SHA}",
+        f"rahgard-web:{TEST_SHA}",
     }
     records = []
     with tarfile.open(path, "w") as outer:
         for index, tag in enumerate(sorted(tags)):
-            labels = {"org.opencontainers.image.revision": MODULE.EXPECTED_SHA}
+            labels = {"org.opencontainers.image.revision": TEST_SHA}
             layer_buffer = io.BytesIO()
             with tarfile.open(fileobj=layer_buffer, mode="w") as layer:
                 _add_file(layer, ".env" if secret_file and index == 0 else "app/marker.txt", b"test-only")
@@ -52,7 +53,7 @@ def _make_docker_archive(path: Path, *, secret_file: bool = False, layer_digest_
 
 
 def _fixture_bundle(tmp_path: Path, *, secret_file: bool = False) -> tuple[Path, Path, Path, set[str]]:
-    source = tmp_path / f"rahgard-source-{MODULE.EXPECTED_SHA}.tar"
+    source = tmp_path / f"rahgard-source-{TEST_SHA}.tar"
     source.write_bytes(b"immutable git archive test fixture")
     images = tmp_path / "rahgard-images-linux-amd64.tar"
     tags = _make_docker_archive(images, secret_file=secret_file)
@@ -60,7 +61,7 @@ def _fixture_bundle(tmp_path: Path, *, secret_file: bool = False) -> tuple[Path,
     manifest = {
         "schema_version": 1,
         "source": {
-            "git_sha": MODULE.EXPECTED_SHA,
+            "git_sha": TEST_SHA,
             "git_archive": source.name,
             "git_archive_sha256": MODULE.sha256_file(source),
         },
@@ -77,7 +78,7 @@ def _fixture_bundle(tmp_path: Path, *, secret_file: bool = False) -> tuple[Path,
 
 def _verify_args(source: Path, images: Path, manifest: Path) -> Namespace:
     return Namespace(
-        source_sha=MODULE.EXPECTED_SHA,
+        source_sha=TEST_SHA,
         source_archive=str(source),
         image_archive=str(images),
         manifest=str(manifest),
@@ -91,6 +92,20 @@ def test_valid_exact_source_and_two_image_bundle_passes(tmp_path: Path) -> None:
     assert len(tags) == 2
 
 
+def test_bundle_verifier_accepts_arbitrary_full_immutable_source_sha(tmp_path: Path) -> None:
+    source, images, manifest, _ = _fixture_bundle(tmp_path)
+    assert json.loads(manifest.read_text(encoding="utf-8"))["source"]["git_sha"] == TEST_SHA
+    MODULE.verify(_verify_args(source, images, manifest))
+
+
+def test_bundle_verifier_rejects_non_full_source_sha(tmp_path: Path) -> None:
+    source, images, manifest, _ = _fixture_bundle(tmp_path)
+    args = _verify_args(source, images, manifest)
+    args.source_sha = TEST_SHA[:-1]
+    with pytest.raises(ValueError, match="full immutable"):
+        MODULE.verify(args)
+
+
 def test_image_archive_with_secret_file_is_rejected(tmp_path: Path) -> None:
     source, images, manifest, _ = _fixture_bundle(tmp_path, secret_file=True)
     with pytest.raises(ValueError, match="Sensitive file"):
@@ -98,7 +113,7 @@ def test_image_archive_with_secret_file_is_rejected(tmp_path: Path) -> None:
 
 
 def test_layer_content_must_match_configured_rootfs_diff_id(tmp_path: Path) -> None:
-    source = tmp_path / f"rahgard-source-{MODULE.EXPECTED_SHA}.tar"
+    source = tmp_path / f"rahgard-source-{TEST_SHA}.tar"
     source.write_bytes(b"immutable git archive test fixture")
     images = tmp_path / "rahgard-images-linux-amd64.tar"
     tags = _make_docker_archive(images, layer_digest_mismatch=True)
@@ -108,7 +123,7 @@ def test_layer_content_must_match_configured_rootfs_diff_id(tmp_path: Path) -> N
             {
                 "schema_version": 1,
                 "source": {
-                    "git_sha": MODULE.EXPECTED_SHA,
+                    "git_sha": TEST_SHA,
                     "git_archive": source.name,
                     "git_archive_sha256": MODULE.sha256_file(source),
                 },
@@ -156,7 +171,7 @@ def test_containerd_manifest_id_alias_requires_exact_exported_config_and_layers(
         "architecture": "amd64",
         "entrypoint": ["/entrypoint"],
         "command": ["app"],
-        "labels": {"org.opencontainers.image.revision": MODULE.EXPECTED_SHA},
+        "labels": {"org.opencontainers.image.revision": TEST_SHA},
     }
     actual = {
         **expected,
@@ -175,7 +190,7 @@ def test_containerd_manifest_id_alias_rejects_changed_exported_config() -> None:
         "architecture": "amd64",
         "entrypoint": ["/entrypoint"],
         "command": ["app"],
-        "labels": {"org.opencontainers.image.revision": MODULE.EXPECTED_SHA},
+        "labels": {"org.opencontainers.image.revision": TEST_SHA},
     }
     actual = {**expected, "image_id": "sha256:" + "c" * 64, "rootfs_layers": ["sha256:" + "b" * 64]}
     archived = {"config_digest": expected["image_id"], "diff_ids": ["sha256:" + "b" * 64]}
@@ -192,7 +207,7 @@ def test_loaded_image_must_retain_handoff_rootfs() -> None:
         "architecture": "amd64",
         "entrypoint": ["/entrypoint"],
         "command": ["app"],
-        "labels": {"org.opencontainers.image.revision": MODULE.EXPECTED_SHA},
+        "labels": {"org.opencontainers.image.revision": TEST_SHA},
     }
     actual = {**expected, "rootfs_layers": ["sha256:" + "c" * 64]}
     archived = {"config_digest": expected["image_id"], "diff_ids": ["sha256:" + "b" * 64]}

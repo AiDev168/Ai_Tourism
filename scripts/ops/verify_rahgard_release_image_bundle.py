@@ -12,7 +12,6 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-EXPECTED_SHA = "d5d9847373b20087a8a866449c6550d306f45b63"
 IMAGE_PREFIXES = ("rahgard-api:", "rahgard-web:")
 FORBIDDEN_SUFFIXES = (".pem", ".p12", ".pfx", ".dump", ".dump.enc", ".sqlite", ".sqlite3", ".db")
 SECRET_ENV = re.compile(r"(?:PASSWORD|SECRET|TOKEN|API_KEY)", re.IGNORECASE)
@@ -39,7 +38,12 @@ def docker_inspect(reference: str) -> dict[str, Any]:
     return parsed[0]
 
 
-def image_record(reference: str, *, include_runtime_details: bool = False) -> dict[str, Any]:
+def image_record(
+    reference: str,
+    *,
+    expected_source_sha: str | None = None,
+    include_runtime_details: bool = False,
+) -> dict[str, Any]:
     image = docker_inspect(reference)
     config = image.get("Config") or {}
     env = config.get("Env") or []
@@ -48,7 +52,11 @@ def image_record(reference: str, *, include_runtime_details: bool = False) -> di
         raise ValueError(f"Image has secret-named environment configuration: {secret_env}")
     labels = config.get("Labels") or {}
     if reference.startswith(IMAGE_PREFIXES):
-        if labels.get("org.opencontainers.image.revision") != EXPECTED_SHA:
+        if expected_source_sha is None or not re.fullmatch(r"[0-9a-f]{40}", expected_source_sha):
+            raise ValueError(f"Expected immutable source SHA is required for {reference}")
+        if reference.rsplit(":", 1)[-1] != expected_source_sha:
+            raise ValueError(f"Image tag does not identify expected source for {reference}")
+        if labels.get("org.opencontainers.image.revision") != expected_source_sha:
             raise ValueError(f"Image revision label mismatch for {reference}")
         if image.get("Os") != "linux" or image.get("Architecture") != "amd64":
             raise ValueError(f"Image is not linux/amd64: {reference}")
@@ -105,7 +113,11 @@ def assert_safe_member(name: str, *, is_directory: bool = False) -> None:
         raise ValueError(f"Runtime-secret path is present in image archive: {name}")
 
 
-def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> dict[str, dict[str, Any]]:
+def inspect_docker_save_archive(
+    path: Path,
+    expected_tags: set[str],
+    expected_source_sha: str,
+) -> dict[str, dict[str, Any]]:
     with tarfile.open(path, "r:") as archive:
         try:
             manifest_member = archive.getmember("manifest.json")
@@ -151,7 +163,7 @@ def inspect_docker_save_archive(path: Path, expected_tags: set[str]) -> dict[str
                 raise ValueError(f"Secret-named runtime variables found in image config: {secret_env}")
             labels = (config.get("config") or {}).get("Labels") or {}
             for tag in record.get("RepoTags") or []:
-                if tag.startswith(IMAGE_PREFIXES) and labels.get("org.opencontainers.image.revision") != EXPECTED_SHA:
+                if tag.startswith(IMAGE_PREFIXES) and labels.get("org.opencontainers.image.revision") != expected_source_sha:
                     raise ValueError(f"Image archive revision label mismatch for {tag}")
             for index, layer_name in enumerate(record.get("Layers") or []):
                 layer_digest = hashlib.sha256()
@@ -225,14 +237,17 @@ def validate_loaded_image_identity(
 
 
 def create_manifest(args: argparse.Namespace) -> None:
-    if args.source_sha != EXPECTED_SHA:
-        raise ValueError("Unexpected immutable source SHA")
+    if not re.fullmatch(r"[0-9a-f]{40}", args.source_sha):
+        raise ValueError("Source must be a full immutable 40-character commit SHA")
     image_tags = args.image_tags
-    expected_tags = {f"rahgard-api:{EXPECTED_SHA}", f"rahgard-web:{EXPECTED_SHA}"}
+    expected_tags = {f"rahgard-api:{args.source_sha}", f"rahgard-web:{args.source_sha}"}
     if set(image_tags) != expected_tags:
         raise ValueError("Exactly the prepared API and Web image tags are required")
-    inspect_docker_save_archive(Path(args.image_archive), expected_tags)
-    images = {"api" if tag.startswith("rahgard-api:") else "web": image_record(tag) for tag in image_tags}
+    inspect_docker_save_archive(Path(args.image_archive), expected_tags, args.source_sha)
+    images = {
+        "api" if tag.startswith("rahgard-api:") else "web": image_record(tag, expected_source_sha=args.source_sha)
+        for tag in image_tags
+    }
     bases = {
         "python": image_record(args.api_base),
         "node": image_record(args.node_base),
@@ -289,11 +304,11 @@ def create_manifest(args: argparse.Namespace) -> None:
 
 
 def verify(args: argparse.Namespace) -> None:
-    if args.source_sha != EXPECTED_SHA:
-        raise ValueError("Unexpected immutable source SHA")
+    if not re.fullmatch(r"[0-9a-f]{40}", args.source_sha):
+        raise ValueError("Source must be a full immutable 40-character commit SHA")
     manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
     image_archive = Path(args.image_archive)
-    if manifest.get("schema_version") != 1 or manifest.get("source", {}).get("git_sha") != EXPECTED_SHA:
+    if manifest.get("schema_version") != 1 or manifest.get("source", {}).get("git_sha") != args.source_sha:
         raise ValueError("Manifest schema or source SHA does not match the approved release")
     if manifest.get("platform") != "linux/amd64":
         raise ValueError("Manifest platform is not linux/amd64")
@@ -307,15 +322,17 @@ def verify(args: argparse.Namespace) -> None:
     if image_archive.name != manifest["docker_archive"]["file"] or sha256_file(image_archive) != manifest["docker_archive"]["sha256"]:
         raise ValueError(f"Image archive checksum or filename mismatch: {image_archive.name}")
     tags = {record["tag"] for record in manifest["application_images"].values()}
-    expected_tags = {f"rahgard-api:{EXPECTED_SHA}", f"rahgard-web:{EXPECTED_SHA}"}
+    expected_tags = {f"rahgard-api:{args.source_sha}", f"rahgard-web:{args.source_sha}"}
     if tags != expected_tags:
         raise ValueError("Manifest does not identify the exact API/Web release tags")
-    archived_images = inspect_docker_save_archive(image_archive, expected_tags)
+    archived_images = inspect_docker_save_archive(image_archive, expected_tags, args.source_sha)
     if args.check_loaded_images:
         loaded_records: dict[str, dict[str, Any]] = {}
         mismatched_ids: list[str] = []
         for name, record in manifest["application_images"].items():
-            actual = image_record(record["tag"], include_runtime_details=True)
+            actual = image_record(
+                record["tag"], expected_source_sha=args.source_sha, include_runtime_details=True
+            )
             tag = record["tag"]
             archived = archived_images.get(tag)
             if archived is None:
@@ -337,7 +354,7 @@ def verify(args: argparse.Namespace) -> None:
                     capture_output=True,
                     text=True,
                 )
-                roundtrip_images = inspect_docker_save_archive(roundtrip_path, expected_tags)
+                roundtrip_images = inspect_docker_save_archive(roundtrip_path, expected_tags, args.source_sha)
 
         identity_methods = []
         for name, record in manifest["application_images"].items():
@@ -350,7 +367,7 @@ def verify(args: argparse.Namespace) -> None:
             for name, record in sorted(manifest["application_images"].items())
         )
         print(f"LOADED_IMAGE_IDENTITY_PASS ids={loaded_ids} verification={','.join(identity_methods)}")
-    print(f"IMAGE_BUNDLE_PASS source={EXPECTED_SHA} platform=linux/amd64 api_web_tags=exact checksums=pass secret_scan=pass")
+    print(f"IMAGE_BUNDLE_PASS source={args.source_sha} platform=linux/amd64 api_web_tags=exact checksums=pass secret_scan=pass")
 
 
 def main() -> None:

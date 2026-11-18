@@ -11,8 +11,15 @@ COPY deploy/staging/nginx-security-headers.conf /etc/nginx/rahgard-security-head
 COPY --from=build /src/dist /usr/share/nginx/html
 # The release archive is created with umask 077. Ensure the public PWA files
 # are readable by the unprivileged Nginx worker regardless of source modes.
-RUN find /usr/share/nginx/html -type d -exec chmod 0755 {} + \
- && find /usr/share/nginx/html -type f -exec chmod 0644 {} + \
- && test -r /usr/share/nginx/html/manifest.webmanifest \
- && test -r /usr/share/nginx/html/sw.js
+# Compare content hashes across chmod so this packaging fix cannot silently
+# rewrite or omit the built shell, service worker, manifest, or hashed assets.
+RUN set -eu; \
+    find /usr/share/nginx/html -type f -exec sha256sum {} \; | sort > /tmp/rahgard-static-before.sha256; \
+    find /usr/share/nginx/html -type d -exec chmod 0755 {} +; \
+    find /usr/share/nginx/html -type f -exec chmod 0644 {} +; \
+    find /usr/share/nginx/html -type f -exec sha256sum {} \; | sort > /tmp/rahgard-static-after.sha256; \
+    cmp -s /tmp/rahgard-static-before.sha256 /tmp/rahgard-static-after.sha256; \
+    rm -f /tmp/rahgard-static-before.sha256 /tmp/rahgard-static-after.sha256; \
+    test -r /usr/share/nginx/html/manifest.webmanifest; \
+    test -r /usr/share/nginx/html/sw.js
 EXPOSE 8080

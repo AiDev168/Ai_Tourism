@@ -46,11 +46,8 @@ set_release_sha() {
   fi
   chmod 0600 "$root/.env"
 }
-set_release_sha "$sha"
 compose=(docker compose --env-file "$root/.env" -f "$release/deploy/staging/compose.yaml")
 next="$root/.current-$sha"
-ln -s "$release" "$next"
-mv -Tf "$next" "$root/current"
 rollback() {
   local status=$?
   if (( status != 0 )); then
@@ -66,10 +63,9 @@ rollback() {
   fi
   exit "$status"
 }
-trap rollback EXIT
 case "$build_images" in
   true|1|yes)
-    "${compose[@]}" build --pull=false
+    RAHGARD_RELEASE_SHA="$sha" "${compose[@]}" build --pull=false
     ;;
   false|0|no)
     for image in "rahgard-api:$sha" "rahgard-web:$sha" 'rahgard-postgres:17-postgis36-vector087'; do
@@ -84,8 +80,21 @@ case "$build_images" in
     exit 2
     ;;
 esac
+test -s "$release/scripts/ops/test_rahgard_web_image_pwa.sh" || {
+  echo 'Release is missing the mandatory PWA image acceptance gate; current release was not changed.' >&2
+  exit 2
+}
+bash "$release/scripts/ops/test_rahgard_web_image_pwa.sh" "rahgard-web:$sha" "$sha"
+
+# Do not change the release marker or current symlink until the candidate Web
+# image has served all essential PWA resources through its unprivileged Nginx
+# worker. Container health alone does not establish functional readiness.
+set_release_sha "$sha"
+ln -s "$release" "$next"
+mv -Tf "$next" "$root/current"
+trap rollback EXIT
 docker exec "$db_id" pg_isready -U ai_tourism_owner -d rahgard_pilot_vps_staging >/dev/null
-"${compose[@]}" up -d --no-deps api web
+"${compose[@]}" up -d --no-deps --no-build api web
 api_id=$("${compose[@]}" ps -q api); web_id=$("${compose[@]}" ps -q web)
 [[ -n "$api_id" && -n "$web_id" ]]
 for _ in $(seq 1 60); do
