@@ -1,6 +1,12 @@
 name: Build Rahgard d5 Linux amd64 release images
 
 on:
+  # One narrowly scoped build trigger for workflow-tooling updates on main.
+  # This makes a fresh run use the corrected verifier instead of rerunning an old SHA.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rahgard-release-image-build.yml'
   workflow_dispatch:
     inputs:
       source_sha:
@@ -13,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: rahgard-image-build-${{ inputs.source_sha }}
+  group: rahgard-image-build-${{ inputs.source_sha || 'd5d9847373b20087a8a866449c6550d306f45b63' }}
   cancel-in-progress: false
 
 jobs:
@@ -32,14 +38,14 @@ jobs:
       - name: Check out immutable application source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ inputs.source_sha }}
+          ref: ${{ inputs.source_sha || 'd5d9847373b20087a8a866449c6550d306f45b63' }}
           path: source
           persist-credentials: false
 
       - name: Build, inspect, and package pinned images
         shell: bash
         env:
-          RELEASE_SHA: ${{ inputs.source_sha }}
+          RELEASE_SHA: ${{ inputs.source_sha || 'd5d9847373b20087a8a866449c6550d306f45b63' }}
         run: >-
           bash tooling/scripts/ops/build_rahgard_release_images.sh
           "$GITHUB_WORKSPACE/source"
