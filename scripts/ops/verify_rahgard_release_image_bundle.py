@@ -79,7 +79,16 @@ def assert_safe_member(name: str, *, is_directory: bool = False) -> None:
     basename = lower_parts[-1] if lower_parts else ""
     if any(part == "secrets" or part == "backups" for part in lower_parts):
         raise ValueError(f"Sensitive path is present in image archive: {name}")
-    if basename == ".env" or basename.startswith(".env.") or basename.endswith(FORBIDDEN_SUFFIXES):
+    # Public CA certificates installed by an official OS base image are not
+    # application private keys. Allow only PEMs in the standard CA trust store.
+    public_ca_pem = (
+        len(lower_parts) == 4
+        and lower_parts[:3] == ["etc", "ssl", "certs"]
+        and basename.endswith(".pem")
+    )
+    if basename == ".env" or basename.startswith(".env.") or (
+        basename.endswith(FORBIDDEN_SUFFIXES) and not public_ca_pem
+    ):
         raise ValueError(f"Sensitive file is present in image archive: {name}")
     if "/run/secrets/" in f"/{'/'.join(lower_parts)}/":
         raise ValueError(f"Runtime-secret path is present in image archive: {name}")
