@@ -9,4 +9,10 @@ FROM nginx:1.27-alpine
 COPY deploy/staging/nginx-web.conf /etc/nginx/conf.d/default.conf
 COPY deploy/staging/nginx-security-headers.conf /etc/nginx/rahgard-security-headers.conf
 COPY --from=build /src/dist /usr/share/nginx/html
+# The release archive is created with umask 077. Ensure the public PWA files
+# are readable by the unprivileged Nginx worker regardless of source modes.
+RUN find /usr/share/nginx/html -type d -exec chmod 0755 {} + \
+ && find /usr/share/nginx/html -type f -exec chmod 0644 {} + \
+ && test -r /usr/share/nginx/html/manifest.webmanifest \
+ && test -r /usr/share/nginx/html/sw.js
 EXPOSE 8080
