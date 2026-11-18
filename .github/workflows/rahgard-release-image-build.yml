@@ -2,7 +2,7 @@ name: Build Rahgard d5 Linux amd64 release images
 
 on:
   # One narrowly scoped build trigger for workflow-tooling updates on main.
-  # This makes a fresh run use the corrected verifier instead of rerunning an old SHA.
+  # Fresh push runs use the latest checked-in layer scanner; retry after OS directory false-positive fix.
   push:
     branches: [main]
     paths:
