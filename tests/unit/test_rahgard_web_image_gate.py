@@ -26,6 +26,7 @@ def test_web_pwa_gate_checks_unprivileged_nginx_read_and_all_essential_responses
     assert "wrong content type" in gate
     assert "missing_asset=404" in gate
     assert "--network none" in gate
+    assert "--add-host api:127.0.0.1" in gate
     assert "PortBindings" not in gate
 
 

@@ -31,7 +31,7 @@ trap cleanup EXIT
 
 # No network attachment, published port, bind mount, writable image layer, or
 # application secret. Test Nginx and its own unprivileged worker in the image.
-docker run -d --rm --name "$probe" --network none --read-only \
+docker run -d --rm --name "$probe" --network none --add-host api:127.0.0.1 --read-only \
   --tmpfs /var/cache/nginx:rw,noexec,nosuid,size=32m \
   --tmpfs /var/run:rw,noexec,nosuid,size=4m \
   --tmpfs /tmp:rw,noexec,nosuid,size=4m \
