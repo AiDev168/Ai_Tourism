@@ -117,7 +117,7 @@ export function App() {
   const [online, setOnline] = useState(navigator.onLine);
   // Smart conversation is the default workflow; no separate opt-in checkbox.
   const [suggestedOrigin, setSuggestedOrigin] = useState<{ approximateText: string; accuracyMeters: number } | null>(null);
-  const [locationStatus, setLocationStatus] = useState('');
+  const [, setLocationStatus] = useState('');
   const [travelerTimezone, setTravelerTimezone] = useState(() =>
     Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const requestDeviceLocation = () => {
@@ -318,6 +318,7 @@ export function App() {
       {window.location.pathname === '/partners' ? (authSession
         ? <PartnerWorkspace locale={locale} csrfToken={authSession.csrf_token} />
         : <main className="partner-workspace"><h1>{locale === 'fa-IR' ? 'برای ادامه وارد شوید' : locale === 'ar' ? 'سجّل الدخول للمتابعة' : 'Sign in to continue'}</h1><AuthPanel locale={locale} onSessionChange={setAuthSession} /></main>) : <main id="home" className={authSession ? 'traveler-app' : undefined}>
+        <div className={authSession ? 'unified-trip-experience' : undefined}>
         <section className={authSession ? 'hero hero-planner' : 'hero'}>
           <div className="hero-copy">
             <p className="eyebrow"><span className="sun">✳</span>{t('heroEyebrow')}</p>
@@ -338,8 +339,8 @@ export function App() {
                 aria-describedby={error ? 'form-error trip-prompt-help' : 'trip-prompt-help'}
                 aria-invalid={error ? true : undefined}
               />
-              {authSession && <fieldset className="ai-processing-consent">
-                <legend>{locale === 'fa-IR' ? 'گفت‌وگوی هوشمند' : locale === 'ar' ? 'المحادثة الذكية' : 'AI conversation'}</legend>
+              {authSession && <aside className="ai-processing-notice">
+                <strong>{locale === 'fa-IR' ? 'گفت‌وگوی هوشمند' : locale === 'ar' ? 'المحادثة الذكية' : 'AI conversation'}</strong>
                 <p className="assistant-action-help">
                   {locale === 'fa-IR' ? 'گفت‌وگوی هوشمند به‌صورت پیش‌فرض فعال است؛ متن درخواست و پیام‌های سفر برای پاسخ به سرویس هوش مصنوعی تنظیم‌شده ارسال می‌شود. هنگام اختلال، تحلیل قواعدمحور در دسترس است.'
                     : locale === 'ar' ? 'المحادثة الذكية مفعّلة افتراضياً. تُرسل رسائل الرحلة إلى خدمة الذكاء الاصطناعي المهيأة، مع تحليل احتياطي عند تعذر الاتصال.'
@@ -353,16 +354,7 @@ export function App() {
                           : (locale === 'fa-IR' ? 'وضعیت دستیار در دسترس نیست؛ درخواست سفر را می‌توانید ذخیره کنید.' : locale === 'ar' ? 'حالة المساعد غير متاحة؛ يمكنك حفظ طلب الرحلة.' : 'Assistant status is unavailable; you can still save the trip request.')}
                   {assistantRemaining !== null && assistantRouteState !== 'disabled' && assistantRouteState !== 'unavailable' && <> · {locale === 'fa-IR' ? `سهمیهٔ باقی‌مانده: ${formatNumber(locale, assistantRemaining)}` : locale === 'ar' ? `المتبقي اليوم: ${formatNumber(locale, assistantRemaining)}` : `${assistantRemaining} requests available today`}</>}
                 </p>
-                <label htmlFor="traveler-timezone">{locale === 'fa-IR' ? 'منطقهٔ زمانی برای عبارت‌هایی مثل «فردا»' : locale === 'ar' ? 'المنطقة الزمنية لعبارات مثل «غداً»' : 'Timezone for phrases such as “tomorrow”'}</label>
-                <select id="traveler-timezone" value={travelerTimezone} onChange={event => setTravelerTimezone(event.currentTarget.value)}>
-                  <option value="Asia/Tehran">Asia/Tehran</option>
-                  <option value={Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}>{Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'} ({locale === 'fa-IR' ? 'دستگاه' : locale === 'ar' ? 'الجهاز' : 'device'})</option>
-                </select>
-                <button type="button" className="location-detect" onClick={requestDeviceLocation}>
-                  {locale === 'fa-IR' ? 'استفاده از موقعیت فعلی به‌عنوان مبدأ' : locale === 'ar' ? 'استخدم موقعي الحالي كنقطة انطلاق' : 'Use my current location as origin'}
-                </button>
-                {locationStatus && <p role="status" className="location-status">{locationStatus}</p>}
-              </fieldset>}
+              </aside>}
               {error && <p id="form-error" className="form-error" role="alert">{error}</p>}
               <button type="submit" className="primary">
                 {tripCopy.submit} <span aria-hidden="true">↗</span>
@@ -467,6 +459,7 @@ export function App() {
           }}
           onStartNewDraft={clearTripDraft}
         />
+        </div>
 
         {!authSession && <section className="section discover" id="discover">
           <div className="section-heading">

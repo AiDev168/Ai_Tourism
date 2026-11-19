@@ -507,8 +507,9 @@ class TravelerRepository:
         requirements["destination_ids"] = destination_ids
         profile = _profile_columns(requirements)
         with self.connection() as conn, conn.transaction():
+            conn.execute("SELECT set_config('app.actor_id',%s,true)", (str(user_id),))
             row = conn.execute(
-                "SELECT version FROM travel.trips WHERE trip_id=%s AND user_id=%s FOR UPDATE",
+                "SELECT version,conversation_id,trip_title,is_synthetic FROM travel.trips WHERE trip_id=%s AND user_id=%s FOR UPDATE",
                 (trip_id, user_id),
             ).fetchone()
             if not row:
@@ -524,18 +525,64 @@ class TravelerRepository:
                     **requirement_consent,
                     "profile_version": expected_version + 1,
                 }
+            if row["is_synthetic"]:
+                # Synthetic travelers may plan in isolated acceptance, but no
+                # synthetic trip can produce a shareable/revision snapshot.
+                requirements["is_synthetic"] = True
+            requirements["requirements_revision"] = expected_version + 1
+            provenance = requirements.get("field_provenance")
+            if not isinstance(provenance, dict):
+                provenance = {}
+            for key in (
+                "destinations", "duration_days", "origin", "travel_dates", "traveler_count",
+                "budget", "interests", "soft_preferences", "constraints", "accessibility",
+                "travel_difficulty", "weather_preferences", "local_cuisine",
+            ):
+                provenance.setdefault(key, "correction" if key in {"destinations", "duration_days", "origin"} else "traveler")
+            requirements["field_provenance"] = provenance
+            destination_names = requirements.get("destinations")
+            trip_title = " → ".join(
+                item.strip() for item in destination_names
+                if isinstance(item, str) and item.strip()
+            ) if isinstance(destination_names, list) else ""
+            revision = conn.execute(
+                "SELECT COALESCE(MAX(revision_number),0)+1 AS value FROM travel.trip_requirement_revisions WHERE trip_id=%s",
+                (trip_id,),
+            ).fetchone()["value"]
             conn.execute(
                 """UPDATE travel.trips SET confirmed_requirements=%s,
+                   trip_title=COALESCE(NULLIF(%s,''),trip_title),
                    origin_text=%s,start_date=%s,end_date=%s,duration_days=%s,
                    traveler_count=%s,budget_amount_original=%s,budget_currency_iso=%s,
                    budget_unit=%s,budget_raw_text=%s,version=version+1,updated_at=NOW()
                    WHERE trip_id=%s AND user_id=%s""",
                 (
-                    Jsonb(requirements), profile["origin"], profile["start_date"],
+                    Jsonb(requirements), trip_title, profile["origin"], profile["start_date"],
                     profile["end_date"], profile["duration"], profile["travelers"],
                     profile["budget_amount"], profile["budget_currency"], profile["budget_unit"],
                     profile["budget_raw"], trip_id, user_id,
                 ),
+            )
+            conn.execute(
+                """UPDATE conversation.conversations
+                   SET structured_context=jsonb_set(COALESCE(structured_context,'{}'::jsonb),%s,%s::jsonb,true),
+                       updated_at=NOW()
+                   WHERE conversation_id=%s AND user_id=%s""",
+                (["confirmed_trip_profiles", str(trip_id)], Jsonb(requirements), row["conversation_id"], user_id),
+            )
+            conn.execute(
+                """UPDATE conversation.messages
+                   SET metadata=COALESCE(metadata,'{}'::jsonb) || jsonb_build_object(
+                       'confirmed_requirements',%s::jsonb,'requirements_revision',%s)
+                   WHERE message_id=(SELECT message_id FROM conversation.messages
+                       WHERE trip_id=%s AND role='user' ORDER BY created_at,message_id LIMIT 1)""",
+                (Jsonb(requirements), expected_version + 1, trip_id),
+            )
+            conn.execute(
+                """INSERT INTO travel.trip_requirement_revisions
+                   (trip_id,user_id,revision_number,trip_version,requirement_snapshot,is_synthetic)
+                   VALUES (%s,%s,%s,%s,%s,%s)""",
+                (trip_id,user_id,revision,expected_version+1,Jsonb(requirements),bool(row["is_synthetic"])),
             )
 
     def conversation(self, user_id: UUID, conversation_id: UUID) -> dict[str, Any] | None:
@@ -957,6 +1004,12 @@ class TravelerRepository:
                 ),
             )
             self._insert_stops(conn, itinerary_id, stops)
+            # Sharing revisions are captured after the stop rows exist so the
+            # company snapshot is complete and represents one coherent plan.
+            conn.execute(
+                "UPDATE travel.itineraries SET updated_at=NOW() WHERE itinerary_id=%s",
+                (itinerary_id,),
+            )
             return itinerary_id
 
     @staticmethod
@@ -1032,13 +1085,13 @@ class TravelerRepository:
                 raise TravelerInvalidState
             for stop in stops:
                 stop["destination_id"] = str(by_id[str(stop["recommendation_id"])]["destination_id"])
+            conn.execute("DELETE FROM travel.itinerary_stops WHERE itinerary_id=%s", (itinerary_id,))
+            self._insert_stops(conn, itinerary_id, stops)
             conn.execute(
                 """UPDATE travel.itineraries SET title_by_locale=%s,title=%s,revision=revision+1,
                    itinerary_status='edited',updated_at=NOW() WHERE itinerary_id=%s AND revision=%s""",
                 (Jsonb(title_by_locale), next(iter(title_by_locale.values()), "Trip plan"), itinerary_id, expected_revision),
             )
-            conn.execute("DELETE FROM travel.itinerary_stops WHERE itinerary_id=%s", (itinerary_id,))
-            self._insert_stops(conn, itinerary_id, stops)
 
 
 _EXPLANATIONS: dict[str, dict[str, str]] = {

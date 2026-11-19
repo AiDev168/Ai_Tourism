@@ -850,6 +850,11 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
     const organizationRow = organizationRows.items.find(item => item.display_name === 'Acceptance Travel Co');
     organization = organizationRow?.organization_id;
     if (!organization) throw new Error('partner_organization_not_created_from_browser_form');
+    const approvedTestOrganization = await checkedControl(api.controlPort, api.controlToken, {
+      action: 'approve_isolated_test_organization', organization_id: organization,
+      created_by: currentIdentity.userId,
+    });
+    if (!approvedTestOrganization.ok) throw new Error('isolated_test_company_approval_failed');
     await page.locator('.partner-forms').waitFor({ state: 'visible', timeout: 15_000 });
 
     const serviceForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Service', exact: true }) });
@@ -943,7 +948,7 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
       'GET', undefined, undefined, trace)).items;
     const selected = foundPlace.find(item => item.destination_key === destinationKey);
     if (!selected) throw new Error('traveler_archive_destination_search_missing');
-    const startRequest = '2-day trip to the Monastery of Saint Thaddeus in West Azerbaijan';
+    const startRequest = '2-day trip from Chalderan to the Monastery of Saint Thaddeus in West Azerbaijan for 2 travelers, budget 30 million toman; gentle walks, mild weather and local cuisine';
     const interpreted = await requestBrowserJson(page, '/api/v1/requirements/interpret', 'POST', currentIdentity.csrfToken,
       { locale: 'en-US', request_text: startRequest }, trace);
     if (interpreted.requirements?.fields?.duration_days?.value !== 2) throw new Error('duration_null_parser_regression');
@@ -959,36 +964,146 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
       confirmed_requirements: {
         confirmation_source: 'traveler_reviewed', destinations: [selected.canonical_name], duration_days: 2,
         origin: 'Chalderan', travel_dates: { start: '2026-11-19', end: '2026-11-20' }, traveler_count: 2,
-        accessibility: [], budget: null, soft_preferences: [], interests: ['heritage'], constraints: [],
+        accessibility: [], budget: { amount: 30, currency: 'TOMAN', unit: 'million toman', raw: '30 million toman' },
+        soft_preferences: [], interests: ['heritage'], constraints: [],
+        travel_difficulty: ['easy'], weather_preferences: ['mild'], local_cuisine: ['regional cuisine'],
+        field_provenance: { destinations: 'traveler', duration_days: 'llm', origin: 'traveler', travel_dates: 'traveler',
+          traveler_count: 'traveler', budget: 'traveler', interests: 'traveler', soft_preferences: 'traveler',
+          travel_difficulty: 'llm', weather_preferences: 'traveler', local_cuisine: 'llm', constraints: 'traveler', accessibility: 'traveler' },
       },
       destination_ids: [String(selected.destination_id)],
       requirement_consent: { contract_version: 'recommendation-consent-v1', field_decisions: {}, advisory_acknowledged_fields: [] },
     }, trace);
     if (confirmed.version !== trip.version + 1 || confirmed.duration_days !== 2) throw new Error('traveler_profile_confirmation_failed');
+    if (confirmed.confirmed_requirements?.origin !== 'Chalderan'
+        || confirmed.confirmed_requirements?.budget?.currency !== 'TOMAN'
+        || confirmed.confirmed_requirements?.travel_difficulty?.[0] !== 'easy'
+        || confirmed.confirmed_requirements?.weather_preferences?.[0] !== 'mild'
+        || confirmed.confirmed_requirements?.local_cuisine?.[0] !== 'regional cuisine'
+        || confirmed.confirmed_requirements?.field_provenance?.duration_days !== 'llm') {
+      throw new Error('traveler_confirmed_requirements_or_provenance_not_persisted');
+    }
+    const shareOptions = await requestBrowserJson(page,
+      `/api/v1/partners/trips/${trip.trip_id}/company-share-options`, 'GET', undefined, undefined, trace);
+    if (!shareOptions.items.some(item => item.organization_id === organization)) {
+      throw new Error('traveler_share_options_missing_approved_company');
+    }
+    const shared = await requestBrowserJson(page, `/api/v1/partners/trips/${trip.trip_id}/company-shares`, 'POST', currentIdentity.csrfToken, {
+      organization_ids: [organization], consent_confirmed: true,
+      include_original_request: false, consent_policy_version: 'company-request-share-v1',
+    }, trace);
+    if (!shared.shared || shared.shares.length !== 1) throw new Error('traveler_company_share_not_created');
+    const privateInboxProbe = await requestBrowserJson(page,
+      `/api/v1/partners/organizations/${organization}/requests`, 'GET', undefined, undefined, trace);
+    if (privateInboxProbe.items.length !== 0) throw new Error('traveler_without_company_membership_saw_inbox');
     const recommendation = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}/recommendations`, 'POST', currentIdentity.csrfToken,
       { selected_destination_ids: [String(selected.destination_id)] }, trace);
     if (recommendation.status !== 'available' || !recommendation.items.some(item => item.destination_id === String(selected.destination_id)
         && item.evidence?.some(source => source.source_url?.startsWith('https://')))) {
-      throw new Error('traveler_archive_backed_recommendation_missing');
+      const matching = recommendation.items?.find(item => item.destination_id === String(selected.destination_id));
+      throw new Error(`traveler_archive_backed_recommendation_missing_${String(recommendation.status)}_${String(recommendation.reason_code ?? 'no_reason')}_${matching?.evidence?.length ?? 0}`);
     }
     const itinerary = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}/itineraries`, 'POST', currentIdentity.csrfToken,
       { recommendation_request_id: recommendation.recommendation_request_id, day_count: 2, locale: 'en-US' }, trace);
     if (!itinerary.itinerary_id || itinerary.stops.length !== 1) throw new Error('traveler_archive_itinerary_not_created');
     const secondRead = await requestBrowserJson(page, `/api/v1/itineraries/${itinerary.itinerary_id}`, 'GET', undefined, undefined, trace);
     if (secondRead.stops.length !== 1 || secondRead.trip_id !== trip.trip_id) throw new Error('traveler_itinerary_initial_read_mismatch');
+
+    // A reviewed profile change is a new revision of the same shared trip;
+    // it must not create another lead or expose the original message by default.
+    const revisedProfile = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}`, 'PATCH', currentIdentity.csrfToken, {
+      expected_version: confirmed.version,
+      confirmed_requirements: {
+        confirmation_source: 'traveler_reviewed', destinations: [selected.canonical_name], duration_days: 2,
+        origin: 'Chalderan', travel_dates: { start: '2026-11-19', end: '2026-11-20' }, traveler_count: 2,
+        accessibility: [], budget: { amount: 30, currency: 'TOMAN', unit: 'million toman', raw: '30 million toman' },
+        soft_preferences: ['nearby walks'], interests: ['heritage'], constraints: [],
+        travel_difficulty: ['easy'], weather_preferences: ['mild'], local_cuisine: ['regional cuisine'],
+        field_provenance: { destinations: 'traveler', duration_days: 'llm', origin: 'traveler', travel_dates: 'traveler',
+          traveler_count: 'traveler', budget: 'traveler', interests: 'traveler', soft_preferences: 'correction',
+          travel_difficulty: 'llm', weather_preferences: 'traveler', local_cuisine: 'llm', constraints: 'traveler', accessibility: 'traveler' },
+      },
+      destination_ids: [String(selected.destination_id)],
+      requirement_consent: { contract_version: 'recommendation-consent-v1', field_decisions: {}, advisory_acknowledged_fields: [] },
+    }, trace);
+    if (revisedProfile.version !== confirmed.version + 1) throw new Error('traveler_shared_request_revision_profile_not_saved');
+    const revisedRecommendation = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}/recommendations`, 'POST', currentIdentity.csrfToken,
+      { selected_destination_ids: [String(selected.destination_id)] }, trace);
+    if (revisedRecommendation.status !== 'available') throw new Error('traveler_revision_recommendation_not_available');
+    const revisedItinerary = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}/itineraries`, 'POST', currentIdentity.csrfToken,
+      { recommendation_request_id: revisedRecommendation.recommendation_request_id, day_count: 2, locale: 'en-US' }, trace);
+    if (!revisedItinerary.itinerary_id || revisedItinerary.stops.length !== 1) throw new Error('traveler_revision_itinerary_not_saved');
+    const revisionItineraryRead = await requestBrowserJson(page, `/api/v1/itineraries/${revisedItinerary.itinerary_id}`, 'GET', undefined, undefined, trace);
+    if (revisionItineraryRead.trip_id !== trip.trip_id || revisionItineraryRead.stops.length !== 1) {
+      throw new Error('traveler_revision_itinerary_not_reopened');
+    }
+
     await page.locator('.auth-signed-in button').first().click();
     await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = companyPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, companyPhone);
+    await page.goto(`${webOrigin}/partners`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Partner workspace' }).waitFor({ state: 'visible' });
+    const inboxPayload = await requestBrowserJson(page,
+      `/api/v1/partners/organizations/${organization}/requests`, 'GET', undefined, undefined, trace);
+    if (inboxPayload.items.length !== 4
+        || !inboxPayload.items.some(item => item.event_kind === 'request_shared')
+        || !inboxPayload.items.some(item => item.event_kind === 'request_revised')
+        || inboxPayload.items.some(item => item.request_snapshot?.original_request != null)
+        || inboxPayload.items.some(item => item.request_snapshot?.trip_id !== trip.trip_id)) {
+      throw new Error('partner_request_inbox_revision_or_privacy_mismatch');
+    }
+    await page.locator('.partner-request-item').first().waitFor({ state: 'visible' });
+    await page.getByText('Traveler request inbox', { exact: true }).waitFor({ state: 'visible' });
+    if (await page.locator('.partner-request-item').count() !== 4) throw new Error('partner_request_inbox_ui_missing_revisions');
+    milestone('selected-company consent, private request inbox, and same-trip revision verified');
+
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = tenantTwoPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, tenantTwoPhone);
+    const otherTenantInbox = await requestBrowserJson(page,
+      `/api/v1/partners/organizations/${organization}/requests`, 'GET', undefined, undefined, trace);
+    if (otherTenantInbox.items.length !== 0) throw new Error('other_tenant_read_company_request_inbox');
+
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = travelerPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, travelerPhone);
+    const ownShares = await requestBrowserJson(page,
+      `/api/v1/partners/trips/${trip.trip_id}/company-shares`, 'GET', undefined, undefined, trace);
+    if (ownShares.items.length !== 1 || ownShares.items[0].share_id !== shared.shares[0].share_id) {
+      throw new Error('traveler_share_identity_not_persisted');
+    }
+    const revoked = await requestBrowserJson(page,
+      `/api/v1/partners/trips/${trip.trip_id}/company-shares/${shared.shares[0].share_id}`,
+      'DELETE', currentIdentity.csrfToken, undefined, trace);
+    if (!revoked.revoked) throw new Error('traveler_company_share_revoke_failed');
+
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = companyPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, companyPhone);
+    const afterRevokeInbox = await requestBrowserJson(page,
+      `/api/v1/partners/organizations/${organization}/requests`, 'GET', undefined, undefined, trace);
+    if (afterRevokeInbox.items.length !== 0) throw new Error('revoked_company_share_still_visible');
+
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = travelerPhone;
     currentIdentity = await signIn(page, api.controlPort, api.controlToken, travelerPhone);
     const history = await requestBrowserJson(page, '/api/v1/conversations', 'GET', undefined, undefined, trace);
     if (!history.items.some(item => item.conversation_id === started.conversation.conversation_id)) throw new Error('traveler_conversation_not_reopened_after_auth');
     const reopenedTrip = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}`, 'GET', undefined, undefined, trace);
-    const reopenedItinerary = await requestBrowserJson(page, `/api/v1/itineraries/${itinerary.itinerary_id}`, 'GET', undefined, undefined, trace);
+    const reopenedItinerary = await requestBrowserJson(page, `/api/v1/itineraries/${revisedItinerary.itinerary_id}`, 'GET', undefined, undefined, trace);
     if (reopenedTrip.duration_days !== 2 || reopenedItinerary.stops.length !== 1
+        || reopenedTrip.confirmed_requirements?.field_provenance?.duration_days !== 'llm'
+        || reopenedTrip.confirmed_requirements?.weather_preferences?.[0] !== 'mild'
         || reopenedItinerary.stops[0].destination_id !== String(selected.destination_id)) throw new Error('traveler_itinerary_not_reopened_after_auth');
     await page.screenshot({ path: resolve(operatorDir, 'traveler-archive-itinerary-reopened.png'), fullPage: true, animations: 'disabled' });
     travelerSummary = { searchResults: foundPlace.length, destinationKey, tripId: trip.trip_id,
       conversationId: started.conversation.conversation_id, durationDays: reopenedTrip.duration_days,
-      recommendationOutcome: recommendation.status, itineraryId: itinerary.itinerary_id,
+      recommendationOutcome: recommendation.status, itineraryId: revisedItinerary.itinerary_id,
       persistedStops: reopenedItinerary.stops.length, reopenedAfterNewAuthentication: true };
 
     const counts = await checkedControl(api.controlPort, api.controlToken, { action: 'national_catalogue_counts' });
@@ -1004,7 +1119,7 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
         || counts.offers - baselineCounts.offers !== 1
         || counts.prices - baselineCounts.prices !== 1
         || counts.availability - baselineCounts.availability !== 1
-        || counts.itineraries - baselineCounts.itineraries !== 1) {
+        || counts.itineraries - baselineCounts.itineraries !== 2) {
       throw new Error('national_postgres_acceptance_counts_mismatch');
     }
     return { archiveStaging: stagedSummary, baselineCounts, operator: { candidate: key, fieldEvidence: evidenceRows.length,

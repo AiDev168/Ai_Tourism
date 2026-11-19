@@ -146,6 +146,15 @@ class TripRequirementFields(_StrictModel):
     )
     hard_constraints: RequirementValue[list[str]]
     accessibility: RequirementValue[list[str]]
+    travel_difficulty: RequirementValue[list[str]] = Field(
+        default_factory=lambda: RequirementValue[list[str]](status="missing", source="fallback")
+    )
+    weather_preferences: RequirementValue[list[str]] = Field(
+        default_factory=lambda: RequirementValue[list[str]](status="missing", source="fallback")
+    )
+    local_cuisine: RequirementValue[list[str]] = Field(
+        default_factory=lambda: RequirementValue[list[str]](status="missing", source="fallback")
+    )
 
 
 class TripClarification(_StrictModel):
@@ -535,6 +544,7 @@ def trip_requirements_storage_view(value: TripRequirementsV1) -> dict[str, objec
             "value": json_safe(field.value),
             "status": mapped_status,
             "evidence": evidence,
+            "source": field.source,
         }
         if field.candidates:
             result["candidates"] = field.candidates
@@ -571,6 +581,9 @@ def trip_requirements_storage_view(value: TripRequirementsV1) -> dict[str, objec
         "softPreferences": field_view(fields.soft_preferences),
         "constraints": field_view(fields.hard_constraints),
         "accessibility": field_view(fields.accessibility),
+        "travelDifficulty": field_view(fields.travel_difficulty),
+        "weatherPreferences": field_view(fields.weather_preferences),
+        "localCuisine": field_view(fields.local_cuisine),
         "extractionStatus": "needs_clarification" if value.clarification.question_fields else "ready",
         "missingRequired": [
             {"duration_days": "duration", "destination": "destination"}[name]

@@ -124,6 +124,47 @@ def _grant_catalogue_capabilities(database: dict[str, Any], user_id: str, capabi
         return False
 
 
+def _approve_isolated_test_organization(
+    database: dict[str, Any], organization_id: str, created_by: str,
+) -> bool:
+    """Mark only the browser-created acceptance organization eligible in disposable PG."""
+    if os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") != "1":
+        return False
+    if not all(re.fullmatch(r"[0-9a-fA-F-]{36}", value) for value in (organization_id, created_by)):
+        return False
+    owner_password = os.environ.get("AUTH_TEST_DATABASE_OWNER_PASSWORD", "")
+    marker = os.environ.get("AUTH_TEST_DATABASE_MARKER", "")
+    if not owner_password or not marker:
+        return False
+    try:
+        with psycopg.connect(
+            **{**database, "user": "ai_tourism_owner", "password": owner_password},
+            connect_timeout=2, row_factory=dict_row,
+        ) as connection, connection.transaction():
+            identity = connection.execute(
+                """SELECT current_database() AS db,
+                          (SELECT count(*) FROM public.ai_tourism_auth_test_marker) AS marker_count,
+                          (SELECT min(marker_value) FROM public.ai_tourism_auth_test_marker) AS marker"""
+            ).fetchone()
+            if (identity["db"] != database["dbname"] or identity["marker_count"] != 1
+                    or not __import__("hmac").compare_digest(identity["marker"] or "", marker)):
+                return False
+            row = connection.execute(
+                """UPDATE partner.organizations
+                   SET verification_status='verified',participation_status='active',
+                       application_status='approved',updated_at=now()
+                   WHERE organization_id=%s AND created_by=%s
+                     AND display_name='Acceptance Travel Co'
+                     AND verification_status='pending' AND participation_status='inactive'
+                     AND application_status='draft'
+                   RETURNING organization_id""",
+                (organization_id, created_by),
+            ).fetchone()
+            return row is not None
+    except Exception:
+        return False
+
+
 def _national_catalogue_counts(database: dict[str, Any]) -> dict[str, int] | None:
     if os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") != "1":
         return None
@@ -290,6 +331,12 @@ class _ControlHandler(socketserver.StreamRequestHandler):
                 caps = command.get("capabilities")
                 result = {"ok": isinstance(caps, list) and _grant_catalogue_capabilities(
                     self.server.database, str(command.get("user_id", "")), caps
+                )}
+            elif action == "approve_isolated_test_organization":
+                result = {"ok": _approve_isolated_test_organization(
+                    self.server.database,
+                    str(command.get("organization_id", "")),
+                    str(command.get("created_by", "")),
                 )}
             elif action == "national_catalogue_counts":
                 counts = _national_catalogue_counts(self.server.database)

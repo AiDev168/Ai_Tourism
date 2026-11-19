@@ -11,7 +11,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.auth import authenticated_user, require_authenticated_csrf
 from app.core.config import Settings, get_settings
@@ -94,6 +94,21 @@ class AvailabilityInput(BaseModel):
     valid_until: datetime
 
 
+class TravelerCompanyShareInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    organization_ids: list[UUID] = Field(min_length=1, max_length=10)
+    consent_confirmed: Literal[True]
+    include_original_request: bool = False
+    consent_policy_version: str = Field(default="company-request-share-v1", min_length=1, max_length=80)
+
+    @field_validator("organization_ids")
+    @classmethod
+    def unique_recipients(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("recipient organizations must be unique")
+        return value
+
+
 def _connection(settings: Settings):
     return psycopg.connect(
         host=settings.database_host,
@@ -120,6 +135,212 @@ def _db_error(error: psycopg.Error) -> None:
     ):
         raise HTTPException(422, "partner_record_rejected") from None
     raise HTTPException(503, "partner_workspace_unavailable") from None
+
+
+@router.get("/trips/{trip_id}/company-share-options")
+def company_share_options(
+    trip_id: UUID,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Return only verified, active companies; never expose traveler data here."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            trip = cur.execute(
+                """SELECT confirmed_requirements,is_synthetic FROM travel.trips
+                   WHERE trip_id=%s AND user_id=%s""", (trip_id, user.user_id),
+            ).fetchone()
+            if trip is None:
+                raise HTTPException(404, "trip_not_found")
+            if trip["is_synthetic"] or not isinstance(trip["confirmed_requirements"], dict) or not trip["confirmed_requirements"]:
+                raise HTTPException(409, "review_trip_before_sharing")
+            cur.execute(
+                """SELECT organization_id,display_name,organization_type
+                   FROM partner.share_eligible_organizations
+                   ORDER BY display_name,organization_id LIMIT 100"""
+            )
+            return {"items": cur.fetchall(), "trip_id": trip_id, "requires_explicit_consent": True}
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.post("/trips/{trip_id}/company-shares", status_code=201)
+def share_trip_with_companies(
+    trip_id: UUID,
+    body: TravelerCompanyShareInput,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Share a reviewed request with named eligible organizations after consent."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            trip = cur.execute(
+                """SELECT confirmed_requirements,is_synthetic FROM travel.trips
+                   WHERE trip_id=%s AND user_id=%s FOR UPDATE""", (trip_id, user.user_id),
+            ).fetchone()
+            if trip is None:
+                raise HTTPException(404, "trip_not_found")
+            if trip["is_synthetic"] or not isinstance(trip["confirmed_requirements"], dict) or not trip["confirmed_requirements"]:
+                raise HTTPException(409, "review_trip_before_sharing")
+            cur.execute(
+                """SELECT organization_id FROM partner.share_eligible_organizations
+                   WHERE organization_id=ANY(%s)""",
+                (body.organization_ids,),
+            )
+            eligible = {row["organization_id"] for row in cur.fetchall()}
+            if eligible != set(body.organization_ids):
+                raise HTTPException(422, "recipient_not_eligible")
+            shares = []
+            for organization_id in body.organization_ids:
+                cur.execute(
+                    """INSERT INTO partner.traveler_request_shares
+                       (trip_id,traveler_id,organization_id,consent_policy_version,include_original_request)
+                       VALUES (%s,%s,%s,%s,%s)
+                       ON CONFLICT (trip_id,organization_id) DO NOTHING
+                       RETURNING share_id,organization_id,consented_at""",
+                    (trip_id,user.user_id,organization_id,body.consent_policy_version,body.include_original_request),
+                )
+                created = cur.fetchone()
+                if created is None:
+                    cur.execute(
+                        """SELECT share_id,organization_id,consented_at FROM partner.traveler_request_shares
+                           WHERE trip_id=%s AND organization_id=%s AND traveler_id=%s AND revoked_at IS NULL""",
+                        (trip_id,organization_id,user.user_id),
+                    )
+                    created = cur.fetchone()
+                if created is None:
+                    raise HTTPException(409, "share_revoked_requires_new_request")
+                shares.append(created)
+            return {"trip_id": trip_id, "shares": shares, "shared": True,
+                    "message": "Only the selected verified organizations can view this request."}
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.get("/trips/{trip_id}/company-shares")
+def list_trip_company_shares(
+    trip_id: UUID,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """SELECT s.share_id,s.organization_id,COALESCE(o.display_name,s.organization_id::text) AS display_name,s.consented_at,s.revoked_at,
+                          (SELECT MAX(r.revision_number) FROM partner.traveler_request_revisions r WHERE r.share_id=s.share_id) AS latest_revision
+                   FROM partner.traveler_request_shares s LEFT JOIN partner.share_eligible_organizations o USING (organization_id)
+                   WHERE s.trip_id=%s AND s.traveler_id=%s ORDER BY s.created_at""",
+                (trip_id,user.user_id),
+            )
+            return {"items": cur.fetchall()}
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.delete("/trips/{trip_id}/company-shares/{share_id}")
+def revoke_trip_company_share(
+    trip_id: UUID,
+    share_id: UUID,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """UPDATE partner.traveler_request_shares SET revoked_at=COALESCE(revoked_at,now())
+                   WHERE trip_id=%s AND share_id=%s AND traveler_id=%s RETURNING share_id""",
+                (trip_id,share_id,user.user_id),
+            )
+            if cur.fetchone() is None:
+                raise HTTPException(404, "share_not_found")
+            return {"revoked": True}
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.get("/organizations/{organization_id}/requests")
+def traveler_request_inbox(
+    organization_id: UUID,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Organization-scoped inbox with immutable request/itinerary revisions."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """SELECT i.inbox_event_id,i.event_kind,i.created_at,i.viewed_at,
+                          r.revision_id,r.share_id,r.revision_number,r.trip_version,
+                          r.request_snapshot,r.itinerary_snapshot,r.created_at AS revision_created_at
+                   FROM partner.traveler_request_inbox i
+                   JOIN partner.traveler_request_revisions r USING (revision_id,organization_id)
+                   WHERE i.organization_id=%s AND NOT r.is_synthetic
+                   ORDER BY i.created_at DESC,r.revision_number DESC LIMIT 200""",
+                (organization_id,),
+            )
+            return {"items": cur.fetchall()}
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.get("/organizations/{organization_id}/requests/{share_id}/revisions")
+def traveler_request_revisions(
+    organization_id: UUID,
+    share_id: UUID,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """SELECT revision_id,share_id,revision_number,trip_version,event_kind,
+                          request_snapshot,itinerary_snapshot,created_at
+                   FROM partner.traveler_request_revisions
+                   WHERE organization_id=%s AND share_id=%s AND NOT is_synthetic
+                   ORDER BY revision_number DESC LIMIT 100""",
+                (organization_id,share_id),
+            )
+            return {"items": cur.fetchall()}
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.post("/organizations/{organization_id}/requests/{inbox_event_id}/viewed")
+def mark_traveler_request_viewed(
+    organization_id: UUID,
+    inbox_event_id: UUID,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """UPDATE partner.traveler_request_inbox SET viewed_at=COALESCE(viewed_at,now())
+                   WHERE organization_id=%s AND inbox_event_id=%s RETURNING inbox_event_id""",
+                (organization_id,inbox_event_id),
+            )
+            if cur.fetchone() is None:
+                raise HTTPException(404, "request_not_found")
+            return {"viewed": True}
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
 
 
 @router.get("/organizations")

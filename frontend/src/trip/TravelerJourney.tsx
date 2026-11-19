@@ -168,6 +168,9 @@ function safeRequirements(value: unknown, locale: Locale, originalRequest?: stri
     interests: field(candidate.interests, strings, defaults.interests) as TripRequirements['interests'],
     softPreferences: field(candidate.softPreferences, strings, defaults.softPreferences) as TripRequirements['softPreferences'],
     constraints: field(candidate.constraints, strings, defaults.constraints) as TripRequirements['constraints'],
+    travelDifficulty: field(candidate.travelDifficulty, strings, defaults.travelDifficulty) as TripRequirements['travelDifficulty'],
+    weatherPreferences: field(candidate.weatherPreferences, strings, defaults.weatherPreferences) as TripRequirements['weatherPreferences'],
+    localCuisine: field(candidate.localCuisine, strings, defaults.localCuisine) as TripRequirements['localCuisine'],
   };
 }
 
@@ -334,6 +337,9 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const [travelEndText, setTravelEndText] = useState('');
   const [interestText, setInterestText] = useState('');
   const [softPreferenceText, setSoftPreferenceText] = useState('');
+  const [difficultyText, setDifficultyText] = useState('');
+  const [weatherPreferenceText, setWeatherPreferenceText] = useState('');
+  const [localCuisineText, setLocalCuisineText] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [requirementChoices, setRequirementChoices] = useState<Partial<Record<RequirementFieldCode, RequirementConsentDecision>>>({});
   const [advisoryAcknowledgements, setAdvisoryAcknowledgements] = useState<Partial<Record<RequirementFieldCode, boolean>>>({});
@@ -342,6 +348,12 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   // AI is available by default; the server/provider still enforces access and quotas.
   const [assistantState, setAssistantState] = useState<'loading' | 'configured' | 'disabled' | 'unavailable' | 'quota_exhausted' | 'responded'>('loading');
   const [assistantRemaining, setAssistantRemaining] = useState<number | null>(null);
+  const [shareOptions, setShareOptions] = useState<Array<{ organization_id: string; display_name: string; organization_type: string }>>([]);
+  const [tripShares, setTripShares] = useState<Array<{ share_id: string; organization_id: string; display_name: string; revoked_at: string | null; latest_revision: number | null }>>([]);
+  const [selectedShareOrganizations, setSelectedShareOrganizations] = useState<string[]>([]);
+  const [includeOriginalRequestInShare, setIncludeOriginalRequestInShare] = useState(false);
+  const [shareConsentAccepted, setShareConsentAccepted] = useState(false);
+  const [sharingBusy, setSharingBusy] = useState(false);
   const [assistantCandidate, setAssistantCandidate] = useState<unknown>(null);
   const [extractionPath, setExtractionPath] = useState<'llm' | 'fallback' | 'user_override' | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationResult | null>(null);
@@ -365,6 +377,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const completedDraftRef = useRef<string | null>(null);
   const draftGenerationRef = useRef(0);
   const manualProfileFieldsRef = useRef(new Set<string>());
+  const assistantProfileFieldsRef = useRef(new Set<string>());
   const requestIdentityRef = useRef(requirements?.requestText ?? null);
   const resolutionSequenceRef = useRef(0);
   const catalogueBrowseSequenceRef = useRef(0);
@@ -395,7 +408,13 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   };
   const markProfileFieldEdited = (field: string) => {
     manualProfileFieldsRef.current.add(field);
+    assistantProfileFieldsRef.current.delete(field);
     setExtractionPath('user_override');
+  };
+  const acceptAssistantProfileField = (field: string) => {
+    manualProfileFieldsRef.current.add(field);
+    assistantProfileFieldsRef.current.add(field);
+    setExtractionPath('llm');
   };
   const chooseRequirement = (field: RequirementFieldCode, decision: RequirementConsentDecision) => {
     setRequirementChoices(current => ({ ...current, [field]: decision }));
@@ -539,6 +558,25 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   }, [requirements?.requestText]);
 
   useEffect(() => {
+    let active = true;
+    if (!session || !activeTrip || !confirmed || !online) {
+      setTripShares([]);
+      return () => { active = false; };
+    }
+    void Promise.all([
+      travelerApi.companyShareOptions(activeTrip.trip_id),
+      travelerApi.listTripCompanyShares(activeTrip.trip_id),
+    ]).then(([options, shares]) => {
+      if (!active) return;
+      setShareOptions(options.items);
+      setTripShares(shares.items);
+    }).catch(() => {
+      if (active) { setShareOptions([]); setTripShares([]); }
+    });
+    return () => { active = false; };
+  }, [session?.user.user_id, activeTrip?.trip_id, confirmed, online]);
+
+  useEffect(() => {
     if (requirements) {
       if (requestIdentityRef.current !== requirements.requestText) {
         requestIdentityRef.current = requirements.requestText;
@@ -566,6 +604,9 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
         }
         if (!manualProfileFieldsRef.current.has('interests')) setInterestText(displayInterests(requirements.interests.value ?? [], locale));
         if (!manualProfileFieldsRef.current.has('softPreferences')) setSoftPreferenceText(displayInterests(requirements.softPreferences.value ?? [], locale));
+        if (!manualProfileFieldsRef.current.has('difficulty')) setDifficultyText(displayInterests(requirements.travelDifficulty.value ?? [], locale));
+        if (!manualProfileFieldsRef.current.has('weather')) setWeatherPreferenceText(displayInterests(requirements.weatherPreferences.value ?? [], locale));
+        if (!manualProfileFieldsRef.current.has('cuisine')) setLocalCuisineText(displayInterests(requirements.localCuisine.value ?? [], locale));
         const suggestedDays = validDayCount(requirements.durationDays.value);
         if (!activeTrip?.latest_itinerary_id && suggestedDays !== null) setDayCount(suggestedDays);
         void resolveNames(requirements.destinations.value ?? []);
@@ -668,10 +709,10 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
           const canApply = (fieldName: string, manualField: string) => candidateCanReplace(fieldName, manualField);
           if (interpreted && typed && typed.original_text === requirements.requestText) {
             if (interpreted.destination && canApply('destinations', 'destination') && hasDirectEvidence('destination')) {
-              setDestinationNames([interpreted.destination]); void resolveNames([interpreted.destination]); improved = true;
+              setDestinationNames([interpreted.destination]); void resolveNames([interpreted.destination]); acceptAssistantProfileField('destination'); improved = true;
             }
             if (interpreted.durationDays && canApply('durationDays', 'duration') && hasDirectEvidence('duration_days')) {
-              setDurationText(String(interpreted.durationDays)); improved = true;
+              setDurationText(String(interpreted.durationDays)); acceptAssistantProfileField('duration'); improved = true;
               const relativeStart = requirements.relativeStartDate.value?.anchor_date;
               const resolvedStart = travelStartText || relativeStart || requirements.relativeDateResolution?.start || '';
               const hasExplicitDateRange = requirements.travelDates.value !== null;
@@ -681,16 +722,16 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
               }
             }
             if (interpreted.origin && canApply('origin', 'origin') && hasDirectEvidence('origin')) {
-              setOriginText(interpreted.origin); improved = true;
+              setOriginText(interpreted.origin); acceptAssistantProfileField('origin'); improved = true;
             }
             if (interpreted.travelerCount && canApply('travelerCount', 'travelers') && hasDirectEvidence('travelers')) {
-              setTravelerCountText(String(interpreted.travelerCount)); improved = true;
+              setTravelerCountText(String(interpreted.travelerCount)); acceptAssistantProfileField('travelers'); improved = true;
             }
             if (interpreted.budgetText && canApply('budget', 'budget') && hasDirectEvidence('budget')) {
-              setBudgetText(interpreted.budgetText); improved = true;
+              setBudgetText(interpreted.budgetText); acceptAssistantProfileField('budget'); improved = true;
             }
             if (interpreted.travelStart && interpreted.travelEnd && canApply('travelDates', 'travelStart') && canApply('travelDates', 'travelEnd') && hasDirectEvidence('travel_dates')) {
-              setTravelStartText(interpreted.travelStart); setTravelEndText(interpreted.travelEnd); improved = true;
+              setTravelStartText(interpreted.travelStart); setTravelEndText(interpreted.travelEnd); acceptAssistantProfileField('travelStart'); acceptAssistantProfileField('travelEnd'); improved = true;
             }
             if (interpreted.relativeStartDate && !interpreted.travelStart
                 && canApply('relativeStartDate', 'travelStart')
@@ -699,19 +740,29 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                 && interpreted.relativeStartDate.anchorDate) {
               const start = interpreted.relativeStartDate.anchorDate;
               setTravelStartText(start);
+              acceptAssistantProfileField('travelStart');
               const effectiveDuration = interpreted.durationDays ?? Number(durationText);
               if (!manualProfileFieldsRef.current.has('travelEnd') && Number.isInteger(effectiveDuration)
                   && effectiveDuration >= 1 && effectiveDuration <= 365) {
                 const end = inclusiveEndDate(start, effectiveDuration);
-                if (end) setTravelEndText(end);
+                if (end) { setTravelEndText(end); acceptAssistantProfileField('travelEnd'); }
               }
               improved = true;
             }
             if (interpreted.interest && canApply('interests', 'interests') && hasDirectEvidence('interests')) {
-              setInterestText(displayInterests(reviewedTripInterests(interpreted.interest), locale)); improved = true;
+              setInterestText(displayInterests(reviewedTripInterests(interpreted.interest), locale)); acceptAssistantProfileField('interests'); improved = true;
             }
             if (interpreted.softPreferences?.length && canApply('softPreferences', 'softPreferences') && hasDirectEvidence('soft_preferences')) {
-              setSoftPreferenceText(displayInterests(interpreted.softPreferences, locale)); improved = true;
+              setSoftPreferenceText(displayInterests(interpreted.softPreferences, locale)); acceptAssistantProfileField('softPreferences'); improved = true;
+            }
+            if (interpreted.travelDifficulty?.length && canApply('travelDifficulty', 'difficulty') && hasDirectEvidence('travel_difficulty')) {
+              setDifficultyText(displayInterests(interpreted.travelDifficulty, locale)); acceptAssistantProfileField('difficulty'); improved = true;
+            }
+            if (interpreted.weatherPreferences?.length && canApply('weatherPreferences', 'weather') && hasDirectEvidence('weather_preferences')) {
+              setWeatherPreferenceText(displayInterests(interpreted.weatherPreferences, locale)); acceptAssistantProfileField('weather'); improved = true;
+            }
+            if (interpreted.localCuisine?.length && canApply('localCuisine', 'cuisine') && hasDirectEvidence('local_cuisine')) {
+              setLocalCuisineText(displayInterests(interpreted.localCuisine, locale)); acceptAssistantProfileField('cuisine'); improved = true;
             }
           }
           if (improved) { setDirty(true); invalidateConsent(); }
@@ -820,6 +871,14 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
         && savedSoftPreferences.every(value => typeof value === 'string')
         ? savedSoftPreferences as string[] : (parsed?.softPreferences.value ?? []);
       setSoftPreferenceText(displayInterests(restoredSoftPreferences, locale));
+      const restoreList = (value: unknown, fallback: string[] | null | undefined) =>
+        Array.isArray(value) && value.every(item => typeof item === 'string') ? value as string[] : (fallback ?? []);
+      setDifficultyText(displayInterests(restoreList(trip.confirmed_requirements.travel_difficulty,
+        parsed?.travelDifficulty.value), locale));
+      setWeatherPreferenceText(displayInterests(restoreList(trip.confirmed_requirements.weather_preferences,
+        parsed?.weatherPreferences.value), locale));
+      setLocalCuisineText(displayInterests(restoreList(trip.confirmed_requirements.local_cuisine,
+        parsed?.localCuisine.value), locale));
       if (parsed) {
         restoringRequestRef.current = parsed.requestText;
         onRestoreRequest(parsed.requestText, parsed);
@@ -975,39 +1034,48 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const applyAssistantCandidate = () => {
     if (!reviewedAssistantCandidate || !activeTrip) return;
     if (reviewedAssistantCandidate.destination !== null) {
-      markProfileFieldEdited('destination');
+      acceptAssistantProfileField('destination');
       const names = [reviewedAssistantCandidate.destination];
       setDestinationNames(names);
       void resolveNames(names); // Catalogue verification is separate from AI text.
     }
     if (reviewedAssistantCandidate.durationDays !== null) {
-      markProfileFieldEdited('duration');
+      acceptAssistantProfileField('duration');
       setDurationText(String(reviewedAssistantCandidate.durationDays));
     }
     if (reviewedAssistantCandidate.origin !== undefined) {
-      markProfileFieldEdited('origin');
+      acceptAssistantProfileField('origin');
       setOriginText(reviewedAssistantCandidate.origin);
     }
     if (reviewedAssistantCandidate.travelerCount !== undefined) {
-      markProfileFieldEdited('travelers');
+      acceptAssistantProfileField('travelers');
       setTravelerCountText(String(reviewedAssistantCandidate.travelerCount));
     }
     if (reviewedAssistantCandidate.budgetText !== undefined) {
-      markProfileFieldEdited('budget');
+      acceptAssistantProfileField('budget');
       setBudgetText(reviewedAssistantCandidate.budgetText);
     }
     if (reviewedAssistantCandidate.travelStart !== undefined && reviewedAssistantCandidate.travelEnd !== undefined) {
-      markProfileFieldEdited('travelStart'); markProfileFieldEdited('travelEnd');
+      acceptAssistantProfileField('travelStart'); acceptAssistantProfileField('travelEnd');
       setTravelStartText(reviewedAssistantCandidate.travelStart);
       setTravelEndText(reviewedAssistantCandidate.travelEnd);
     }
     if (reviewedAssistantCandidate.interest !== undefined) {
-      markProfileFieldEdited('interests');
+      acceptAssistantProfileField('interests');
       setInterestText(current => displayInterests(parseInterests([current, reviewedAssistantCandidate.interest!].filter(Boolean).join('، ')), locale));
     }
     if (reviewedAssistantCandidate.softPreferences?.length) {
-      markProfileFieldEdited('softPreferences');
+      acceptAssistantProfileField('softPreferences');
       setSoftPreferenceText(current => displayInterests(parseInterests([current, ...reviewedAssistantCandidate.softPreferences!].filter(Boolean).join('، ')), locale));
+    }
+    if (reviewedAssistantCandidate.travelDifficulty?.length) {
+      acceptAssistantProfileField('difficulty'); setDifficultyText(displayInterests(reviewedAssistantCandidate.travelDifficulty, locale));
+    }
+    if (reviewedAssistantCandidate.weatherPreferences?.length) {
+      acceptAssistantProfileField('weather'); setWeatherPreferenceText(displayInterests(reviewedAssistantCandidate.weatherPreferences, locale));
+    }
+    if (reviewedAssistantCandidate.localCuisine?.length) {
+      acceptAssistantProfileField('cuisine'); setLocalCuisineText(displayInterests(reviewedAssistantCandidate.localCuisine, locale));
     }
     setDirty(true);
     invalidateConsent(); // Explicit profile confirmation remains mandatory.
@@ -1026,6 +1094,9 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     }
     setBusy(true); setError(''); setStatus('');
     const duration = durationText.trim() === '' ? null : Number(durationText);
+    const fieldSource = (manualField: string, source: string | undefined) =>
+      manualProfileFieldsRef.current.has(manualField) && !assistantProfileFieldsRef.current.has(manualField)
+        ? 'correction' : assistantProfileFieldsRef.current.has(manualField) ? 'llm' : source ?? 'traveler';
     const confirmedRequirements = {
       destinations: destinationNames.map(name => name.trim()).filter(Boolean),
       duration_days: duration,
@@ -1034,11 +1105,31 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
         ? { start: travelStartText, end: travelEndText } : (extracted?.travelDates.value ?? null),
       traveler_count: travelerCountText.trim() ? Number(travelerCountText.trim()) : null,
       accessibility: extracted?.accessibility?.value ?? [],
+      travel_difficulty: parseInterests(difficultyText),
+      weather_preferences: parseInterests(weatherPreferenceText),
+      local_cuisine: parseInterests(localCuisineText),
       budget: parseReviewedBudget(budgetText, locale) ?? extracted?.budget.value ?? null,
       soft_preferences: softPreferences.length ? softPreferences : (extracted?.softPreferences.value ?? []),
       interests: interests.length ? interests : (extracted?.interests.value ?? []),
       constraints: extracted?.constraints.value ?? [],
       confirmation_source: 'traveler_reviewed',
+      field_provenance: {
+        destinations: fieldSource('destination', extracted?.destinations.source),
+        duration_days: fieldSource('duration', extracted?.durationDays.source),
+        origin: fieldSource('origin', extracted?.origin.source),
+        travel_dates: fieldSource('travelStart', extracted?.travelDates.source) === 'correction'
+          || fieldSource('travelEnd', extracted?.travelDates.source) === 'correction' ? 'correction'
+          : assistantProfileFieldsRef.current.has('travelStart') || assistantProfileFieldsRef.current.has('travelEnd') ? 'llm'
+            : extracted?.travelDates.source ?? 'traveler',
+        traveler_count: fieldSource('travelers', extracted?.travelerCount.source),
+        budget: fieldSource('budget', extracted?.budget.source),
+        interests: fieldSource('interests', extracted?.interests.source),
+        soft_preferences: fieldSource('softPreferences', extracted?.softPreferences.source),
+        travel_difficulty: fieldSource('difficulty', extracted?.travelDifficulty.source),
+        weather_preferences: fieldSource('weather', extracted?.weatherPreferences.source),
+        local_cuisine: fieldSource('cuisine', extracted?.localCuisine.source),
+        constraints: extracted?.constraints.source ?? 'traveler', accessibility: extracted?.accessibility.source ?? 'traveler',
+      },
     };
     try {
       const trip = await travelerApi.confirmTripProfile(csrf, activeTrip.trip_id, {
@@ -1057,6 +1148,39 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       setDayCount(validDayCount(duration) ?? 1);
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
+  };
+
+  const shareRequestWithSelectedCompanies = async () => {
+    if (!session || !activeTrip || !confirmed || !shareConsentAccepted || !selectedShareOrganizations.length || !online) return;
+    setSharingBusy(true); setError(''); setStatus('');
+    try {
+      await travelerApi.shareTripWithCompanies(csrf, activeTrip.trip_id, {
+        organization_ids: selectedShareOrganizations, consent_confirmed: true,
+        include_original_request: includeOriginalRequestInShare,
+        consent_policy_version: 'company-request-share-v1',
+      });
+      const [options, shares] = await Promise.all([
+        travelerApi.companyShareOptions(activeTrip.trip_id), travelerApi.listTripCompanyShares(activeTrip.trip_id),
+      ]);
+      setShareOptions(options.items); setTripShares(shares.items);
+      setSelectedShareOrganizations([]); setShareConsentAccepted(false);
+      setStatus(locale === 'fa-IR' ? 'درخواست تأییدشده فقط با شرکت‌های انتخاب‌شده به اشتراک گذاشته شد.'
+        : locale === 'ar' ? 'تمت مشاركة الطلب المؤكد مع الشركات المحددة فقط.'
+          : 'The reviewed request was shared only with the selected companies.');
+    } catch (value) { applyFailure(value); }
+    finally { setSharingBusy(false); }
+  };
+
+  const revokeCompanyShare = async (shareId: string) => {
+    if (!session || !activeTrip || !online || !window.confirm(locale === 'fa-IR'
+      ? 'دسترسی این شرکت به نسخه‌های جدید درخواست لغو شود؟' : locale === 'ar'
+        ? 'هل تريد إلغاء وصول هذه الشركة إلى الطلب؟' : 'Revoke this company’s access to the request?')) return;
+    setSharingBusy(true);
+    try {
+      await travelerApi.revokeCompanyShare(csrf, activeTrip.trip_id, shareId);
+      setTripShares(await travelerApi.listTripCompanyShares(activeTrip.trip_id).then(result => result.items));
+    } catch (value) { applyFailure(value); }
+    finally { setSharingBusy(false); }
   };
 
   const findRecommendations = async () => {
@@ -1489,6 +1613,15 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
             <textarea id="profile-soft-preferences" maxLength={300} rows={2} dir="auto" value={softPreferenceText}
               onChange={event => { markProfileFieldEdited('softPreferences'); setSoftPreferenceText(event.target.value); setDirty(true); invalidateConsent(); }} />
             {!softPreferencesValid && <p className="journey-error" role="alert">{copy.profileInterestsInvalid}</p>}
+            <label htmlFor="profile-travel-difficulty">{locale === 'fa-IR' ? 'ترجیح سختی مسیر' : locale === 'ar' ? 'مستوى صعوبة المسار' : 'Travel difficulty preference'}</label>
+            <textarea id="profile-travel-difficulty" maxLength={300} rows={2} dir="auto" value={difficultyText}
+              onChange={event => { markProfileFieldEdited('difficulty'); setDifficultyText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            <label htmlFor="profile-weather-preferences">{locale === 'fa-IR' ? 'ترجیح‌های آب‌وهوا' : locale === 'ar' ? 'تفضيلات الطقس' : 'Weather preferences'}</label>
+            <textarea id="profile-weather-preferences" maxLength={300} rows={2} dir="auto" value={weatherPreferenceText}
+              onChange={event => { markProfileFieldEdited('weather'); setWeatherPreferenceText(event.target.value); setDirty(true); invalidateConsent(); }} />
+            <label htmlFor="profile-local-cuisine">{locale === 'fa-IR' ? 'علاقه به خوراک محلی' : locale === 'ar' ? 'اهتمام بالمأكولات المحلية' : 'Local cuisine interests'}</label>
+            <textarea id="profile-local-cuisine" maxLength={300} rows={2} dir="auto" value={localCuisineText}
+              onChange={event => { markProfileFieldEdited('cuisine'); setLocalCuisineText(event.target.value); setDirty(true); invalidateConsent(); }} />
             {!!consentFields.length && <fieldset className="requirement-consent" aria-describedby="requirement-consent-intro">
               <legend>{copy.requirementConsentTitle}</legend>
               <p id="requirement-consent-intro">{copy.requirementConsentIntro}</p>
@@ -1661,6 +1794,47 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
           </div>}
         </article>
       </div>}
+
+      {confirmed && activeTrip && session && <section className="company-request-sharing" aria-labelledby="company-request-share-title">
+        <h3 id="company-request-share-title">{locale === 'fa-IR' ? 'اشتراک‌گذاری اختیاری با شرکت‌های گردشگری' : locale === 'ar' ? 'مشاركة اختيارية مع شركات السياحة' : 'Optional sharing with tourism companies'}</h3>
+        <p>{locale === 'fa-IR'
+          ? 'فقط شرکت‌های تأییدشده‌ای که خودتان انتخاب می‌کنید، درخواست تأییدشده و برنامهٔ سفر را می‌بینند. با تغییر درخواست یا برنامه، نسخهٔ تازه در همان صندوق ثبت می‌شود. پیام عمومی یا پیامک ارسال نمی‌شود.'
+          : locale === 'ar'
+            ? 'لا ترى الطلب المؤكد وخطة الرحلة إلا الشركات المعتمدة التي تختارها. تُضاف التعديلات كإصدارات جديدة في صندوق المؤسسة نفسه. لا تُرسل رسائل عامة أو رسائل نصية.'
+            : 'Only verified companies you select can see your reviewed request and itinerary. Later edits create a new revision in the same inbox. No public broadcast or SMS is sent.'}</p>
+        {shareOptions.length > 0 ? <fieldset className="company-share-options">
+          <legend>{locale === 'fa-IR' ? 'شرکت‌های تأییدشده' : locale === 'ar' ? 'الشركات المعتمدة' : 'Verified companies'}</legend>
+          {shareOptions.map(option => <label key={option.organization_id}>
+            <input type="checkbox" checked={selectedShareOrganizations.includes(option.organization_id)}
+              onChange={event => setSelectedShareOrganizations(current => event.currentTarget.checked
+                ? [...new Set([...current, option.organization_id])].slice(0, 10)
+                : current.filter(id => id !== option.organization_id))} />
+            <span>{option.display_name}</span>
+          </label>)}
+          <label><input type="checkbox" checked={includeOriginalRequestInShare}
+            onChange={event => setIncludeOriginalRequestInShare(event.currentTarget.checked)} />
+            {locale === 'fa-IR' ? 'متن اولیهٔ درخواست هم ارسال شود' : locale === 'ar' ? 'تضمين نص الطلب الأصلي' : 'Include the original request text'}</label>
+          <label className="company-share-consent"><input type="checkbox" checked={shareConsentAccepted}
+            onChange={event => setShareConsentAccepted(event.currentTarget.checked)} />
+            {locale === 'fa-IR' ? 'اجازه می‌دهم اطلاعات تأییدشدهٔ سفر و برنامهٔ آن با شرکت‌های انتخاب‌شده به اشتراک گذاشته شود.'
+              : locale === 'ar' ? 'أوافق على مشاركة تفاصيل الرحلة المؤكدة وخطتها مع الشركات التي اخترتها.'
+                : 'I authorize sharing my reviewed trip request and itinerary with the selected companies.'}</label>
+          <button type="button" className="primary" onClick={() => void shareRequestWithSelectedCompanies()}
+            disabled={sharingBusy || !online || !shareConsentAccepted || !selectedShareOrganizations.length}>
+            {sharingBusy ? copy.saving : locale === 'fa-IR' ? 'اشتراک‌گذاری با شرکت‌های انتخاب‌شده' : locale === 'ar' ? 'مشاركة مع الشركات المحددة' : 'Share with selected companies'}
+          </button>
+        </fieldset> : <p role="status">{locale === 'fa-IR' ? 'در حال حاضر شرکت گردشگری تأییدشده‌ای برای انتخاب وجود ندارد.'
+          : locale === 'ar' ? 'لا توجد حالياً شركات سياحة معتمدة للاختيار.' : 'No verified tourism companies are available to select.'}</p>}
+        {!!tripShares.length && <ul className="company-share-list" aria-label={locale === 'fa-IR' ? 'شرکت‌های دارای دسترسی' : locale === 'ar' ? 'الشركات التي لديها وصول' : 'Companies with access'}>
+          {tripShares.map(share => <li key={share.share_id}>
+            <span>{share.display_name} · {locale === 'fa-IR' ? `نسخه ${formatNumber(locale, share.latest_revision ?? 0)}` : `revision ${share.latest_revision ?? 0}`}</span>
+            {share.revoked_at ? <span>{locale === 'fa-IR' ? 'دسترسی لغوشده' : locale === 'ar' ? 'تم إلغاء الوصول' : 'Access revoked'}</span>
+              : <button type="button" className="danger" disabled={sharingBusy} onClick={() => void revokeCompanyShare(share.share_id)}>
+                {locale === 'fa-IR' ? 'لغو دسترسی' : locale === 'ar' ? 'إلغاء الوصول' : 'Revoke access'}
+              </button>}
+          </li>)}
+        </ul>}
+      </section>}
 
       {itinerary && <section className="saved-itinerary" aria-labelledby="saved-itinerary-title">
         <h3 id="saved-itinerary-title">{copy.itineraryTitle}</h3>

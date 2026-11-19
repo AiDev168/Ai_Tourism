@@ -7,6 +7,7 @@ export type TripRequirements = {
   relativeStartDate: Field<{ offset_days: number; anchor_date: string | null; timezone: string | null }>;
   travelDates: Field<{ start: string; end: string }>; travelerCount: Field<number>;
   accessibility: Field<Array<'wheelchair_access' | 'step_free_access'>>;
+  travelDifficulty: Field<string[]>; weatherPreferences: Field<string[]>; localCuisine: Field<string[]>;
   budget: Field<{ amount: number; currency: string | null; unit: string; raw: string; scale?: string | null; currency_status?: 'known' | 'unknown' | 'ambiguous' }>;
   interests: Field<string[]>; softPreferences: Field<string[]>; constraints: Field<string[]>; extractionStatus: 'ready' | 'needs_clarification';
   missingRequired: Array<'destination' | 'duration'>; ambiguousRequired: Array<'destination' | 'duration'>;
@@ -25,6 +26,8 @@ export type TripRequirementsV1 = {
     travelers: RequirementEnvelope<number>; budget: RequirementEnvelope<{ amount: string; scale: string | null; currency: string | null; currency_status: 'known' | 'unknown' | 'ambiguous'; raw: string }>;
     interests: RequirementEnvelope<string[]>; soft_preferences?: RequirementEnvelope<string[]>;
     hard_constraints: RequirementEnvelope<string[]>; accessibility: RequirementEnvelope<string[]>;
+    travel_difficulty?: RequirementEnvelope<string[]>; weather_preferences?: RequirementEnvelope<string[]>;
+    local_cuisine?: RequirementEnvelope<string[]>;
   };
   clarification: { missing_fields: string[]; ambiguous_fields: string[]; question_fields: string[] };
 };
@@ -92,6 +95,9 @@ export function tripRequirementsV1ToTripRequirements(value: TripRequirementsV1):
     durationDays: project(fields.duration_days),
     travelDates: project(fields.travel_dates), travelerCount: project(fields.travelers),
     accessibility: project(fields.accessibility) as TripRequirements['accessibility'],
+    travelDifficulty: fields.travel_difficulty ? project(fields.travel_difficulty) : { value: null, status: 'unknown', evidence: null },
+    weatherPreferences: fields.weather_preferences ? project(fields.weather_preferences) : { value: null, status: 'unknown', evidence: null },
+    localCuisine: fields.local_cuisine ? project(fields.local_cuisine) : { value: null, status: 'unknown', evidence: null },
     budget, interests: project(fields.interests),
     softPreferences: fields.soft_preferences ? project(fields.soft_preferences) : { value: null, status: 'unknown', evidence: null },
     constraints: project(fields.hard_constraints),
@@ -123,6 +129,9 @@ export function mergeRequirementInterpretations(local: TripRequirements, interpr
     interests: mergeField(local.interests, interpreted.interests),
     softPreferences: mergeField(local.softPreferences, interpreted.softPreferences),
     constraints: mergeField(local.constraints, interpreted.constraints),
+    travelDifficulty: mergeField(local.travelDifficulty, interpreted.travelDifficulty),
+    weatherPreferences: mergeField(local.weatherPreferences, interpreted.weatherPreferences),
+    localCuisine: mergeField(local.localCuisine, interpreted.localCuisine),
   };
   const missingRequired: TripRequirements['missingRequired'] = [];
   const ambiguousRequired: TripRequirements['ambiguousRequired'] = [];
@@ -294,7 +303,7 @@ export function createTripRequirements(input:{requestText:string;locale:Locale;m
  if(!places.value){(places.status==='ambiguous'?ambiguousRequired:missingRequired).push('destination');}if(!duration.value){(duration.status==='ambiguous'?ambiguousRequired:missingRequired).push('duration');}
  const interest=extractedText(text,/(?:interested in|love|enjoy|أحب|احب)\s+(.+?)(?:[.!؟؛،,;]|$)/iu);if(!interest.value){const historical=text.match(/(?:\u0645\u0646\u0627\u0637\u0642\s*\u062a\u0627\u0631\u06cc\u062e\u06cc|\u062c\u0627\u0647\u0627\u06cc\s*\u062a\u0627\u0631\u06cc\u062e\u06cc|\bhistorical\s+(?:areas|places|attractions)\b)/iu);if(historical)Object.assign(interest,{value:['historical_attractions'],status:'extracted',evidence:historical[0]});}const garden=text.match(/(?:\u0628\u0627\u063a(?:[\s\u200c]*\u0647\u0627)?|\bgardens?\b|\bparks?\b|\u062d\u062f\u0627\u0626\u0642)/iu);if(garden)Object.assign(interest,{value:[...new Set([...(interest.value??[]),'gardens'])],status:'extracted',evidence:[interest.evidence,garden[0]].filter(Boolean).join(' ')});{const end=text.indexOf(' علاقه دارم');const start=end>=0?text.lastIndexOf(' به ',end):-1;if(start>=0)Object.assign(interest,{value:[cleanPlace(text.slice(start+4,end))],status:'extracted',evidence:text.slice(start,end+12)});}
   const fallback = <T,>(field: Field<T>): Field<T> => ({ ...field, source: 'fallback' });
-  const requirements:TripRequirements={requestText:original,locale:input.locale,destinations:fallback(places),origin:fallback(origin),relativeStartDate:fallback(explicitRelativeStart(text)),durationDays:fallback(duration),travelDates:fallback(explicitDateRange(text)),travelerCount:fallback((()=>{const n=explicitCount(text);return n?{value:n,status:'extracted' as const,evidence:text.match(new RegExp(`${n}\\s*(?:people|travelers|travellers|نفر|مسافر|أشخاص|اشخاص|أفراد|افراد)`,'iu'))?.[0]??null}:{value:null,status:'unknown' as const,evidence:null};})()),accessibility:fallback(accessibility),budget:fallback(parseBudget(text)),interests:fallback(interest),softPreferences:fallback(explicitSoftPreferences(text)),constraints:fallback(explicitHardConstraints(text)),extractionStatus:missingRequired.length||ambiguousRequired.length?'needs_clarification':'ready',missingRequired,ambiguousRequired,confirmationRequired:[],destinationVerification:'user_input_unverified'};
+  const requirements:TripRequirements={requestText:original,locale:input.locale,destinations:fallback(places),origin:fallback(origin),relativeStartDate:fallback(explicitRelativeStart(text)),durationDays:fallback(duration),travelDates:fallback(explicitDateRange(text)),travelerCount:fallback((()=>{const n=explicitCount(text);return n?{value:n,status:'extracted' as const,evidence:text.match(new RegExp(`${n}\\s*(?:people|travelers|travellers|نفر|مسافر|أشخاص|اشخاص|أفراد|افراد)`,'iu'))?.[0]??null}:{value:null,status:'unknown' as const,evidence:null};})()),accessibility:fallback(accessibility),budget:fallback(parseBudget(text)),interests:fallback(interest),softPreferences:fallback(explicitSoftPreferences(text)),constraints:fallback(explicitHardConstraints(text)),travelDifficulty:{value:null,status:'unknown',evidence:null,source:'fallback'},weatherPreferences:{value:null,status:'unknown',evidence:null,source:'fallback'},localCuisine:{value:null,status:'unknown',evidence:null,source:'fallback'},extractionStatus:missingRequired.length||ambiguousRequired.length?'needs_clarification':'ready',missingRequired,ambiguousRequired,confirmationRequired:[],destinationVerification:'user_input_unverified'};
  return requirements.extractionStatus==='ready'?{kind:'ready',requirements}:{kind:'clarification',requirements};
 }
 

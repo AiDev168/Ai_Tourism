@@ -58,6 +58,41 @@ def test_persisted_requirements_view_keeps_v1_evidence_and_exact_original_budget
     assert stored["clarificationFields"] == ["destination", "duration_days", "budget.currency"]
 
 
+def test_trip_requirement_storage_keeps_new_constraints_and_field_provenance():
+    from app.modules.trip.requirements_interpretation import (
+        EvidenceSpan, RequirementValue, TripClarification, TripRequirementsV1,
+        TripRequirementFields,
+    )
+
+    text = "I prefer easy walks, mild weather and local food"
+    evidence = EvidenceSpan(start=0, end=len(text), text=text)
+    fields = TripRequirementFields(
+        destination=RequirementValue(status="missing", source="fallback"),
+        origin=RequirementValue(status="missing", source="fallback"),
+        relative_start_date=RequirementValue(status="missing", source="fallback"),
+        duration_days=RequirementValue(status="missing", source="fallback"),
+        travel_dates=RequirementValue(status="missing", source="fallback"),
+        travelers=RequirementValue(status="missing", source="fallback"),
+        budget=RequirementValue(status="missing", source="fallback"),
+        interests=RequirementValue(status="missing", source="fallback"),
+        hard_constraints=RequirementValue(status="missing", source="fallback"),
+        accessibility=RequirementValue(status="missing", source="fallback"),
+        travel_difficulty=RequirementValue(status="known", value=["easy"], evidence_span=evidence, source="llm"),
+        weather_preferences=RequirementValue(status="known", value=["mild"], evidence_span=evidence, source="llm"),
+        local_cuisine=RequirementValue(status="known", value=["local food"], evidence_span=evidence, source="llm"),
+    )
+    value = TripRequirementsV1(
+        original_text=text, locale="en-US", fields=fields,
+        clarification=TripClarification(),
+    )
+    stored = trip_requirements_storage_view(value)
+    assert stored["travelDifficulty"]["value"] == ["easy"]
+    assert stored["travelDifficulty"]["source"] == "llm"
+    assert stored["weatherPreferences"]["source"] == "llm"
+    assert stored["localCuisine"]["source"] == "llm"
+    assert stored["requirements_v1"]["fields"]["local_cuisine"]["evidence_span"]["text"] == text
+
+
 def test_owner_persian_request_keeps_tomorrow_party_and_toman_without_duration():
     text = "برای فردا برای 5 نفر برای بازدید از مناطق تاریخی شیراز برنامه ریزی سفر کن و هزینه ای که میخوایم بکنیم 5 میلیون تومان است"
     result = interpret_trip_requirements(text, "fa-IR")

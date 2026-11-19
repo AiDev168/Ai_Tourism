@@ -58,6 +58,17 @@ export type ConversationRecord = {
 };
 
 export type ConversationSummary = Omit<ConversationRecord, 'messages'> & { messages?: ConversationMessage[] };
+export type CompanyShareOption = { organization_id: string; display_name: string; organization_type: string };
+export type CompanyRequestInboxItem = {
+  inbox_event_id: string; event_kind: 'request_shared' | 'request_revised'; created_at: string;
+  viewed_at: string | null; revision_id: string; share_id: string; revision_number: number;
+  trip_version: number; request_snapshot: Record<string, unknown>; itinerary_snapshot: Record<string, unknown>;
+};
+export type CompanyRequestRevision = {
+  revision_id: string; share_id: string; revision_number: number; trip_version: number;
+  event_kind: 'request_shared' | 'request_revised'; request_snapshot: Record<string, unknown>;
+  itinerary_snapshot: Record<string, unknown>; created_at: string;
+};
 
 export type EvidenceSource = {
   source_id: number;
@@ -387,6 +398,31 @@ export const travelerApi = {
     destination_ids: string[];
     requirement_consent: RequirementConsent;
   }) => request<TripRecord>(`/trips/${encodeURIComponent(tripId)}`, csrf, json('PATCH', body)),
+  companyShareOptions: (tripId: string) => request<{ items: CompanyShareOption[]; trip_id: string; requires_explicit_consent: boolean }>(
+    `/partners/trips/${encodeURIComponent(tripId)}/company-share-options`, undefined,
+  ),
+  shareTripWithCompanies: (csrf: string, tripId: string, body: {
+    organization_ids: string[]; consent_confirmed: true; include_original_request: boolean;
+    consent_policy_version: 'company-request-share-v1';
+  }) => request<{ trip_id: string; shares: Array<{ share_id: string; organization_id: string; consented_at: string }>; shared: boolean }>(
+    `/partners/trips/${encodeURIComponent(tripId)}/company-shares`, csrf, json('POST', body),
+  ),
+  listTripCompanyShares: (tripId: string) => request<{ items: Array<{
+    share_id: string; organization_id: string; display_name: string; consented_at: string;
+    revoked_at: string | null; latest_revision: number | null;
+  }> }>(`/partners/trips/${encodeURIComponent(tripId)}/company-shares`, undefined),
+  revokeCompanyShare: (csrf: string, tripId: string, shareId: string) => request<{ revoked: boolean }>(
+    `/partners/trips/${encodeURIComponent(tripId)}/company-shares/${encodeURIComponent(shareId)}`, csrf, { method: 'DELETE' },
+  ),
+  companyRequestInbox: (organizationId: string) => request<{ items: CompanyRequestInboxItem[] }>(
+    `/partners/organizations/${encodeURIComponent(organizationId)}/requests`, undefined,
+  ),
+  companyRequestRevisions: (organizationId: string, shareId: string) => request<{ items: CompanyRequestRevision[] }>(
+    `/partners/organizations/${encodeURIComponent(organizationId)}/requests/${encodeURIComponent(shareId)}/revisions`, undefined,
+  ),
+  markCompanyRequestViewed: (csrf: string, organizationId: string, eventId: string) => request<{ viewed: boolean }>(
+    `/partners/organizations/${encodeURIComponent(organizationId)}/requests/${encodeURIComponent(eventId)}/viewed`, csrf, json('POST', {}),
+  ),
   getTrip: (tripId: string) => request<TripRecord>(`/trips/${encodeURIComponent(tripId)}`, undefined),
   deleteTrip: (csrf: string, tripId: string) => request<void>(`/trips/${encodeURIComponent(tripId)}`, csrf, { method: 'DELETE' }),
   deleteConversation: (csrf: string, conversationId: string) => request<void>(`/conversations/${encodeURIComponent(conversationId)}`, csrf, { method: 'DELETE' }),

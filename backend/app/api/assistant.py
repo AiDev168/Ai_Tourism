@@ -284,6 +284,8 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
         'soft_preference': 'soft_preferences', 'relative_start_date': 'relative_start_date',
         'travel_start': 'travel_dates', 'travel_end': 'travel_dates',
         'hard_constraint': 'hard_constraints', 'accessibility': 'accessibility',
+        'travel_difficulty': 'travel_difficulty', 'weather_preference': 'weather_preferences',
+        'local_cuisine': 'local_cuisine',
     }
     ambiguous = ambiguous or {}
     for key, options in ambiguous.items():
@@ -368,6 +370,11 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
                 value = list(dict.fromkeys([*(current.value or []), *(quoted_field.value or [])]))
             else:
                 value = list(dict.fromkeys([*(current.value or []), raw_value.strip()]))
+        elif key in {'travel_difficulty', 'weather_preference', 'local_cuisine'}:
+            if (not isinstance(raw_value, str) or not raw_value.strip()
+                    or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(quote)):
+                continue
+            value = list(dict.fromkeys([*(current.value or []), raw_value.strip()]))
         elif key in {'hard_constraint', 'accessibility'}:
             if not isinstance(raw_value, str) or raw_value.strip() != quote.strip():
                 continue

@@ -71,11 +71,13 @@ _ALLOWED_REQUIREMENT_KEYS = {
     "transport", "preferred_transport", "prohibited_transport", "travel_style", "accommodation",
     "hard_constraints", "terrain", "max_distance_km", "flexible_dates",
     "interest", "soft_preferences",
-    "confirmation_source",
+    "confirmation_source", "travel_difficulty", "weather_preferences", "local_cuisine",
+    "field_provenance", "requirements_revision", "is_synthetic",
 }
 _FIELD_WRAPPED_KEYS = _ALLOWED_REQUIREMENT_KEYS - {
     "requestText", "locale", "destination_ids", "extractionStatus", "missingRequired",
-    "ambiguousRequired", "confirmationRequired", "destinationVerification",
+    "ambiguousRequired", "confirmationRequired", "destinationVerification", "field_provenance",
+    "requirements_revision", "is_synthetic",
 }
 
 
@@ -327,6 +329,23 @@ def _assess_requirements(
         not isinstance(confirmation_source, str) or confirmation_source != "traveler_reviewed"
     ):
         raise _InvalidRequirements
+    revision = requirements.get("requirements_revision")
+    if revision is not None and (isinstance(revision, bool) or not isinstance(revision, int) or revision < 1):
+        raise _InvalidRequirements
+    synthetic = requirements.get("is_synthetic")
+    if synthetic is not None and not isinstance(synthetic, bool):
+        raise _InvalidRequirements
+    provenance = requirements.get("field_provenance")
+    if provenance is not None:
+        allowed_provenance_fields = {
+            "destinations", "duration_days", "origin", "travel_dates", "traveler_count",
+            "budget", "interests", "soft_preferences", "constraints", "accessibility",
+            "travel_difficulty", "weather_preferences", "local_cuisine",
+        }
+        if not isinstance(provenance, Mapping) or set(provenance) - allowed_provenance_fields:
+            raise _InvalidRequirements
+        if any(value not in {"traveler", "llm", "fallback", "correction"} for value in provenance.values()):
+            raise _InvalidRequirements
 
     extraction_status = requirements.get("extractionStatus")
     missing = requirements.get("missingRequired", [])
@@ -394,6 +413,13 @@ def _assess_requirements(
     for key in ("budget_range", "max_budget"):
         if key in requirements and _validate_budget(_unwrap(requirements, key)):
             known_fields.append("budget")
+
+    # These are known traveler preferences, but the published catalogue does
+    # not yet support evaluating them. Keep them visible as known facts rather
+    # than treating them as missing or allowing them to affect ranking.
+    for key in ("travel_difficulty", "weather_preferences", "local_cuisine"):
+        if key in requirements and _string_list(_unwrap(requirements, key), field=key):
+            known_fields.append(key)
 
     for key in ("access", "accessibility", "access_modes", "accessModes", "visitor_access"):
         if key in requirements and _explicit_strings(_unwrap(requirements, key)):

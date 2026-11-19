@@ -113,6 +113,9 @@ export function integrateTripFollowUp(
     budget: takeExplicit(base.budget, correction.budget),
     interests: cumulative(base.interests, correction.interests),
     softPreferences: cumulative(base.softPreferences, correction.softPreferences),
+    travelDifficulty: cumulative(base.travelDifficulty, correction.travelDifficulty),
+    weatherPreferences: cumulative(base.weatherPreferences, correction.weatherPreferences),
+    localCuisine: cumulative(base.localCuisine, correction.localCuisine),
     // Never silently drop a hard constraint or accessibility requirement.
     constraints: cumulative(base.constraints, correction.constraints),
     accessibility: cumulative(base.accessibility, correction.accessibility),

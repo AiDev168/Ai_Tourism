@@ -14,7 +14,7 @@ function Hex([int]$Length) {
   return [BitConverter]::ToString($buffer).Replace('-','').ToLowerInvariant()
 }
 function Psql([string]$Db,[string]$Sql,[string]$User='ai_tourism_owner',[string]$Password=$env:AUTH_TEST_DATABASE_OWNER_PASSWORD) {
-  $out = $Sql | & docker exec -i -e "PGPASSWORD=$Password" $container psql -X -q -v ON_ERROR_STOP=1 -U $User -d $Db
+  $out = $Sql | & docker exec -i -e "PGPASSWORD=$Password" $container psql -X -q -A -t -v ON_ERROR_STOP=1 -U $User -d $Db
   if ($LASTEXITCODE -ne 0) { throw "Isolated PostgreSQL operation failed for $Db." }
   return $out
 }
@@ -138,6 +138,11 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
   $h21File = Join-Path $ProjectRoot 'engineering/pilot/sql/021_postgis_security_definer_publication.sql'
   $h21Expected = (Get-FileHash -LiteralPath $h21File -Algorithm SHA256).Hash.ToLowerInvariant()
   $h21 = Apply '021_postgis_security_definer_publication' 'engineering/pilot/sql/021_postgis_security_definer_publication.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0020_SHA256=$h20; RAHGARD_PILOT_MIGRATION_0021_SHA256=$h21Expected }
+  $h22File = Join-Path $ProjectRoot 'engineering/pilot/sql/022_traveler_company_requests.sql'
+  $h22Expected = (Get-FileHash -LiteralPath $h22File -Algorithm SHA256).Hash.ToLowerInvariant()
+  $h22 = Apply '022_traveler_company_requests' 'engineering/pilot/sql/022_traveler_company_requests.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0021_SHA256=$h21; RAHGARD_PILOT_MIGRATION_0022_SHA256=$h22Expected }
+  $migration22Assertions = (Psql $migrationTarget "SELECT (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0022_traveler_company_requests')='$h22Expected', (SELECT relrowsecurity FROM pg_class WHERE oid='partner.traveler_request_shares'::regclass), (SELECT relrowsecurity FROM pg_class WHERE oid='partner.traveler_request_revisions'::regclass), (SELECT count(*) FROM information_schema.columns WHERE table_schema='partner' AND table_name='share_eligible_organizations'), has_table_privilege('ai_tourism_app','partner.traveler_request_revisions','INSERT'), has_table_privilege('ai_tourism_app','partner.traveler_request_inbox','INSERT')") | Out-String
+  if (($migration22Assertions -join '').Trim() -ne 't|t|t|3|f|f') { throw "Migration 0022 assertions failed (checksum, RLS, view columns, unexpected write grants): $migration22Assertions" }
   $testDb = $env:AUTH_TEST_DATABASE_NAME
   Psql 'postgres' "ALTER DATABASE $migrationTarget RENAME TO $testDb;" | Out-Null
   $env:AUTH_TEST_DATABASE_NAME = $testDb
@@ -148,7 +153,7 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
   Push-Location (Join-Path $ProjectRoot 'frontend')
   try { node scripts/traveler-e2e.mjs; if ($LASTEXITCODE -ne 0) { throw 'National-catalogue browser acceptance failed.' } }
   finally { Pop-Location }
-  Write-Host 'PASS: full app migrations 0013-0021 and authenticated national-catalogue Chromium journey completed in isolated PG17.' -ForegroundColor Green
+  Write-Host 'PASS: full app migrations 0013-0022 and authenticated national-catalogue Chromium journey completed in isolated PG17.' -ForegroundColor Green
 }
 finally {
   if ($container -and $container -match '^ai-tourism-mvp-pg17-[a-f0-9]{12}$') {

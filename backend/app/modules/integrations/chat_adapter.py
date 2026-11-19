@@ -125,7 +125,9 @@ class ChatReply(BaseModel):
         if type(relative_offset) is int and 0 <= relative_offset <= 365:
             hints["relative_start_date"] = relative_offset
         for key, limit in (("budget_text", 100), ("interest", 100), ("soft_preference", 120),
-                           ("hard_constraint", 120), ("accessibility", 120)):
+                           ("hard_constraint", 120), ("accessibility", 120),
+                           ("travel_difficulty", 100), ("weather_preference", 120),
+                           ("local_cuisine", 120)):
             item = value.get(key)
             if (isinstance(item, str) and 0 < len(item.strip()) <= limit
                     and "\\" not in item
@@ -152,7 +154,8 @@ class ChatReply(BaseModel):
     def bounded_evidence(cls, value: dict[str, str]) -> dict[str, str]:
         allowed = {"destination", "origin", "duration_days", "traveler_count", "budget_text",
                    "interest", "soft_preference", "relative_start_date", "travel_start", "travel_end",
-                   "hard_constraint", "accessibility"}
+                   "hard_constraint", "accessibility", "travel_difficulty", "weather_preference",
+                   "local_cuisine"}
         return {
             key: quote.strip()
             for key, quote in value.items()
@@ -225,7 +228,8 @@ def _parse_provider_content(content: object) -> ChatReply:
             permitted_requirement_keys = {
                 "destination", "origin", "duration_days", "traveler_count", "budget_text",
                 "interest", "soft_preference", "relative_start_date", "travel_start",
-                "travel_end", "hard_constraint", "accessibility",
+                "travel_end", "hard_constraint", "accessibility", "travel_difficulty",
+                "weather_preference", "local_cuisine",
             }
             candidate["requirements"] = {
                 key: item for key, item in candidate["requirements"].items()
@@ -307,7 +311,8 @@ class RemoteChatAdapter:
                 "soft_preference (one explicitly advisory preference, max 120 characters; "
                 "retain its exact wording, and NEVER reclassify a safety/access need or prohibition as soft), "
                 "relative_start_date (integer offset-days 0..365), hard_constraint "
-                "and accessibility (short exact strings from the user). "
+                "and accessibility (short exact strings from the user), travel_difficulty, "
+                "weather_preference, and local_cuisine (one short exact phrase from the current message). "
                 "Resolve relative date phrases only as an offset from the supplied "
                 "traveler_reference_date in traveler_timezone; never use server/current time. "
                 "Do not turn a relative departure offset into trip duration or an end date. "

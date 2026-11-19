@@ -35,6 +35,40 @@ def source(destination_id: int, source_id: int, **overrides: object) -> Evidence
     return EvidenceSource.model_validate(values)
 
 
+def test_reviewed_v2_profile_metadata_and_new_constraints_are_not_misclassified_as_invalid():
+    requirements = {
+        "confirmation_source": "traveler_reviewed",
+        "requirements_revision": 2,
+        "is_synthetic": False,
+        "field_provenance": {
+            "destinations": "llm", "origin": "traveler", "duration_days": "llm",
+            "travel_difficulty": "correction", "weather_preferences": "traveler",
+            "local_cuisine": "llm",
+        },
+        "destinations": ["Shiraz"], "destination_ids": ["1"],
+        "origin": "Mashhad", "duration_days": 5, "traveler_count": 5,
+        "travel_dates": {"start": "2026-11-21", "end": "2026-11-25"},
+        "budget": {"amount": 30, "currency": "TOMAN", "unit": "million toman", "raw": "30 million toman"},
+        "interests": ["historical_attractions"], "soft_preferences": [],
+        "travel_difficulty": ["easy"], "weather_preferences": ["mild"],
+        "local_cuisine": ["local dishes"], "constraints": [], "accessibility": [],
+        "requirement_consent": {
+            "contract_version": "recommendation-consent-v1", "profile_version": 2,
+            "field_decisions": {}, "advisory_acknowledged_fields": [],
+        },
+    }
+    result = recommend_trip(
+        requirements=requirements, selected_destination_ids=["1"], catalogue=[],
+        evidence_by_destination={}, locale="fa-IR", profile_version=2,
+    )
+    assert result.reason_code == "catalogue_empty"
+    assert result.status == "empty"
+    assert {item.field for item in result.requirement_assessments if item.status == "known"} >= {
+        "origin", "duration_days", "traveler_count", "travel_dates", "destination", "interests",
+        "travel_difficulty", "weather_preferences", "local_cuisine",
+    }
+
+
 def requirements(**values: object) -> dict[str, object]:
     return {"durationDays": {"value": 10, "status": "confirmed"}, **values}
 

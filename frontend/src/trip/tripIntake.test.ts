@@ -21,6 +21,27 @@ describe('Persian colloquial origin fallback', () => {
 });
 
 describe('natural-language trip intake v2',()=>{
+ it('preserves LLM provenance and optional constraints through the shared persisted requirements contract',()=>{
+  const source='I prefer gentle walks, mild weather and local cuisine';
+  const field=(value:string[])=>({status:'known' as const,source:'llm' as const,value,evidence_span:{start:0,end:source.length,text:source}});
+  const mapped=tripRequirementsV1ToTripRequirements({
+   contract_version:'trip-requirements-v1',original_text:source,locale:'en-US',
+   fields:{
+    destination:{status:'missing'},origin:{status:'missing'},relative_start_date:{status:'missing'},
+    duration_days:{status:'missing'},travel_dates:{status:'missing'},travelers:{status:'missing'},
+    budget:{status:'missing'},interests:{status:'missing'},soft_preferences:{status:'missing'},
+    hard_constraints:{status:'missing'},accessibility:{status:'missing'},travel_difficulty:field(['easy']),
+    weather_preferences:field(['mild']),local_cuisine:field(['local cuisine']),
+   },clarification:{missing_fields:[],ambiguous_fields:[],question_fields:[]},
+  });
+  expect(mapped.travelDifficulty).toMatchObject({value:['easy'],source:'llm'});
+  expect(mapped.weatherPreferences).toMatchObject({value:['mild'],source:'llm'});
+  expect(mapped.localCuisine).toMatchObject({value:['local cuisine'],source:'llm'});
+  expect(requirementsForPersistence(mapped)).toMatchObject({
+   travelDifficulty:{value:['easy'],source:'llm'},weatherPreferences:{value:['mild'],source:'llm'},
+   localCuisine:{value:['local cuisine'],source:'llm'},requestText:source,
+  });
+ });
  it('keeps the owner Persian request as tomorrow, five travelers, historical Shiraz and five million TOMAN',()=>{
   const text='برای فردا برای 5 نفر برای بازدید از مناطق تاریخی شیراز برنامه ریزی سفر کن و هزینه ای که میخوایم بکنیم 5 میلیون تومان است';
   const result=intake(text);

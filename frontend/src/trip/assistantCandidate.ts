@@ -19,6 +19,9 @@ export type ReviewableAssistantCandidate = {
   relativeStartDate?: { offsetDays: number; anchorDate: string | null; timezone: string | null };
   interest?: string;
   softPreferences?: string[];
+  travelDifficulty?: string[];
+  weatherPreferences?: string[];
+  localCuisine?: string[];
   typedRequirements?: TripRequirementsV1;
 };
 
@@ -74,6 +77,17 @@ export function reviewableAssistantCandidate(raw: unknown): ReviewableAssistantC
     const softPreferences = fields.soft_preferences ? known(fields.soft_preferences) : null;
     if (Array.isArray(softPreferences) && softPreferences.length <= 10
         && softPreferences.every(item => safeText(item, 100) !== null)) candidate.softPreferences = softPreferences.map(item => item.trim());
+    const copyList = (field: { status?: string; value?: unknown } | undefined): string[] | null => {
+      if (field?.status !== 'known' || !Array.isArray(field.value) || field.value.length > 10
+          || !field.value.every(item => safeText(item, 100) !== null)) return null;
+      return field.value.map(item => (item as string).trim());
+    };
+    const difficulty = copyList(fields.travel_difficulty);
+    const weather = copyList(fields.weather_preferences);
+    const cuisine = copyList(fields.local_cuisine);
+    if (difficulty) candidate.travelDifficulty = difficulty;
+    if (weather) candidate.weatherPreferences = weather;
+    if (cuisine) candidate.localCuisine = cuisine;
     return candidate;
   }
 

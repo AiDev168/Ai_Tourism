@@ -92,6 +92,26 @@ button { cursor: pointer; }
 .trip-budget-scope { margin-block: 12px; color: #765424; font-size: 12px; line-height: 1.8; }
 .planner-next-link { display: inline-flex; margin-block-start: 12px; padding: 10px 16px; border-radius: 999px; background: var(--forest); color: white; font-weight: 750; text-decoration: none; }
 .traveler-app .traveler-workspace { padding-block-start: 12px; }
+.unified-trip-experience {
+  width: min(1280px, calc(100% - 32px)); margin: 26px auto 48px; overflow: clip;
+  border: 1px solid #d9e7dd; border-radius: 30px;
+  background: linear-gradient(145deg, #f7fbf7 0%, #eef5ef 56%, #f8faf7 100%);
+  box-shadow: 0 24px 70px rgba(20, 57, 44, .12);
+}
+.unified-trip-experience .hero-planner { max-width: none; margin: 0; padding: clamp(24px, 4vw, 48px); }
+.unified-trip-experience .hero-planner .trip-form { border: 1px solid #dbe8de; background: rgba(255,255,255,.94); }
+.unified-trip-experience .traveler-workspace { max-width: none; margin: 0; border: 0; border-top: 1px solid #d8e5db; border-radius: 0; box-shadow: none; background: rgba(255,255,255,.62); }
+.ai-processing-notice { margin-block: 14px 18px; padding: 12px 15px; border: 1px solid #d8e6db; border-radius: 15px; background: #f4f8f3; }
+.ai-processing-notice > strong { color: #174c3d; }
+.ai-processing-notice p { margin-block: 5px 0; }
+.company-request-sharing { margin-block: 20px; padding: clamp(16px, 2.5vw, 24px); border: 1px solid #dbe7dc; border-radius: 20px; background: #f6faf5; }
+.company-request-sharing h3 { margin-block: 0 8px; color: #174b3d; }
+.company-share-options { display: grid; gap: 10px; margin-block: 14px; padding: 16px; border: 1px solid #d8e4da; border-radius: 14px; background: white; }
+.company-share-options > label, .company-share-list li { display: flex; align-items: center; gap: 10px; }
+.company-share-options input, .company-share-consent input { width: auto; }
+.company-share-consent { padding-block-start: 10px; border-block-start: 1px solid #e5ece5; font-weight: 700; }
+.company-share-list { display: grid; gap: 8px; padding: 0; list-style: none; }
+.company-share-list li { justify-content: space-between; flex-wrap: wrap; padding: 10px 12px; border: 1px solid #e0e9e1; border-radius: 12px; background: white; }
 .eyebrow {
   margin: 0 0 15px; display: flex; align-items: center; gap: 9px; color: var(--clay);
   font-size: 11px; font-weight: 750; line-height: 1.7;
@@ -348,6 +368,9 @@ button { cursor: pointer; }
   .hero-planner { padding: 20px 18px 8px; }
   .hero-planner .trip-summary dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .traveler-workspace { padding: 30px 18px 52px; }
+  .unified-trip-experience { width: calc(100% - 20px); margin-block: 10px 30px; border-radius: 20px; }
+  .unified-trip-experience .hero-planner { padding: 22px 15px; }
+  .unified-trip-experience .traveler-workspace { padding: 24px 15px 36px; }
   .journey-columns { grid-template-columns: minmax(0, 1fr); }
   .traveler-workspace-heading, .history-trip { align-items: stretch; }
   .traveler-workspace-heading { flex-direction: column; }

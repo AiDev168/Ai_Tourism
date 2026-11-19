@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from hashlib import sha256
-from uuid import uuid4
 
 import pytest
 
