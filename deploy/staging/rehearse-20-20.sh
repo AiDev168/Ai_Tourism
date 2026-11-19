@@ -146,9 +146,27 @@ host_marker=$(cat "$root/state/database-marker")
 expected_ids=(0018_national_catalogue_ingestion 0019_partner_workspace 0020_archive_candidate_publication 0021_postgis_security_definer_publication)
 expected_files=(018_national_catalogue_ingestion.sql 019_partner_workspace.sql 020_archive_candidate_publication.sql 021_postgis_security_definer_publication.sql)
 for i in "${!expected_ids[@]}"; do
-  expected_hash=$(sha256sum "$release_dir/engineering/pilot/sql/${expected_files[$i]}" | cut -d' ' -f1)
+  migration_file="$release_dir/engineering/pilot/sql/${expected_files[$i]}"
+  expected_hash=$(sha256sum "$migration_file" | cut -d' ' -f1)
+  crlf_hash=$(python3 - "$migration_file" <<'PY'
+import hashlib, pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_bytes()
+lf = source.replace(b"\r\n", b"\n")
+if b"\r" in lf:
+    raise SystemExit("Migration contains unsupported mixed line endings.")
+print(hashlib.sha256(lf.replace(b"\n", b"\r\n")).hexdigest())
+PY
+)
   actual_hash=$(db_scalar "SELECT rtrim(sha256) FROM system.schema_migrations WHERE migration_id='${expected_ids[$i]}'")
-  [[ "$actual_hash" == "$expected_hash" ]] || { echo "20-entry restore has wrong migration checksum: ${expected_ids[$i]}" >&2; exit 3; }
+  if [[ "$actual_hash" == "$expected_hash" ]]; then
+    line_ending=lf
+  elif [[ "$actual_hash" == "$crlf_hash" ]]; then
+    line_ending=crlf
+  else
+    echo "20-entry restore has wrong migration content checksum: ${expected_ids[$i]}" >&2
+    exit 3
+  fi
+  echo "MIGRATION_CHECKSUM_20_20_PASS id=${expected_ids[$i]} line_endings=$line_ending"
 done
 counts_sql="SELECT 'users',count(*) FROM identity.users UNION ALL SELECT 'sessions',count(*) FROM identity.web_sessions UNION ALL SELECT 'conversations',count(*) FROM conversation.conversations UNION ALL SELECT 'messages',count(*) FROM conversation.messages UNION ALL SELECT 'trips',count(*) FROM travel.trips UNION ALL SELECT 'itineraries',count(*) FROM travel.itineraries UNION ALL SELECT 'itinerary_stops',count(*) FROM travel.itinerary_stops UNION ALL SELECT 'provisional_itineraries',count(*) FROM travel.provisional_itineraries UNION ALL SELECT 'destinations',count(*) FROM knowledge.destinations UNION ALL SELECT 'destination_sources',count(*) FROM knowledge.destination_sources UNION ALL SELECT 'knowledge_sources',count(*) FROM knowledge.knowledge_sources UNION ALL SELECT 'documents',count(*) FROM knowledge.knowledge_documents UNION ALL SELECT 'chunks',count(*) FROM knowledge.knowledge_chunks UNION ALL SELECT 'published',count(*) FROM knowledge.production_destinations UNION ALL SELECT 'candidates',count(*) FROM knowledge.destination_candidates UNION ALL SELECT 'candidate_evidence',count(*) FROM knowledge.destination_candidate_evidence UNION ALL SELECT 'publication_events',count(*) FROM knowledge.catalogue_publication_events UNION ALL SELECT 'partner_orgs',count(*) FROM partner.organizations UNION ALL SELECT 'partner_services',count(*) FROM partner.services UNION ALL SELECT 'partner_schedules',count(*) FROM partner.schedules UNION ALL SELECT 'partner_offers',count(*) FROM partner.offers UNION ALL SELECT 'partner_prices',count(*) FROM partner.prices UNION ALL SELECT 'partner_availability',count(*) FROM partner.availability_snapshots ORDER BY 1"
 counts_before=$(db_rows "$counts_sql")

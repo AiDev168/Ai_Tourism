@@ -48,6 +48,8 @@ def test_current_schema_rehearsal_never_applies_migrations() -> None:
     assert "INSERT INTO system.schema_migrations" not in rehearsal
     assert "0018_national_catalogue_ingestion" in rehearsal
     assert "0021_postgis_security_definer_publication" in rehearsal
+    assert 'crlf_hash=$(python3 - "$migration_file"' in rehearsal
+    assert "20-entry restore has wrong migration content checksum:" in rehearsal
     assert 'not h.get("Mounts",[])' in rehearsal
     assert 'all(m["Type"]=="tmpfs" for m in c.get("Mounts",[]))' in rehearsal
     assert '"/var/lib/postgresql/data" in h["Tmpfs"]' in rehearsal
