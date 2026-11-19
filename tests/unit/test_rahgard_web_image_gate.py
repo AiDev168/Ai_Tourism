@@ -20,6 +20,7 @@ def test_web_pwa_gate_checks_unprivileged_nginx_read_and_all_essential_responses
     gate = (ROOT / "scripts/ops/test_rahgard_web_image_pwa.sh").read_text(encoding="utf-8")
 
     assert "--user nginx" in gate
+    assert "user[[:space:]]+nginx;" in gate
     assert "manifest.webmanifest" in gate
     assert "sw.js" in gate
     assert "hashed JS and CSS assets" in gate

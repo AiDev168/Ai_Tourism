@@ -45,7 +45,7 @@ for _ in $(seq 1 20); do
   sleep 1
 done
 [[ "$ready" == true ]] || { echo 'Nginx did not start in the isolated Web image probe.' >&2; exit 3; }
-docker exec "$probe" nginx -T 2>&1 | grep -Eq '^[[:space:]]*user nginx;'
+docker exec "$probe" nginx -T 2>&1 | grep -Eq '^[[:space:]]*user[[:space:]]+nginx;'
 docker exec --user nginx "$probe" sh -ec \
   'test -r /usr/share/nginx/html/manifest.webmanifest && test -r /usr/share/nginx/html/sw.js && test -r /usr/share/nginx/html/index.html'
 
