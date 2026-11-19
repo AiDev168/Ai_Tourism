@@ -177,8 +177,12 @@ def test_containerd_manifest_id_alias_requires_exact_exported_config_and_layers(
         **expected,
         "image_id": "sha256:" + "c" * 64,
         "rootfs_layers": diff_ids,
+        # Docker Engine 29/containerd may normalize omitted Config fields in
+        # image inspect; exact config identity comes from the saved-image
+        # roundtrip digest, not direct JSON object equality.
+        "config": {"Env": ["PATH=/usr/local/sbin:/usr/local/bin"], "Cmd": ["app"]},
     }
-    archived = {"config_digest": config_id, "diff_ids": diff_ids}
+    archived = {"config_digest": config_id, "diff_ids": diff_ids, "config": {"Cmd": ["app"]}}
 
     assert MODULE.validate_loaded_image_identity(expected, actual, archived, archived) == "containerd-export-equivalent"
 

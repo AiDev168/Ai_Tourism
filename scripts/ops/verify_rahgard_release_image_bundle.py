@@ -220,9 +220,14 @@ def validate_loaded_image_identity(
     for key in ("os", "architecture", "entrypoint", "command", "labels"):
         if actual.get(key) != expected.get(key):
             raise ValueError(f"Loaded image {key} differs from the handoff manifest")
-    if actual.get("config") is not None and archived.get("config") is not None:
-        if actual["config"] != archived["config"]:
-            raise ValueError("Loaded image configuration differs from the handoff archive")
+    # `docker image inspect` returns Engine-normalized Config JSON. With the
+    # containerd image store, fields can be expanded/defaulted differently
+    # from the original Docker-save config even when the loaded image is
+    # byte-for-byte identical. Do not compare those two JSON representations.
+    # For a differing Engine image ID, the caller requires a docker-save
+    # roundtrip and compares its config digest below; that is the exact,
+    # content-addressed configuration identity check. Entrypoint, command,
+    # labels, platform, and rootfs are independently checked above/below.
     if actual.get("rootfs_layers") != archived.get("diff_ids"):
         raise ValueError("Loaded image rootfs differs from the handoff archive")
     if actual.get("image_id") == expected.get("image_id"):
