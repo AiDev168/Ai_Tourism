@@ -68,7 +68,7 @@ grep -Eiq 'Content-Type:[[:space:]]*(application|text)/javascript' <<<"$sw_heade
   echo 'Service worker has the wrong content type.' >&2; exit 3;
 }
 
-mapfile -t assets < <(python3 -c 'import re,sys; print("\n".join(sorted(set(re.findall(r"/assets/[^\" ]+\.(?:js|css)", sys.stdin.read()))))' <<<"$html")
+mapfile -t assets < <(python3 -c 'import re,sys; paths=set(re.findall(r"/assets/[^\" ]+\.(?:js|css)", sys.stdin.read())); print("\n".join(sorted(paths)))' <<<"$html")
 [[ "${#assets[@]}" -ge 2 ]] || { echo 'Application shell did not reference hashed JS and CSS assets.' >&2; exit 3; }
 seen_js=false; seen_css=false
 for asset in "${assets[@]}"; do

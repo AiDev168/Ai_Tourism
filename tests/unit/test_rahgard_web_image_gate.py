@@ -1,4 +1,6 @@
 from pathlib import Path
+import subprocess
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -56,6 +58,20 @@ def test_current_schema_rehearsal_never_applies_migrations() -> None:
     assert 'all(m["Type"]=="tmpfs" for m in c.get("Mounts",[]))' in rehearsal
     assert '"/var/lib/postgresql/data" in h["Tmpfs"]' in rehearsal
     assert 'bash "$release_dir/scripts/ops/test_rahgard_web_image_pwa.sh"' in rehearsal
+
+
+def test_pwa_probe_asset_extractor_accepts_hashed_js_and_css() -> None:
+    gate = (ROOT / "scripts/ops/test_rahgard_web_image_pwa.sh").read_text(encoding="utf-8")
+    line = next(line for line in gate.splitlines() if line.startswith("mapfile -t assets"))
+    snippet = line.split("python3 -c '", 1)[1].split("' <<<", 1)[0]
+    result = subprocess.run(
+        [sys.executable, "-c", snippet],
+        input='<script src="/assets/index-abc123.js"></script><link href="/assets/index-def456.css">',
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout.splitlines() == ["/assets/index-abc123.js", "/assets/index-def456.css"]
 
 
 def test_hosted_build_is_parameterized_and_artifact_uses_exact_source_sha() -> None:
