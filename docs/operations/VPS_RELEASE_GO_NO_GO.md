@@ -1,23 +1,18 @@
-﻿# Rahgard VPS release decision — 2026-11-18
+# Rahgard VPS release decision — 2026-11-19
 
 ## Current decision
 
-**READY FOR OWNER PRODUCTION APPROVAL.** The hosted d5 API/Web images passed the strict isolated restore, migrations, security, runtime, Web, and rollback rehearsal. This is readiness only; the owner has **not** authorized production rollout.
+**READY FOR OWNER LIVE-DEPLOYMENT APPROVAL — NOT DEPLOYED.** The final Issue #21 PWA hotfix candidate passed hosted image verification and a fresh, isolated PostgreSQL 17 20-to-20 restore/runtime rehearsal. No live rollout is authorized by that result.
 
-- Prepared application SHA: `d5d9847373b20087a8a866449c6550d306f45b63`
-- Current live VPS SHA (unchanged): `5e2664fb51e18f52549aa37a8b5793e12ace09b2`
-- GitHub Actions run / artifact: `44228225648` / `14393716721`
-- Isolated rehearsal: exit 0; PostgreSQL clone advanced from migration 0017 to 0021; restored data counts unchanged; 27 protected tables have RLS and 67 policies.
-- Live database: still at 16 migrations through 0017; persistent volume and records preserved.
-- Live services: API, Web, and PostgreSQL remained healthy with their pre-rehearsal image IDs.
-- Deployment, live migration, service restart, and publication: **not performed**.
+- Qualified immutable candidate: `4a9574ae67056cac9bde1253102d93f4b798910d`
+- Current live VPS application: `5e2664fb51e18f52549aa37a8b5793e12ace09b2`
+- Successful hosted build: run `44481724443`, artifact `14508033297`
+- Isolated rehearsal: exit 0, `HOTFIX_IMAGE_REHEARSAL_PASS`; migration count stayed 20; no DDL; row counts preserved; PWA assets, API, Web proxy and old-API compatibility passed.
+- Fresh encrypted backup `rahgard-20261119T072015Z-nj8bwh.dump.enc` passed checksum, HMAC, decryption, archive readability and isolated restore verification.
+- No live application/database operations, migrations, service restarts or publication were performed.
 
-The five high-severity npm audit package findings are confined to the locked frontend build/test dependency graph. `npm audit --omit=dev` reported zero production dependency findings; the final Web image contains the compiled static assets served by Nginx, not those npm packages. A separate dependency update review is recommended; d5's lockfile was not changed.
+See [the complete Issue #21 acceptance evidence](RAHGARD_ISSUE21_PWA_HOTFIX_ACCEPTANCE_2026-11-19.md). The November 18 d5 deployment history and rollback evidence remain in [the historical live acceptance report](RAHGARD_LIVE_DEPLOYMENT_ACCEPTANCE_2026-11-18.md).
 
-## Evidence
+## Approval gate
 
-See [the exact hosted-image and isolated-rehearsal report](RAHGARD_HOSTED_IMAGES_ISOLATED_REHEARSAL_2026-11-18.md) and [the prior release-preparation history](VPS_RELEASE_GO_NO_GO_2026-11-17_HISTORICAL.md). Machine-readable sanitized results are in `evidence/hosted-image-rehearsal-2026-11-18.json`.
-
-## Explicit owner approval gate
-
-Before any production operation, the owner must approve the exact application SHA above, migrations 0018–0021, the maintenance/restart window, and the verified backup and application rollback procedure. Published content requires separate approval. No production command should run before that authorization.
+The owner must separately authorize deployment of the exact candidate SHA and a maintenance/restart window. This hotfix requires no database migration. SMS, RAG and catalogue publication remain disabled and out of scope.
