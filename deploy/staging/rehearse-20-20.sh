@@ -117,7 +117,7 @@ docker run -d --rm --name "$isolated" --network "$network" --network-alias db --
   --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=1g \
   --label rahgard.test=schema-20-20 --label "org.opencontainers.image.revision=$release_sha" \
   -e POSTGRES_USER="$owner" -e POSTGRES_DB="$database" -e POSTGRES_HOST_AUTH_METHOD=trust "$platform_image" >/dev/null
-docker inspect "$isolated" | python3 -c 'import json,sys; c=json.load(sys.stdin)[0]; h=c["HostConfig"]; assert h["NetworkMode"]==sys.argv[1] and not h["PortBindings"] and not h["Binds"] and not h["Mounts"] and "/var/lib/postgresql/data" in h["Tmpfs"] and all(m["Type"]=="tmpfs" for m in c["Mounts"])' "$network"
+docker inspect "$isolated" | python3 -c 'import json,sys; c=json.load(sys.stdin)[0]; h=c["HostConfig"]; assert h["NetworkMode"]==sys.argv[1] and not h["PortBindings"] and not h["Binds"] and not h.get("Mounts",[]) and "/var/lib/postgresql/data" in h["Tmpfs"] and all(m["Type"]=="tmpfs" for m in c.get("Mounts",[]))' "$network"
 ready=false
 for _ in $(seq 1 60); do
   if docker exec "$isolated" psql -X -q -A -t -h 127.0.0.1 -U "$owner" -d "$database" -c 'SELECT 1' >/dev/null 2>&1; then ready=true; break; fi

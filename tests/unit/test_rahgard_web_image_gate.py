@@ -48,6 +48,9 @@ def test_current_schema_rehearsal_never_applies_migrations() -> None:
     assert "INSERT INTO system.schema_migrations" not in rehearsal
     assert "0018_national_catalogue_ingestion" in rehearsal
     assert "0021_postgis_security_definer_publication" in rehearsal
+    assert 'not h.get("Mounts",[])' in rehearsal
+    assert 'all(m["Type"]=="tmpfs" for m in c.get("Mounts",[]))' in rehearsal
+    assert '"/var/lib/postgresql/data" in h["Tmpfs"]' in rehearsal
 
 
 def test_hosted_build_is_parameterized_and_artifact_uses_exact_source_sha() -> None:
