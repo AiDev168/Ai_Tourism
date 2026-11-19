@@ -46,6 +46,15 @@ source_archive_sha="$(sha256sum "$work_dir/source.tar" | awk '{print $1}')"
 source_tree="$work_dir/source"
 mkdir "$source_tree"
 tar -xf "$work_dir/source.tar" -C "$source_tree"
+python3 - "$source_tree" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+bad = [str(path.relative_to(root)) for path in root.rglob("*.sh") if b"\r" in path.read_bytes()]
+if bad:
+    raise SystemExit("Source archive contains CRLF shell scripts: " + ", ".join(bad[:20]))
+PY
 for dockerfile in deploy/staging/Dockerfile.api deploy/staging/Dockerfile.web; do
   [[ -f "$source_tree/$dockerfile" ]] || { echo "Missing target Dockerfile: $dockerfile" >&2; exit 2; }
 done
