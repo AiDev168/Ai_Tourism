@@ -1,5 +1,27 @@
 # Codex outcome mission: close V2 REAL-provider semantic-intake gate (no remote deployment)
 
+## Owner clarification — TWO REAL PROVIDER ROUTES, LOCAL ONLY (2026-11-19)
+
+**Important correction:** V2 has **NOT** been installed, deployed, tested, or attempted on the VPS. The original NO-GO means the **LOCAL** browser E2E used a simulated AI gateway and did not exercise a real LLM; it does not mean any connection to remote vLLM failed. Do not access the VPS or remote application to run V2 tests.
+
+The owner confirms **both** paths are available from the Windows development laptop:
+
+**Route 1 — Local LM Studio**: a running LM Studio OpenAI-compatible server on local Windows, typically `http://127.0.0.1:1234/v1/chat/completions`. Discover the actual bound host/port, loaded model name and server readiness rather than assuming a default. The current Settings and Chat adapter enforce HTTPS outside staging, so ordinary loopback HTTP will be rejected. Codex must implement the **narrowest justified local-only exception** for explicit `development` or `test` (and only if required, authenticated localhost `local_pilot`): allow `http://127.0.0.1` or `http://localhost` with a bounded configured port for this Chat provider, without accepting arbitrary network hosts, HTTP remote endpoints or credentials in URLs. Keep staging restriction `host.docker.internal:8000` unchanged, ensure secure authentication on the application, and add unit/security regression tests rejecting external insecure HTTP. If LM Studio is accessible through a secured loopback HTTPS proxy instead, that is acceptable without broadening HTTP policy. Do not change unrelated RAG or SMS adapter settings.
+
+**Route 2 — Remote vLLM over HTTPS from LOCAL laptop**: `https://llm.hinaa.ir/v1/chat/completions` (check exact compatible completion URL), using the owner's approved API key obtained solely from existing private local config and model id `TaHa1_VL` (Qwen3-VL-30B-A3B-Instruct), subject to real discovery/verification of model availability. Test this route directly from the Windows local app. **This is an outbound API call from the local development environment, not V2 deployment on the remote VPS**. Never print or commit the token.
+
+### Mandatory separate real-path evidence
+
+Run **two independent** end-to-end authenticated V2 journeys through the **actual production Chat adapter**, V2 frontend, FastAPI, and disposable PG17: one using LM Studio and one using the remote HTTPS provider. Each run should explicitly identify the route, actual model ID, real invocation count, sanitized response validation, fields extracted, missing/ambiguous fields, follow-up corrections, manual-edit precedence, fallback behavior, persistence and sharing/revision authorization. Do not silently substitute one route for the other. Each route may use its own model; evaluate both against the same semantic case set and report differences, never assume equal model capability. A direct `curl` provider call can be a preflight, but **not** replace the authenticated application E2E.
+
+Test failure states for both routes (timeout/unreachable/model-invalid) and demonstrate Regex fallback with correct provenance, no overwritten traveler-confirmed edits, no false missing-field errors, and no leaked secrets. Missing/unsupported loaded LM Studio model should be reported distinctly, not misrepresented as failure of remote vLLM.
+
+**Acceptance gates:** (a) LM Studio real-provider path PASS/FAIL/BLOCKED, (b) remote vLLM real-provider path PASS/FAIL/BLOCKED, (c) overall V2 LOCAL GO only when essential LLM-first semantics are demonstrated with real provider(s), required regression/security suites pass, and deficiencies are documented. The owner specifically requests both routes, so the final report must give an independent result for each; do not claim both tested based on one. If one is blocked, report overall incomplete or a clearly owner-reviewable partial verdict, not silent GO.
+
+**Stop boundary:** No VPS access, no new domain/DNS setup, no remote database, no persistent test data, no provider secret in GitHub. All updates remain on V2 Windows local checkout and the V2 GitHub branch until separate owner acceptance and explicit deployment authorization.
+
+---
+
 ## Current verified baseline
 
 - Branch `feat/rahgard-unified-travel-v2` at `85c722415a114c8fe07be10e99f3acd265f5d7b6` (do not confuse V2 HEAD with a deployment source SHA).
