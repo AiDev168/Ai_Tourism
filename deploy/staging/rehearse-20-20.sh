@@ -190,7 +190,7 @@ live_counts=$(live_db_rows "$counts_sql")
 echo "RESTORE_20_20_PASS migrations=20 no_ddl=true data_counts=preserved rls_tables=27 policies=67 candidates=0 partner_rows=0 publications=0"
 printf 'RESTORED_COUNTS_BEGIN\n%s\nRESTORED_COUNTS_END\n' "$counts_before"
 
-"$release_dir/scripts/ops/test_rahgard_web_image_pwa.sh" "$web_image" "$release_sha"
+bash "$release_dir/scripts/ops/test_rahgard_web_image_pwa.sh" "$web_image" "$release_sha"
 
 runtime_secrets() {
   local name="$1"
