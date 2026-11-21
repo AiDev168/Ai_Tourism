@@ -1597,6 +1597,29 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
             {extractionPath === 'llm' ? 'Extraction: configured LLM' : extractionPath === 'user_override' ? 'Extraction: traveler correction' : 'Extraction: deterministic fallback'}
           </small>}
           <p className="profile-next-step">{chatFlowCopy[locale].review}</p>
+          {extracted && <section className="rahgard-extracted-summary" aria-labelledby="rahgard-extracted-summary-heading">
+            <h3 id="rahgard-extracted-summary-heading">{locale === 'fa-IR' ? 'نیازهای استخراج‌شدهٔ سفر' : locale === 'ar' ? 'متطلبات الرحلة المستخلصة' : 'Extracted trip requirements'}</h3>
+            <p>{locale === 'fa-IR' ? 'مقادیر از همین گفتگو و اصلاحات شما به‌روز می‌شوند؛ پیش از برنامه‌ریزی آن‌ها را تأیید کنید.' : 'Values reflect your conversation and edits; confirm them before planning.'}</p>
+            <ul>{([
+              { key: 'destination', label: copy.profileDestination, value: destinationNames.filter(name => name.trim()).join(' → '), required: true },
+              { key: 'duration', label: copy.profileDuration, value: reviewedDuration !== null ? `${formatNumber(locale,reviewedDuration)} ${locale === 'fa-IR' ? 'روز' : 'days'}` : '', required: true },
+              { key: 'origin', label: copy.profileOrigin, value: originText.trim(), required: false },
+              { key: 'travelers', label: copy.profileTravelers, value: travelerCountText.trim(), required: false },
+              { key: 'dates', label: copy.profileTravelStart, value: travelStartText && travelEndText ? `${travelStartText} – ${travelEndText}` : '', required: false },
+              { key: 'budget', label: copy.profileBudget, value: budgetText.trim(), required: false },
+              { key: 'interests', label: copy.profileInterests, value: interestText.trim(), required: false },
+              { key: 'difficulty', label: locale === 'fa-IR' ? 'درجه سختی سفر' : 'Travel difficulty', value: difficultyText.trim(), required: false },
+              { key: 'weather', label: locale === 'fa-IR' ? 'آب‌وهوا' : 'Weather', value: weatherPreferenceText.trim(), required: false },
+              { key: 'cuisine', label: locale === 'fa-IR' ? 'غذای محلی' : 'Local cuisine', value: localCuisineText.trim(), required: false },
+            ] as Array<{key:string; label:string; value:string; required:boolean}>).map(item =>
+              <li key={item.key} data-required={item.required} data-filled={!!item.value}>
+                <span className="rahgard-summary-indicator" aria-hidden="true">{item.value ? '✓' : item.required ? '!' : '○'}</span>
+                <span className="rahgard-summary-label">{item.label}{item.required ? ' *' : ''}</span>
+                <b dir="auto">{item.value || (item.required
+                  ? (locale === 'fa-IR' ? 'نیاز به تکمیل' : 'Required')
+                  : (locale === 'fa-IR' ? 'اختیاری' : 'Optional'))}</b>
+              </li>)}</ul>
+          </section>}
           {extracted && <div className="profile-editor" id="trip-profile-editor" tabIndex={-1}>
             <fieldset>
               <legend>{copy.profileDestination} <span className="trip-field-required">{locale === 'fa-IR' ? '(ضروری)' : locale === 'ar' ? '(مطلوب)' : '(Required)'}</span></legend>
