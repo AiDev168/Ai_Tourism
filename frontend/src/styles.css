@@ -778,3 +778,289 @@ body {
   color: #304f6c; background: #f0f5fa; border: 1px solid #b2cbe2;
   border-radius: 10px; padding: 9px 12px;
 }
+
+
+/* RAHGARD_V2_CHAT_UNIFIED_2026_11_21
+ * Single visual chat surface, dark RTL shell, and readable partner share links.
+ * Frontend-only; existing authentication, state transitions, profile confirmation
+ * and server-side access control remain authoritative.
+ */
+body:has(.traveler-app), body:has(.partner-workspace) {
+  background: #080c16;
+  color: #e9ebf8;
+}
+body:has(.traveler-app) .topbar,
+body:has(.partner-workspace) .topbar {
+  background: #0b101d;
+  border-color: #262c42;
+  color: #f1edff;
+  box-shadow: none;
+}
+body:has(.traveler-app) .topbar .brand small,
+body:has(.partner-workspace) .topbar .brand small,
+body:has(.traveler-app) .topbar nav,
+body:has(.partner-workspace) .topbar nav { color: #b3b4cf; }
+body:has(.traveler-app) .brand-mark,
+body:has(.partner-workspace) .brand-mark {
+  background: linear-gradient(145deg,#a04dfc,#6122c1);
+  color: #fff;
+}
+body:has(.traveler-app) .top-actions select,
+body:has(.partner-workspace) .top-actions select {
+  background: #161c2d; color: #f3eeff; border-color: #414063;
+}
+body:has(.traveler-app) .auth-entry > button,
+body:has(.traveler-app) .auth-signed-in button,
+body:has(.partner-workspace) .auth-entry > button,
+body:has(.partner-workspace) .auth-signed-in button {
+  background: #26213f; border-color: #7551b3; color: #f4eaff;
+}
+.traveler-app .unified-trip-experience {
+  --ink: #f1efff;
+  --muted: #b6b6d0;
+  --forest: #9050f2;
+  --forest-deep: #7434d5;
+  --clay: #e6b1f7;
+  --line: #39344f;
+  --surface: #14192a;
+  --soft-green: #191f33;
+  --soft-sand: #191c2f;
+  width: min(1500px, calc(100% - 24px));
+  margin: 12px auto 42px;
+  color: #f1efff;
+  background: linear-gradient(145deg,#0d1221,#121426);
+  border: 1px solid #30314f;
+  border-radius: 26px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.27);
+  overflow: visible;
+}
+.unified-trip-experience .rahgard-chat-entrance {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(270px, .85fr);
+  gap: 16px;
+  direction: rtl;
+  align-items: stretch;
+  padding: 18px;
+}
+.rahgard-chat-entrance .hero-copy {
+  min-width: 0; max-width: none;
+  padding: clamp(18px,3vw,32px);
+  background: #101727;
+  border: 1px solid #35304d;
+  border-radius: 22px;
+  display: flex; flex-direction: column;
+}
+.rahgard-chat-entrance .hero-copy .eyebrow {
+  color: #cba4ff; margin: 0 0 6px;
+}
+.rahgard-chat-entrance .hero-copy > h1 {
+  max-width: none;
+  color: #f8f4ff;
+  font-size: clamp(23px,3vw,31px);
+  margin: 0 0 8px;
+  text-align: start;
+}
+.rahgard-chat-entrance .hero-body {
+  color: #aeb4cb; font-size: 13px; margin: 0 0 24px;
+}
+.rahgard-chat-intro { display: flex; justify-content: flex-end; padding-bottom: 12px; }
+.rahgard-chat-greeting {
+  max-width: min(88%,690px);
+  background: linear-gradient(135deg,#2d224f,#171b35);
+  border: 1px solid #68449b;
+  border-radius: 20px 20px 6px 20px;
+  padding: 16px 20px;
+  box-shadow: 0 6px 22px rgba(112,50,218,.13);
+}
+.rahgard-chat-greeting strong { color: #eedbff; }
+.rahgard-chat-greeting p { margin: 9px 0 0; color: #f0eaff; line-height: 2; font-size: 14px; }
+.unified-trip-experience .rahgard-chat-entrance .trip-form {
+  margin-top: auto; border: 0; box-shadow: none; border-radius: 0;
+  padding: 12px 0 0; background: transparent;
+}
+.rahgard-chat-entrance .trip-form label { color: #eadcff; font-size: 14px; }
+.rahgard-chat-entrance .trip-form-help { color: #b7b4d0; }
+.rahgard-chat-entrance .trip-form textarea {
+  background: #0a1020; color: #fff;
+  border: 1px solid #8253cb; border-radius: 16px;
+  padding: 16px; font-size: 15px; line-height: 1.9;
+}
+.rahgard-chat-entrance .trip-form textarea::placeholder { color: #a6a6c0; }
+.rahgard-chat-entrance .trip-form > .primary {
+  background: linear-gradient(120deg,#a44bf3,#6430d8);
+  box-shadow: 0 12px 26px rgba(108,42,210,.27);
+  min-height: 50px; margin-top: 12px;
+}
+.rahgard-chat-entrance .ai-processing-notice {
+  background: #161e31; border: 1px solid #333953; color: #d8d5ed;
+}
+.rahgard-chat-entrance .ai-processing-notice > strong { color: #f0deff; }
+.rahgard-chat-entrance .trip-response {
+  background: #22223c; color: #efebff; border-color: #9457e0;
+}
+.rahgard-chat-entrance .trip-summary dd,
+.rahgard-chat-entrance .trip-summary dt { color: #f5edff; }
+.rahgard-chat-guide {
+  background: #171a2e; border: 1px solid #363051;
+  border-radius: 22px; padding: clamp(18px,2.6vw,28px);
+  color: #f0eefe;
+}
+.rahgard-chat-guide h2 { font-size: 19px; margin: 0 0 10px; }
+.rahgard-chat-guide p { color: #bfc1d7; line-height: 1.9; font-size: 13px; }
+.rahgard-guide-group {
+  margin-top: 22px; padding: 15px 12px; border-radius: 14px;
+  border: 1px solid #383554; background: #111626;
+}
+.rahgard-guide-group > strong { font-size: 13px; color: #e9d8ff; }
+.rahgard-guide-group ul { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 9px; }
+.rahgard-guide-group li {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border: 1px solid #3f3959; border-radius: 11px;
+}
+.rahgard-guide-group li b { font-size: 11px; color: #ffc1cd; }
+.rahgard-guide-group small { color: #d4bfd8; line-height: 1.8; display: block; }
+.traveler-app .unified-trip-experience .traveler-workspace {
+  background: transparent; border: 0; color: #f5efff;
+  padding: clamp(15px,2.5vw,30px);
+}
+.unified-trip-experience .traveler-workspace-heading h2 { color: #f7efff; }
+.unified-trip-experience .traveler-workspace-heading,
+.unified-trip-experience .journey-new-actions { color: #f5eaff; }
+.unified-trip-experience .privacy-notice,
+.unified-trip-experience .profile-next-step { color: #cbc5dd; }
+.unified-trip-experience .journey-columns {
+  grid-template-columns: minmax(0,1.75fr) minmax(290px,.92fr);
+  gap: 16px;
+}
+.unified-trip-experience .journey-panel {
+  min-width: 0;
+  border: 1px solid #3a3359;
+  border-radius: 21px;
+  background: #14182a;
+  color: #f0edff;
+  padding: clamp(16px,2.5vw,26px);
+  box-shadow: none;
+}
+.unified-trip-experience .recommend-panel { background: #1a1b30; }
+.unified-trip-experience .panel-title { color: #f2ddff; font-weight: 800; }
+.unified-trip-experience .mini-icon { background: #33254f; color: #d6b2ff; }
+.unified-trip-experience .conversation-transcript {
+  max-height: min(60dvh,750px); min-height: 320px;
+  overflow-y: auto; background: #0b1020; border: 1px solid #2a2d49;
+  border-radius: 16px; padding: 18px; align-content: start;
+}
+.unified-trip-experience .saved-message {
+  width: fit-content; max-width: 90%;
+  color: #f1efff; border-radius: 17px;
+  box-shadow: none; padding: 13px 17px;
+}
+.unified-trip-experience .saved-message-user {
+  justify-self: start; margin: 0; border: 1px solid #353954; background: #23273e;
+}
+.unified-trip-experience .saved-message-assistant,
+.unified-trip-experience .saved-message-system,
+.unified-trip-experience .saved-message-tool {
+  justify-self: end; margin: 0;
+  background: #2a2048; border: 1px solid #634393;
+}
+.unified-trip-experience .saved-message small { color: #b5a4cf; }
+.unified-trip-experience .saved-message p { line-height: 1.95; }
+.unified-trip-experience .conversation-panel > label { color: #e8ddf9; }
+.unified-trip-experience .journey-panel textarea,
+.unified-trip-experience .journey-panel select,
+.unified-trip-experience .profile-editor input:not([type=checkbox]):not([type=radio]) {
+  background: #0e1425; color: #f5efff; border: 1px solid #555075;
+  border-radius: 12px; padding: 11px 13px;
+}
+.unified-trip-experience .profile-editor label,
+.unified-trip-experience .profile-editor legend { color: #e9dbff; }
+.unified-trip-experience .profile-editor > fieldset,
+.unified-trip-experience .requirement-consent { background: #161c31; border-color: #3e395b; }
+.unified-trip-experience .profile-editor input[aria-invalid="true"] {
+  border: 2px solid #f0909a; background: #322134;
+}
+.unified-trip-experience .assistant-controls .primary,
+.unified-trip-experience .traveler-workspace button.primary {
+  background: linear-gradient(120deg,#9945e8,#672cd8); color: #fff;
+  border: 1px solid #a467f4;
+}
+.unified-trip-experience .assistant-provider-state[data-provider-state="connected"],
+.unified-trip-experience .assistant-provider-state[data-provider-state="responded"] {
+  background: #102a2a; color: #9af3c6; border-color: #388974;
+}
+.unified-trip-experience .assistant-provider-state[data-provider-state="configured"],
+.unified-trip-experience .assistant-provider-state[data-provider-state="loading"] {
+  background: #1a2539; color: #d2d8ff; border-color: #54668f;
+}
+.unified-trip-experience .recommendation-controls,
+.unified-trip-experience .provisional-plan-card { background: #1d2038; color: #eee9ff; border-color: #4a436a; }
+.unified-trip-experience .empty-state { background: #241d35; color: #ede5ff; }
+.unified-trip-experience .journey-alert,
+.unified-trip-experience .journey-error { border-radius: 10px; }
+.unified-trip-experience .recommend-panel { max-height: min(88dvh,1100px); overflow-y: auto; }
+.unified-trip-experience .trip-field-required { color: #ffabb7; }
+.unified-trip-experience .trip-field-optional { color: #c5b0e4; }
+
+/* Company inbox: two real, protected, addressable link views. */
+body:has(.partner-workspace) .partner-workspace { color: #eeeafc; max-width: 1280px; }
+.partner-workspace > header { background: #141a2e; border: 1px solid #3b335a; color: #f5edff; }
+.partner-workspace h1, .partner-workspace h2, .partner-workspace h3 { color: #f5ecff; }
+.partner-workspace p, .partner-workspace > header a { color: #c8c3dd; }
+.partner-workspace .partner-request-inbox {
+  border: 1px solid #423568; border-radius: 22px;
+  padding: clamp(17px,2.5vw,28px); background: #121828;
+  margin-block: 22px;
+}
+.partner-workspace .partner-request-item {
+  margin-block: 14px; padding: clamp(15px,2.4vw,23px);
+  background: #1b2034; border: 1px solid #62449b; border-radius: 17px;
+  color: #f5efff;
+}
+.partner-workspace .partner-request-item header,
+.partner-workspace .partner-request-item > p { color: #f3ebff; }
+.partner-share-link-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-block: 14px; }
+.partner-workspace .partner-share-link {
+  min-height: 50px; padding: 11px 14px;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; border: 1px solid #a06af1; border-radius: 12px;
+  background: linear-gradient(120deg,#8e42e1,#6730c0); color: #fff;
+  font-size: 14px; font-weight: 800; overflow-wrap: anywhere;
+}
+.partner-workspace .partner-share-link:nth-child(2) { background: #28203f; }
+.partner-workspace .partner-share-link:hover { filter: brightness(1.14); }
+.partner-workspace .partner-share-link:focus-visible { outline: 3px solid #dbc0ff; }
+.partner-workspace .partner-linked-view {
+  border: 1px solid #985bea; border-radius: 20px;
+  background: #191a30; padding: clamp(20px,3vw,32px); margin-top: 22px;
+}
+.partner-workspace .partner-back-link {
+  display: inline-block; padding: 9px 13px; margin-bottom: 12px;
+  border-radius: 10px; border: 1px solid #7654ad; color: #eee1ff;
+}
+.partner-readable-request { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.partner-readable-request > div { padding: 12px; background: #23253e; border: 1px solid #3e3b60; border-radius: 12px; min-width: 0; }
+.partner-readable-request dt { color: #c7b5e6; font-size: 12px; }
+.partner-readable-request dd { margin: 6px 0 0; color: #fff; overflow-wrap: anywhere; }
+.partner-readable-itinerary pre, .partner-request-item pre {
+  max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere;
+  direction: ltr; text-align: start; padding: 12px; border-radius: 10px;
+  background: #0c1120; color: #d5e2f4;
+}
+.partner-workspace .partner-card { background: #171d30; color: #ede7ff; border-color: #3c3b56; }
+.partner-workspace .partner-card label { color: #eee5ff; }
+.partner-workspace .partner-card .primary { background: #7039c4; color: #fff; }
+.partner-workspace .partner-card input, .partner-workspace .partner-card select { background: #0e1525; color: #efecff; border-color: #555073; }
+@media (max-width: 900px) {
+  .unified-trip-experience .rahgard-chat-entrance { grid-template-columns: minmax(0,1fr); }
+  .unified-trip-experience .journey-columns { grid-template-columns: minmax(0,1fr); }
+  .unified-trip-experience .recommend-panel { position: static; max-height: none; overflow: visible; }
+}
+@media (max-width: 600px) {
+  .traveler-app .unified-trip-experience { width: calc(100% - 10px); border-radius: 17px; margin: 5px auto 20px; }
+  .unified-trip-experience .rahgard-chat-entrance { gap: 9px; padding: 9px; }
+  .rahgard-chat-entrance .hero-copy { padding: 15px; }
+  .rahgard-chat-greeting { max-width: 95%; }
+  .unified-trip-experience .conversation-transcript { max-height: 55dvh; min-height: 240px; padding: 12px; }
+  .unified-trip-experience .saved-message { max-width: 98%; }
+  .partner-share-link-actions, .partner-readable-request { grid-template-columns: minmax(0,1fr); }
+}
