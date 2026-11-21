@@ -378,6 +378,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const [provisionalCandidate, setProvisionalCandidate] = useState<{ days: Array<{ day_number: number; stops: Array<{ name: string; role: 'model_proposed' }> }> } | null>(null);
   const [provisionalItinerary, setProvisionalItinerary] = useState<ProvisionalItinerary | null>(null);
   const [provisionalDays, setProvisionalDays] = useState<ProvisionalDay[]>([]);
+  const [expandedProvisionalDay, setExpandedProvisionalDay] = useState<number | null>(1);
   const [provisionalDirty, setProvisionalDirty] = useState(false);
   const [newProvisionalStop, setNewProvisionalStop] = useState('');
   const [itinerary, setItinerary] = useState<ItineraryRecord | null>(null);
@@ -2081,8 +2082,22 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
         <h3 id="provisional-itinerary-title">{provisionalText[locale].edit}</h3>
         <p className="provisional-warning">{provisionalText[locale].warning}</p>
         <div className="saved-itinerary-days">
-          {provisionalDays.map(day => <section className="itinerary-day" key={day.day_number} aria-labelledby={`provisional-day-${day.day_number}`}>
-            <h4 id={`provisional-day-${day.day_number}`}>{copy.day} {formatNumber(locale, day.day_number)}</h4>
+          {provisionalDays.map(day => <details className="itinerary-day provisional-day" key={day.day_number}
+            data-provisional-day={day.day_number} open={expandedProvisionalDay === day.day_number}>
+            <summary className="provisional-day-summary" onClick={event => {
+              // Keep one day open at a time while retaining every unsaved edit
+              // in the parent state. Native keyboard activation dispatches click.
+              event.preventDefault();
+              setExpandedProvisionalDay(current => current === day.day_number ? null : day.day_number);
+            }}>
+              <strong>{copy.day} {formatNumber(locale, day.day_number)}</strong>
+              <span>{day.stops.length === 0 ? copy.unplannedDay
+                : locale === 'fa-IR' ? `${formatNumber(locale, day.stops.length)} توقف`
+                  : locale === 'ar' ? `${formatNumber(locale, day.stops.length)} محطات`
+                    : `${formatNumber(locale, day.stops.length)} stops`}</span>
+              {!!day.stops.length && <small dir="auto">{day.stops.map(stop => stop.name).join(' · ')}</small>}
+            </summary>
+            <div className="provisional-day-editor">
             {day.stops.length === 0 && <p className="unplanned-day" role="status">{copy.unplannedDay}</p>}
             {day.stops.map((stop, index) => <article className="saved-stop provisional-stop" key={`${day.day_number}-${index}`}>
               <label htmlFor={`provisional-name-${day.day_number}-${index}`}>{provisionalText[locale].name}</label>
@@ -2112,7 +2127,8 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
               <input id={`provisional-add-${day.day_number}`} dir="auto" maxLength={160} value={newProvisionalStop} onChange={event => setNewProvisionalStop(event.target.value)} />
               <button type="button" className="secondary" onClick={() => addProvisionalStop(day.day_number)} disabled={!newProvisionalStop.trim()}>{provisionalText[locale].add}</button>
             </div>
-          </section>)}
+            </div>
+          </details>)}
         </div>
         <button className="primary" type="button" onClick={() => void saveProvisionalEdits()} disabled={busy || !online || !provisionalDirty}>{busy ? copy.saving : provisionalText[locale].saveChanges}</button>
       </section>}

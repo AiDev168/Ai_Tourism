@@ -296,6 +296,11 @@ describe('persisted traveler journey', () => {
     await act(async () => { blankPlan.click(); }); await settle();
     expect(savedPlan).toMatchObject({ day_count: 3, status: 'provisional_unverified', unplanned_days: [1, 2, 3] });
     expect(host.querySelectorAll('.provisional-itinerary .itinerary-day')).toHaveLength(3);
+    const dayOne = host.querySelector<HTMLDetailsElement>('.provisional-day[data-provisional-day="1"]')!;
+    const dayTwo = host.querySelector<HTMLDetailsElement>('.provisional-day[data-provisional-day="2"]')!;
+    expect(dayOne.open).toBe(true);
+    expect(dayTwo.open).toBe(false);
+    expect(dayOne.querySelector('summary')?.textContent).toContain('Unplanned');
     const addInput = host.querySelector<HTMLInputElement>('#provisional-add-1')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(addInput, 'Traveler-selected museum');
@@ -303,6 +308,13 @@ describe('persisted traveler journey', () => {
     });
     const addButton = [...host.querySelectorAll('button')].find(button => button.textContent === 'Add a place you provide')!;
     await act(async () => { addButton.click(); }); await settle();
+    expect(dayOne.querySelector('summary')?.textContent).toContain('Traveler-selected museum');
+    await act(async () => { dayTwo.querySelector('summary')!.click(); }); await settle();
+    expect(dayOne.open).toBe(false);
+    expect(dayTwo.open).toBe(true);
+    await act(async () => { dayOne.querySelector('summary')!.click(); }); await settle();
+    expect(dayOne.open).toBe(true);
+    expect(dayOne.querySelector<HTMLInputElement>('#provisional-name-1-0')?.value).toBe('Traveler-selected museum');
     const saveEdits = [...host.querySelectorAll('button')].find(button => button.textContent === 'Save edits')!;
     await act(async () => { saveEdits.click(); }); await settle();
     const updateCall = fetchMock.mock.calls.find(call => String(call[0]) === '/api/v1/provisional-itineraries/provisional-1' && call[1]?.method === 'PUT')!;

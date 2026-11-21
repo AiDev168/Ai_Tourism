@@ -1505,3 +1505,63 @@ html[data-rahgard-theme="light"] .partner-advanced-help > div { background: #f5f
 html[data-rahgard-theme="light"] .partner-advanced-help :where(dt,dd) { color: #273047; }
 .partner-request-link-note { line-height: 1.8; margin-block: 11px 2px; }
 @media (max-width: 620px) { .partner-advanced-help { grid-template-columns: minmax(0,1fr); } }
+
+/* V2 multi-day provisional planning: concise keyboard-accessible day cards.
+   The editable inputs stay mounted and their values live in React state even
+   when a day is collapsed. This does not alter itinerary persistence. */
+.unified-trip-experience .provisional-itinerary .provisional-day {
+  padding: 0;
+  overflow: hidden;
+}
+.unified-trip-experience .provisional-day-summary {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 6px 14px;
+  align-items: center;
+  padding: 16px 18px;
+  min-height: 58px;
+  list-style: none;
+  cursor: pointer;
+  color: #26324d;
+  background: #f5f6fd;
+  border-radius: 15px;
+}
+.unified-trip-experience .provisional-day-summary::-webkit-details-marker { display: none; }
+.unified-trip-experience .provisional-day-summary::after {
+  content: '⌄';
+  grid-column: 2;
+  grid-row: 1;
+  font-size: 20px;
+  line-height: 1;
+  color: currentColor;
+}
+.unified-trip-experience .provisional-day[open] > .provisional-day-summary::after { content: '⌃'; }
+.unified-trip-experience .provisional-day-summary strong { font-size: 16px; }
+.unified-trip-experience .provisional-day-summary > span {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  line-height: 1.65;
+  font-size: 13px;
+}
+.unified-trip-experience .provisional-day-summary small {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #465371;
+}
+.unified-trip-experience .provisional-day-summary:focus-visible {
+  outline: 3px solid #7950ba;
+  outline-offset: -4px;
+}
+.unified-trip-experience .provisional-day-editor { padding: 0 15px 15px; }
+.unified-trip-experience .provisional-day:not([open]) .provisional-day-editor { display: none; }
+html[data-rahgard-theme="dark"] .unified-trip-experience .provisional-day-summary {
+  color: #f3edff;
+  background: #2b324a;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience .provisional-day-summary small { color: #ddd4f4; }
+@media (max-width: 600px) {
+  .unified-trip-experience .provisional-day-summary { padding: 14px 12px; }
+  .unified-trip-experience .provisional-day-editor { padding: 0 9px 12px; }
+}
