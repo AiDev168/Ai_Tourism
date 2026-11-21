@@ -2455,11 +2455,18 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     await page.locator(`.history-trip[data-trip-id="${tripId}"] button`).first().click();
     await page.locator('.traveler-company-responses').waitFor({ state: 'visible', timeout: 15_000 });
     await page.locator('.traveler-company-response').first().waitFor({ state: 'visible', timeout: 15_000 });
+    const tripBeforeDecision = await requestBrowserJson(page,`/api/v1/trips/${tripId}`,'GET');
     const decision = await requestBrowserJson(page,
       `/api/v1/partners/trips/${tripId}/company-responses/${counterResponse.response.response_id}/decision`,
       'POST',identity.csrfToken,{decision:'accepted'});
     if (decision.traveler_decision !== 'accepted') {
       throw new Error('real_provider_traveler_company_decision_failed');
+    }
+    const tripAfterDecision = await requestBrowserJson(page,`/api/v1/trips/${tripId}`,'GET');
+    if (tripBeforeDecision.version !== tripAfterDecision.version
+      || JSON.stringify(tripBeforeDecision.confirmed_requirements)
+          !== JSON.stringify(tripAfterDecision.confirmed_requirements)) {
+      throw new Error('real_provider_company_decision_must_not_modify_traveler_trip');
     }
     safeResult.companyProposals = { acceptedAsRequested:true, counterOffer:true,
       travelerAcceptedCounterOffer:true, travelerTripUnchanged:true };
