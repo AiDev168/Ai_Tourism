@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Locale } from '../i18n/messages';
+import { displayPartnerRequest } from './partnerRequestDisplay';
 
 type Org = { organization_id: string; display_name: string; organization_type: string; application_status: string };
 type Workspace = { services: Array<Record<string, unknown>>; schedules: Array<Record<string, unknown>>; offers: Array<Record<string, unknown>>; prices: Array<Record<string, unknown>>; availability: Array<Record<string, unknown>>; destinations: Array<Record<string, unknown>> };
@@ -77,18 +78,13 @@ export function PartnerWorkspace({ locale, csrfToken }: { locale: Locale; csrfTo
       {!inboxLoading && linkedItem && <>
         <p>{t.revision} {linkedItem.revision_number} · {linkedItem.event_kind === 'request_revised' ? t.revised : t.shared}</p>
         {requestedView === 'request' ? <dl className="partner-readable-request">
-          {Object.entries(linkedItem.request_snapshot.requirements && typeof linkedItem.request_snapshot.requirements === 'object'
-            ? linkedItem.request_snapshot.requirements : {}).filter(([field]) => field !== 'requirement_consent'
-              && field !== 'field_provenance').map(([field,value]) =>
-              <div key={field}><dt>{({
-                origin:t.origin, destinations:t.destination, duration_days:t.duration,
-                traveler_count:t.travelers, budget:t.budget, interests:t.interests,
-                travel_dates: locale === 'fa-IR' ? 'تاریخ سفر' : 'Travel dates',
-                local_cuisine: locale === 'fa-IR' ? 'غذای محلی' : 'Local food',
-                travel_difficulty: locale === 'fa-IR' ? 'درجه سختی' : 'Difficulty',
-                weather_preferences: locale === 'fa-IR' ? 'آب‌وهوا' : 'Weather',
-              } as Record<string,string>)[field] ?? field}</dt>
-              <dd dir="auto">{value == null ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd></div>)}
+          {displayPartnerRequest(
+            linkedItem.request_snapshot.requirements && typeof linkedItem.request_snapshot.requirements === 'object'
+              ? linkedItem.request_snapshot.requirements as Record<string,unknown> : {},
+            locale,
+          ).map(field => <div key={field.key} data-provided={field.provided}>
+            <dt>{field.label}</dt><dd dir="auto">{field.text}</dd>
+          </div>)}
           {typeof linkedItem.request_snapshot.original_request === 'string' && <div><dt>{locale === 'fa-IR' ? 'متن اصلی درخواست (با اجازهٔ مسافر)' : 'Original request with consent'}</dt><dd dir="auto">{linkedItem.request_snapshot.original_request}</dd></div>}
         </dl> : <div className="partner-readable-itinerary">
           {Array.isArray(linkedItem.itinerary_snapshot.published_itineraries)
@@ -155,9 +151,9 @@ export function PartnerWorkspace({ locale, csrfToken }: { locale: Locale; csrfTo
             </a>
           </div>
           <details><summary>{t.viewRequest}</summary>
-            <dl><div><dt>{t.origin}</dt><dd>{String(request.origin??'—')}</dd></div><div><dt>{t.duration}</dt><dd>{String(request.duration_days??'—')}</dd></div>
-              <div><dt>{t.travelers}</dt><dd>{String(request.traveler_count??'—')}</dd></div><div><dt>{t.budget}</dt><dd>{String(budget||'—')}</dd></div>
-              <div><dt>{t.interests}</dt><dd>{Array.isArray(request.interests)?request.interests.join(', '):'—'}</dd></div>
+            <dl className="partner-readable-request">
+              {displayPartnerRequest(request,locale).map(field =>
+                <div key={field.key} data-provided={field.provided}><dt>{field.label}</dt><dd dir="auto">{field.text}</dd></div>)}
             </dl>
             {typeof item.request_snapshot.original_request==='string'&&<blockquote dir="auto">{item.request_snapshot.original_request}</blockquote>}
             <h3>{t.itinerary}</h3>
