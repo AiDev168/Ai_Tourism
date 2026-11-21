@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Locale } from '../i18n/messages';
 import { displayPartnerRequest } from './partnerRequestDisplay';
+import { CompanyResponseActions } from './CompanyResponseActions';
 
 type Org = { organization_id: string; display_name: string; organization_type: string; application_status: string };
 type Workspace = { services: Array<Record<string, unknown>>; schedules: Array<Record<string, unknown>>; offers: Array<Record<string, unknown>>; prices: Array<Record<string, unknown>>; availability: Array<Record<string, unknown>>; destinations: Array<Record<string, unknown>> };
@@ -124,6 +125,8 @@ export function PartnerWorkspace({ locale, csrfToken }: { locale: Locale; csrfTo
             && !linkedItem.itinerary_snapshot.provisional
             && <p>{locale === 'fa-IR' ? 'برنامه‌ای برای این نسخه به اشتراک گذاشته نشده است.' : 'No itinerary has been shared in this revision.'}</p>}
         </div>}
+        <CompanyResponseActions locale={locale} csrfToken={csrfToken} organizationId={orgId}
+          shareId={linkedItem.share_id} revisionId={linkedItem.revision_id} />
       </>}
     </section>}
 
