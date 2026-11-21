@@ -11,6 +11,12 @@ const copy: Record<Locale, Record<string,string>> = {
   ar: { title:'مساحة الشركاء', intro:'قدّم بيانات المؤسسة والخدمات للمراجعة. الإرسال لا يعني النشر العام.', org:'المؤسسة', legal:'الاسم القانوني', display:'الاسم الظاهر', createOrg:'إنشاء مؤسسة', service:'الخدمة', serviceName:'اسم الخدمة', serviceDescription:'وصف الخدمة', serviceKey:'معرّف الخدمة', serviceType:'نوع الخدمة', createService:'إنشاء خدمة', linkDestination:'اربط الخدمة بوجهة منشورة', destination:'الوجهة الأساسية', relation:'نوع العلاقة', evidenceNote:'ملاحظة الدليل (اختيارية)', createLink:'إضافة رابط الوجهة', schedule:'الجدول', scheduleType:'نوع الجدول', timezone:'المنطقة الزمنية', starts:'البداية (اختياري)', ends:'النهاية (اختياري)', createSchedule:'إنشاء جدول', offer:'العرض', offerType:'نوع العرض', createOffer:'إنشاء عرض', price:'السعر', amount:'المبلغ', currency:'رمز العملة', denomination:'الفئة', unit:'وحدة السعر', createPrice:'إضافة سعر', availability:'التوافر', occurrence:'وقت الواقعة', state:'الحالة', createAvailability:'إضافة التوافر', select:'اختر', ok:'حُفظت البيانات للمراجعة', error:'تعذّر حفظ البيانات.', requestInbox:'صندوق طلبات المسافرين', requestIntro:'تظهر الطلبات بعد موافقة المسافر على مشاركتها مع مؤسسة معتمدة.', shared:'طلب جديد', revised:'نسخة محدّثة', revision:'الإصدار', viewRequest:'عرض الطلب وخطة الرحلة', noRequests:'لا توجد طلبات لهذه المؤسسة.', trip:'الرحلة', origin:'نقطة الانطلاق', duration:'المدة', travelers:'المسافرون', budget:'الميزانية', interests:'الاهتمامات', itinerary:'خطة الرحلة', unverified:'يجب عدم التعامل مع المعلومات التشغيلية غير المتحقق منها كحقائق.' },
 };
 
+/** Authenticated deep links: no bearer tokens; access is checked again via the organization inbox API. */
+export function partnerShareViewPath(organizationId: string, shareId: string, revision: number, view: 'request' | 'itinerary'): string {
+  const query = new URLSearchParams({ org: organizationId, share: shareId, revision: String(revision), view });
+  return `/partners?${query.toString()}`;
+}
+
 export function localScheduleInstant(value:string,timeZone:string):string{
   const match=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
   if(!match)throw new Error('invalid local date');
@@ -23,28 +29,80 @@ export function localScheduleInstant(value:string,timeZone:string):string{
 }
 
 export function PartnerWorkspace({ locale, csrfToken }: { locale: Locale; csrfToken: string }) {
-  const t=copy[locale]; const [orgs,setOrgs]=useState<Org[]>([]); const [orgId,setOrgId]=useState('');
+  const t=copy[locale];
+  const linkParams = new URLSearchParams(window.location.search);
+  const requestedOrg = linkParams.get('org') || '';
+  const requestedShare = linkParams.get('share') || '';
+  const requestedRevision = Number(linkParams.get('revision'));
+  const requestedView = linkParams.get('view');
+  const isLinkView = !!requestedOrg && !!requestedShare && Number.isSafeInteger(requestedRevision)
+    && requestedRevision > 0 && (requestedView === 'request' || requestedView === 'itinerary');
+  const [orgs,setOrgs]=useState<Org[]>([]); const [orgId,setOrgId]=useState('');
+  const [inboxLoading,setInboxLoading]=useState(false);
   const [data,setData]=useState<Workspace>({services:[],schedules:[],offers:[],prices:[],availability:[],destinations:[]});
   const [publishedPlaces,setPublishedPlaces]=useState<PublishedPlace[]>([]);
   const [requestInbox,setRequestInbox]=useState<RequestInboxItem[]>([]);
+  const linkedItem = isLinkView && orgId === requestedOrg
+    ? requestInbox.find(item => item.share_id === requestedShare && item.revision_number === requestedRevision) : undefined;
   const [notice,setNotice]=useState(''); const [serviceId,setServiceId]=useState(''); const [scheduleId,setScheduleId]=useState(''); const [offerId,setOfferId]=useState('');
   const [destinationId,setDestinationId]=useState(''); const [destinationRelation,setDestinationRelation]=useState('at'); const [destinationEvidence,setDestinationEvidence]=useState('');
   const [serviceName,setServiceName]=useState(''); const [serviceKey,setServiceKey]=useState(''); const [serviceType,setServiceType]=useState('tour');
   const [serviceDescription,setServiceDescription]=useState(''); const [orgType,setOrgType]=useState('company'); const [occurrence,setOccurrence]=useState('');
   const [legal,setLegal]=useState(''); const [display,setDisplay]=useState('');
   const api=async(path:string,body?:unknown)=>{const r=await fetch(`/api/v1/partners${path}`,{method:body?'POST':'GET',credentials:'same-origin',headers:{Accept:'application/json',...(body?{'Content-Type':'application/json','X-CSRF-Token':csrfToken}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'}); if(!r.ok) throw new Error('request failed'); return r.json();};
-  const reload=async()=>{const r=await api('/organizations');const rows=Array.isArray(r.items)?r.items as Org[]:[];setOrgs(rows); if(!orgId&&rows[0])setOrgId(rows[0].organization_id);};
+  const reload=async()=>{const r=await api('/organizations');const rows=Array.isArray(r.items)?r.items as Org[]:[];setOrgs(rows); if(!orgId&&rows[0])setOrgId(rows.find(row => row.organization_id === requestedOrg)?.organization_id ?? rows[0].organization_id);};
   useEffect(()=>{void reload().catch(()=>setNotice(t.error));},[]);
   useEffect(()=>{void fetch('/api/v2/catalog/destinations?limit=100',{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}}).then(async response=>response.ok?response.json():null).then(result=>setPublishedPlaces(Array.isArray(result?.items)?result.items:[])).catch(()=>setPublishedPlaces([]));},[]);
   const reloadWorkspace=async(id:string)=>{
-    const [workspace,inbox]=await Promise.all([api(`/organizations/${id}/workspace`),api(`/organizations/${id}/requests`)]);
-    setData(workspace as Workspace);setRequestInbox(Array.isArray(inbox.items)?inbox.items as RequestInboxItem[]:[]);
+    setInboxLoading(true);
+    try {
+      const [workspace,inbox]=await Promise.all([api(`/organizations/${id}/workspace`),api(`/organizations/${id}/requests`)]);
+      setData(workspace as Workspace);setRequestInbox(Array.isArray(inbox.items)?inbox.items as RequestInboxItem[]:[]);
+    } finally { setInboxLoading(false); }
   };
   useEffect(()=>{if(orgId)void reloadWorkspace(orgId).catch(()=>{setData({services:[],schedules:[],offers:[],prices:[],availability:[],destinations:[]});setRequestInbox([]);setNotice(t.error);});},[orgId]);
   const submit=async(action:()=>Promise<unknown>)=>{try{await action();setNotice(t.ok);if(orgId)await reloadWorkspace(orgId);await reload();}catch{setNotice(t.error);}};
   const form=(title:string,children:ReactNode,onSubmit:()=>void,button:string)=><form className="partner-card" onSubmit={e=>{e.preventDefault();onSubmit();}}><h2>{title}</h2>{children}<button className="primary" type="submit">{button}</button></form>;
   return <main className="partner-workspace" dir={locale==='en-US'?'ltr':'rtl'}><header><p className="eyebrow">Rahgard</p><h1>{t.title}</h1><p>{t.intro}</p><a href="/">← {locale==='fa-IR'?'بازگشت به سفر':'Back to travel planning'}</a></header>
     {notice&&<p role="status">{notice}</p>}
+    {isLinkView && <section className="partner-linked-view" aria-labelledby="partner-linked-view-title" data-view={requestedView}>
+      <a className="partner-back-link" href="/partners">{locale === 'fa-IR' ? 'بازگشت به صندوق درخواست‌ها' : locale === 'ar' ? 'العودة إلى صندوق الطلبات' : 'Back to inbox'}</a>
+      <h2 id="partner-linked-view-title">{requestedView === 'request'
+        ? (locale === 'fa-IR' ? 'درخواست سفر مسافر' : locale === 'ar' ? 'طلب المسافر' : 'Traveler request')
+        : (locale === 'fa-IR' ? 'برنامهٔ سفر مشترک' : locale === 'ar' ? 'برنامج الرحلة' : 'Shared itinerary')}</h2>
+      {inboxLoading && <p role="status">{locale === 'fa-IR' ? 'در حال بررسی اجازهٔ دسترسی…' : 'Checking access…'}</p>}
+      {!inboxLoading && !linkedItem && <p role="alert">{locale === 'fa-IR'
+        ? 'این لینک در دسترس نیست؛ ممکن است مجوز اشتراک لغو شده باشد یا نسخه متعلق به شرکت دیگری باشد.'
+        : 'This protected link is unavailable, revoked, or belongs to another organization.'}</p>}
+      {!inboxLoading && linkedItem && <>
+        <p>{t.revision} {linkedItem.revision_number} · {linkedItem.event_kind === 'request_revised' ? t.revised : t.shared}</p>
+        {requestedView === 'request' ? <dl className="partner-readable-request">
+          {Object.entries(linkedItem.request_snapshot.requirements && typeof linkedItem.request_snapshot.requirements === 'object'
+            ? linkedItem.request_snapshot.requirements : {}).filter(([field]) => field !== 'requirement_consent'
+              && field !== 'field_provenance').map(([field,value]) =>
+              <div key={field}><dt>{({
+                origin:t.origin, destinations:t.destination, duration_days:t.duration,
+                traveler_count:t.travelers, budget:t.budget, interests:t.interests,
+                travel_dates: locale === 'fa-IR' ? 'تاریخ سفر' : 'Travel dates',
+                local_cuisine: locale === 'fa-IR' ? 'غذای محلی' : 'Local food',
+                travel_difficulty: locale === 'fa-IR' ? 'درجه سختی' : 'Difficulty',
+                weather_preferences: locale === 'fa-IR' ? 'آب‌وهوا' : 'Weather',
+              } as Record<string,string>)[field] ?? field}</dt>
+              <dd dir="auto">{value == null ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd></div>)}
+          {typeof linkedItem.request_snapshot.original_request === 'string' && <div><dt>{locale === 'fa-IR' ? 'متن اصلی درخواست (با اجازهٔ مسافر)' : 'Original request with consent'}</dt><dd dir="auto">{linkedItem.request_snapshot.original_request}</dd></div>}
+        </dl> : <div className="partner-readable-itinerary">
+          {Array.isArray(linkedItem.itinerary_snapshot.published_itineraries)
+            && linkedItem.itinerary_snapshot.published_itineraries.map((plan,index) =>
+              <article key={index}><h3>{String((plan as Record<string,unknown>).title || t.itinerary)}</h3>
+                <pre>{JSON.stringify((plan as Record<string,unknown>).stops ?? [], null, 2)}</pre></article>)}
+          {linkedItem.itinerary_snapshot.provisional && typeof linkedItem.itinerary_snapshot.provisional === 'object'
+            && <article><strong>{t.unverified}</strong>
+              <pre>{JSON.stringify((linkedItem.itinerary_snapshot.provisional as Record<string,unknown>).days ?? [],null,2)}</pre>
+            </article>}
+        </div>}
+      </>}
+    </section>}
+
     {form(t.org,<><label>{t.legal}<input value={legal} onChange={e=>setLegal(e.target.value)} required maxLength={240}/></label><label>{t.display}<input value={display} onChange={e=>setDisplay(e.target.value)} required maxLength={240}/></label><select aria-label={t.org} value={orgType} onChange={e=>setOrgType(e.target.value)}><option value="company">Company</option><option value="individual_business">Individual business</option><option value="nonprofit">Nonprofit</option><option value="public_body">Public body</option><option value="other">Other</option></select></>,()=>void submit(async()=>{await api('/organizations',{legal_name:legal,display_name:display,organization_type:orgType,registration_country:'IR'});setLegal('');setDisplay('');}),t.createOrg)}
     {!!orgs.length&&<label>{t.org}<select value={orgId} onChange={e=>setOrgId(e.target.value)}>{orgs.map(o=><option key={o.organization_id} value={o.organization_id}>{o.display_name} · {o.application_status}</option>)}</select></label>}
     {orgId&&<section className="partner-request-inbox" aria-labelledby="partner-request-inbox-title">
@@ -60,6 +118,14 @@ export function PartnerWorkspace({ locale, csrfToken }: { locale: Locale; csrfTo
         return <article className="partner-request-item" key={item.inbox_event_id}>
           <header><strong>{item.event_kind==='request_revised'?t.revised:t.shared} · {t.revision} {item.revision_number}</strong><small>{new Date(item.created_at).toLocaleString(locale)}</small></header>
           <p>{t.trip}: {destinations||String(request.trip_id??'')}</p>
+          <div className="partner-share-link-actions" aria-label={locale === 'fa-IR' ? 'لینک‌های محافظت‌شدهٔ سفر' : 'Protected trip links'}>
+            <a className="partner-share-link" href={partnerShareViewPath(orgId,item.share_id,item.revision_number,'request')}>
+              {locale === 'fa-IR' ? 'مشاهدهٔ لینک درخواست سفر' : locale === 'ar' ? 'رابط طلب السفر' : 'Open request link'}
+            </a>
+            <a className="partner-share-link" href={partnerShareViewPath(orgId,item.share_id,item.revision_number,'itinerary')}>
+              {locale === 'fa-IR' ? 'مشاهدهٔ لینک برنامهٔ سفر' : locale === 'ar' ? 'رابط برنامج الرحلة' : 'Open itinerary link'}
+            </a>
+          </div>
           <details><summary>{t.viewRequest}</summary>
             <dl><div><dt>{t.origin}</dt><dd>{String(request.origin??'—')}</dd></div><div><dt>{t.duration}</dt><dd>{String(request.duration_days??'—')}</dd></div>
               <div><dt>{t.travelers}</dt><dd>{String(request.traveler_count??'—')}</dd></div><div><dt>{t.budget}</dt><dd>{String(budget||'—')}</dd></div>
