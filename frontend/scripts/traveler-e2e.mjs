@@ -2288,10 +2288,9 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       await revisions.nth(1).waitFor({ state: 'visible' });
       if (await revisions.count() !== 2) throw new Error('issue23_company_browser_revision_count');
       for (const revision of await revisions.all()) {
-        await revision.locator('summary').click();
-        if (!await revision.locator('dl').isVisible()
-          || !await revision.getByText('provisional_unverified', { exact: true }).isVisible()) {
-          throw new Error('issue23_company_browser_request_or_plan_hidden');
+        if (!await revision.locator('a[href*="view=request"]').isVisible()
+          || !await revision.locator('a[href*="view=itinerary"]').isVisible()) {
+          throw new Error('issue23_company_browser_request_or_plan_links_hidden');
         }
       }
     };
