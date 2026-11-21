@@ -11,7 +11,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.api.auth import authenticated_user, require_authenticated_csrf
 from app.core.config import Settings, get_settings
@@ -96,8 +96,12 @@ class AvailabilityInput(BaseModel):
 
 class TravelerCompanyShareInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    organization_ids: list[UUID] = Field(min_length=1, max_length=10)
+    organization_ids: list[UUID] = Field(default_factory=list, max_length=10)
+    recipient_mode: Literal["selected", "all_eligible"] = "selected"
     consent_confirmed: Literal[True]
+    # Extra, explicit opt-in for broad sharing. A selected-recipient consent
+    # alone must never silently turn into a broadcast.
+    broad_sharing_consent_confirmed: bool = False
     include_original_request: bool = False
     consent_policy_version: str = Field(default="company-request-share-v1", min_length=1, max_length=80)
 
@@ -107,6 +111,17 @@ class TravelerCompanyShareInput(BaseModel):
         if len(value) != len(set(value)):
             raise ValueError("recipient organizations must be unique")
         return value
+
+    @model_validator(mode="after")
+    def validate_recipient_mode(self):
+        if self.recipient_mode == "selected" and not self.organization_ids:
+            raise ValueError("select_at_least_one_company")
+        if self.recipient_mode == "all_eligible":
+            if self.organization_ids:
+                raise ValueError("broadcast_must_not_include_named_recipients")
+            if not self.broad_sharing_consent_confirmed:
+                raise ValueError("broadcast_requires_explicit_consent")
+        return self
 
 
 def _connection(settings: Settings):
@@ -160,7 +175,12 @@ def company_share_options(
                    FROM partner.share_eligible_organizations
                    ORDER BY display_name,organization_id LIMIT 100"""
             )
-            return {"items": cur.fetchall(), "trip_id": trip_id, "requires_explicit_consent": True}
+            items = cur.fetchall()
+            cur.execute("SELECT count(*) AS total FROM partner.share_eligible_organizations")
+            eligible_count = int(cur.fetchone()["total"])
+            return {"items": items, "eligible_count": eligible_count,
+                    "broadcast_limit": 500, "trip_id": trip_id,
+                    "requires_explicit_consent": True}
     except HTTPException:
         raise
     except psycopg.Error as exc:
@@ -187,16 +207,30 @@ def share_trip_with_companies(
                 raise HTTPException(404, "trip_not_found")
             if trip["is_synthetic"] or not isinstance(trip["confirmed_requirements"], dict) or not trip["confirmed_requirements"]:
                 raise HTTPException(409, "review_trip_before_sharing")
-            cur.execute(
-                """SELECT organization_id FROM partner.share_eligible_organizations
-                   WHERE organization_id=ANY(%s)""",
-                (body.organization_ids,),
-            )
-            eligible = {row["organization_id"] for row in cur.fetchall()}
-            if eligible != set(body.organization_ids):
-                raise HTTPException(422, "recipient_not_eligible")
+            if body.recipient_mode == "all_eligible":
+                # Cap before writing anything; avoid silently omitting recipients.
+                # Only approved/verified/active organizations are included.
+                cur.execute(
+                    """SELECT organization_id FROM partner.share_eligible_organizations
+                       ORDER BY organization_id LIMIT 501"""
+                )
+                recipient_ids = [row["organization_id"] for row in cur.fetchall()]
+                if not recipient_ids:
+                    raise HTTPException(409, "no_eligible_companies")
+                if len(recipient_ids) > 500:
+                    raise HTTPException(409, "too_many_eligible_companies")
+            else:
+                cur.execute(
+                    """SELECT organization_id FROM partner.share_eligible_organizations
+                       WHERE organization_id=ANY(%s)""",
+                    (body.organization_ids,),
+                )
+                eligible = {row["organization_id"] for row in cur.fetchall()}
+                if eligible != set(body.organization_ids):
+                    raise HTTPException(422, "recipient_not_eligible")
+                recipient_ids = body.organization_ids
             shares = []
-            for organization_id in body.organization_ids:
+            for organization_id in recipient_ids:
                 cur.execute(
                     """INSERT INTO partner.traveler_request_shares
                        (trip_id,traveler_id,organization_id,consent_policy_version,include_original_request)
@@ -217,7 +251,9 @@ def share_trip_with_companies(
                     raise HTTPException(409, "share_revoked_requires_new_request")
                 shares.append(created)
             return {"trip_id": trip_id, "shares": shares, "shared": True,
-                    "message": "Only the selected verified organizations can view this request."}
+                    "recipient_mode": body.recipient_mode,
+                    "recipient_count": len(shares),
+                    "message": "Only consented eligible organizations can view this request in their protected inbox."}
     except HTTPException:
         raise
     except psycopg.Error as exc:
