@@ -15,8 +15,8 @@ type CompanyReply = {
   created_at: string;
 };
 
-export function TravelerCompanyResponses({ locale, csrfToken, tripId }: {
-  locale: Locale; csrfToken: string; tripId: string;
+export function TravelerCompanyResponses({ locale, csrfToken, tripId, highlightResponseId }: {
+  locale: Locale; csrfToken: string; tripId: string; highlightResponseId?: string | null;
 }) {
   const [replies, setReplies] = useState<CompanyReply[]>([]);
   const [busy, setBusy] = useState(false);
@@ -30,6 +30,10 @@ export function TravelerCompanyResponses({ locale, csrfToken, tripId }: {
   };
 
   useEffect(() => { void reload().catch(() => { /* Older database has no response inbox until migration 0023. */ }); }, [tripId]);
+  useEffect(() => {
+    if (!highlightResponseId || !replies.some(reply => reply.response_id === highlightResponseId)) return;
+    document.getElementById(`company-response-${highlightResponseId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [highlightResponseId, replies]);
   const decide = async (responseId: string, decision: 'accepted' | 'declined') => {
     const accepted = window.confirm(locale === 'fa-IR'
       ? (decision === 'accepted' ? 'این پیشنهاد شرکت را برای بررسی بعدی می‌پذیرید؟ برنامهٔ اصلی سفر خودکار تغییر نمی‌کند.' : 'این پاسخ شرکت را رد می‌کنید؟')
@@ -64,7 +68,9 @@ export function TravelerCompanyResponses({ locale, csrfToken, tripId }: {
       : 'Responses are private in-app records. Accepting a counter-offer does not automatically edit your itinerary or constitute a final contract.'}</p>
     {!replies.length && <p role="status">{locale === 'fa-IR' ? 'هنوز پاسخی از شرکت‌ها ثبت نشده است.' : 'No company replies yet.'}</p>}
     {notice && <p role="status">{notice}</p>}
-    {replies.map(reply => <article className="traveler-company-response" key={reply.response_id}>
+    {replies.map(reply => <article className="traveler-company-response" key={reply.response_id}
+      id={`company-response-${reply.response_id}`}
+      data-linked={highlightResponseId === reply.response_id}>
       <header><strong>{reply.display_name}</strong>
         <span>{reply.response_kind === 'accepted_as_requested'
           ? (locale === 'fa-IR' ? 'پذیرش درخواست بدون تغییر' : 'Accepted as requested')
