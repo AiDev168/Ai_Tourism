@@ -2440,10 +2440,16 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     if (staleCompanyResponse.status !== 409) {
       throw new Error('real_provider_stale_company_revision_not_rejected');
     }
+    const acceptedClientRequestId = crypto.randomUUID();
     const acceptedResponse = await requestBrowserJson(page,companyResponsePath,'POST',companyOneIdentity.csrfToken,{
-      client_request_id:crypto.randomUUID(),revision_id:changedRevision.revision_id,
+      client_request_id:acceptedClientRequestId,revision_id:changedRevision.revision_id,
       response_kind:'accepted_as_requested',message:'QA: We can support this as requested.',
     });
+    const conflictingRetry = await browserApi(page,companyResponsePath,'POST',companyOneIdentity.csrfToken,{
+      client_request_id:acceptedClientRequestId,revision_id:changedRevision.revision_id,
+      response_kind:'accepted_as_requested',message:'QA: attempt to change original acceptance',
+    });
+    if (conflictingRetry.status !== 409) throw new Error('real_provider_company_idempotency_key_conflict_not_rejected');
     const counterResponse = await requestBrowserJson(page,companyResponsePath,'POST',companyOneIdentity.csrfToken,{
       client_request_id:crypto.randomUUID(),revision_id:changedRevision.revision_id,
       response_kind:'counter_offer',message:'QA: Revised price and dates.',
