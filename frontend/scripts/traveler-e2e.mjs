@@ -2398,6 +2398,21 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     }
     safeResult.protectedCompanyViews = true;
     await verifyCompanyInboxInBrowser();
+    // Two independently addressable, authenticated company links must be usable
+    // in the actual browser, not just present as JSON on the inbox response.
+    const companyRequestLink = `/partners?org=${encodeURIComponent(companyOne)}&share=${encodeURIComponent(shareId)}&revision=2&view=request`;
+    const companyPlanLink = `/partners?org=${encodeURIComponent(companyOne)}&share=${encodeURIComponent(shareId)}&revision=2&view=itinerary`;
+    await page.goto(webOrigin + companyRequestLink, { waitUntil: 'domcontentloaded' });
+    await page.locator('.partner-readable-request').waitFor({ state: 'visible', timeout: 15_000 });
+    if (await page.locator('.partner-linked-view [role="alert"]').count()) {
+      throw new Error('real_provider_company_request_link_access_denied');
+    }
+    await page.goto(webOrigin + companyPlanLink, { waitUntil: 'domcontentloaded' });
+    await page.locator('.partner-shared-day').first().waitFor({ state: 'visible', timeout: 15_000 });
+    if (await page.locator('.partner-linked-view [role="alert"]').count()) {
+      throw new Error('real_provider_company_plan_link_access_denied');
+    }
+    safeResult.protectedCompanyDeepLinks = { request: true, itinerary: true, revision: 2 };
     safeResult.protectedCompanyBrowserViews = 2;
     identity = await switchIdentity(phone);
     const revoked = await requestBrowserJson(page,
@@ -2408,6 +2423,14 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       const denied = await requestBrowserJson(page,
         `/api/v1/partners/organizations/${companyTwo}/requests`, 'GET');
       if (denied.items.length) throw new Error('real_provider_revoked_or_unverified_company_saw_request');
+      if (deniedPhone === companyTwoPhone) {
+        const revokedLink = `/partners?org=${encodeURIComponent(companyTwo)}&share=${encodeURIComponent(companyTwoShare)}&revision=2&view=itinerary`;
+        await page.goto(webOrigin + revokedLink, { waitUntil: 'domcontentloaded' });
+        await page.locator('.partner-linked-view [role="alert"]').waitFor({ state: 'visible', timeout: 15_000 });
+        if (await page.locator('.partner-shared-day').count()) {
+          throw new Error('real_provider_revoked_company_deep_link_leaked_itinerary');
+        }
+      }
     }
     await switchIdentity(companyOnePhone);
     const retained = await requestBrowserJson(page,
