@@ -810,12 +810,12 @@ def traveler_company_responses(
         with _connection(settings) as conn, conn.cursor() as cur:
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
             cur.execute(
-                """SELECT r.response_id,r.organization_id,o.display_name,r.share_id,r.revision_id,
+                """SELECT r.response_id,r.organization_id,COALESCE(o.display_name,r.organization_id::text) AS display_name,r.share_id,r.revision_id,
                           r.response_kind,r.message,r.proposed_price_toman,r.proposed_start_date,
                           r.proposed_end_date,r.proposed_schedule_notes,r.traveler_decision,
                           r.created_at,r.decided_at
                    FROM partner.trip_company_responses r
-                   JOIN partner.organizations o USING (organization_id)
+                   LEFT JOIN partner.share_eligible_organizations o USING (organization_id)
                    WHERE r.trip_id=%s AND r.traveler_id=%s
                    ORDER BY r.created_at DESC LIMIT 200""",
                 (trip_id,user.user_id),
