@@ -320,11 +320,21 @@ export function App() {
         ? <PartnerWorkspace locale={locale} csrfToken={authSession.csrf_token} />
         : <main className="partner-workspace"><h1>{locale === 'fa-IR' ? 'برای ادامه وارد شوید' : locale === 'ar' ? 'سجّل الدخول للمتابعة' : 'Sign in to continue'}</h1><AuthPanel locale={locale} onSessionChange={setAuthSession} /></main>) : <main id="home" className={authSession ? 'traveler-app' : undefined}>
         <div className={authSession ? 'unified-trip-experience' : undefined}>
-        <section className={authSession ? 'hero hero-planner' : 'hero'}>
+        {(!authSession || !conversationVisible) && <section className={authSession ? 'hero hero-planner rahgard-chat-entrance' : 'hero'}>
           <div className="hero-copy">
             <p className="eyebrow"><span className="sun">✳</span>{t('heroEyebrow')}</p>
             <h1>{authSession ? plannerCopy[locale].title : t('heroTitle')}</h1>
             <p className="hero-body">{authSession ? plannerCopy[locale].intro : t('heroBody')}</p>
+            {authSession && <div className="rahgard-chat-intro" aria-label={locale === 'fa-IR' ? 'شروع گفت‌وگوی سفر' : 'Start travel conversation'}>
+              <div className="rahgard-chat-greeting">
+                <strong>{locale === 'fa-IR' ? '✦ دستیار رهگارد' : locale === 'ar' ? '✦ مساعد رهگارد' : '✦ Rahgard assistant'}</strong>
+                <p>{locale === 'fa-IR'
+                  ? 'سلام! سفرتان را با زبان خودتان توضیح دهید. از شما سؤال می‌پرسم تا مقصد و مدت مشخص شود؛ سپس نیازها را برای بازبینی در کنار همین گفتگو نمایش می‌دهم.'
+                  : locale === 'ar'
+                    ? 'أهلاً! أخبرني عن رحلتك بطريقتك. سأطرح أسئلة عن الوجهة والمدة ثم نراجع التفاصيل معاً.'
+                    : 'Welcome! Tell me about your trip in your own words. I will clarify the destination and duration, then we can review the details here.'}</p>
+              </div>
+            </div>}
             <details className="trip-intake-panel" open={!authSession || !conversationVisible}>
             <summary hidden={!authSession || !conversationVisible}>{tripCopy.requestLabel}</summary>
             <form className="trip-form" onSubmit={submit} noValidate>
@@ -361,7 +371,8 @@ export function App() {
               </aside>}
               {error && <p id="form-error" className="form-error" role="alert">{error}</p>}
               <button type="submit" className="primary">
-                {tripCopy.submit} <span aria-hidden="true">↗</span>
+                {authSession ? (locale === 'fa-IR' ? 'ارسال پیام و شروع گفت‌وگو' : locale === 'ar' ? 'أرسل الرسالة وابدأ المحادثة' : 'Send and start conversation') : tripCopy.submit}
+                <span aria-hidden="true">↗</span>
               </button>
               <p className="fixture-pill">{tripCopy.sessionNotice}</p>
               {!!clarifications.length && requirements && <section className="trip-response" aria-live="polite" aria-labelledby="clarification-title">
@@ -413,6 +424,24 @@ export function App() {
             </form>
             </details>
           </div>
+          {authSession && <aside className="rahgard-chat-guide" aria-label={locale === 'fa-IR' ? 'راهنمای نیازهای سفر' : 'Trip requirements guide'}>
+            <h2>{locale === 'fa-IR' ? 'نیازهای سفر' : locale === 'ar' ? 'متطلبات الرحلة' : 'Trip requirements'}</h2>
+            <p>{locale === 'fa-IR' ? 'در طول گفتگو، نیازهای سفر استخراج می‌شوند. اطلاعات نهایی را می‌توانید در همین صفحه اصلاح و تأیید کنید.' : locale === 'ar' ? 'سنستخلص المتطلبات أثناء المحادثة، ثم يمكنك تعديلها وتأكيدها هنا.' : 'Requirements are collected in the chat, then you can review and edit them here.'}</p>
+            <div className="rahgard-guide-group">
+              <strong>{locale === 'fa-IR' ? 'حداقل اطلاعات برای شروع برنامه‌ریزی' : 'Required to begin planning'}</strong>
+              <ul>
+                <li><span>{locale === 'fa-IR' ? 'مقصد سفر' : 'Destination'}</span><b>{locale === 'fa-IR' ? 'ضروری' : 'Required'}</b></li>
+                <li><span>{locale === 'fa-IR' ? 'مدت سفر' : 'Duration'}</span><b>{locale === 'fa-IR' ? 'ضروری' : 'Required'}</b></li>
+              </ul>
+            </div>
+            <div className="rahgard-guide-group">
+              <strong>{locale === 'fa-IR' ? 'برای پیشنهاد دقیق‌تر' : 'Helpful optional details'}</strong>
+              <p>{locale === 'fa-IR'
+                ? 'مبدأ، تاریخ، تعداد مسافران، بودجه، علایق، غذای محلی، سختی مسیر و آب‌وهوا را هم می‌توانید در گفتگو مشخص کنید.'
+                : 'Origin, dates, travelers, budget, interests, local food, route difficulty and weather can be clarified in chat.'}</p>
+              <small>{locale === 'fa-IR' ? 'محدودیت‌های ضروری باید جداگانه بررسی شوند؛ اطلاعات تأییدنشده به‌عنوان واقعیت اعلام نمی‌شود.' : 'Safety-critical constraints still require explicit review.'}</small>
+            </div>
+          </aside>}
 
           {!authSession && <figure className="hero-art">
             {heroImageFailed ? (
@@ -439,7 +468,7 @@ export function App() {
               <PhotoCredit source={photoSources.hero} author="Bernard Gagnon" label={t('photoCreditLabel')} />
             </figcaption>
           </figure>}
-        </section>
+        </section>}
 
         <PwaUpdateNotice locale={locale} />
         <TravelerJourney
