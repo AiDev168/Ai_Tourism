@@ -1493,3 +1493,15 @@ html[data-rahgard-theme="light"] .company-share-broadcast-note { background: #f1
 html[data-rahgard-theme="light"] .partner-response-share-url input {
   color: #26304c; background: #fff; border-color: #a5a1be;
 }
+
+.partner-advanced-help {
+  display: grid; grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 9px; margin-block: 15px;
+}
+.partner-advanced-help > div { padding: 12px; border: 1px solid #5c5079; border-radius: 11px; background: #23273d; }
+.partner-advanced-help dt { color: #f6e8ff; font-weight: 800; font-size: 13px; }
+.partner-advanced-help dd { color: #ded6f1; margin: 5px 0 0; font-size: 12px; line-height: 1.85; }
+html[data-rahgard-theme="light"] .partner-advanced-help > div { background: #f5f5fb; border-color: #d3cde0; }
+html[data-rahgard-theme="light"] .partner-advanced-help :where(dt,dd) { color: #273047; }
+.partner-request-link-note { line-height: 1.8; margin-block: 11px 2px; }
+@media (max-width: 620px) { .partner-advanced-help { grid-template-columns: minmax(0,1fr); } }
