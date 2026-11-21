@@ -142,13 +142,10 @@ export function PartnerWorkspace({ locale, csrfToken }: { locale: Locale; csrfTo
       {!requestInbox.length&&<p role="status">{t.noRequests}</p>}
       {requestInbox.map(item=>{
         const request=(item.request_snapshot.requirements&&typeof item.request_snapshot.requirements==='object'?item.request_snapshot.requirements:{}) as Record<string,unknown>;
-        const itinerary=item.itinerary_snapshot as Record<string,unknown>;
-        const published=Array.isArray(itinerary.published_itineraries)?itinerary.published_itineraries as Array<Record<string,unknown>>:[];
-        const provisional=itinerary.provisional&&typeof itinerary.provisional==='object'?itinerary.provisional as Record<string,unknown>:null;
         const destinations=Array.isArray(request.destinations)?request.destinations.filter(value=>typeof value==='string').join(' → '):'';
         return <article className="partner-request-item" key={item.inbox_event_id}>
           <header><strong>{item.event_kind==='request_revised'?t.revised:t.shared} · {t.revision} {item.revision_number}</strong><small>{new Date(item.created_at).toLocaleString(locale)}</small></header>
-          <p>{t.trip}: {destinations||String(request.trip_id??'')}</p>
+          <p>{t.trip}: {destinations || (locale === 'fa-IR' ? 'مقصد مشخص نشده' : 'Destination not specified')}</p>
           <div className="partner-share-link-actions" aria-label={locale === 'fa-IR' ? 'لینک‌های محافظت‌شدهٔ سفر' : 'Protected trip links'}>
             <a className="partner-share-link" href={partnerShareViewPath(orgId,item.share_id,item.revision_number,'request')}>
               {locale === 'fa-IR' ? 'مشاهدهٔ لینک درخواست سفر' : locale === 'ar' ? 'رابط طلب السفر' : 'Open request link'}
@@ -157,16 +154,12 @@ export function PartnerWorkspace({ locale, csrfToken }: { locale: Locale; csrfTo
               {locale === 'fa-IR' ? 'مشاهدهٔ لینک برنامهٔ سفر' : locale === 'ar' ? 'رابط برنامج الرحلة' : 'Open itinerary link'}
             </a>
           </div>
-          <details><summary>{t.viewRequest}</summary>
-            <dl className="partner-readable-request">
-              {displayPartnerRequest(request,locale).map(field =>
-                <div key={field.key} data-provided={field.provided}><dt>{field.label}</dt><dd dir="auto">{field.text}</dd></div>)}
-            </dl>
-            {typeof item.request_snapshot.original_request==='string'&&<blockquote dir="auto">{item.request_snapshot.original_request}</blockquote>}
-            <h3>{t.itinerary}</h3>
-            {published.map((plan,index)=><div key={String(plan.itinerary_id??index)}><strong>{String(plan.title??t.itinerary)}</strong><pre>{JSON.stringify(plan.stops??[],null,2)}</pre></div>)}
-            {provisional&&<div><strong>{String(provisional.status??'provisional_unverified')}</strong><pre>{JSON.stringify(provisional.days??[],null,2)}</pre><p>{t.unverified}</p></div>}
-          </details>
+          <p className="partner-request-link-note">
+            {locale === 'fa-IR'
+              ? 'برای مشاهدهٔ اطلاعات این نسخه، لینک درخواست یا برنامه را انتخاب کنید. اطلاعات فقط در حساب شرکتِ مجاز نمایش داده می‌شوند.'
+              : 'Open the protected request or itinerary link to review this revision.'}
+          </p>
+
         </article>;
       })}
     </section>}
