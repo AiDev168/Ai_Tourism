@@ -1089,3 +1089,25 @@ body:has(.partner-workspace) .partner-workspace { color: #eeeafc; max-width: 128
 @media (min-width: 901px) {
   .rahgard-chat-entrance .hero-copy { min-height: 560px; }
 }
+
+/* Readable per-day itinerary in the authenticated company share view. */
+.partner-readable-itinerary { display: grid; gap: 15px; }
+.partner-readable-itinerary .partner-shared-plan {
+  padding: 16px; border: 1px solid #484165; border-radius: 15px;
+  background: #171b2f; color: #eeeaff;
+}
+.partner-readable-itinerary .partner-shared-day {
+  margin-block: 13px; padding: 14px;
+  background: #22223a; border: 1px solid #474060; border-radius: 12px;
+}
+.partner-readable-itinerary .partner-shared-day h4 { margin: 0 0 10px; color: #f5dcff; }
+.partner-readable-itinerary .partner-shared-day ul,
+.partner-readable-itinerary .partner-shared-plan ol { margin: 0; padding-inline-start: 23px; }
+.partner-readable-itinerary .partner-shared-day li,
+.partner-readable-itinerary .partner-shared-plan li { margin-block: 8px; line-height: 1.85; }
+.partner-readable-itinerary .partner-shared-day p,
+.partner-readable-itinerary .partner-shared-plan li p { margin: 4px 0; color: #c9c8e1; }
+.partner-readable-itinerary .partner-unverified-label {
+  display: inline-block; color: #f4c18b; border: 1px solid #a9764a;
+  background: #342438; border-radius: 999px; padding: 7px 12px;
+}
