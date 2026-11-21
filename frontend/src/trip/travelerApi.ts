@@ -398,13 +398,15 @@ export const travelerApi = {
     destination_ids: string[];
     requirement_consent: RequirementConsent;
   }) => request<TripRecord>(`/trips/${encodeURIComponent(tripId)}`, csrf, json('PATCH', body)),
-  companyShareOptions: (tripId: string) => request<{ items: CompanyShareOption[]; trip_id: string; requires_explicit_consent: boolean }>(
+  companyShareOptions: (tripId: string) => request<{ items: CompanyShareOption[]; eligible_count: number; broadcast_limit: number; trip_id: string; requires_explicit_consent: boolean }>(
     `/partners/trips/${encodeURIComponent(tripId)}/company-share-options`, undefined,
   ),
   shareTripWithCompanies: (csrf: string, tripId: string, body: {
-    organization_ids: string[]; consent_confirmed: true; include_original_request: boolean;
+    organization_ids: string[]; recipient_mode?: 'selected' | 'all_eligible';
+    broad_sharing_consent_confirmed?: boolean; consent_confirmed: true; include_original_request: boolean;
     consent_policy_version: 'company-request-share-v1';
-  }) => request<{ trip_id: string; shares: Array<{ share_id: string; organization_id: string; consented_at: string }>; shared: boolean }>(
+  }) => request<{ trip_id: string; shares: Array<{ share_id: string; organization_id: string; consented_at: string }>;
+    shared: boolean; recipient_mode: 'selected' | 'all_eligible'; recipient_count: number }>(
     `/partners/trips/${encodeURIComponent(tripId)}/company-shares`, csrf, json('POST', body),
   ),
   listTripCompanyShares: (tripId: string) => request<{ items: Array<{
