@@ -81,6 +81,12 @@ function Apply([string]$Id,[string]$File,[string]$User,[string]$Password,[hashta
   return $hash
 }
 try {
+  # Check syntax BEFORE creating the disposable PostgreSQL container or
+  # running its migrations. This catches duplicate lexical declarations
+  # and other Node parser failures without touching any database.
+  $e2eScript = Join-Path $ProjectRoot 'frontend\scripts\traveler-e2e.mjs'
+  & node --check $e2eScript
+  if ($LASTEXITCODE -ne 0) { throw 'Traveler Chromium E2E JavaScript syntax validation failed; database was not started.' }
   . $Runner -ProjectRoot $ProjectRoot
   $container = $env:AI_TOURISM_MVP_E2E_CONTAINER
   if ($container -notmatch '^ai-tourism-mvp-pg17-[a-f0-9]{12}$' -or $env:AUTH_TEST_DATABASE_HOST -ne '127.0.0.1' -or [int]$env:AUTH_TEST_DATABASE_PORT -eq 55433) { throw 'Disposable database identity guard failed.' }
