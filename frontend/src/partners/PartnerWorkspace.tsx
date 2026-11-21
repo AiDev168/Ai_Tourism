@@ -145,7 +145,6 @@ export function PartnerWorkspace({ locale, csrfToken }: { locale: Locale; csrfTo
         const published=Array.isArray(itinerary.published_itineraries)?itinerary.published_itineraries as Array<Record<string,unknown>>:[];
         const provisional=itinerary.provisional&&typeof itinerary.provisional==='object'?itinerary.provisional as Record<string,unknown>:null;
         const destinations=Array.isArray(request.destinations)?request.destinations.filter(value=>typeof value==='string').join(' → '):'';
-        const budget=request.budget&&typeof request.budget==='object'?(request.budget as Record<string,unknown>).raw:'';
         return <article className="partner-request-item" key={item.inbox_event_id}>
           <header><strong>{item.event_kind==='request_revised'?t.revised:t.shared} · {t.revision} {item.revision_number}</strong><small>{new Date(item.created_at).toLocaleString(locale)}</small></header>
           <p>{t.trip}: {destinations||String(request.trip_id??'')}</p>
