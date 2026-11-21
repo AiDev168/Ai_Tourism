@@ -1,13 +1,15 @@
 """Offline assistant API contract: no network, database or paid calls."""
+import asyncio
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 from unittest.mock import patch
 
+from fastapi import Response
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 import pytest
 
-from app.api.assistant import _candidate_profile, get_assistant_turn_repository, get_chat_gateway
+from app.api.assistant import _candidate_profile, assistant_status, get_assistant_turn_repository, get_chat_gateway
 from app.api.auth import require_authenticated_csrf
 from app.api.traveler import get_traveler_repository
 from app.core.config import Settings, get_settings
@@ -318,6 +320,33 @@ def test_assistant_status_reports_configuration_and_budget_without_invocation(mo
             'global_limit': 100,
         }
         assert gateway.calls == [] and repo.calls == 0
+    finally:
+        c.app.dependency_overrides.clear()
+
+
+def test_concurrent_status_requests_share_the_same_readiness_probe(monkeypatch):
+    c, repo, _ = client()
+    settings = c.app.dependency_overrides[get_settings]()
+    probe_count = 0
+
+    async def available(_adapter):
+        nonlocal probe_count
+        probe_count += 1
+        await asyncio.sleep(0.01)
+        return True
+
+    async def check():
+        principal = Principal(OWNER, uuid4())
+        return await asyncio.gather(*(
+            assistant_status(Response(), principal, settings, repo) for _ in range(2)
+        ))
+
+    monkeypatch.setattr(
+        'app.modules.integrations.chat_adapter.RemoteChatAdapter.check_model_available', available,
+    )
+    try:
+        assert [result['state'] for result in asyncio.run(check())] == ['connected', 'connected']
+        assert probe_count == 1
     finally:
         c.app.dependency_overrides.clear()
 

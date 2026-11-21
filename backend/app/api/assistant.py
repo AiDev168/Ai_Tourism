@@ -1,6 +1,8 @@
 """Internal authenticated Chat endpoint; never a public provider control plane."""
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import re
 from datetime import date, timedelta
@@ -36,7 +38,7 @@ from app.modules.provider_admin.runtime import make_admin_chat_gateway, provider
 
 router = APIRouter(prefix='/api/v1', tags=['traveler'])
 logger = logging.getLogger('ai_tourism.assistant')
-_model_readiness: tuple[int, float, bool] | None = None
+_model_readiness: tuple[Settings, float, asyncio.Task[bool]] | None = None
 
 
 class AssistantTurnRequest(BaseModel):
@@ -255,14 +257,12 @@ async def assistant_status(
         ):
             state = 'quota_exhausted'
         if state == 'configured' and not settings.ai_provider_admin_enabled:
-            settings_identity = id(settings)
             now = monotonic()
-            if (_model_readiness is None or _model_readiness[0] != settings_identity
+            if (_model_readiness is None or _model_readiness[0] is not settings
                     or _model_readiness[1] <= now):
-                _model_readiness = (settings_identity, now + 30, False)
-                available = await make_chat_adapter(settings).check_model_available()
-                _model_readiness = (settings_identity, monotonic() + 30, available)
-            if _model_readiness[2]:
+                probe = asyncio.create_task(make_chat_adapter(settings).check_model_available())
+                _model_readiness = (settings, now + 30, probe)
+            if await asyncio.shield(_model_readiness[2]):
                 state = 'connected'
         return {'state': state, **budget}
     except Exception:
@@ -497,6 +497,22 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
     })
 
 
+def _reviewed_profile_context(trip: dict[str, Any] | None) -> str | None:
+    reviewed = trip.get('confirmed_requirements') if trip else None
+    if not isinstance(reviewed, dict) or reviewed.get('confirmation_source') != 'traveler_reviewed':
+        return None
+    context: dict[str, Any] = {}
+    for name in (
+        'destinations', 'duration_days', 'travel_dates', 'traveler_count', 'budget',
+        'constraints', 'accessibility', 'interests', 'travel_difficulty',
+        'weather_preferences', 'local_cuisine', 'soft_preferences',
+    ):
+        value = reviewed.get(name)
+        if value is not None and len(json.dumps({**context, name: value}, ensure_ascii=False)) <= 2000:
+            context[name] = value
+    return json.dumps(context, ensure_ascii=False) if context else None
+
+
 @router.post('/conversations/{conversation_id}/assistant-turns', response_model=AssistantTurnResponse)
 async def assistant_turn(
     conversation_id: UUID,
@@ -614,6 +630,7 @@ async def assistant_turn(
                 locale=locale, text=body.content, history=history,
                 traveler_timezone=traveler_timezone if isinstance(traveler_timezone, str) else None,
                 traveler_reference_date=traveler_reference_date,
+                reviewed_profile=_reviewed_profile_context(trip_context),
             ))
             candidate_profile = _candidate_profile(
                 body.content, locale, reply.requirements, reply.requirement_evidence,

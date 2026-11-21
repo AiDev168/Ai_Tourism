@@ -147,7 +147,7 @@ button { cursor: pointer; }
 .jalali-calendar-grid [role="columnheader"] { padding-block: 6px; color: var(--muted); font-size: 11px; }
 .jalali-calendar-grid [role="gridcell"] { display: grid; min-width: 0; min-height: 38px; place-items: center; border: 0; border-radius: 8px; background: white; color: var(--ink); }
 .jalali-calendar-grid button[aria-current="date"] { background: #103f34; color: #ffffff; box-shadow: inset 0 0 0 2px #f0c879, 0 2px 5px rgba(16,63,52,.2); font-weight: 850; }
-.jalali-calendar-grid button[aria-pressed="true"] { background: var(--green); color: white; }
+.jalali-calendar-grid button[aria-pressed="true"] { background: #315f56; color: white; }
 .jalali-calendar-grid button[aria-current="date"][aria-pressed="true"] { box-shadow: inset 0 0 0 2px #f9cb72; }
 .location-detect { min-height: 42px; border-radius: 10px; border: 1px solid var(--line); background: #f6faf8; color: var(--ink); cursor: pointer; }
 .location-status { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 0; }
@@ -318,13 +318,13 @@ button { cursor: pointer; }
 .itinerary-coverage-partial, .unplanned-day { background: #fff4d8; }
 .unresolved-requirements { margin-block: 8px 0; padding-inline-start: 1.5rem; }
 .saved-stop { display: grid; gap: 10px; }
-.traveler-workspace button:not(.text-button):not(.jalali-clear-date) {
+.traveler-workspace button:not(.text-button):where(:not(.jalali-calendar button)) {
   min-height: 42px; padding: 9px 16px; border: 1px solid rgba(23, 74, 62, .16); border-radius: 12px;
   color: var(--forest-deep); background: #fffdf8; font-weight: 700;
   box-shadow: 0 3px 10px rgba(29, 48, 43, .06);
   transition: transform .16s ease, box-shadow .16s ease, background-color .16s ease, border-color .16s ease;
 }
-.traveler-workspace button:not(:disabled):not(.text-button):not(.jalali-clear-date):hover {
+.traveler-workspace button:not(:disabled):not(.text-button):where(:not(.jalali-calendar button)):hover {
   transform: translateY(-1px); border-color: rgba(23, 74, 62, .38); box-shadow: 0 7px 16px rgba(29, 48, 43, .10);
 }
 .traveler-workspace button:active:not(:disabled) { transform: translateY(0); }
@@ -674,7 +674,7 @@ body {
 }
 .assistant-controls .primary { width: 100%; min-height: 54px; margin-block-start: 8px; }
 .profile-confirm-action, .itinerary-generate-action, .itinerary-save-action { width: 100%; margin-block-start: 15px; }
-.traveler-workspace button.secondary, .traveler-workspace button:not(.primary):not(.danger):not(.text-button):not(.jalali-clear-date) {
+.traveler-workspace button.secondary, .traveler-workspace button:not(.primary):not(.danger):not(.text-button):where(:not(.jalali-calendar button)) {
   border-color: #bfd2c4;
   border-radius: 12px;
   background: #f5faf5;

@@ -36,6 +36,7 @@ class ChatRequest(BaseModel):
     history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=12)
     traveler_timezone: str | None = Field(default=None, max_length=80)
     traveler_reference_date: date | None = None
+    reviewed_profile: str | None = Field(default=None, max_length=2000)
 
     @field_validator("text")
     @classmethod
@@ -379,7 +380,8 @@ class RemoteChatAdapter:
                 "relative_start_date=1. If both occur in the same message, return both fields with separate "
                 "exact evidence quotes. Do not omit an explicit duration or relative departure. "
                 "Never return a field unless requirement_evidence contains its exact wording "
-                "from the current message. Do not cite conversation history as current-turn evidence. "
+                "from the current message. Do not cite conversation history or the reviewed profile as "
+                "current-turn evidence. Use the reviewed profile as traveler-confirmed context for replies. "
                     "Use these fields ONLY when explicitly supported by traveler statements. "
                     "Omit unknown fields; do not infer a city or group size. If the "
                     "traveler corrects an earlier statement, follow the latest clear "
@@ -401,6 +403,7 @@ class RemoteChatAdapter:
                 *[{"role": turn.role, "content": turn.content} for turn in request.history],
                 {"role": "user", "content": json.dumps(
                     {"locale": request.locale, "text": request.text,
+                     "reviewed_profile": request.reviewed_profile,
                      "traveler_timezone": request.traveler_timezone,
                      "traveler_reference_date": (request.traveler_reference_date.isoformat()
                                                   if request.traveler_reference_date else None)},

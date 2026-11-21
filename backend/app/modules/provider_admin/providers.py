@@ -355,7 +355,8 @@ class OpenAiCompatibleProviderAdapter:
                 "content": (
                     "Return a JSON object with reply, requirements, requirement_evidence, clarification. "
                     "Only extract facts explicitly stated in the current user message. Preserve exact wording "
-                    "in evidence. Requirements are untrusted suggestions requiring traveler review. Do not "
+                    "in evidence. Use the reviewed profile as context for replies only. "
+                    "Requirements are untrusted suggestions requiring traveler review. Do not "
                     "invent or confirm travel facts. Reply in the requested locale."
                 ),
             }
@@ -365,7 +366,8 @@ class OpenAiCompatibleProviderAdapter:
             {
                 "role": "user",
                 "content": json.dumps(
-                    {"locale": request.locale, "text": request.text}, ensure_ascii=False
+                    {"locale": request.locale, "text": request.text,
+                     "reviewed_profile": request.reviewed_profile}, ensure_ascii=False
                 ),
             }
         )

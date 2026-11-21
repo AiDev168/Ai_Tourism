@@ -1869,6 +1869,7 @@ function providerFieldSnapshot(candidate) {
 async function runRealProviderJourney(browser, api, audit, artifactRoot, provider) {
   const context = await browser.newContext({ locale: 'fa-IR', timezoneId: 'Asia/Tehran' });
   const page = await context.newPage();
+  await page.clock.setFixedTime(new Date('2026-12-01T08:00:00Z'));
   page.setDefaultTimeout(90_000);
   const phone = syntheticPhone();
   let identity;
@@ -2019,6 +2020,28 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     safeResult.manualEditPreserved = manualOrigin.includes('مشهد')
       && await page.locator('#profile-budget').inputValue() === '۲۵ میلیون تومان';
     if (!safeResult.manualEditPreserved) throw new Error('real_chat_candidate_overwrote_manual_origin');
+    const dateUpdates = [['start', '2026-12-05'], ['end', '2026-12-08']];
+    safeResult.followUpDatesFromModel = true;
+    for (const [field, iso] of dateUpdates) {
+      const id = '#profile-travel-' + field;
+      if (await page.locator(id).inputValue() === iso) continue;
+      safeResult.followUpDatesFromModel = false;
+      await page.locator(id + '-picker').click();
+      const persianDay = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+        day: 'numeric', timeZone: 'UTC',
+      }).format(new Date(iso + 'T00:00:00Z'));
+      await page.locator('.jalali-calendar-grid').getByText(persianDay, { exact: true }).click();
+      if (await page.locator(id).inputValue() !== iso) throw new Error('issue23_calendar_iso_mismatch');
+    }
+    if (!await page.locator('#profile-travel-difficulty').inputValue()) {
+      await page.locator('#profile-travel-difficulty').fill('مسیرهای سبک');
+    }
+    if (!await page.locator('#profile-weather-preferences').inputValue()) {
+      await page.locator('#profile-weather-preferences').fill('هوای معتدل');
+    }
+    if (!await page.locator('#profile-local-cuisine').inputValue()) {
+      await page.locator('#profile-local-cuisine').fill('غذای محلی');
+    }
     safeResult.invocationAttempts = (await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' })).attempts;
     safeResult.successfulInvocations = (await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' })).successes;
 
@@ -2036,6 +2059,11 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     }
     safeResult.followUpDatesConfirmed = confirmed.confirmed_requirements?.travel_dates?.start === '2026-12-05'
       && confirmed.confirmed_requirements?.travel_dates?.end === '2026-12-08';
+    safeResult.confirmedPreferenceFields = ['travel_difficulty', 'weather_preferences', 'local_cuisine']
+      .filter(field => confirmed.confirmed_requirements?.[field]?.length);
+    if (!safeResult.followUpDatesConfirmed || safeResult.confirmedPreferenceFields.length !== 3) {
+      throw new Error('issue23_reviewed_dates_or_preferences_not_saved');
+    }
 
     const recResponsePromise = page.waitForResponse(response =>
       new URL(response.url()).pathname === `/api/v1/trips/${tripId}/recommendations`
@@ -2242,6 +2270,19 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
       return signIn(page, api.controlPort, api.controlToken, targetPhone);
     };
+    const verifyCompanyInboxInBrowser = async () => {
+      await page.goto(`${webOrigin}/partners`, { waitUntil: 'domcontentloaded' });
+      const revisions = page.locator('.partner-request-item');
+      await revisions.nth(1).waitFor({ state: 'visible' });
+      if (await revisions.count() !== 2) throw new Error('issue23_company_browser_revision_count');
+      for (const revision of await revisions.all()) {
+        await revision.locator('summary').click();
+        if (!await revision.locator('dl').isVisible()
+          || !await revision.getByText('provisional_unverified', { exact: true }).isVisible()) {
+          throw new Error('issue23_company_browser_request_or_plan_hidden');
+        }
+      }
+    };
     const rejectedPhone = syntheticPhone();
     const rejectedIdentity = await switchIdentity(rejectedPhone);
     const rejectedCompany = await createCompany('Company REJECTED', rejectedIdentity, false);
@@ -2302,6 +2343,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       && item.request_snapshot?.trip_id === tripId && item.itinerary_snapshot?.provisional))) {
       throw new Error('real_provider_second_company_request_or_revision_missing');
     }
+    await verifyCompanyInboxInBrowser();
     const crossTenantInbox = await requestBrowserJson(page,
       `/api/v1/partners/organizations/${companyOne}/requests`, 'GET');
     const crossTenantWorkspace = await browserApi(page,
@@ -2343,6 +2385,8 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       await anonymousContext.close();
     }
     safeResult.protectedCompanyViews = true;
+    await verifyCompanyInboxInBrowser();
+    safeResult.protectedCompanyBrowserViews = 2;
     identity = await switchIdentity(phone);
     const revoked = await requestBrowserJson(page,
       `/api/v1/partners/trips/${tripId}/company-shares/${companyTwoShare}`, 'DELETE', identity.csrfToken);
@@ -2378,6 +2422,22 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     await page.locator(`.history-trip[data-trip-id="${tripId}"]`).waitFor({ state: 'visible' });
     await page.locator(`.history-trip[data-trip-id="${tripId}"] button`).first().click();
     await page.locator('.provisional-itinerary').waitFor({ state: 'visible' });
+    await selectAndVerifyLocale(page, 'fa-IR');
+    await page.locator('#profile-travel-start-picker').click();
+    const today = page.locator('.jalali-calendar-grid button[aria-current="date"]');
+    const selected = page.locator('.jalali-calendar-grid button[aria-pressed="true"]');
+    const todayCount = await today.count();
+    const selectedCount = await selected.count();
+    if (todayCount !== 1 || selectedCount !== 1) {
+      throw new Error('issue23_calendar_state_missing_today_' + todayCount + '_selected_' + selectedCount);
+    }
+    if (await today.evaluate(el => getComputedStyle(el).backgroundColor)
+        === await selected.evaluate(el => getComputedStyle(el).backgroundColor)) {
+      throw new Error('issue23_calendar_today_and_selected_colors_equal');
+    }
+    safeResult.jalaliTodayAndSelectionDistinct = true;
+    await page.locator('.jalali-calendar').screenshot({ path: resolve(artifactRoot, 'issue23-jalali-calendar.png') });
+    await page.keyboard.press('Escape');
     const finalProviderStatus = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' });
     safeResult.providerTelemetry = {
       route: finalProviderStatus.route,
