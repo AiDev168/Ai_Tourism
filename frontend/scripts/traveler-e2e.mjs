@@ -2330,7 +2330,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     // accepts the profile without that field and the explicit top-level
     // consent request below.
     delete revisedRequirements.requirement_consent;
-    revisedRequirements.soft_preferences = [...new Set([...(revisedRequirements.soft_preferences ?? []), 'acceptance revision'])];
+    revisedRequirements.soft_preferences = [...new Set([...(revisedRequirements.soft_preferences ?? []), 'اولویت بازدید آرام از باغ‌های شیراز'])];
     const revisedTrip = await requestBrowserJson(page, `/api/v1/trips/${tripId}`, 'PATCH', identity.csrfToken, {
       expected_version: latestTrip.version,
       confirmed_requirements: revisedRequirements,
