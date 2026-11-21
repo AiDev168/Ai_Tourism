@@ -2124,6 +2124,18 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       if (restoredDraftResponse.status() !== 200 || restoredDraft.provisional_itinerary_id !== savedDraft.provisional_itinerary_id) {
         throw new Error('real_chat_provisional_itinerary_not_persisted');
       }
+      const note = 'یادداشت آزمایشی مسافر';
+      await page.locator('.provisional-itinerary .provisional-stop textarea').first().fill(note);
+      const editResponse = page.waitForResponse(response =>
+        new URL(response.url()).pathname === `/api/v1/provisional-itineraries/${savedDraft.provisional_itinerary_id}`
+        && response.request().method() === 'PUT', { timeout: 15000 });
+      await page.locator('.provisional-itinerary > button.primary').click();
+      if ((await editResponse).status() !== 200) throw new Error('issue23_provisional_edit_not_saved');
+      const edited = await requestBrowserJson(page, `/api/v1/trips/${tripId}/provisional-itineraries`, 'GET');
+      if (!edited.days?.some(day => day.stops.some(stop => stop.notes_by_locale?.['fa-IR'] === note))) {
+        throw new Error('issue23_provisional_saved_note_missing');
+      }
+      safeResult.provisionalEdited = true;
       safeResult.persistedAndReopened = true;
     } else if (recBody.status === 'available' && recBody.items?.length) {
       const dayCountInput = page.locator('#journey-day-count');
@@ -2423,6 +2435,10 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     await page.locator(`.history-trip[data-trip-id="${tripId}"] button`).first().click();
     await page.locator('.provisional-itinerary').waitFor({ state: 'visible' });
     await selectAndVerifyLocale(page, 'fa-IR');
+    if (safeResult.provisionalEdited
+      && await page.locator('.provisional-itinerary .provisional-stop textarea').first().inputValue() !== 'یادداشت آزمایشی مسافر') {
+      throw new Error('issue23_provisional_edit_missing_after_reopen');
+    }
     await page.locator('#profile-travel-start-picker').click();
     const today = page.locator('.jalali-calendar-grid button[aria-current="date"]');
     const selected = page.locator('.jalali-calendar-grid button[aria-pressed="true"]');

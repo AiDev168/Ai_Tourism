@@ -1974,7 +1974,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
           {provisionalDays.map(day => <section className="itinerary-day" key={day.day_number} aria-labelledby={`provisional-day-${day.day_number}`}>
             <h4 id={`provisional-day-${day.day_number}`}>{copy.day} {formatNumber(locale, day.day_number)}</h4>
             {day.stops.length === 0 && <p className="unplanned-day" role="status">{copy.unplannedDay}</p>}
-            {day.stops.map((stop, index) => <article className="saved-stop provisional-stop" key={`${day.day_number}-${index}-${stop.name}`}>
+            {day.stops.map((stop, index) => <article className="saved-stop provisional-stop" key={`${day.day_number}-${index}`}>
               <label htmlFor={`provisional-name-${day.day_number}-${index}`}>{provisionalText[locale].name}</label>
               <input id={`provisional-name-${day.day_number}-${index}`} dir="auto" maxLength={160} value={stop.name}
                 onChange={event => editProvisionalStop(day.day_number, index, { name: event.target.value })} />
