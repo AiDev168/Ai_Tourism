@@ -1142,3 +1142,213 @@ body:has(.partner-workspace) .partner-workspace { color: #eeeafc; max-width: 128
  .rahgard-extracted-summary li { grid-template-columns: 17px minmax(0,1fr); }
  .rahgard-extracted-summary li b { grid-column: 2; justify-self: start; }
 }
+
+/* Theme and mobile-readability correction — explicit accessible surface pairs. */
+.rahgard-theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; min-width: 70px; padding: 9px 12px;
+  border: 1px solid #9a78ce; border-radius: 12px; background: #28203d;
+  color: #fff; font-size: 13px; font-weight: 800; cursor: pointer;
+}
+.rahgard-theme-toggle span:first-child { font-size: 20px; line-height: 1; }
+.rahgard-theme-toggle:focus-visible { outline: 3px solid #c0a5fc; outline-offset: 2px; }
+/* Dark mode: remove unreadable inherited dark text on dark backgrounds and
+   prevent light hardcoded form surfaces from silently retaining white foreground. */
+html[data-rahgard-theme="dark"] .unified-trip-experience .journey-panel :where(h2,h3,h4,h5,legend,dt,label,p,li,summary),
+html[data-rahgard-theme="dark"] .unified-trip-experience .privacy-notice,
+html[data-rahgard-theme="dark"] .unified-trip-experience .recommendation-controls,
+html[data-rahgard-theme="dark"] .unified-trip-experience .provisional-plan-card,
+html[data-rahgard-theme="dark"] .unified-trip-experience .saved-itinerary,
+html[data-rahgard-theme="dark"] .unified-trip-experience .saved-stop,
+html[data-rahgard-theme="dark"] .unified-trip-experience .history-trip,
+html[data-rahgard-theme="dark"] .unified-trip-experience .trip-history,
+html[data-rahgard-theme="dark"] .unified-trip-experience .company-request-sharing {
+  color: #f1eefa;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience .profile-relative-date,
+html[data-rahgard-theme="dark"] .unified-trip-experience .journey-alert,
+html[data-rahgard-theme="dark"] .unified-trip-experience .journey-status,
+html[data-rahgard-theme="dark"] .unified-trip-experience .itinerary-day,
+html[data-rahgard-theme="dark"] .unified-trip-experience .itinerary-coverage,
+html[data-rahgard-theme="dark"] .unified-trip-experience .unplanned-day,
+html[data-rahgard-theme="dark"] .unified-trip-experience .provisional-itinerary,
+html[data-rahgard-theme="dark"] .unified-trip-experience .provisional-stop,
+html[data-rahgard-theme="dark"] .unified-trip-experience .provisional-plan-preview > div,
+html[data-rahgard-theme="dark"] .unified-trip-experience .saved-stop,
+html[data-rahgard-theme="dark"] .unified-trip-experience .requirement-consent-field,
+html[data-rahgard-theme="dark"] .unified-trip-experience .company-request-sharing,
+html[data-rahgard-theme="dark"] .unified-trip-experience .company-share-options,
+html[data-rahgard-theme="dark"] .unified-trip-experience .company-share-list li,
+html[data-rahgard-theme="dark"] .unified-trip-experience .itinerary-start {
+  background: #21283d; color: #f5f1ff; border-color: #505579;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience .journey-error {
+  background: #421f32; color: #ffd5dc; border: 1px solid #aa627c;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience :where(.provisional-warning,.provisional-plan-card > p,.provisional-plan-preview small,.provisional-stop > small,.profile-relative-date,.profile-next-step,.location-reference,.extraction-diagnostic) {
+  color: #e8d0ab;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience :where(.itinerary-day,.saved-stop,.company-share-list li) :where(p,dt,dd,span,strong,label,h4) {
+  color: #f3edf9;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience :where(input,textarea,select):not([type="checkbox"]):not([type="radio"]) {
+  color: #f9f5ff; background: #11182b; border-color: #6b6687;
+  caret-color: #f3eaff;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience :where(input,textarea)::placeholder { color: #c6bfd5; opacity: 1; }
+html[data-rahgard-theme="dark"] .unified-trip-experience :where(.profile-editor,.requirement-consent,.saved-itinerary,.company-request-sharing) a { color: #e9c4ff; text-decoration-color: #b580f9; }
+html[data-rahgard-theme="dark"] .unified-trip-experience .journey-panel button:not(.primary):not(.danger) {
+  color: #efe5ff; background: #2e2744; border-color: #6b5a93;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience :where(.assistant-prompt-suggestions details,.saved-stop,.history-conversation) { background: #1a2035; border-color: #515072; color: #eee9fa; }
+html[data-rahgard-theme="dark"] .jalali-calendar { background: #1a2034; border-color: #666080; color: #fff; }
+html[data-rahgard-theme="dark"] .jalali-calendar-grid button,
+html[data-rahgard-theme="dark"] .jalali-calendar-grid [role="gridcell"] { color: #fff; background: #26304a; }
+html[data-rahgard-theme="dark"] .jalali-calendar-grid button[aria-current="date"] { background: #7142db; color: #fff; }
+html[data-rahgard-theme="dark"] .jalali-calendar-grid button[aria-pressed="true"] { background: #975ff5; color: #fff; }
+html[data-rahgard-theme="dark"] .jalali-calendar-heading button { background: #37304e; color: #fff; }
+/* Partner workspace has its own cards and inline input backgrounds. */
+html[data-rahgard-theme="dark"] .partner-workspace :where(.partner-card,.partner-request-inbox,.partner-linked-view,.partner-request-item,.partner-shared-day) :where(label,dt,dd,small,span,p,li,summary,legend) {
+  color: #f5f0ff;
+}
+html[data-rahgard-theme="dark"] .partner-workspace :where(input,select,textarea,option) {
+  background: #151d31; color: #fff; border: 1px solid #77718e;
+}
+html[data-rahgard-theme="dark"] .partner-workspace :where(input,textarea)::placeholder { color: #c7c5d5; opacity: 1; }
+html[data-rahgard-theme="dark"] .partner-workspace .partner-linked-view [role="alert"] {
+  background: #451f33; color: #ffd2dc; padding: 12px; border-radius: 11px;
+}
+
+/* Day palette: explicit reverse of the dark-authenticated shell, with
+   readable dark ink on each light surface and WCAG-oriented contrast. */
+html[data-rahgard-theme="light"] { color-scheme: light; }
+html[data-rahgard-theme="light"] body:has(.traveler-app),
+html[data-rahgard-theme="light"] body:has(.partner-workspace) {
+  background: #f6f7fb; color: #182138;
+}
+html[data-rahgard-theme="light"] body:has(.traveler-app) .topbar,
+html[data-rahgard-theme="light"] body:has(.partner-workspace) .topbar {
+  background: #fff; color: #24304c; border-color: #d4d9e7;
+}
+html[data-rahgard-theme="light"] body:has(.traveler-app) .topbar nav,
+html[data-rahgard-theme="light"] body:has(.partner-workspace) .topbar nav,
+html[data-rahgard-theme="light"] body:has(.traveler-app) .brand small { color: #4b576d; }
+html[data-rahgard-theme="light"] .rahgard-theme-toggle {
+  background: #f7f2ff; border-color: #7552ad; color: #3a2469;
+}
+html[data-rahgard-theme="light"] .traveler-app .unified-trip-experience {
+  --ink: #1b2340; --muted: #525d74; --forest: #7044b6;
+  --forest-deep: #4f287d; --line: #ced1e0; --surface: #fff;
+  --soft-green: #f3f0fa; --soft-sand: #f5f4fa;
+  color: #1d2440; background: #f3f5fd; border-color: #ced4e9;
+}
+html[data-rahgard-theme="light"] .rahgard-chat-entrance .hero-copy,
+html[data-rahgard-theme="light"] .rahgard-chat-guide,
+html[data-rahgard-theme="light"] .unified-trip-experience .journey-panel {
+  background: #fff; color: #1d2540; border-color: #d2d6e6;
+}
+html[data-rahgard-theme="light"] .rahgard-chat-entrance .hero-copy > h1,
+html[data-rahgard-theme="light"] .rahgard-chat-guide h2,
+html[data-rahgard-theme="light"] .unified-trip-experience .traveler-workspace-heading h2,
+html[data-rahgard-theme="light"] .unified-trip-experience .panel-title,
+html[data-rahgard-theme="light"] .unified-trip-experience .journey-panel :where(h2,h3,h4,h5,legend,dt,label,p,li,summary) {
+  color: #222b4c;
+}
+html[data-rahgard-theme="light"] .rahgard-chat-entrance .hero-body,
+html[data-rahgard-theme="light"] .rahgard-guide-group p,
+html[data-rahgard-theme="light"] .unified-trip-experience .profile-next-step,
+html[data-rahgard-theme="light"] .unified-trip-experience .privacy-notice {
+  color: #465471;
+}
+html[data-rahgard-theme="light"] .rahgard-chat-greeting {
+  background: #ece3ff; border-color: #a48bd7;
+}
+html[data-rahgard-theme="light"] .rahgard-chat-greeting strong,
+html[data-rahgard-theme="light"] .rahgard-chat-greeting p { color: #312052; }
+html[data-rahgard-theme="light"] .rahgard-guide-group,
+html[data-rahgard-theme="light"] .unified-trip-experience .conversation-transcript,
+html[data-rahgard-theme="light"] .unified-trip-experience .rahgard-extracted-summary {
+  background: #f7f8fc; border-color: #d5d8e7; color: #26304d;
+}
+html[data-rahgard-theme="light"] .rahgard-guide-group strong,
+html[data-rahgard-theme="light"] .rahgard-extracted-summary h3,
+html[data-rahgard-theme="light"] .rahgard-extracted-summary p,
+html[data-rahgard-theme="light"] .rahgard-extracted-summary li { color: #34405d; }
+html[data-rahgard-theme="light"] .rahgard-guide-group li,
+html[data-rahgard-theme="light"] .rahgard-extracted-summary li {
+  background: #fff; border-color: #d4d8e5;
+}
+html[data-rahgard-theme="light"] .rahgard-extracted-summary li[data-required="true"][data-filled="false"] {
+  background: #fff1f2; border-color: #bf4265; color: #7e2440;
+}
+html[data-rahgard-theme="light"] .unified-trip-experience .saved-message-user {
+  background: #e8ecf7; color: #1b2a46; border-color: #c7cee2;
+}
+html[data-rahgard-theme="light"] .unified-trip-experience .saved-message-assistant {
+  background: #eee4fc; color: #31214f; border-color: #cdb6ed;
+}
+html[data-rahgard-theme="light"] .unified-trip-experience .saved-message :where(small,p) { color: inherit; }
+html[data-rahgard-theme="light"] .rahgard-chat-entrance .trip-form textarea,
+html[data-rahgard-theme="light"] .unified-trip-experience .journey-panel :where(input,textarea,select),
+html[data-rahgard-theme="light"] .unified-trip-experience .profile-editor input:not([type=checkbox]):not([type=radio]) {
+  background: #fff; color: #1b2543; border: 1px solid #9c9ab5; caret-color: #45287e;
+}
+html[data-rahgard-theme="light"] .unified-trip-experience :where(input,textarea)::placeholder { color: #536079; opacity: 1; }
+html[data-rahgard-theme="light"] .unified-trip-experience .profile-editor > fieldset,
+html[data-rahgard-theme="light"] .unified-trip-experience .requirement-consent,
+html[data-rahgard-theme="light"] .unified-trip-experience .requirement-consent-field,
+html[data-rahgard-theme="light"] .unified-trip-experience .saved-stop,
+html[data-rahgard-theme="light"] .unified-trip-experience .itinerary-day,
+html[data-rahgard-theme="light"] .unified-trip-experience .company-request-sharing,
+html[data-rahgard-theme="light"] .unified-trip-experience .company-share-options,
+html[data-rahgard-theme="light"] .unified-trip-experience .company-share-list li,
+html[data-rahgard-theme="light"] .unified-trip-experience .provisional-plan-card,
+html[data-rahgard-theme="light"] .unified-trip-experience .provisional-stop,
+html[data-rahgard-theme="light"] .unified-trip-experience .provisional-plan-preview > div {
+  background: #f9f9fd; color: #28314b; border-color: #d8dbe8;
+}
+html[data-rahgard-theme="light"] .unified-trip-experience .provisional-plan-card :where(p,small,span,strong) { color: #36304c; }
+html[data-rahgard-theme="light"] .unified-trip-experience .journey-alert,
+html[data-rahgard-theme="light"] .unified-trip-experience .profile-relative-date { background: #fff5d9; color: #583f15; }
+html[data-rahgard-theme="light"] .unified-trip-experience .journey-error { background: #fff0f1; color: #862943; }
+html[data-rahgard-theme="light"] .unified-trip-experience .journey-status { background: #e9f8f1; color: #205743; }
+html[data-rahgard-theme="light"] .partner-workspace,
+html[data-rahgard-theme="light"] .partner-workspace :where(h1,h2,h3,p,small,span,dt,dd,li,label) { color: #24304b; }
+html[data-rahgard-theme="light"] .partner-workspace > header,
+html[data-rahgard-theme="light"] .partner-workspace .partner-card,
+html[data-rahgard-theme="light"] .partner-workspace .partner-request-inbox,
+html[data-rahgard-theme="light"] .partner-workspace .partner-linked-view,
+html[data-rahgard-theme="light"] .partner-workspace .partner-request-item,
+html[data-rahgard-theme="light"] .partner-workspace .partner-shared-plan,
+html[data-rahgard-theme="light"] .partner-workspace .partner-shared-day {
+  background: #fff; color: #25314a; border-color: #d2d6e3;
+}
+html[data-rahgard-theme="light"] .partner-workspace :where(input,select,textarea) { color: #232d48; background: #fff; border: 1px solid #8b96ae; }
+html[data-rahgard-theme="light"] .partner-workspace .partner-shared-day p { color: #4d556d; }
+html[data-rahgard-theme="light"] .partner-workspace .partner-readable-request > div { background: #f6f7fc; border-color: #d9dae9; }
+html[data-rahgard-theme="light"] .partner-workspace .partner-readable-request :where(dt,dd) { color: #283551; }
+html[data-rahgard-theme="light"] .partner-workspace .partner-share-link { color: #fff; }
+html[data-rahgard-theme="light"] .partner-workspace .partner-share-link:nth-child(2) { background: #653caa; }
+/* Responsive PWA layout and safe areas */
+body { min-width: 320px; }
+.traveler-app, .partner-workspace { min-width: 0; }
+.traveler-app :where(.journey-panel,.journey-columns,.profile-editor,.saved-stop,.conversation-transcript),
+.partner-workspace :where(.partner-card,.partner-request-inbox,.partner-forms,.partner-linked-view) { min-width: 0; overflow-wrap: anywhere; }
+.rahgard-theme-toggle, .partner-workspace button, .partner-workspace a.partner-share-link,
+.traveler-app button { min-height: 44px; }
+input, select, textarea { font-size: max(16px, 1rem); }
+@media (max-width: 760px) {
+  .topbar { padding-inline: max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-left)); }
+  .top-actions { flex-wrap: nowrap; }
+  .rahgard-theme-toggle { min-width: 44px; padding: 8px; }
+  .rahgard-theme-toggle span:last-child { display: none; }
+  .traveler-app .unified-trip-experience .traveler-workspace { padding-bottom: calc(22px + env(safe-area-inset-bottom)); }
+  .unified-trip-experience .journey-columns { grid-template-columns: minmax(0,1fr); }
+  .partner-workspace { margin-bottom: calc(26px + env(safe-area-inset-bottom)); }
+  .partner-forms { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 380px) {
+  .brand { font-size: 14px; }
+  .top-actions select { max-width: 72px; min-width: 72px; }
+  .rahgard-theme-toggle { width: 44px; }
+}
