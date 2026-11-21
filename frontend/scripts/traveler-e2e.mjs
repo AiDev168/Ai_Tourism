@@ -2441,6 +2441,9 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     }
     const companyResponseList = await requestBrowserJson(page,companyResponsePath,'GET');
     if (companyResponseList.items.length !== 2) throw new Error('real_provider_company_response_inbox_failed');
+    await page.goto(webOrigin + companyPlanLink, { waitUntil: 'domcontentloaded' });
+    await page.locator('.partner-response-actions').waitFor({ state: 'visible', timeout: 15_000 });
+    await page.locator('.partner-response-history summary').waitFor({ state: 'visible', timeout: 15_000 });
     identity = await switchIdentity(phone);
     const travelerResponses = await requestBrowserJson(page,
       `/api/v1/partners/trips/${tripId}/company-responses`, 'GET');
@@ -2448,6 +2451,10 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       || !travelerResponses.items.some(item => item.response_id === counterResponse.response.response_id)) {
       throw new Error('real_provider_traveler_company_response_inbox_failed');
     }
+    await page.goto(webOrigin, { waitUntil: 'domcontentloaded' });
+    await page.locator(`.history-trip[data-trip-id="${tripId}"] button`).first().click();
+    await page.locator('.traveler-company-responses').waitFor({ state: 'visible', timeout: 15_000 });
+    await page.locator('.traveler-company-response').first().waitFor({ state: 'visible', timeout: 15_000 });
     const decision = await requestBrowserJson(page,
       `/api/v1/partners/trips/${tripId}/company-responses/${counterResponse.response.response_id}/decision`,
       'POST',identity.csrfToken,{decision:'accepted'});
