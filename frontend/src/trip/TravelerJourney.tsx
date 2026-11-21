@@ -353,6 +353,9 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const [shareOptions, setShareOptions] = useState<Array<{ organization_id: string; display_name: string; organization_type: string }>>([]);
   const [tripShares, setTripShares] = useState<Array<{ share_id: string; organization_id: string; display_name: string; revoked_at: string | null; latest_revision: number | null }>>([]);
   const [selectedShareOrganizations, setSelectedShareOrganizations] = useState<string[]>([]);
+  const [shareToAllEligible, setShareToAllEligible] = useState(false);
+  const [eligibleCompanyCount, setEligibleCompanyCount] = useState(0);
+  const [broadcastLimit, setBroadcastLimit] = useState(500);
   const [includeOriginalRequestInShare, setIncludeOriginalRequestInShare] = useState(false);
   const [shareConsentAccepted, setShareConsentAccepted] = useState(false);
   const [sharingBusy, setSharingBusy] = useState(false);
@@ -585,6 +588,8 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     ]).then(([options, shares]) => {
       if (!active) return;
       setShareOptions(options.items);
+      setEligibleCompanyCount(options.eligible_count ?? options.items.length);
+      setBroadcastLimit(options.broadcast_limit ?? 500);
       setTripShares(shares.items);
     }).catch(() => {
       if (active) { setShareOptions([]); setTripShares([]); }
@@ -1211,22 +1216,37 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   };
 
   const shareRequestWithSelectedCompanies = async () => {
-    if (!session || !activeTrip || !confirmed || !shareConsentAccepted || !selectedShareOrganizations.length || !online) return;
+    if (!session || !activeTrip || !confirmed || !shareConsentAccepted || !online) return;
+    if (shareToAllEligible) {
+      if (eligibleCompanyCount < 1 || eligibleCompanyCount > broadcastLimit) return;
+      const accepted = window.confirm(locale === 'fa-IR'
+        ? `آیا با ارسال درخواست و برنامهٔ سفر (بدون متن اولیه) به همهٔ ${eligibleCompanyCount} شرکت تأییدشده و فعال فعلی موافقید؟ این اشتراک در صندوق داخلی شرکت‌ها قابل مشاهده است.`
+        : `Share this reviewed trip with all ${eligibleCompanyCount} currently eligible companies?`);
+      if (!accepted) return;
+    } else if (!selectedShareOrganizations.length) return;
     setSharingBusy(true); setError(''); setStatus('');
     try {
-      await travelerApi.shareTripWithCompanies(csrf, activeTrip.trip_id, {
-        organization_ids: selectedShareOrganizations, consent_confirmed: true,
-        include_original_request: includeOriginalRequestInShare,
+      const shareResult = await travelerApi.shareTripWithCompanies(csrf, activeTrip.trip_id, {
+        organization_ids: shareToAllEligible ? [] : selectedShareOrganizations,
+        recipient_mode: shareToAllEligible ? 'all_eligible' : 'selected',
+        broad_sharing_consent_confirmed: shareToAllEligible,
+        consent_confirmed: true,
+        include_original_request: shareToAllEligible ? false : includeOriginalRequestInShare,
         consent_policy_version: 'company-request-share-v1',
       });
       const [options, shares] = await Promise.all([
         travelerApi.companyShareOptions(activeTrip.trip_id), travelerApi.listTripCompanyShares(activeTrip.trip_id),
       ]);
       setShareOptions(options.items); setTripShares(shares.items);
-      setSelectedShareOrganizations([]); setShareConsentAccepted(false);
-      setStatus(locale === 'fa-IR' ? 'درخواست تأییدشده فقط با شرکت‌های انتخاب‌شده به اشتراک گذاشته شد.'
-        : locale === 'ar' ? 'تمت مشاركة الطلب المؤكد مع الشركات المحددة فقط.'
-          : 'The reviewed request was shared only with the selected companies.');
+      setEligibleCompanyCount(options.eligible_count ?? options.items.length);
+      setSelectedShareOrganizations([]); setShareConsentAccepted(false); setShareToAllEligible(false);
+      setStatus(shareResult.recipient_mode === 'all_eligible'
+        ? (locale === 'fa-IR'
+          ? `درخواست و برنامهٔ سفر با ${shareResult.recipient_count} شرکت تأییدشدهٔ فعلی در صندوق داخلی به اشتراک گذاشته شد.`
+          : `Shared with ${shareResult.recipient_count} eligible companies in their protected inboxes.`)
+        : (locale === 'fa-IR' ? 'درخواست تأییدشده فقط با شرکت‌های انتخاب‌شده به اشتراک گذاشته شد.'
+          : locale === 'ar' ? 'تمت مشاركة الطلب المؤكد مع الشركات المحددة فقط.'
+            : 'The reviewed request was shared only with the selected companies.'));
     } catch (value) { applyFailure(value); }
     finally { setSharingBusy(false); }
   };
@@ -1903,13 +1923,29 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       {confirmed && activeTrip && session && <section className="company-request-sharing" aria-labelledby="company-request-share-title">
         <h3 id="company-request-share-title">{locale === 'fa-IR' ? 'اشتراک‌گذاری اختیاری با شرکت‌های گردشگری' : locale === 'ar' ? 'مشاركة اختيارية مع شركات السياحة' : 'Optional sharing with tourism companies'}</h3>
         <p>{locale === 'fa-IR'
-          ? 'فقط شرکت‌های تأییدشده‌ای که خودتان انتخاب می‌کنید، درخواست تأییدشده و برنامهٔ سفر را می‌بینند. با تغییر درخواست یا برنامه، نسخهٔ تازه در همان صندوق ثبت می‌شود. پیام عمومی یا پیامک ارسال نمی‌شود.'
+          ? 'می‌توانید شرکت‌های خاص را انتخاب کنید یا با اجازهٔ جداگانه، اطلاعات تأییدشدهٔ سفر را به همهٔ شرکت‌های مجاز فعلی در صندوق داخلی بفرستید. نسخه‌های اصلاحی در همان درخواست ثبت می‌شوند. پیامک یا ارسال عمومی وجود ندارد.'
           : locale === 'ar'
             ? 'لا ترى الطلب المؤكد وخطة الرحلة إلا الشركات المعتمدة التي تختارها. تُضاف التعديلات كإصدارات جديدة في صندوق المؤسسة نفسه. لا تُرسل رسائل عامة أو رسائل نصية.'
             : 'Only verified companies you select can see your reviewed request and itinerary. Later edits create a new revision in the same inbox. No public broadcast or SMS is sent.'}</p>
         {shareOptions.length > 0 ? <fieldset className="company-share-options">
-          <legend>{locale === 'fa-IR' ? 'شرکت‌های تأییدشده' : locale === 'ar' ? 'الشركات المعتمدة' : 'Verified companies'}</legend>
-          {shareOptions.map(option => <label key={option.organization_id}>
+          <legend>{locale === 'fa-IR' ? 'روش اشتراک‌گذاری' : locale === 'ar' ? 'طريقة المشاركة' : 'Sharing method'}</legend>
+          <label className="company-share-mode">
+            <input type="radio" name="company-share-mode" checked={!shareToAllEligible}
+              onChange={() => { setShareToAllEligible(false); setShareConsentAccepted(false); }} />
+            {locale === 'fa-IR' ? 'انتخاب شرکت‌های مشخص' : 'Choose named companies'}
+          </label>
+          <label className="company-share-mode">
+            <input type="radio" name="company-share-mode" checked={shareToAllEligible}
+              onChange={() => { setShareToAllEligible(true); setShareConsentAccepted(false); setIncludeOriginalRequestInShare(false); }} />
+            {locale === 'fa-IR' ? `ارسال به همهٔ ${eligibleCompanyCount} شرکت تأییدشده و فعال فعلی`
+              : `Share with all ${eligibleCompanyCount} currently eligible companies`}
+          </label>
+          {shareToAllEligible && <p className="company-share-broadcast-note" role="note">
+            {eligibleCompanyCount > broadcastLimit
+              ? (locale === 'fa-IR' ? `تعداد شرکت‌ها بیش از سقف ایمن ${broadcastLimit} است؛ ارسال گروهی نیازمند تقسیم به دسته‌های کنترل‌شده است.` : 'Too many companies for a single safe batch.')
+              : (locale === 'fa-IR' ? 'این انتخاب فقط برای شرکت‌های واجد شرایط در لحظهٔ ارسال اجرا می‌شود؛ شرکت‌های جدید در آینده خودکار اضافه نمی‌شوند. متن اولیهٔ درخواست ارسال نمی‌شود.' : 'Only currently eligible companies will receive a protected inbox entry. Original raw request is excluded.')}
+          </p>}
+          {!shareToAllEligible && shareOptions.map(option => <label key={option.organization_id}>
             <input type="checkbox" checked={selectedShareOrganizations.includes(option.organization_id)}
               onChange={event => {
                 const checked = event.currentTarget.checked;
@@ -1919,17 +1955,22 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
               }} />
             <span>{option.display_name}</span>
           </label>)}
-          <label><input type="checkbox" checked={includeOriginalRequestInShare}
+          {!shareToAllEligible && <label><input type="checkbox" checked={includeOriginalRequestInShare}
             onChange={event => setIncludeOriginalRequestInShare(event.currentTarget.checked)} />
-            {locale === 'fa-IR' ? 'متن اولیهٔ درخواست هم ارسال شود' : locale === 'ar' ? 'تضمين نص الطلب الأصلي' : 'Include the original request text'}</label>
+            {locale === 'fa-IR' ? 'متن اولیهٔ درخواست هم ارسال شود' : locale === 'ar' ? 'تضمين نص الطلب الأصلي' : 'Include the original request text'}</label}
           <label className="company-share-consent"><input type="checkbox" checked={shareConsentAccepted}
             onChange={event => setShareConsentAccepted(event.currentTarget.checked)} />
-            {locale === 'fa-IR' ? 'اجازه می‌دهم اطلاعات تأییدشدهٔ سفر و برنامهٔ آن با شرکت‌های انتخاب‌شده به اشتراک گذاشته شود.'
+            {locale === 'fa-IR' ? (shareToAllEligible
+              ? 'با اشتراک‌گذاری اطلاعات تأییدشدهٔ سفر با تمام شرکت‌های فعال و تأییدشدهٔ فعلی موافقم.'
+              : 'اجازه می‌دهم اطلاعات تأییدشدهٔ سفر و برنامهٔ آن با شرکت‌های انتخاب‌شده به اشتراک گذاشته شود.')
               : locale === 'ar' ? 'أوافق على مشاركة تفاصيل الرحلة المؤكدة وخطتها مع الشركات التي اخترتها.'
                 : 'I authorize sharing my reviewed trip request and itinerary with the selected companies.'}</label>
           <button type="button" className="primary" onClick={() => void shareRequestWithSelectedCompanies()}
-            disabled={sharingBusy || !online || !shareConsentAccepted || !selectedShareOrganizations.length}>
-            {sharingBusy ? copy.saving : locale === 'fa-IR' ? 'اشتراک‌گذاری با شرکت‌های انتخاب‌شده' : locale === 'ar' ? 'مشاركة مع الشركات المحددة' : 'Share with selected companies'}
+            disabled={sharingBusy || !online || !shareConsentAccepted
+              || (shareToAllEligible ? eligibleCompanyCount === 0 || eligibleCompanyCount > broadcastLimit : !selectedShareOrganizations.length)}>
+            {sharingBusy ? copy.saving : shareToAllEligible
+              ? (locale === 'fa-IR' ? 'ارسال به همهٔ شرکت‌های مجاز' : 'Share with all eligible companies')
+              : locale === 'fa-IR' ? 'اشتراک‌گذاری با شرکت‌های انتخاب‌شده' : locale === 'ar' ? 'مشاركة مع الشركات المحددة' : 'Share with selected companies'}
           </button>
         </fieldset> : <p role="status">{locale === 'fa-IR' ? 'در حال حاضر شرکت گردشگری تأییدشده‌ای برای انتخاب وجود ندارد.'
           : locale === 'ar' ? 'لا توجد حالياً شركات سياحة معتمدة للاختيار.' : 'No verified tourism companies are available to select.'}</p>}
