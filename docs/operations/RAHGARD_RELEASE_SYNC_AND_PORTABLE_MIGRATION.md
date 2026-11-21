@@ -1,3 +1,7 @@
+> **V2 release addendum (2026-11-21):** Triple-environment synchronization is source/release SHA and runtime fingerprint parity, **not** database copying. The existing managed VPS rollout scripts end at schema 0021, while V2's 0022/0023 were exercised only on disposable PostgreSQL. For current gate status, immutable SHA pinning, restored-real-data rehearsal, owner approval and local permanent pilot isolation, follow [Rahgard V2 release readiness](RAHGARD_V2_VPS_READINESS_AND_THREE_ENV_SYNC_2026-11-21.md) and the [Codex implementation mission](RAHGARD_CODEX_V2_RELEASE_PREPARATION_AND_ROLLOUT_GATE_2026-11-21.md). The instructions below continue to apply for secure backup/restore and release parity; they do not authorize an unqualified V2 rollout.
+
+---
+
 # Rahgard: synchronized releases and lossless VPS migration
 
 **Policy from this change forward:** every completed release has one immutable

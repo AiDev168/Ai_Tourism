@@ -1,3 +1,7 @@
+> **V2 DECISION (2026-11-21): PREPARATION GO / LIVE DEPLOYMENT NO-GO.** This document below is **historical Issue #21 PWA hotfix** evidence, NOT an approval for V2. The current VPS runtime has not been freshly observed in this conversation. Use [V2 readiness and three-environment release gates](RAHGARD_V2_VPS_READINESS_AND_THREE_ENV_SYNC_2026-11-21.md) and [Codex V2 preparation handoff](RAHGARD_CODEX_V2_RELEASE_PREPARATION_AND_ROLLOUT_GATE_2026-11-21.md) before any operator action. An immutable candidate, real-data isolated 0022/0023 rehearsal, off-host HMAC backup, old-code compatibility and a separately approved live maintenance window are required.
+
+---
+
 # Rahgard VPS release decision — 2026-11-19
 
 ## Current decision
