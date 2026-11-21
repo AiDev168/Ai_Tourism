@@ -382,6 +382,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const draftInFlightRef = useRef<string | null>(null);
   const completedDraftRef = useRef<string | null>(null);
   const draftGenerationRef = useRef(0);
+  const restoredCompanyReplyRef = useRef<string | null>(null);
   const manualProfileFieldsRef = useRef(new Set<string>());
   const assistantProfileFieldsRef = useRef(new Set<string>());
   const requestIdentityRef = useRef(requirements?.requestText ?? null);
@@ -951,6 +952,27 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
   };
+
+  // Private company response URLs only identify a response. They do not
+  // grant access: the usual authenticated trip + response APIs still enforce
+  // traveler identity on every retrieval.
+  useEffect(() => {
+    if (!session || !online) return;
+    const params = new URLSearchParams(window.location.search);
+    const tripId = params.get('trip');
+    const responseId = params.get('company_response');
+    const isUuid = (value: string | null) =>
+      Boolean(value && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value));
+    if (!isUuid(tripId) || !isUuid(responseId) || !tripId || !responseId) return;
+    const key = `${session.user.user_id}:${tripId}:${responseId}`;
+    if (restoredCompanyReplyRef.current === key) return;
+    restoredCompanyReplyRef.current = key;
+    let active = true;
+    void travelerApi.getTrip(tripId).then(trip => {
+      if (active && trip.trip_id === tripId) return restoreTrip(trip.conversation_id, tripId);
+    }).catch(value => { if (active) applyFailure(value); });
+    return () => { active = false; };
+  }, [session?.user.user_id, online]);
 
   const sendMessage = async () => {
     if (!session || !activeConversation || !activeTrip || !messageText.trim() || !online) {
@@ -1987,7 +2009,8 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       </section>}
 
       {confirmed && activeTrip && session && <TravelerCompanyResponses
-        locale={locale} csrfToken={csrf} tripId={activeTrip.trip_id} />}
+        locale={locale} csrfToken={csrf} tripId={activeTrip.trip_id}
+        highlightResponseId={new URLSearchParams(window.location.search).get('company_response')} />}
 
       {itinerary && <section className="saved-itinerary" aria-labelledby="saved-itinerary-title">
         <h3 id="saved-itinerary-title">{copy.itineraryTitle}</h3>
