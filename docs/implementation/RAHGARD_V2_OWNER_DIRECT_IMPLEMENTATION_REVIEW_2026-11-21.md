@@ -85,3 +85,29 @@ All changes below are **committed source changes**, not proven local runtime acc
 
 ### Revised status labels
 **CODE-QUALITY PASS** at the above SHA. **LOCAL END-TO-END NO-GO/UNVERIFIED** pending guarded PG17 migration **0023**, real role-based Chromium UI, real LM Studio provider, PWA mobile/contrast inspection, and company response lifecycle. The old `8443` pilot remains 16 migrations and must not be used to validate 0023 features. No remote production rollout authorized.
+
+
+## Owner-run isolated local acceptance — 2026-11-21 (evidence received)
+
+**Acceptance source:** owner-provided Windows PowerShell terminal output, not an independently collected CI artifact. Source SHA at test time: `8d3a4a1e32d1f572698b553e14614f15df677a0f`; `node --check frontend/scripts/traveler-e2e.mjs` completed without error. Local Node.js 26.13.0 was confirmed in the preceding Windows run.
+
+**Command executed:**
+
+```powershell
+& .\engineering\pilot\Run-National-Catalogue-Browser-E2E.ps1 `
+  -ChatProvider lm_studio `
+  -ChatLoopbackPort 1234 `
+  -ChatModel 'qwen3-8b-abliterated'
+```
+
+**Observed terminal result:** `status=passed`, `provider=lm_studio`, `model=qwen3-8b-abliterated`, `invocationAttempts=3`, `successfulInvocations=3`, `extractionPath=llm`, `correctionTurn=true`, `itineraryGenerated=true`, `persistedAndReopened=true`. Final runner line: `PASS: authenticated real-provider Chromium journey via lm_studio completed on disposable PG17; no persistent database or VPS was used.`
+
+**Database evidence:** Guarded disposable PostgreSQL 17 bootstrapped migrations 0000–0012. The successful enclosing runner applies 0013–0023, including migration 0023 checksum, RLS and application grants assertions before starting the browser journey. The database used an assigned loopback port (55823 in this run). No migration was applied to permanent pilot, operational VPS or live data.
+
+**Company/permission assertions in the successfully completed `runRealProviderJourney` code path:** two approved test companies plus an ineligible company, consented named and `all_eligible` sharing with two deduplicated recipients and original-text exclusion, separate trip share revisions, authenticated company request/itinerary links, cross-tenant and anonymous access denial, stale revision refusal, idempotency conflict denial, `accepted_as_requested`, changed-price/date `counter_offer`, traveler acceptance without changing the canonical trip profile, company B revocation and company A continued access. The code path includes browser UI selectors and authenticated FastAPI/PG17 requests; these assertions are inferred from a successful complete run, not separately itemized in the printed terminal summary.
+
+**Local artifacts:** `artifacts/visual-qa-task15d/run-2026-11-21T14-14-47-416Z-35124/` on the owner's Windows machine. The script writes `real-chat-lm_studio.json`, `issue23-jalali-calendar.png`, `real-chat-lm_studio-390.png`, `real-chat-lm_studio-1440.png`. These files were not uploaded or visually reviewed as part of this report. Do not copy authentication tokens, private prompts or personal data into GitHub documentation.
+
+**Updated gate decision:** CODE QUALITY **PASS** (prior Windows + Linux CI); LOCAL PG17/MIGRATION 0023 **PASS in disposable acceptance**; LOCAL REAL-PROVIDER CHROMIUM E2E **PASS** on tested source SHA; production deployment **NOT AUTHORIZED**. Visual day/night contrast, typography, company and traveler responsive layout, real physical mobile/PWA install/offline behavior, external service delivery, scale >500 recipients, and recovery on a different server remain unverified. The verified test uses synthetic company identities and a test-only itinerary fixture; it is not verification of public production-catalogue coverage or a source-backed commercial booking.
+
+**Next gate:** visually inspect redacted screenshots and the in-app partner/traveler views in both day/night themes at mobile (390 px) and desktop (1440 px), assess WCAG text contrast, and conduct physical-device PWA acceptance before any production rollout. Current test artifacts already include the two traveler screen widths, but neither day/night nor all company screens have been independently reviewed.
