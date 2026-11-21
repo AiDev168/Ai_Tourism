@@ -322,6 +322,17 @@ export function App() {
         <div className={authSession ? 'unified-trip-experience' : undefined}>
         {(!authSession || !conversationVisible) && <section className={authSession ? 'hero hero-planner rahgard-chat-entrance' : 'hero'}>
           <div className="hero-copy">
+            {authSession && <p className="rahgard-chat-status" role="status" data-provider-state={assistantRouteState}>
+              <span aria-hidden="true">●</span> {assistantRouteState === 'connected'
+                ? (locale === 'fa-IR' ? 'هوش مصنوعی متصل است' : locale === 'ar' ? 'الذكاء الاصطناعي متصل' : 'AI connected')
+                : assistantRouteState === 'configured'
+                  ? (locale === 'fa-IR' ? 'سرویس تنظیم شده؛ اتصال هنوز تأیید نشده' : 'AI configured; connectivity unverified')
+                  : assistantRouteState === 'loading'
+                    ? (locale === 'fa-IR' ? 'در حال بررسی اتصال هوش مصنوعی…' : 'Checking AI connection…')
+                    : assistantRouteState === 'quota_exhausted'
+                      ? (locale === 'fa-IR' ? 'سهمیهٔ دستیار پایان یافته است' : 'AI quota exhausted')
+                      : (locale === 'fa-IR' ? 'دستیار در دسترس نیست؛ استخراج جایگزین فعال می‌شود' : 'AI unavailable; fallback available')}
+            </p>}
             <p className="eyebrow"><span className="sun">✳</span>{t('heroEyebrow')}</p>
             <h1>{authSession ? plannerCopy[locale].title : t('heroTitle')}</h1>
             <p className="hero-body">{authSession ? plannerCopy[locale].intro : t('heroBody')}</p>
@@ -375,14 +386,14 @@ export function App() {
                 <span aria-hidden="true">↗</span>
               </button>
               <p className="fixture-pill">{tripCopy.sessionNotice}</p>
-              {!!clarifications.length && requirements && <section className="trip-response" aria-live="polite" aria-labelledby="clarification-title">
+              {!!clarifications.length && requirements && (!authSession || assistantRouteState === 'disabled' || assistantRouteState === 'unavailable') && <section className="trip-response" aria-live="polite" aria-labelledby="clarification-title">
                 <h2 id="clarification-title">{tripCopy.clarificationTitle}</h2>
                 <ul>{clarifications.map(field => <li key={field}>{field === 'destination' ? tripCopy.askDestination : tripCopy.askDuration}</li>)}
                   {ambiguities.map(field => <li key={field}>{field === 'destination' ? tripCopy.askAmbiguousDestination : tripCopy.askAmbiguousDuration}</li>)}</ul>
                 {requirements.clarificationFields?.includes('budget.currency') && <p>{requirementCopy.budgetCurrency}</p>}
                 {requirements.clarificationFields?.includes('relative_start_date.anchor') && <p>{requirementCopy.relativeAnchor}</p>}
               </section>}
-              {requirements && <section className="trip-response trip-summary" aria-live="polite" aria-labelledby="captured-title">
+              {requirements && (!authSession || assistantRouteState === 'disabled' || assistantRouteState === 'unavailable') && <section className="trip-response trip-summary" aria-live="polite" aria-labelledby="captured-title">
                 <div className="trip-summary-heading"><h2 id="captured-title">{tripCopy.capturedTitle}</h2>
                   <button className="text-button" type="button" onClick={clearTripDraft}>{tripCopy.clearDraft}</button></div>
                 <p>{tripCopy.capturedLocal}</p>
