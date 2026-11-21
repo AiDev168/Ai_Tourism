@@ -97,12 +97,12 @@ export function PartnerWorkspace({ locale, csrfToken }: { locale: Locale; csrfTo
                 <ol>{stops.map((stop,position)=><li key={position} dir="auto">
                   {locale === 'fa-IR' ? 'روز' : 'Day'} {String(stop.day_number ?? '—')}
                   {' · '}{locale === 'fa-IR' ? 'مقصد ثبت‌شده' : 'Recorded stop'}
-                  {stop.notes_fa && <p>{String(stop.notes_fa)}</p>}
+                  {typeof stop.notes_fa === 'string' && stop.notes_fa.trim() !== '' && <p>{stop.notes_fa}</p>}
                 </li>)}</ol>
                 {!stops.length && <p>{locale === 'fa-IR' ? 'هنوز توقفی ثبت نشده است.' : 'No stops saved yet.'}</p>}
               </article>;
             })}
-          {linkedItem.itinerary_snapshot.provisional && typeof linkedItem.itinerary_snapshot.provisional === 'object'
+          {Boolean(linkedItem.itinerary_snapshot.provisional) && typeof linkedItem.itinerary_snapshot.provisional === 'object'
             && <article className="partner-shared-plan">
               <strong className="partner-unverified-label">{locale === 'fa-IR' ? 'برنامهٔ موقت — تأییدنشده' : t.unverified}</strong>
               {(Array.isArray((linkedItem.itinerary_snapshot.provisional as Record<string,unknown>).days)
@@ -115,7 +115,7 @@ export function PartnerWorkspace({ locale, csrfToken }: { locale: Locale; csrfTo
                       const notes = stop.notes_by_locale && typeof stop.notes_by_locale === 'object'
                         ? stop.notes_by_locale as Record<string,unknown> : {};
                       return <li key={position} dir="auto"><strong>{String(stop.name ?? '—')}</strong>
-                        {notes[locale] && <p>{String(notes[locale])}</p>}</li>;
+                        {typeof notes[locale] === 'string' && <p>{String(notes[locale])}</p>}</li>;
                     })}</ul> : <p>{locale === 'fa-IR' ? 'هنوز برنامه‌ای برای این روز ثبت نشده است.' : 'No stops planned for this day.'}</p>}
                   </section>;
                 })}
