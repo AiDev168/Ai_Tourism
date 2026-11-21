@@ -17,6 +17,7 @@ import { displayTripInterest } from '../trip/interestDisplay';
 import { deviceCalendarDate } from '../trip/jalaliDate';
 import { requestDeviceOrigin, withApproximateDeviceOrigin } from './locationOrigin';
 import { PartnerWorkspace } from '../partners/PartnerWorkspace';
+import { ThemeSwitcher } from '../theme/ThemeSwitcher';
 import { CatalogueReviewPanel } from '../admin/catalogue/CatalogueReviewPanel';
 
 const destinationCatalog = new ApiDestinationCatalogPort();
@@ -274,6 +275,7 @@ export function App() {
       <header className="topbar">
         <a className="brand" href="/"><span className="brand-mark" aria-hidden="true">Ø±</span><span>{t('brand')}<small>{t('tagline')}</small></span></a>
         <div className="top-actions">
+          <ThemeSwitcher locale={locale} />
           <AuthPanel locale={locale} onSessionChange={setAuthSession} />
           <label className="sr-only" htmlFor="locale">{t('labelLanguage')}</label>
           <select id="locale" value={locale} onChange={event => setLocale(event.target.value as Locale)}>
@@ -304,6 +306,7 @@ export function App() {
           {authSession?.user.auth_method === 'local_owner' && <a href="/admin/ai-providers">AI admin</a>}
         </nav>
         <div className="top-actions">
+          <ThemeSwitcher locale={locale} />
           <AuthPanel locale={locale} onSessionChange={setAuthSession} />
           <label className="sr-only" htmlFor="locale">{t('labelLanguage')}</label>
           <select id="locale" value={locale} onChange={event => setLocale(event.target.value as Locale)}>
