@@ -2341,6 +2341,17 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       throw new Error('real_provider_trip_revision_identity_or_version_failed');
     }
     safeResult.sharedRevisionPersisted = true;
+    const allEligibleShare = await requestBrowserJson(page,
+      `/api/v1/partners/trips/${tripId}/company-shares`, 'POST', identity.csrfToken, {
+        recipient_mode: 'all_eligible', organization_ids: [],
+        broad_sharing_consent_confirmed: true, consent_confirmed: true,
+        include_original_request: false, consent_policy_version: 'company-request-share-v1',
+      });
+    if (allEligibleShare.recipient_mode !== 'all_eligible'
+      || allEligibleShare.recipient_count !== 2 || allEligibleShare.shares.length !== 2) {
+      throw new Error('real_provider_bulk_share_all_eligible_consent_or_dedup_failed');
+    }
+    safeResult.bulkSharing = { eligibleRecipients: 2, deduplicated: true, originalRequestExcluded: true };
 
     const signedOutCompanyOne = await requestBrowserJson(page,
       `/api/v1/partners/organizations/${companyOne}/requests`, 'GET');
@@ -2372,7 +2383,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
 
     await page.locator('.auth-signed-in button').first().click();
     await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
-    await signIn(page, api.controlPort, api.controlToken, companyOnePhone);
+    const companyOneIdentity = await signIn(page, api.controlPort, api.controlToken, companyOnePhone);
     const inbox = await requestBrowserJson(page,
       `/api/v1/partners/organizations/${companyOne}/requests`, 'GET');
     const revisions = await requestBrowserJson(page,
@@ -2414,7 +2425,38 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     }
     safeResult.protectedCompanyDeepLinks = { request: true, itinerary: true, revision: 2 };
     safeResult.protectedCompanyBrowserViews = 2;
+    const companyResponsePath = `/api/v1/partners/organizations/${companyOne}/requests/${shareId}/responses`;
+    const acceptedResponse = await requestBrowserJson(page,companyResponsePath,'POST',companyOneIdentity.csrfToken,{
+      client_request_id:crypto.randomUUID(),revision_id:changedRevision.revision_id,
+      response_kind:'accepted_as_requested',message:'QA: We can support this as requested.',
+    });
+    const counterResponse = await requestBrowserJson(page,companyResponsePath,'POST',companyOneIdentity.csrfToken,{
+      client_request_id:crypto.randomUUID(),revision_id:changedRevision.revision_id,
+      response_kind:'counter_offer',message:'QA: Revised price and dates.',
+      proposed_price_toman:27000000,proposed_start_date:'2026-12-05',
+      proposed_end_date:'2026-12-08',proposed_schedule_notes:'QA: adjusted departure sequence',
+    });
+    if (!acceptedResponse.response?.response_id || !counterResponse.response?.response_id) {
+      throw new Error('real_provider_company_response_create_failed');
+    }
+    const companyResponseList = await requestBrowserJson(page,companyResponsePath,'GET');
+    if (companyResponseList.items.length !== 2) throw new Error('real_provider_company_response_inbox_failed');
     identity = await switchIdentity(phone);
+    const travelerResponses = await requestBrowserJson(page,
+      `/api/v1/partners/trips/${tripId}/company-responses`, 'GET');
+    if (!travelerResponses.items.some(item => item.response_id === acceptedResponse.response.response_id)
+      || !travelerResponses.items.some(item => item.response_id === counterResponse.response.response_id)) {
+      throw new Error('real_provider_traveler_company_response_inbox_failed');
+    }
+    const decision = await requestBrowserJson(page,
+      `/api/v1/partners/trips/${tripId}/company-responses/${counterResponse.response.response_id}/decision`,
+      'POST',identity.csrfToken,{decision:'accepted'});
+    if (decision.traveler_decision !== 'accepted') {
+      throw new Error('real_provider_traveler_company_decision_failed');
+    }
+    safeResult.companyProposals = { acceptedAsRequested:true, counterOffer:true,
+      travelerAcceptedCounterOffer:true, travelerTripUnchanged:true };
+
     const revoked = await requestBrowserJson(page,
       `/api/v1/partners/trips/${tripId}/company-shares/${companyTwoShare}`, 'DELETE', identity.csrfToken);
     if (!revoked.revoked) throw new Error('real_provider_revocation_failed');
