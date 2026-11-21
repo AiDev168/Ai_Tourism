@@ -111,3 +111,25 @@ All changes below are **committed source changes**, not proven local runtime acc
 **Updated gate decision:** CODE QUALITY **PASS** (prior Windows + Linux CI); LOCAL PG17/MIGRATION 0023 **PASS in disposable acceptance**; LOCAL REAL-PROVIDER CHROMIUM E2E **PASS** on tested source SHA; production deployment **NOT AUTHORIZED**. Visual day/night contrast, typography, company and traveler responsive layout, real physical mobile/PWA install/offline behavior, external service delivery, scale >500 recipients, and recovery on a different server remain unverified. The verified test uses synthetic company identities and a test-only itinerary fixture; it is not verification of public production-catalogue coverage or a source-backed commercial booking.
 
 **Next gate:** visually inspect redacted screenshots and the in-app partner/traveler views in both day/night themes at mobile (390 px) and desktop (1440 px), assess WCAG text contrast, and conduct physical-device PWA acceptance before any production rollout. Current test artifacts already include the two traveler screen widths, but neither day/night nor all company screens have been independently reviewed.
+
+
+## Post-acceptance screenshot review — 2026-11-21, preliminary visual gate
+
+**Source images inspected in conversation:** owner-uploaded `real-chat-lm_studio-390(1).png` (rendered image file 65×2047) and `real-chat-lm_studio-1440.png` (351×2048). Their names refer to original Playwright viewport widths of 390 and 1440 px, but these chat uploads are strongly downscaled full-page exports. Pixel-perfect typography, color-contrast ratios, and text transcription **cannot** be certified from these copies. The actual original screenshots on the owner's laptop are higher-resolution artifacts.
+
+**Grounded observations and source cross-check:**
+- The captured traveler screen uses a largely light palette and includes progress, chat/profile, and a long multi-day provisional itinerary editor. A dark-mode screenshot was not supplied. The company workspace is not pictured; the separately generated Jalali calendar screenshot is also not supplied.
+- The itinerary edit area stacks multiple fully expanded per-day edit cards and many labeled fields vertically. The full-page scroll is extremely long on mobile. The desktop screenshot retains broad margins around the day-editor column. This is a UX density/navigation issue, **not** a demonstrated data-loss or functionality defect.
+- Current `frontend/src/trip/TravelerJourney.tsx` renders `provisionalDays.map(day => ...)` as all expanded `.itinerary-day` sections, while `frontend/src/styles.css` gives each `.provisional-stop` a full grid of inputs. A future accordion/summary-per-day pattern should keep edits in React state when collapsed, keep day numbers and unplanned-day indicators visible, preserve keyboard accessibility, and not silently discard unsaved entries.
+- Some existing helper text styles use 10–13 px fonts. Prioritize an actual rendered CSS/computed-style review at 390 px and test legibility and contrast; apparent tiny text in the downscaled upload alone is **not** evidence of a contrast failure.
+- Browser E2E screenshot code clears all `input`/`textarea` values and redacts chat text before screenshot; blank values in these captured images therefore do not prove unexpected empty application fields.
+- The successful real-provider E2E asserts no horizontal overflow at 390 and 1440 px and checks distinguishing Jalali today/selected-day visual state. It does **not** automatically establish WCAG AA color contrast or test both theme appearances on every page.
+
+**Priority acceptance backlog (not yet implemented):**
+1. Re-capture original-resolution 390 px and 1440 px images, each in **light and dark**, in authenticated traveler and company views; upload cropped/native-width frames rather than downscaled full-page images, remove private data first.
+2. Run a computed-style / axe-core WCAG 2.2 AA audit for contrast, field labels, focus, alerts and form targets at 390/1440 px; distinguish real issues from screenshot scaling artifacts.
+3. Prototype collapsible itinerary day cards with an always-readable day summary, explicit edit action, stable React identity and preserved unsaved edits; add keyboard and persistence regression tests.
+4. Review actual company inbox and protected links in both themes; this cannot be inferred from traveler-only captures.
+5. Check physical Android/iOS PWA installation, keyboard, safe area, native select/date controls and offline shell.
+
+**Gate:** browser/API/PG17 **PASS** on source SHA `8d3a4a1...`; preliminary screenshot review **PARTIAL**; visual accessibility and physical-device PWA **UNVERIFIED**. No production deployment authorization and no changes to VPS/permanent pilot.
