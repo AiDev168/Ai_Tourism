@@ -21,6 +21,18 @@ SELECT 1 / CASE WHEN current_database() = 'rahgard_pilot_vps_staging'
         WHERE migration_id='0023_partner_trip_responses')
     THEN 1 ELSE 0 END;
 
+-- Test-only partners must never enter automatic distribution. No partner
+-- self-service API may change this operator-governed flag.
+ALTER TABLE partner.organizations
+  ADD COLUMN is_test BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE OR REPLACE VIEW partner.share_eligible_organizations
+WITH (security_barrier=true) AS
+SELECT organization_id,display_name,organization_type
+FROM partner.organizations
+WHERE verification_status='verified' AND participation_status='active'
+  AND application_status='approved' AND closed_at IS NULL AND NOT is_test;
+
 CREATE TABLE partner.trip_company_responses (
     response_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_request_id UUID NOT NULL,
