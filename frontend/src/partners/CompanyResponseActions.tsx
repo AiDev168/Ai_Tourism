@@ -13,8 +13,8 @@ type PartnerResponse = {
   created_at: string;
 };
 
-export function CompanyResponseActions({ locale, csrfToken, organizationId, shareId, revisionId }: {
-  locale: Locale; csrfToken: string; organizationId: string; shareId: string; revisionId: string;
+export function CompanyResponseActions({ locale, csrfToken, organizationId, shareId, revisionId, tripId }: {
+  locale: Locale; csrfToken: string; organizationId: string; shareId: string; revisionId: string; tripId: string;
 }) {
   const [responseKind, setResponseKind] = useState<'accepted_as_requested'|'counter_offer'>('accepted_as_requested');
   const [message, setMessage] = useState('');
@@ -121,6 +121,11 @@ export function CompanyResponseActions({ locale, csrfToken, organizationId, shar
         {' · '}{locale === 'fa-IR' ? 'وضعیت مسافر:' : 'Traveler decision:'} {item.traveler_decision === 'pending'
           ? (locale === 'fa-IR' ? 'در انتظار بررسی' : 'Pending')
           : item.traveler_decision === 'accepted' ? (locale === 'fa-IR' ? 'پذیرفته' : 'Accepted') : (locale === 'fa-IR' ? 'ردشده' : 'Declined')}
+        <label className="partner-response-share-url">
+          {locale === 'fa-IR' ? 'لینک خصوصی این پاسخ برای مسافر (قابل کپی)' : 'Protected traveler response link'}
+          <input readOnly dir="ltr" onFocus={event => event.currentTarget.select()}
+            value={`${window.location.origin}/?trip=${encodeURIComponent(tripId)}&company_response=${encodeURIComponent(item.response_id)}`} />
+        </label>
       </li>)}</ul>
     </details>}
   </section>;
