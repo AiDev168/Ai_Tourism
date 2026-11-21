@@ -146,7 +146,7 @@ button { cursor: pointer; }
 .jalali-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; text-align: center; }
 .jalali-calendar-grid [role="columnheader"] { padding-block: 6px; color: var(--muted); font-size: 11px; }
 .jalali-calendar-grid [role="gridcell"] { display: grid; min-width: 0; min-height: 38px; place-items: center; border: 0; border-radius: 8px; background: white; color: var(--ink); }
-.jalali-calendar-grid button[aria-current="date"] { background: #fff2d7; color: #643900; box-shadow: inset 0 0 0 2px #bf751a; font-weight: 850; }
+.jalali-calendar-grid button[aria-current="date"] { background: #103f34; color: #ffffff; box-shadow: inset 0 0 0 2px #f0c879, 0 2px 5px rgba(16,63,52,.2); font-weight: 850; }
 .jalali-calendar-grid button[aria-pressed="true"] { background: var(--green); color: white; }
 .jalali-calendar-grid button[aria-current="date"][aria-pressed="true"] { box-shadow: inset 0 0 0 2px #f9cb72; }
 .location-detect { min-height: 42px; border-radius: 10px; border: 1px solid var(--line); background: #f6faf8; color: var(--ink); cursor: pointer; }
@@ -750,3 +750,28 @@ body {
 .candidate-review-card pre { max-height:20rem; overflow:auto; white-space:pre-wrap; direction:ltr; text-align:left; background:#f5f7f5; padding:.8rem; border-radius:.6rem; }
 .candidate-review-actions { display:flex; flex-wrap:wrap; gap:.6rem; }
 @media(max-width:420px){.partner-workspace{width:calc(100% - 1rem);margin:1rem auto 3rem}.partner-card{padding:.9rem}}
+
+/* V2 intake: visually distinguish essential fields and true validation errors. */
+.trip-field-required { color: #9b2c28; font-weight: 800; font-size: .86em; }
+.trip-field-optional { color: var(--muted); font-size: .83em; font-weight: 500; }
+.profile-editor input[aria-invalid="true"] {
+  border: 2px solid #b42318;
+  background: #fff1ee;
+  box-shadow: 0 0 0 3px rgba(180,35,24,.10);
+}
+.profile-editor input[aria-invalid="true"]:focus-visible { outline: 3px solid #ae3429; outline-offset: 2px; }
+.assistant-provider-state[data-provider-state="responded"] {
+  color: #125840; background: #edf8f1; border: 1px solid #8dc5a1;
+  border-radius: 10px; padding: 9px 12px; font-weight: 750;
+}
+.assistant-provider-state[data-provider-state="unavailable"],
+.assistant-provider-state[data-provider-state="disabled"],
+.assistant-provider-state[data-provider-state="quota_exhausted"] {
+  color: #853212; background: #fff1e9; border: 1px solid #d9a487;
+  border-radius: 10px; padding: 9px 12px; font-weight: 750;
+}
+.assistant-provider-state[data-provider-state="configured"],
+.assistant-provider-state[data-provider-state="loading"] {
+  color: #304f6c; background: #f0f5fa; border: 1px solid #b2cbe2;
+  border-radius: 10px; padding: 9px 12px;
+}
