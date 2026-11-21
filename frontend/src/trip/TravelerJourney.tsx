@@ -1494,6 +1494,13 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
           <label htmlFor="trip-follow-up">{copy.messagePlaceholder}</label>
           <textarea id="trip-follow-up" value={messageText}
             onChange={event => { setMessageText(event.target.value); setAssistantPromptSelected(false); }}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing
+                && messageText.trim() && !busy && online && messageText.length <= 1200) {
+                event.preventDefault();
+                void askAssistant();
+              }
+            }}
             maxLength={1200} rows={3} dir="auto" />
           {assistantPromptSelected && <p className="assistant-prompt-warning" role="status">{assistantCopy[locale].promptForAi}</p>}
           <details className="conversation-local-action">
