@@ -1352,3 +1352,130 @@ input, select, textarea { font-size: max(16px, 1rem); }
   .top-actions select { max-width: 72px; min-width: 72px; }
   .rahgard-theme-toggle { width: 44px; }
 }
+
+/* Simple company inbox: keep advanced service administration optional. */
+.partner-primary-organization {
+  display: grid; gap: 8px; margin-block: 16px; padding: 14px;
+  border: 1px solid #6b568c; border-radius: 14px; background: #20243a;
+}
+.partner-primary-organization > label { margin: 0; max-width: none; color: #f0ecff; }
+.partner-management-advanced {
+  margin-block: 22px; padding: clamp(16px,2.5vw,24px);
+  border: 1px solid #554969; border-radius: 17px;
+  background: #1a1f32; color: #efeaff;
+}
+.partner-management-advanced > summary {
+  cursor: pointer; font-weight: 800; min-height: 44px; padding: 9px 2px;
+  color: #f2e0ff; font-size: 16px;
+}
+.partner-management-advanced > p, .partner-inbox-help {
+  line-height: 1.9; font-size: 13px; color: #d7cced;
+}
+.partner-management-advanced .partner-forms { align-items: start; }
+.partner-management-advanced .partner-card { background: #23263e; }
+.partner-management-advanced .partner-card :where(label,span,p) { color: #f4ebff; }
+.partner-management-advanced .partner-card :where(input,select,textarea) {
+  min-height: 44px; background: #11192d; color: #f5efff; border: 1px solid #797394;
+}
+.partner-management-advanced .partner-card :where(input,textarea)::placeholder { color: #d4c7e6; }
+html[data-rahgard-theme="light"] .partner-primary-organization,
+html[data-rahgard-theme="light"] .partner-management-advanced,
+html[data-rahgard-theme="light"] .partner-management-advanced .partner-card {
+  background: #fff; color: #26314d; border-color: #d1d7e6;
+}
+html[data-rahgard-theme="light"] .partner-primary-organization > label,
+html[data-rahgard-theme="light"] .partner-management-advanced > summary,
+html[data-rahgard-theme="light"] .partner-management-advanced > p,
+html[data-rahgard-theme="light"] .partner-inbox-help,
+html[data-rahgard-theme="light"] .partner-management-advanced .partner-card :where(label,span,p) {
+  color: #25334c;
+}
+html[data-rahgard-theme="light"] .partner-management-advanced .partner-card :where(input,select,textarea) {
+  background: #fff; color: #243047; border-color: #929cb1;
+}
+/* Company acceptance and counter-offer actions. */
+.partner-response-actions, .traveler-company-responses {
+  margin-block: 20px; padding: clamp(15px,2.5vw,25px);
+  border: 1px solid #7256a0; border-radius: 18px;
+  background: #1a1c31; color: #f6f1ff;
+}
+.partner-response-actions :where(h3,p,label,li,strong,span),
+.traveler-company-responses :where(h3,p,label,li,strong,span) { color: #efe9ff; }
+.partner-response-actions > p, .traveler-company-responses > p {
+  line-height: 1.9; font-size: 13px; color: #d6cdec;
+}
+.partner-response-actions label {
+  display: grid; gap: 7px; margin-block: 14px;
+  color: #f3eaff; font-weight: 750; font-size: 13px;
+}
+.partner-response-actions :where(input,textarea) {
+  display: block; min-width: 0; width: 100%; min-height: 44px;
+  border: 1px solid #8075a5; border-radius: 12px; padding: 10px 12px;
+  background: #11172a; color: #fff; font-size: 16px;
+}
+.partner-response-actions input[aria-invalid="true"] { border-color: #f593a9; }
+.partner-response-mode, .traveler-company-response-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.partner-response-mode > button, .traveler-company-response-actions > button {
+  flex: 1 1 165px; min-height: 48px; border-radius: 11px;
+  border: 1px solid #765cb0; background: #2b2743; color: #f5edff;
+  font-weight: 800; padding: 10px 13px;
+}
+.partner-response-mode > button[aria-pressed="true"] {
+  background: #7939cb; border-color: #b086f4; color: #fff;
+}
+.partner-proposed-changes {
+  display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px 12px;
+}
+.partner-response-wide { grid-column: 1 / -1; }
+.partner-response-send {
+  min-height: 49px; width: 100%; margin-top: 12px;
+  border-radius: 12px; background: linear-gradient(120deg,#8648de,#642ab1);
+  color: #fff; font-weight: 800; border: 1px solid #9d69eb;
+}
+.partner-response-send:disabled { opacity: .6; }
+.partner-response-history { margin-top: 15px; padding: 12px; border: 1px solid #655380; border-radius: 12px; }
+.partner-response-history summary { cursor: pointer; min-height: 42px; font-weight: 750; }
+.traveler-company-responses { color: #f4eaff; background: #191d30; border-color: #7256a0; }
+.traveler-company-responses-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.traveler-company-responses-heading > button {
+  border: 1px solid #7e60ae; color: #fff; background: #332750;
+  min-height: 44px; border-radius: 12px; padding: 9px 15px;
+}
+.traveler-company-response {
+  margin-top: 12px; padding: 16px; border: 1px solid #514566;
+  border-radius: 14px; background: #23263f;
+}
+.traveler-company-response header { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.traveler-company-response > p { overflow-wrap: anywhere; line-height: 1.8; }
+.company-share-mode {
+  display: flex !important; gap: 10px; align-items: center;
+  padding: 12px; border: 1px solid #74638f; border-radius: 12px;
+}
+.company-share-broadcast-note {
+  border-inline-start: 3px solid #b989ef; padding: 12px 15px;
+  background: #242238; color: #f2eaff; border-radius: 10px; line-height: 1.8;
+}
+html[data-rahgard-theme="light"] .partner-response-actions,
+html[data-rahgard-theme="light"] .traveler-company-responses,
+html[data-rahgard-theme="light"] .traveler-company-response {
+  background: #fff; color: #23304d; border-color: #c9b7df;
+}
+html[data-rahgard-theme="light"] .partner-response-actions :where(h3,p,label,li,strong,span),
+html[data-rahgard-theme="light"] .traveler-company-responses :where(h3,p,label,li,strong,span) { color: #26324d; }
+html[data-rahgard-theme="light"] .partner-response-actions > p,
+html[data-rahgard-theme="light"] .traveler-company-responses > p { color: #465371; }
+html[data-rahgard-theme="light"] .partner-response-actions :where(input,textarea) {
+  background: #fff; color: #202c45; border-color: #9195ac;
+}
+html[data-rahgard-theme="light"] .partner-response-mode > button,
+html[data-rahgard-theme="light"] .traveler-company-response-actions > button,
+html[data-rahgard-theme="light"] .traveler-company-responses-heading > button {
+  background: #e9e0f7; color: #38205f; border-color: #9c84c4;
+}
+html[data-rahgard-theme="light"] .partner-response-mode > button[aria-pressed="true"] { background: #6334a9; color: #fff; }
+html[data-rahgard-theme="light"] .company-share-broadcast-note { background: #f1eafa; color: #362451; }
+@media (max-width: 600px) {
+  .partner-proposed-changes { grid-template-columns: minmax(0,1fr); }
+  .partner-response-wide { grid-column: auto; }
+  .partner-response-actions, .traveler-company-responses { padding: 14px; }
+}
