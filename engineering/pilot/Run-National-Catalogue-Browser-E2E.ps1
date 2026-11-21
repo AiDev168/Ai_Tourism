@@ -188,6 +188,11 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
   $h22 = Apply '022_traveler_company_requests' 'engineering/pilot/sql/022_traveler_company_requests.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0021_SHA256=$h21; RAHGARD_PILOT_MIGRATION_0022_SHA256=$h22Expected }
   $migration22Assertions = (Psql $migrationTarget "SELECT (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0022_traveler_company_requests')='$h22Expected', (SELECT relrowsecurity FROM pg_class WHERE oid='partner.traveler_request_shares'::regclass), (SELECT relrowsecurity FROM pg_class WHERE oid='partner.traveler_request_revisions'::regclass), (SELECT count(*) FROM information_schema.columns WHERE table_schema='partner' AND table_name='share_eligible_organizations'), has_table_privilege('ai_tourism_app','partner.traveler_request_revisions','INSERT'), has_table_privilege('ai_tourism_app','partner.traveler_request_inbox','INSERT')") | Out-String
   if (($migration22Assertions -join '').Trim() -ne 't|t|t|3|f|f') { throw "Migration 0022 assertions failed (checksum, RLS, view columns, unexpected write grants): $migration22Assertions" }
+  $h23File = Join-Path $ProjectRoot 'engineering/pilot/sql/023_partner_trip_responses.sql'
+  $h23Expected = (Get-FileHash -LiteralPath $h23File -Algorithm SHA256).Hash.ToLowerInvariant()
+  $h23 = Apply '023_partner_trip_responses' 'engineering/pilot/sql/023_partner_trip_responses.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0022_SHA256=$h22; RAHGARD_PILOT_MIGRATION_0023_SHA256=$h23Expected }
+  $migration23Assertions = (Psql $migrationTarget "SELECT (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0023_partner_trip_responses')='$h23Expected', (SELECT relrowsecurity FROM pg_class WHERE oid='partner.trip_company_responses'::regclass), has_table_privilege('ai_tourism_app','partner.trip_company_responses','SELECT'), has_table_privilege('ai_tourism_app','partner.trip_company_responses','INSERT'), has_column_privilege('ai_tourism_app','partner.trip_company_responses','traveler_decision','UPDATE')") | Out-String
+  if (($migration23Assertions -join '').Trim() -ne 't|t|t|t|t') { throw "Migration 0023 assertions failed (checksum, RLS, grants): $migration23Assertions" }
   $testDb = $env:AUTH_TEST_DATABASE_NAME
   Psql 'postgres' "ALTER DATABASE $migrationTarget RENAME TO $testDb;" | Out-Null
   $env:AUTH_TEST_DATABASE_NAME = $testDb
@@ -204,7 +209,7 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
   try { node scripts/traveler-e2e.mjs; if ($LASTEXITCODE -ne 0) { throw 'National-catalogue browser acceptance failed.' } }
   finally { Pop-Location }
   if ($ChatProvider -eq 'simulated') {
-    Write-Host 'PASS: full app migrations 0013-0022 and authenticated national-catalogue Chromium journey completed in isolated PG17.' -ForegroundColor Green
+    Write-Host 'PASS: full app migrations 0013-0023 and authenticated national-catalogue Chromium journey completed in isolated PG17.' -ForegroundColor Green
   }
   elseif ($ChatProvider -eq 'forced_outage') {
     Write-Host 'PASS: production Chat adapter failure and deterministic fallback were exercised through authenticated Chromium/FastAPI on disposable PG17.' -ForegroundColor Green
