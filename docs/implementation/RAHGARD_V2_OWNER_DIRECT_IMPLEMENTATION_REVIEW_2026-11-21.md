@@ -73,3 +73,15 @@ All changes below are **committed source changes**, not proven local runtime acc
 - Provider output can be provisional; company proposal is not a source-verified travel quote. Real price/hours/road times and source-backed catalogue need separate quality controls.
 - No notification by external email/SMS; only authenticated in-app inbox. No legal booking/payment flow.
 - No Codex tasks created; no VPS, DNS, permanent database or external server code changes.
+
+## Post-implementation update — code validation and proposal deep links
+
+- Current validated source commit **`28317cf518e9495498add16663ff780d214ce77f`**. Isolated GitHub Actions run [44908261788](https://github.com/AiDev168/Ai_Tourism/actions/runs/44908261788) finished **SUCCESS**: frontend Vitest **199 passed**, strict TypeScript production build **PASS**, static PWA build packaging **PASS**, focused Python partner contracts **5 passed**, Ruff and Python compilation **PASS**. No secrets, production deployment, or persistent database access occurred in CI.
+- Previous CI runs did catch and force repair of TypeScript `unknown` JSON-to-JSX rendering problems and required new component props. Those are now fixed in the passing SHA.
+- The partner inbox no longer displays original raw JSON `<pre>` snapshots in its inline collapsed detail. It directs the company to the separately authenticated request and itinerary link views, with a concise Persian help/glossary and translated company type/schedule/availability choices.
+- Each company response history contains a **copyable private link** `/?trip=<uuid>&company_response=<uuid>`. On opening that URL, a signed-in traveler is loaded through the **existing authenticated traveler trip and response APIs**; the specific reply scrolls into view. URL contains no bearer credential. This link is NOT an SMS/email, and only the trip owner can retrieve the response data.
+- The request/itinerary link remains scoped to the selected organization's membership, revision and unrevoked share. Company accept/reply calls are CSRF checked, latest-revision checked and duplicate `client_request_id` with changed terms is rejected `409`.
+- The expanded Chromium journey script now asserts broadcast+dedup to two QA companies, stale and unauthorized response denial, accepted-as-requested, counterproposal, traveler decision, and nonmutation of canonical trip profile. **It is written but HAS NOT run against PostgreSQL/LM Studio on the new commit yet.**
+
+### Revised status labels
+**CODE-QUALITY PASS** at the above SHA. **LOCAL END-TO-END NO-GO/UNVERIFIED** pending guarded PG17 migration **0023**, real role-based Chromium UI, real LM Studio provider, PWA mobile/contrast inspection, and company response lifecycle. The old `8443` pilot remains 16 migrations and must not be used to validate 0023 features. No remote production rollout authorized.
