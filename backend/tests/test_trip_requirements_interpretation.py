@@ -40,6 +40,21 @@ def test_colloquial_departure_is_extracted_as_fallback_with_evidence(request_tex
     assert result.fields.destination.value == "شیراز"
 
 
+def test_colloquial_departure_survives_intervening_relative_date_and_duration():
+    text = (
+        "\u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645 \u0627\u0632 "
+        "\u067e\u0633\u200c\u0641\u0631\u062f\u0627 \u0628\u0631\u0627\u06cc \u067e\u0646\u062c \u0631\u0648\u0632 "
+        "\u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632"
+    )
+    fields = interpret_trip_requirements(text, "fa-IR").fields
+    assert fields.origin.value == "\u0645\u0634\u0647\u062f"
+    assert fields.origin.source == "fallback"
+    assert text[fields.origin.evidence_span.start:fields.origin.evidence_span.end] == fields.origin.value
+    assert fields.relative_start_date.value.offset_days == 2
+    assert fields.duration_days.value == 5
+    assert fields.destination.value == "\u0634\u06cc\u0631\u0627\u0632"
+
+
 def test_relative_departure_is_not_misread_as_origin_city():
     result = interpret_trip_requirements("از فردا میخوام برم شیراز", "fa-IR")
     assert result.fields.origin.status == "missing"

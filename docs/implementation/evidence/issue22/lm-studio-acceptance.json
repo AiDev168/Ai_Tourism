@@ -1,0 +1,154 @@
+{
+  "status": "passed",
+  "mode": "authenticated_real_chat_provider_local_acceptance",
+  "provider": {
+    "provider": "lm_studio",
+    "model": "qwen3-8b-abliterated",
+    "routeType": "loopback_http",
+    "invocationAttempts": 3,
+    "successfulInvocations": 3,
+    "extractionPath": "llm",
+    "fields": {
+      "destination": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "origin": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "relative_start_date": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "duration_days": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "travel_dates": {
+        "status": "missing",
+        "source": "fallback",
+        "hasValue": false
+      },
+      "travelers": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "budget": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "interests": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "soft_preferences": {
+        "status": "missing",
+        "source": "fallback",
+        "hasValue": false
+      },
+      "hard_constraints": {
+        "status": "missing",
+        "source": "fallback",
+        "hasValue": false
+      },
+      "accessibility": {
+        "status": "missing",
+        "source": "fallback",
+        "hasValue": false
+      },
+      "travel_difficulty": {
+        "status": "missing",
+        "source": "fallback",
+        "hasValue": false
+      },
+      "weather_preferences": {
+        "status": "missing",
+        "source": "fallback",
+        "hasValue": false
+      },
+      "local_cuisine": {
+        "status": "missing",
+        "source": "fallback",
+        "hasValue": false
+      }
+    },
+    "correctionTurn": true,
+    "manualEditPreserved": true,
+    "itineraryGenerated": true,
+    "persistedAndReopened": true,
+    "protectedCompanyViews": true,
+    "sharedRevisionPersisted": true,
+    "crossTenantDenied": true,
+    "relativeStartDateSource": "llm",
+    "providerTelemetry": {
+      "route": {
+        "scheme": "http",
+        "host": "127.0.0.1",
+        "port": 1234,
+        "model_id": "qwen3-8b-abliterated"
+      },
+      "attempts": 3,
+      "successes": 3,
+      "failures": 0,
+      "latencyMs": [
+        10721,
+        10763,
+        16744
+      ],
+      "responseFieldKeys": [
+        "budget_text",
+        "destination",
+        "duration_days",
+        "interest",
+        "origin",
+        "relative_start_date",
+        "travel_end",
+        "travel_start",
+        "traveler_count"
+      ],
+      "responseEvidenceKeys": [
+        "budget_text",
+        "destination",
+        "duration_days",
+        "interest",
+        "origin",
+        "relative_start_date",
+        "travel_end",
+        "travel_start",
+        "traveler_count"
+      ]
+    },
+    "recommendationStatus": "needs_confirmation",
+    "recommendationCount": 0,
+    "unresolvedFields": [
+      "destination_resolution"
+    ],
+    "syntheticCatalogueAcceptance": {
+      "status": "test_only_dependency_override",
+      "recommendation": true,
+      "itineraryPersisted": true,
+      "publicCatalogueBeforeAndAfterEmpty": true
+    }
+  },
+  "browser": "Chromium 157.0.8103.40",
+  "database": {
+    "host": "127.0.0.1",
+    "majorVersion": 17,
+    "markerValidated": true,
+    "tripPersisted": true
+  },
+  "privacy": {
+    "rawPromptsSaved": false,
+    "providerTokenSaved": false,
+    "browserTokenStorage": false
+  },
+  "screenshot": "real-chat-lm_studio.png"
+}

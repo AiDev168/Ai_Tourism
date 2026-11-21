@@ -453,6 +453,11 @@ def interpret_trip_requirements(
         interests_field = _missing()
 
     origin_match = _find_first(request_text, [
+        # Spoken Persian requests may place date and duration clauses between
+        # the origin and destination verb: "from Mashhad ... in five days ... go".
+        r"(?<!\w)\u0627\u0632\s+(?P<place>[\u0600-\u06ff][\u0600-\u06ff\u200c-]{1,45}(?:\s+[\u0600-\u06ff][\u0600-\u06ff\u200c-]{1,45})?)"
+        r"\s+\u0645\u06cc[\s\u200c]*(?:\u062e\u0648\u0627\u0645|\u062e\u0648\u0627\u0647\u0645|\u062e\u0648\u0627\u06cc\u0645|\u062e\u0648\u0627\u0647\u06cc\u0645)"
+        r"[\s\S]{0,80}?\s+(?:\u0628\u0631\u0645|\u0628\u0631\u0648\u0645|\u0628\u0631\u0648\u06cc\u0645|\u0633\u0641\u0631\s+\u06a9\u0646\u0645)",
         r"(?<!\w)از\s+(?P<place>[\u0600-\u06ff][\u0600-\u06ff\u200c-]{1,45}(?:\s+[\u0600-\u06ff][\u0600-\u06ff\u200c-]{1,45})?)\s+می[\s\u200c]*(?:خوام|خواهم|خوایم|خواهیم)\s+(?:برم|بریم|برویم|سفر)",
         r"(?:\u0627\u0632\s+\u0645\u0628\u062f\u0627\u0621?\s+)(?P<place>[\u0600-\u06ffA-Za-z][\u0600-\u06ffA-Za-z\s\u200c-]{1,50})",
         r"\bfrom\s+(?P<place>[A-Za-z][A-Za-z -]{1,50})",

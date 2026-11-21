@@ -3,6 +3,16 @@ import { createTripRequirements, extractDurationDays, inclusiveEndDate, mergeReq
 
 const intake=(requestText:string,locale:'fa-IR'|'en-US'|'ar'='fa-IR')=>createTripRequirements({requestText,locale});
 describe('Persian colloquial origin fallback', () => {
+ it('keeps a colloquial origin when a relative date and duration come before the travel verb', () => {
+   const text='\u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc\u200c\u062e\u0648\u0627\u0645 \u0627\u0632 \u067e\u0633\u200c\u0641\u0631\u062f\u0627 \u0628\u0631\u0627\u06cc \u067e\u0646\u062c \u0631\u0648\u0632 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632';
+   const result = intake(text);
+   if (result.kind === 'invalid') throw new Error('Unexpected invalid request');
+   expect(result.requirements.origin.value).toBe('\u0645\u0634\u0647\u062f');
+   expect(result.requirements.origin.source).toBe('fallback');
+   expect(result.requirements.durationDays.value).toBe(5);
+   expect(result.requirements.relativeStartDate.value?.offset_days).toBe(2);
+   expect(result.requirements.destinations.value).toContain('\u0634\u06cc\u0631\u0627\u0632');
+ });
  it.each([
    ['از مشهد میخوام برم شیراز', 'مشهد'],
    ['من از بندر عباس می‌خواهم برم شیراز', 'بندر عباس'],

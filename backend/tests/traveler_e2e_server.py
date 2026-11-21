@@ -26,6 +26,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = BACKEND_ROOT.parent
 sys.path.insert(0, str(REPOSITORY_ROOT))
 sys.path.insert(0, str(BACKEND_ROOT))
+_SAFE_PHASE = "startup"
 
 
 def _required(name: str) -> str:
@@ -125,17 +126,27 @@ def _grant_catalogue_capabilities(database: dict[str, Any], user_id: str, capabi
 
 
 def _approve_isolated_test_organization(
-    database: dict[str, Any], organization_id: str, created_by: str,
-) -> bool:
+    database: dict[str, Any], organization_id: str, created_by: str, display_name: str,
+) -> tuple[bool, str]:
     """Mark only the browser-created acceptance organization eligible in disposable PG."""
-    if os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") != "1":
-        return False
+    provider_test = os.environ.get("RAHGARD_REAL_CHAT_PROVIDER", "").strip().lower() in {
+        "lm_studio", "remote_vllm",
+    }
+    national_test = os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") == "1"
+    if not (provider_test or national_test):
+        return False, "test_mode_disabled"
+    allowed_name = (
+        (national_test and display_name == "Acceptance Travel Co")
+        or (provider_test and bool(re.fullmatch(r"V2 acceptance Company [0-9]{4}", display_name)))
+    )
+    if not allowed_name:
+        return False, "test_name_not_allowed"
     if not all(re.fullmatch(r"[0-9a-fA-F-]{36}", value) for value in (organization_id, created_by)):
-        return False
+        return False, "invalid_test_identity"
     owner_password = os.environ.get("AUTH_TEST_DATABASE_OWNER_PASSWORD", "")
     marker = os.environ.get("AUTH_TEST_DATABASE_MARKER", "")
     if not owner_password or not marker:
-        return False
+        return False, "isolated_db_guard_missing"
     try:
         with psycopg.connect(
             **{**database, "user": "ai_tourism_owner", "password": owner_password},
@@ -148,21 +159,21 @@ def _approve_isolated_test_organization(
             ).fetchone()
             if (identity["db"] != database["dbname"] or identity["marker_count"] != 1
                     or not __import__("hmac").compare_digest(identity["marker"] or "", marker)):
-                return False
+                return False, "isolated_db_marker_mismatch"
             row = connection.execute(
                 """UPDATE partner.organizations
                    SET verification_status='verified',participation_status='active',
                        application_status='approved',updated_at=now()
                    WHERE organization_id=%s AND created_by=%s
-                     AND display_name='Acceptance Travel Co'
+                     AND display_name=%s
                      AND verification_status='pending' AND participation_status='inactive'
                      AND application_status='draft'
                    RETURNING organization_id""",
-                (organization_id, created_by),
+                (organization_id, created_by, display_name),
             ).fetchone()
-            return row is not None
+            return (True, "approved") if row is not None else (False, "organization_state_mismatch")
     except Exception:
-        return False
+        return False, "isolated_db_update_failed"
 
 
 def _national_catalogue_counts(database: dict[str, Any]) -> dict[str, int] | None:
@@ -278,6 +289,14 @@ class _ControlHandler(socketserver.StreamRequestHandler):
             elif action == "assistant_call_count":
                 # The private authenticated control socket exposes only counts.
                 result = {"ok": True, "count": self.server.chat_gateway.call_count}
+            elif action == "assistant_call_status":
+                snapshot = getattr(self.server.chat_gateway, "safe_snapshot", None)
+                result = {"ok": True, **snapshot()} if callable(snapshot) else {
+                    "ok": True, "attempts": self.server.chat_gateway.call_count,
+                    "successes": 0, "failures": 0,
+                    "route": {"scheme": "simulated", "host": None, "port": None,
+                              "model_id": "simulated-test-gateway"},
+                }
             elif action == "owner_rag_call_counts":
                 if self.server.owner_rag_counter is None:
                     result = {
@@ -297,16 +316,21 @@ class _ControlHandler(socketserver.StreamRequestHandler):
             elif action == "enable_itinerary_fixture":
                 # This test-only projection is deliberately isolated to the
                 # traveler recommendation dependency. Public catalogue views
-                # remain unchanged and empty; no canonical rows are written.
+                # remain unchanged; no canonical rows are written.
                 with psycopg.connect(**self.server.database, connect_timeout=2, row_factory=dict_row) as connection:
-                    published = connection.execute(
-                        "SELECT COUNT(*) AS n FROM knowledge.production_destinations"
-                    ).fetchone()["n"]
-                if published != 0:
-                    result = {"ok": False}
+                    published_keys = [row["destination_key"] for row in connection.execute(
+                        "SELECT destination_key FROM knowledge.production_destinations ORDER BY destination_key"
+                    ).fetchall()]
+                allowed_qa_keys = {
+                    "shiraz-hafezieh-v1", "shiraz-eram-garden-v1",
+                    "shiraz-vakil-bazaar-v1", "unesco-persepolis-v1",
+                }
+                if len(published_keys) > 4 or not set(published_keys).issubset(allowed_qa_keys):
+                    result = {"ok": False, "reason": "unexpected_published_catalogue"}
                 else:
                     self.server.fixture_state["enabled"] = True
-                    result = {"ok": True, "destination_ids": self.server.itinerary_fixture_ids}
+                    result = {"ok": True, "destination_ids": self.server.itinerary_fixture_ids,
+                              "replaced_qa_catalogue_count": len(published_keys)}
             elif action == "disable_itinerary_fixture":
                 self.server.fixture_state["enabled"] = False
                 result = {"ok": True}
@@ -333,11 +357,13 @@ class _ControlHandler(socketserver.StreamRequestHandler):
                     self.server.database, str(command.get("user_id", "")), caps
                 )}
             elif action == "approve_isolated_test_organization":
-                result = {"ok": _approve_isolated_test_organization(
+                approved, reason = _approve_isolated_test_organization(
                     self.server.database,
                     str(command.get("organization_id", "")),
                     str(command.get("created_by", "")),
-                )}
+                    str(command.get("display_name", "")),
+                )
+                result = {"ok": approved, "reason": reason}
             elif action == "national_catalogue_counts":
                 counts = _national_catalogue_counts(self.server.database)
                 result = {"ok": counts is not None, **(counts or {})}
@@ -349,6 +375,8 @@ class _ControlHandler(socketserver.StreamRequestHandler):
 
 
 def main() -> None:
+    global _SAFE_PHASE
+    _SAFE_PHASE = "database_verification"
     database = _verify_disposable_database()
     # Construct Settings explicitly with _env_file=None; neither repository
     # root nor backend .env participates in this harness.
@@ -367,6 +395,9 @@ def main() -> None:
     rag_token = os.environ.get("TOURISM_RAG_API_TOKEN", "")
     geo_qa_mode = os.environ.get("RAHGARD_REAL_GEO_E2E", "") == "1"
     national_catalogue_mode = os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E", "") == "1"
+    real_chat_provider = os.environ.get("RAHGARD_REAL_CHAT_PROVIDER", "").strip().lower()
+    if real_chat_provider not in {"", "lm_studio", "remote_vllm", "forced_outage"}:
+        raise RuntimeError("E2E precondition failed: real Chat provider mode is invalid")
     if geo_qa_mode and (os.environ.get("RAHGARD_RUN_GEO_QA") != "1" or rag_enabled):
         raise RuntimeError("E2E real geographic QA mode requires explicit opt-in and no RAG")
     if rag_enabled:
@@ -393,6 +424,37 @@ def main() -> None:
     import app.core.config as config
     settings_dependency = config.get_settings
 
+    real_chat_endpoint = os.environ.get("RAHGARD_REAL_CHAT_ENDPOINT", "")
+    real_chat_model = os.environ.get("RAHGARD_REAL_CHAT_MODEL", "")
+    real_chat_token = os.environ.get("RAHGARD_REAL_CHAT_TOKEN", "")
+    loopback_http_port = None
+    if real_chat_provider in {"lm_studio", "forced_outage"}:
+        from urllib.parse import urlsplit
+
+        parsed_chat = urlsplit(real_chat_endpoint)
+        try:
+            loopback_http_port = int(os.environ.get("RAHGARD_REAL_CHAT_LOOPBACK_HTTP_PORT", ""))
+        except ValueError:
+            raise RuntimeError("E2E precondition failed: local Chat port is invalid") from None
+        if (
+            parsed_chat.scheme != "http" or parsed_chat.hostname != "127.0.0.1"
+            or parsed_chat.port != loopback_http_port or parsed_chat.path != "/v1/chat/completions"
+            or parsed_chat.username or parsed_chat.password or parsed_chat.query or parsed_chat.fragment
+            or not real_chat_model or not real_chat_token or not 1024 <= loopback_http_port <= 65535
+        ):
+            raise RuntimeError("E2E precondition failed: local Chat target must be explicit loopback")
+    elif real_chat_provider == "remote_vllm":
+        from urllib.parse import urlsplit
+
+        parsed_chat = urlsplit(real_chat_endpoint)
+        if (
+            parsed_chat.scheme != "https" or parsed_chat.hostname != "llm.hinaa.ir"
+            or parsed_chat.path != "/v1/chat/completions" or parsed_chat.username
+            or parsed_chat.password or parsed_chat.query or parsed_chat.fragment
+            or real_chat_model != "TaHa1_VL" or not real_chat_token
+        ):
+            raise RuntimeError("E2E precondition failed: remote Chat target is not the approved endpoint/model")
+    _SAFE_PHASE = "settings_validation"
     settings = config.Settings(
         _env_file=None,
         app_env="test",
@@ -407,9 +469,13 @@ def main() -> None:
         # Offline E2E enables the API route, but overrides its gateway before
         # any request can reach the network. No paid or external model traffic.
         internal_chat_enabled=True,
-        internal_chat_endpoint="https://example.invalid/v1/chat/completions",
-        internal_chat_model="offline-browser-fixture",
-        internal_chat_token=__import__("pydantic").SecretStr(token_hex(32)),
+        internal_chat_endpoint=(real_chat_endpoint if real_chat_provider else
+                                "https://example.invalid/v1/chat/completions"),
+        internal_chat_model=(real_chat_model if real_chat_provider else "offline-browser-fixture"),
+        internal_chat_token=__import__("pydantic").SecretStr(
+            real_chat_token if real_chat_provider else token_hex(32),
+        ),
+        internal_chat_loopback_http_port=loopback_http_port,
         tourism_rag_enabled=rag_enabled,
         tourism_rag_api_url=rag_url,
         tourism_rag_api_token=(
@@ -430,6 +496,7 @@ def main() -> None:
         auth_ip_verify_limit=100,
     )
     config.get_settings = lambda: settings
+    _SAFE_PHASE = "application_import"
     from app.main import app
     from app.modules.identity.sms import FakeSmsAdapter
     from app.api.assistant import get_chat_gateway
@@ -509,7 +576,60 @@ def main() -> None:
                 requirement_evidence={"destination": destination, "duration_days": duration_quote},
             )
 
-    chat_gateway = SimulatedChatGateway()
+    class CountingChatGateway:
+        """Count calls around the actual production gateway without retaining prompts or replies."""
+
+        def __init__(self, gateway, route_settings):
+            self.gateway = gateway
+            self.adapter = getattr(gateway, "_adapter", None)
+            self.call_count = 0
+            self.success_count = 0
+            self.failure_count = 0
+            self.response_field_keys: list[str] = []
+            self.response_evidence_keys: list[str] = []
+            self.latency_ms: list[int] = []
+            self.model_id = route_settings.internal_chat_model
+            parsed = __import__("urllib.parse", fromlist=["urlsplit"]).urlsplit(
+                route_settings.internal_chat_endpoint,
+            )
+            self.route = {
+                "scheme": parsed.scheme, "host": parsed.hostname,
+                "port": parsed.port, "model_id": self.model_id,
+            }
+
+        async def invoke(self, request):
+            started = __import__("time").perf_counter()
+            self.call_count += 1
+            try:
+                result = await self.gateway.invoke(request)
+            except Exception:
+                self.failure_count += 1
+                self.latency_ms.append(round((__import__("time").perf_counter() - started) * 1000))
+                raise
+            self.success_count += 1
+            self.latency_ms.append(round((__import__("time").perf_counter() - started) * 1000))
+            # Keep only schema key names for private acceptance diagnostics;
+            # never retain the request, model reply, or evidence text.
+            self.response_field_keys = sorted(result.requirements.keys())[:20]
+            self.response_evidence_keys = sorted(result.requirement_evidence.keys())[:20]
+            return result
+
+        def safe_snapshot(self):
+            return {
+                "attempts": self.call_count, "successes": self.success_count,
+                "failures": self.failure_count, "route": self.route,
+                "response_field_keys": self.response_field_keys,
+                "response_evidence_keys": self.response_evidence_keys,
+                "latency_ms": self.latency_ms[-12:],
+                "last_failure_category": getattr(self.adapter, "last_failure_category", None),
+            }
+
+    if real_chat_provider:
+        from app.modules.integrations.chat_adapter import make_chat_gateway
+
+        chat_gateway = CountingChatGateway(make_chat_gateway(settings), settings)
+    else:
+        chat_gateway = SimulatedChatGateway()
     app.dependency_overrides[get_chat_gateway] = lambda: chat_gateway
     owner_rag_counter = None
     if rag_enabled:
@@ -519,6 +639,7 @@ def main() -> None:
     # Existing synthetic itinerary-stop identities are read-only test fixtures.
     # Their fake provenance is explicitly marked and never enters the approved
     # production projection. The private loopback control socket gates access.
+    _SAFE_PHASE = "fixture_query"
     with psycopg.connect(**database, connect_timeout=2, row_factory=dict_row) as connection:
         published_count = connection.execute(
             "SELECT COUNT(*) AS n FROM knowledge.production_destinations"
@@ -530,7 +651,13 @@ def main() -> None:
         geo_rows = connection.execute(
             """SELECT destination_key, coordinate_role FROM knowledge.production_destinations"""
         ).fetchall() if geo_qa_mode else []
-    if len(fixture_rows) != 4:
+    _SAFE_PHASE = "fixture_assertions"
+    # Real-provider acceptance exercises the provisional itinerary path and
+    # deliberately starts with no catalogue records. The four synthetic stop
+    # identities belong only to the historical simulated recommendation
+    # journey; requiring them here prevented the provider from ever being
+    # invoked on a clean disposable database.
+    if not real_chat_provider and len(fixture_rows) != 4:
         raise RuntimeError("E2E seeded QA fixture prerequisite failed")
     if geo_qa_mode:
         expected_geo = {
@@ -542,7 +669,7 @@ def main() -> None:
         actual_geo = {row["destination_key"]: row["coordinate_role"] for row in geo_rows}
         if published_count != 4 or actual_geo != expected_geo:
             raise RuntimeError("E2E geo QA expects exactly four real canonical published map points")
-    elif published_count != 0 and not national_catalogue_mode:
+    elif published_count != 0 and not national_catalogue_mode and not real_chat_provider:
         raise RuntimeError("E2E historical fixture mode requires an empty production catalogue")
     # Pending content-pack geometry is borrowed only to exercise the coordinate
     # grouping path with synthetic destination identities. It is not canonical,
@@ -607,6 +734,7 @@ def main() -> None:
     # Override that exact callable; patching config.get_settings alone replaces
     # only the module attribute and leaves route dependencies on defaults.
     app.dependency_overrides[settings_dependency] = lambda: settings
+    _SAFE_PHASE = "api_server_start"
     server = uvicorn.Server(uvicorn.Config(
         app, host="127.0.0.1", port=api_port, log_level="warning", access_log=False, log_config=None
     ))
@@ -617,6 +745,7 @@ def main() -> None:
         time.sleep(0.025)
     if not server.started:
         raise RuntimeError("E2E API server did not start")
+    _SAFE_PHASE = "control_server_start"
     control = socketserver.ThreadingTCPServer(("127.0.0.1", control_port), _ControlHandler)
     control.daemon_threads = True
     control.adapter = adapter
@@ -632,6 +761,7 @@ def main() -> None:
     control_thread.start()
     # stdout carries readiness only. OTP values are returned on the authenticated
     # private loopback test-control socket, never stdout or an HTTP API.
+    _SAFE_PHASE = "ready"
     print(json.dumps({"ok": True, "event": "ready"}), flush=True)
     try:
         thread.join()
@@ -647,5 +777,5 @@ if __name__ == "__main__":
         main()
     except Exception as exc:
         # Diagnostics are stable and must never contain credentials or IDs.
-        sys.stderr.write(f"E2E server failed closed: {type(exc).__name__}\n")
+        sys.stderr.write(f"E2E server failed closed: {type(exc).__name__} phase={_SAFE_PHASE}\n")
         raise SystemExit(2)

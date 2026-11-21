@@ -1,0 +1,32 @@
+{
+  "status": "passed",
+  "mode": "actual_adapter_forced_loopback_outage_and_regex_fallback",
+  "provider": {
+    "route": "loopback_http_closed_port",
+    "attempts": 1,
+    "successes": 0,
+    "failures": 1,
+    "fallbackFormAndPersistence": {
+      "origin": true,
+      "destination": true,
+      "duration": true,
+      "travelers": true,
+      "budget": true,
+      "relative_date": true
+    },
+    "manualOverridePersisted": true,
+    "automaticRetry": false
+  },
+  "database": {
+    "host": "127.0.0.1",
+    "majorVersion": 17,
+    "markerValidated": true,
+    "tripPersisted": true
+  },
+  "privacy": {
+    "rawPromptsSaved": false,
+    "providerTokenSaved": false,
+    "browserTokenStorage": false
+  },
+  "screenshot": "real-chat-forced-outage-fallback.png"
+}

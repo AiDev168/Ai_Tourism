@@ -48,6 +48,33 @@ function ownerRagConfiguration() {
   return { enabled: true, url, token };
 }
 
+function realChatConfiguration() {
+  const provider = process.env.RAHGARD_REAL_CHAT_PROVIDER?.trim().toLowerCase() || '';
+  if (!provider) return null;
+  if (!['lm_studio', 'remote_vllm', 'forced_outage'].includes(provider)) throw new Error('invalid_real_chat_provider');
+  const endpoint = process.env.RAHGARD_REAL_CHAT_ENDPOINT || '';
+  const model = process.env.RAHGARD_REAL_CHAT_MODEL || '';
+  const token = process.env.RAHGARD_REAL_CHAT_TOKEN || '';
+  let parsed;
+  try { parsed = new URL(endpoint); } catch { throw new Error('real_chat_endpoint_invalid'); }
+  if (provider === 'lm_studio' || provider === 'forced_outage') {
+    const port = Number(process.env.RAHGARD_REAL_CHAT_LOOPBACK_HTTP_PORT || '');
+    if (parsed.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(parsed.hostname)
+      || !Number.isInteger(port) || port < 1024 || port > 65535 || Number(parsed.port) !== port
+      || parsed.pathname !== '/v1/chat/completions' || parsed.search || parsed.hash
+      || parsed.username || parsed.password || !model || !token) {
+      throw new Error('local_chat_must_use_explicit_loopback_chat_endpoint');
+    }
+    return { provider, endpoint, model, token, loopbackPort: port };
+  }
+  if (parsed.protocol !== 'https:' || parsed.hostname !== 'llm.hinaa.ir'
+    || parsed.pathname !== '/v1/chat/completions' || parsed.search || parsed.hash
+    || parsed.username || parsed.password || model !== 'TaHa1_VL' || !token) {
+    throw new Error('remote_vllm_must_use_approved_https_endpoint_model_and_private_token');
+  }
+  return { provider, endpoint, model, token, loopbackPort: null };
+}
+
 function runtimeEnv(extra = {}) {
   const env = {};
   for (const key of ['PATH', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP']) {
@@ -140,6 +167,7 @@ async function startApi() {
   const controlPort = await reserveLoopbackPort();
   const controlToken = randomBytes(32).toString('hex');
   const ownerRag = ownerRagConfiguration();
+  const realChat = realChatConfiguration();
   const realGeoMode = process.env.RAHGARD_REAL_GEO_E2E === '1';
   const nationalCatalogueMode = process.env.RAHGARD_NATIONAL_CATALOGUE_E2E === '1';
   if (realGeoMode && process.env.RAHGARD_RUN_GEO_QA !== '1') {
@@ -157,7 +185,7 @@ async function startApi() {
     AUTH_TEST_DATABASE_USER: process.env.AUTH_TEST_DATABASE_USER,
     AUTH_TEST_DATABASE_PASSWORD: process.env.AUTH_TEST_DATABASE_PASSWORD,
     AUTH_TEST_DATABASE_MARKER: process.env.AUTH_TEST_DATABASE_MARKER,
-    ...(nationalCatalogueMode ? {
+    ...(nationalCatalogueMode || realChat ? {
       AUTH_TEST_DATABASE_OWNER_PASSWORD: process.env.AUTH_TEST_DATABASE_OWNER_PASSWORD,
     } : {}),
     E2E_API_PORT: String(apiPort),
@@ -165,6 +193,13 @@ async function startApi() {
     E2E_CONTROL_PORT: String(controlPort),
     E2E_CONTROL_TOKEN: controlToken,
     PYTHONIOENCODING: 'utf-8',
+    ...(realChat ? {
+      RAHGARD_REAL_CHAT_PROVIDER: realChat.provider,
+      RAHGARD_REAL_CHAT_ENDPOINT: realChat.endpoint,
+      RAHGARD_REAL_CHAT_MODEL: realChat.model,
+      RAHGARD_REAL_CHAT_TOKEN: realChat.token,
+      ...(realChat.loopbackPort ? { RAHGARD_REAL_CHAT_LOOPBACK_HTTP_PORT: String(realChat.loopbackPort) } : {}),
+    } : {}),
     TOURISM_RAG_ENABLED: ownerRag.enabled ? 'true' : 'false',
     ...(ownerRag.enabled ? {
       TOURISM_RAG_API_URL: ownerRag.url,
@@ -180,16 +215,24 @@ async function startApi() {
   // Python only emits stable exception class labels to stderr. Retain a small
   // bounded buffer internally; never print a Python traceback or credentials.
   let safeErrorType = '';
+  let safeErrorPhase = '';
   let safeAssistantFailure = '';
+  let safeChatUpstreamStatus = '';
   let safeCatalogueFailure = '';
   child.stderr.on('data', chunk => {
     const safeChunk = chunk.toString('utf8');
+    const upstreamStatusMatch = safeChunk.match(/chat\.upstream\.unavailable status_code=(\d{3})/);
+    if (upstreamStatusMatch) safeChatUpstreamStatus = upstreamStatusMatch[1];
     const assistantMatch = safeChunk.match(/assistant\.turn\.failed phase=([a-z_]+) error_type=([A-Za-z]+)/);
     if (assistantMatch) safeAssistantFailure = `${assistantMatch[1]}_${assistantMatch[2]}`;
     const catalogueMatch = safeChunk.match(/catalogue_review\.(decision|publication)_(failed|denied) phase=([a-z_]+) sqlstate=([A-Z0-9]+)(?: error_type=([A-Za-z]+))?/);
     if (catalogueMatch) safeCatalogueFailure = `${catalogueMatch[1]}_${catalogueMatch[2]}_${catalogueMatch[3]}_${catalogueMatch[4]}_${catalogueMatch[5] || 'unknown'}`;
     const match = safeChunk.match(/E2E server failed closed: ([A-Za-z]+Error)/);
-    if (match) safeErrorType = match[1].toLowerCase();
+    if (match) {
+      safeErrorType = match[1].toLowerCase();
+      const phaseMatch = safeChunk.match(/phase=([a-z_]+)/);
+      if (phaseMatch) safeErrorPhase = phaseMatch[1];
+    }
   });
   child.on('error', () => { safeErrorType = 'process_spawn_error'; });
   const pipe = makePipe(child);
@@ -202,10 +245,12 @@ async function startApi() {
   }
   if (!ready?.ok || ready.event !== 'ready') {
     child.kill();
-    throw new Error('guarded_api_start_failed_' + (safeErrorType || ready?.event || 'unknown'));
+    throw new Error('guarded_api_start_failed_' + (safeErrorType || ready?.event || 'unknown')
+      + (safeErrorPhase ? `_phase_${safeErrorPhase}` : ''));
   }
   return { child, pipe, controlPort, controlToken, ownerRagEnabled: ownerRag.enabled,
     safeAssistantFailure: () => safeAssistantFailure,
+    safeChatUpstreamStatus: () => safeChatUpstreamStatus,
     safeCatalogueFailure: () => safeCatalogueFailure };
 }
 
@@ -850,11 +895,11 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
     const organizationRow = organizationRows.items.find(item => item.display_name === 'Acceptance Travel Co');
     organization = organizationRow?.organization_id;
     if (!organization) throw new Error('partner_organization_not_created_from_browser_form');
-    const approvedTestOrganization = await checkedControl(api.controlPort, api.controlToken, {
+    const approvedTestOrganization = await controlRequest(api.controlPort, api.controlToken, {
       action: 'approve_isolated_test_organization', organization_id: organization,
-      created_by: currentIdentity.userId,
+      created_by: currentIdentity.userId, display_name: 'Acceptance Travel Co',
     });
-    if (!approvedTestOrganization.ok) throw new Error('isolated_test_company_approval_failed');
+    if (!approvedTestOrganization.ok) throw new Error(`isolated_test_company_approval_failed_${approvedTestOrganization.reason || 'unknown'}`);
     await page.locator('.partner-forms').waitFor({ state: 'visible', timeout: 15_000 });
 
     const serviceForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Service', exact: true }) });
@@ -1809,6 +1854,600 @@ async function verifySimulatedAssistant(page, api, locale, conversationId, tripI
   return true;
 }
 
+function normalizedPersianText(value) {
+  return String(value ?? '').normalize('NFKC').replace(/\u200c/g, '').replace(/[يى]/g, '\u06cc');
+}
+
+function providerFieldSnapshot(candidate) {
+  const fields = candidate?.fields && typeof candidate.fields === 'object' ? candidate.fields : {};
+  return Object.fromEntries(Object.entries(fields).map(([name, field]) => [name, {
+    status: field?.status ?? 'missing', source: field?.source ?? null,
+    hasValue: field?.value !== null && field?.value !== undefined,
+  }]));
+}
+
+async function runRealProviderJourney(browser, api, audit, artifactRoot, provider) {
+  const context = await browser.newContext({ locale: 'fa-IR', timezoneId: 'Asia/Tehran' });
+  const page = await context.newPage();
+  page.setDefaultTimeout(90_000);
+  const phone = syntheticPhone();
+  let identity;
+  let tripId = null;
+  let conversationId = null;
+  const safeResult = {
+    provider: provider.provider,
+    model: provider.model,
+    routeType: provider.provider === 'lm_studio' ? 'loopback_http' : 'remote_https',
+    invocationAttempts: 0,
+    successfulInvocations: 0,
+    extractionPath: null,
+    fields: {},
+    correctionTurn: false,
+    manualEditPreserved: false,
+    itineraryGenerated: false,
+    persistedAndReopened: false,
+    protectedCompanyViews: false,
+    sharedRevisionPersisted: false,
+    crossTenantDenied: false,
+  };
+  try {
+    await attachBrowserGuards(page, audit);
+    await page.goto(webOrigin, { waitUntil: 'domcontentloaded' });
+    await selectAndVerifyLocale(page, 'fa-IR');
+    identity = await signIn(page, api.controlPort, api.controlToken, phone);
+
+    const before = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' });
+    if (before.attempts !== 0 || before.route?.model_id !== provider.model
+      || before.route?.host !== new URL(provider.endpoint).hostname) {
+      throw new Error('real_chat_provider_route_identity_mismatch');
+    }
+    const requestText = '\u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645 \u0641\u0631\u062f\u0627 \u0628\u0631\u0627\u06cc 3 \u0631\u0648\u0632 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632. 5 \u0646\u0641\u0631 \u0647\u0633\u062a\u06cc\u0645\u060c \u0628\u0648\u062f\u062c\u0647 30 \u0645\u06cc\u0644\u06cc\u0648\u0646 \u062a\u0648\u0645\u0627\u0646 \u0627\u0633\u062a \u0648 \u0628\u0647 \u0622\u062b\u0627\u0631 \u062a\u0627\u0631\u06cc\u062e\u06cc \u0648 \u0628\u0627\u063a\u200c\u0647\u0627 \u0639\u0644\u0627\u0642\u0647 \u062f\u0627\u0631\u06cc\u0645.';
+    const firstTurn = page.waitForResponse(response =>
+      new URL(response.url()).pathname.endsWith('/assistant-turns') && response.request().method() === 'POST');
+    await page.locator('#trip-prompt').fill(requestText);
+    await page.locator('.trip-form button[type="submit"]').click();
+    const firstResponse = await firstTurn;
+    const firstBody = await firstResponse.json().catch(() => ({}));
+    if (firstResponse.status() !== 200 || !firstBody.trip?.trip_id || !firstBody.conversation?.conversation_id) {
+      const failedCalls = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' });
+      throw new Error(`real_chat_initial_turn_failed_status_${firstResponse.status()}_attempts_${failedCalls.attempts}`
+        + `_successes_${failedCalls.successes}_upstream_${api.safeChatUpstreamStatus() || 'unknown'}`
+        + `_adapter_${api.safeAssistantFailure() || 'unknown'}`);
+    }
+    tripId = firstBody.trip.trip_id;
+    conversationId = firstBody.conversation.conversation_id;
+    safeResult.extractionPath = firstBody.extraction_path;
+    const fields = firstBody.candidate_requirements?.fields ?? {};
+    safeResult.fields = providerFieldSnapshot(firstBody.candidate_requirements);
+    const fieldValue = name => fields[name]?.value;
+    const originOk = normalizedPersianText(fieldValue('origin')).includes('\u0645\u0634\u0647\u062f');
+    const destinationOk = normalizedPersianText(fieldValue('destination')).includes('\u0634\u06cc\u0631\u0627\u0632');
+    const durationOk = fieldValue('duration_days') === 3;
+    // The canonical requirement model names this persisted form field
+    // `travelers`; `traveler_count` is the provider extraction-contract key.
+    const travelersOk = fieldValue('travelers') === 5;
+    const budgetOk = normalizedPersianText(JSON.stringify(fieldValue('budget') ?? fieldValue('budget_text')))
+      .includes('\u062a\u0648\u0645\u0627\u0646');
+    const dateField = fieldValue('relative_start_date');
+    const relativeDateOk = dateField?.offset_days === 1;
+    safeResult.relativeStartDateSource = fields.relative_start_date?.source || 'missing';
+    const initialStatus = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' });
+    safeResult.invocationAttempts = initialStatus.attempts;
+    safeResult.successfulInvocations = initialStatus.successes;
+    safeResult.providerTelemetry = {
+      route: initialStatus.route,
+      attempts: initialStatus.attempts,
+      successes: initialStatus.successes,
+      failures: initialStatus.failures,
+      latencyMs: initialStatus.latency_ms,
+      responseFieldKeys: initialStatus.response_field_keys,
+      responseEvidenceKeys: initialStatus.response_evidence_keys,
+    };
+    if (initialStatus.attempts !== 1 || initialStatus.successes !== 1
+      || firstBody.extraction_path !== 'llm') {
+      const acceptedSources = Object.entries(providerFieldSnapshot(firstBody.candidate_requirements))
+        .map(([name, field]) => `${name}_${field.source || field.status}`).join('_');
+      throw new Error('real_chat_provider_invocation_or_llm_provenance_failed'
+        + `_attempts_${initialStatus.attempts}_successes_${initialStatus.successes}`
+        + `_accepted_${acceptedSources || 'none'}`
+        + `_provider_keys_${(initialStatus.response_field_keys || []).join('_') || 'none'}`
+        + `_evidence_keys_${(initialStatus.response_evidence_keys || []).join('_') || 'none'}`);
+    }
+    if (!(originOk && destinationOk && durationOk && travelersOk && budgetOk && relativeDateOk)) {
+      const failures = [!originOk && 'origin', !destinationOk && 'destination', !durationOk && 'duration_days',
+        !travelersOk && 'traveler_count', !budgetOk && 'budget', !relativeDateOk && 'relative_start_date']
+        .filter(Boolean).join('_');
+      const safeState = key => {
+        const field = fields[key];
+        return field ? `${field.status || 'unknown'}_${field.source || 'unknown'}_${field.value == null ? 'null' : typeof field.value}` : 'absent';
+      };
+      throw new Error(`real_chat_semantic_fields_failed_${failures}`
+        + `_states_origin_${safeState('origin')}_destination_${safeState('destination')}`
+        + `_duration_${safeState('duration_days')}_travelers_${safeState('travelers')}`
+        + `_budget_${safeState('budget')}_date_${safeState('relative_start_date')}`
+        + `_provider_keys_${(initialStatus.response_field_keys || []).join('_') || 'none'}`
+        + `_evidence_keys_${(initialStatus.response_evidence_keys || []).join('_') || 'none'}`);
+    }
+    // Core semantic extraction must demonstrably come from the provider. The
+    // date can validly use the deterministic fallback when the model omits an
+    // offset; the report preserves that source distinction.
+    const requiredLlmFields = ['origin', 'destination', 'travelers', 'budget', 'interests'];
+    const nonLlmFields = requiredLlmFields.filter(key => fields[key]?.source !== 'llm');
+    if (nonLlmFields.length) throw new Error(`real_chat_required_semantics_not_llm_${nonLlmFields.join('_')}`);
+    await page.locator('.saved-message-assistant p').first().waitFor({ state: 'visible' });
+    if (!normalizedPersianText(await page.locator('#profile-origin').inputValue()).includes('\u0645\u0634\u0647\u062f')
+      || await page.locator('#profile-duration').inputValue() !== '3'
+      || await page.locator('#profile-travelers').inputValue() !== '5'
+      || !normalizedPersianText(await page.locator('#profile-budget').inputValue()).includes('\u062a\u0648\u0645\u0627\u0646')) {
+      throw new Error('real_chat_fields_not_synchronized_to_profile_form');
+    }
+
+    await page.locator('#profile-origin').fill('\u06a9\u0631\u0645\u0627\u0646\u0634\u0627\u0647');
+    await page.locator('#trip-follow-up').fill('\u0645\u0642\u0635\u062f \u0631\u0627 \u0627\u0632 \u0634\u06cc\u0631\u0627\u0632 \u0628\u0647 \u0627\u0635\u0641\u0647\u0627\u0646 \u062a\u063a\u06cc\u06cc\u0631 \u0628\u062f\u0647؛ \u0645\u0628\u062f\u0623 \u0647\u0645\u0627\u0646 \u06a9\u0631\u0645\u0627\u0646\u0634\u0627\u0647 \u0628\u0645\u0627\u0646\u062f.');
+    const correctionResponsePromise = page.waitForResponse(response =>
+      new URL(response.url()).pathname.endsWith('/assistant-turns') && response.request().method() === 'POST');
+    await page.locator('.assistant-controls > button').click();
+    const correctionResponse = await correctionResponsePromise;
+    const correctionBody = await correctionResponse.json().catch(() => ({}));
+    if (correctionResponse.status() !== 200 || correctionBody.extraction_path !== 'llm') {
+      const correctionCalls = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' });
+      const correctionFields = correctionBody.candidate_requirements?.fields ?? {};
+      const correctionSources = ['origin', 'destination'].map(key =>
+        `${key}_${correctionFields[key]?.source || correctionFields[key]?.status || 'absent'}`).join('_');
+      throw new Error(`real_chat_correction_turn_failed_status_${correctionResponse.status()}`
+        + `_extraction_${correctionBody.extraction_path || 'absent'}_attempts_${correctionCalls.attempts}`
+        + `_successes_${correctionCalls.successes}_${correctionSources}`
+        + `_response_keys_${(correctionCalls.response_field_keys || []).join('_') || 'none'}`
+        + `_evidence_keys_${(correctionCalls.response_evidence_keys || []).join('_') || 'none'}`
+        + `_failure_${correctionCalls.last_failure_category || 'none'}`);
+    }
+    safeResult.correctionTurn = true;
+    await page.locator('.assistant-candidate').waitFor({ state: 'visible' });
+    await page.locator('.assistant-candidate button').first().click();
+    const manualOrigin = normalizedPersianText(await page.locator('#profile-origin').inputValue());
+    safeResult.manualEditPreserved = manualOrigin.includes('\u06a9\u0631\u0645\u0627\u0646\u0634\u0627\u0647');
+    if (!safeResult.manualEditPreserved) throw new Error('real_chat_candidate_overwrote_manual_origin');
+    safeResult.invocationAttempts = (await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' })).attempts;
+    safeResult.successfulInvocations = (await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' })).successes;
+
+    const confirmation = page.locator('.profile-confirm-action');
+    if (await confirmation.isDisabled()) throw new Error('real_chat_profile_confirmation_disabled');
+    const profileSaved = page.waitForResponse(response =>
+      new URL(response.url()).pathname === `/api/v1/trips/${tripId}` && response.request().method() === 'PATCH');
+    await confirmation.click();
+    if ((await profileSaved).status() !== 200) throw new Error('real_chat_profile_save_failed');
+    const confirmed = await (await page.request.get(`${webOrigin}/api/v1/trips/${tripId}`)).json();
+    if (confirmed.confirmed_requirements?.origin !== '\u06a9\u0631\u0645\u0627\u0646\u0634\u0627\u0647'
+      || confirmed.confirmed_requirements?.confirmation_source !== 'traveler_reviewed') {
+      throw new Error('real_chat_confirmed_snapshot_did_not_preserve_manual_edit');
+    }
+
+    const recResponsePromise = page.waitForResponse(response =>
+      new URL(response.url()).pathname === `/api/v1/trips/${tripId}/recommendations`
+      && response.request().method() === 'POST');
+    await page.locator('.recommendation-controls > button').click();
+    const recResponse = await recResponsePromise;
+    const recBody = await recResponse.json().catch(() => ({}));
+    // POST creates and persists a recommendation snapshot, so the route's
+    // contract returns 201 (the UI reads the same response as its result).
+    if (recResponse.status() !== 201 || !['empty', 'available', 'needs_confirmation'].includes(recBody.status)) {
+      throw new Error(`real_chat_recommendation_failed_status_${recResponse.status()}`);
+    }
+    safeResult.recommendationStatus = recBody.status;
+    safeResult.recommendationCount = Array.isArray(recBody.items) ? recBody.items.length : 0;
+    safeResult.unresolvedFields = Array.isArray(recBody.unresolved_fields) ? recBody.unresolved_fields : [];
+    const mayUseProvisionalDraft = recBody.status === 'empty'
+      || (recBody.status === 'needs_confirmation'
+        && Array.isArray(recBody.unresolved_fields)
+        && recBody.unresolved_fields.length === 1
+        && recBody.unresolved_fields[0] === 'destination_resolution');
+    if (mayUseProvisionalDraft) {
+      await page.locator('.provisional-plan-card button.primary').first().waitFor({ state: 'visible' });
+      const itineraryTurn = page.waitForResponse(response =>
+        new URL(response.url()).pathname.endsWith('/assistant-turns') && response.request().method() === 'POST');
+      await page.locator('.provisional-plan-card button.primary').first().click();
+      const itineraryResponse = await itineraryTurn;
+      const itineraryBody = await itineraryResponse.json().catch(() => ({}));
+      if (itineraryResponse.status() !== 200 || itineraryBody.provisional_itinerary?.status !== 'provisional_unverified') {
+        const failedCall = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' });
+        throw new Error(`real_chat_structured_itinerary_missing_status_${itineraryResponse.status()}`
+          + `_attempts_${failedCall.attempts}_successes_${failedCall.successes}`
+          + `_failure_${failedCall.last_failure_category || 'none'}`);
+      }
+      safeResult.itineraryGenerated = true;
+      safeResult.invocationAttempts = (await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' })).attempts;
+      safeResult.successfulInvocations = (await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' })).successes;
+      await page.locator('.provisional-plan-card button.primary').first().click();
+      const savedResponse = await page.waitForResponse(response =>
+        new URL(response.url()).pathname === `/api/v1/trips/${tripId}/provisional-itineraries`
+        && response.request().method() === 'POST');
+      if (savedResponse.status() !== 201) throw new Error('real_chat_provisional_itinerary_save_failed');
+      const savedDraft = await savedResponse.json();
+      const restoredDraftResponse = await page.request.get(`${webOrigin}/api/v1/trips/${tripId}/provisional-itineraries`);
+      const restoredDraft = await restoredDraftResponse.json();
+      if (restoredDraftResponse.status() !== 200 || restoredDraft.provisional_itinerary_id !== savedDraft.provisional_itinerary_id) {
+        throw new Error('real_chat_provisional_itinerary_not_persisted');
+      }
+      safeResult.persistedAndReopened = true;
+    } else if (recBody.status === 'available' && recBody.items?.length) {
+      const dayCountInput = page.locator('#journey-day-count');
+      await dayCountInput.waitFor({ state: 'visible' });
+      await dayCountInput.fill(String(Math.min(3, Number(await dayCountInput.getAttribute('max')) || 3)));
+      const itineraryPromise = page.waitForResponse(response =>
+        new URL(response.url()).pathname === `/api/v1/trips/${tripId}/itineraries`
+        && response.request().method() === 'POST');
+      await page.locator('.itinerary-generate-action').click();
+      const itineraryResponse = await itineraryPromise;
+      if (itineraryResponse.status() !== 201) {
+        throw new Error(`real_chat_catalogue_itinerary_failed_status_${itineraryResponse.status()}`);
+      }
+      const itinerary = await itineraryResponse.json();
+      const itineraryId = itinerary.itinerary_id;
+      const firstStop = itinerary.stops?.[0];
+      if (!itineraryId || !firstStop) throw new Error('real_chat_catalogue_itinerary_has_no_stops');
+      safeResult.itineraryGenerated = true;
+      await page.locator(`#stop-note-${firstStop.recommendation_id}`).fill('Acceptance edit, test only.');
+      const editPromise = page.waitForResponse(response =>
+        new URL(response.url()).pathname === `/api/v1/itineraries/${itineraryId}`
+        && response.request().method() === 'PUT');
+      await page.locator('.itinerary-save-action').click();
+      if ((await editPromise).status() !== 200) throw new Error('real_chat_catalogue_itinerary_edit_save_failed');
+      const reopened = await page.request.get(`${webOrigin}/api/v1/itineraries/${itineraryId}`);
+      const reopenedBody = await reopened.json();
+      if (reopened.status() !== 200
+        || reopenedBody.stops?.[0]?.notes_by_locale?.['fa-IR'] !== 'Acceptance edit, test only.') {
+        throw new Error('real_chat_catalogue_itinerary_edit_not_persisted');
+      }
+      safeResult.persistedAndReopened = true;
+    } else {
+      throw new Error(`real_chat_recommendation_requires_traveler_resolution_${recBody.status}`
+        + `_${safeResult.unresolvedFields.join('_') || 'no_listed_field'}`);
+    }
+
+    // Exercise the positive deterministic recommendation/itinerary boundary
+    // with the existing clearly synthetic test identities, only when the
+    // disposable database's real production publication view is empty. This
+    // dependency override is private to the guarded E2E process; it does not
+    // publish or expose any fixture through the public catalogue endpoint.
+    const fixture = await controlRequest(api.controlPort, api.controlToken, { action: 'enable_itinerary_fixture' });
+    if (!fixture.ok) throw new Error(`real_provider_test_catalogue_fixture_enable_failed_${fixture.reason || 'unknown'}`);
+    if (!Array.isArray(fixture.destination_ids) || fixture.destination_ids.length !== 4) {
+      throw new Error('real_provider_test_catalogue_fixture_unavailable');
+    }
+    const publicCatalogueBefore = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET');
+    const publicCatalogueIdsBefore = (publicCatalogueBefore.items ?? []).map(item => item.destination_id).sort();
+    if (publicCatalogueBefore.items?.some(item => String(item.destination_key).startsWith('E2E-TEST-ONLY-'))) {
+      throw new Error('synthetic_fixture_preexisted_in_public_catalogue');
+    }
+    const fixtureTripResponse = await requestBrowserJson(page, `/api/v1/conversations/${conversationId}/trips`, 'POST', identity.csrfToken, {
+      locale: 'fa-IR', request_text: 'Isolated test-only destination selection.',
+      traveler_timezone: 'Asia/Tehran', traveler_reference_date: new Date().toISOString().slice(0, 10),
+      idempotency_key: randomUUID(),
+    });
+    const fixtureTripId = fixtureTripResponse.trip?.trip_id;
+    if (!fixtureTripId) throw new Error('real_provider_test_trip_not_persisted');
+    const fixtureTripProfile = structuredClone(confirmed.confirmed_requirements);
+    delete fixtureTripProfile.requirement_consent;
+    fixtureTripProfile.destinations = ['SYNTHETIC E2E TEST DESTINATION — NOT A REAL PLACE'];
+    fixtureTripProfile.destination_ids = [fixture.destination_ids[0]];
+    const consentReceipt = structuredClone(confirmed.confirmed_requirements.requirement_consent);
+    delete consentReceipt.profile_version;
+    const fixtureConfirmed = await requestBrowserJson(page, `/api/v1/trips/${fixtureTripId}`, 'PATCH', identity.csrfToken, {
+      expected_version: fixtureTripResponse.trip.version,
+      confirmed_requirements: fixtureTripProfile,
+      destination_ids: fixture.destination_ids.slice(0, 1),
+      requirement_consent: consentReceipt,
+    });
+    const fixtureRecommendation = await requestBrowserJson(page, `/api/v1/trips/${fixtureTripId}/recommendations`, 'POST', identity.csrfToken, {
+      selected_destination_ids: fixture.destination_ids.slice(0, 1),
+    });
+    if (fixtureRecommendation.status !== 'available' || fixtureRecommendation.items?.[0]?.destination_id !== fixture.destination_ids[0]) {
+      throw new Error(`real_provider_test_catalogue_recommendation_failed_${fixtureRecommendation.status}`);
+    }
+    const fixtureItinerary = await requestBrowserJson(page, `/api/v1/trips/${fixtureTripId}/itineraries`, 'POST', identity.csrfToken, {
+      recommendation_request_id: fixtureRecommendation.recommendation_request_id,
+      day_count: Math.min(3, fixtureConfirmed.trip?.duration_days || 3), locale: 'fa-IR',
+    });
+    const fixtureItineraryRead = await requestBrowserJson(page, `/api/v1/itineraries/${fixtureItinerary.itinerary_id}`, 'GET');
+    if (!fixtureItineraryRead.stops?.some(stop => stop.destination_id === fixture.destination_ids[0])) {
+      throw new Error('real_provider_test_catalogue_itinerary_not_persisted');
+    }
+    await checkedControl(api.controlPort, api.controlToken, { action: 'disable_itinerary_fixture' });
+    const publicCatalogueAfter = await requestBrowserJson(page, '/api/v1/catalog/destinations', 'GET');
+    const publicCatalogueIdsAfter = (publicCatalogueAfter.items ?? []).map(item => item.destination_id).sort();
+    if (JSON.stringify(publicCatalogueIdsAfter) !== JSON.stringify(publicCatalogueIdsBefore)
+      || publicCatalogueAfter.items?.some(item => String(item.destination_key).startsWith('E2E-TEST-ONLY-'))) {
+      throw new Error('synthetic_fixture_leaked_after_test');
+    }
+    safeResult.syntheticCatalogueAcceptance = {
+      status: 'test_only_dependency_override', recommendation: true, itineraryPersisted: true,
+      publicCatalogueBeforeAndAfterEmpty: true,
+    };
+
+    // Verify that this real-provider-derived, traveler-confirmed profile and
+    // its provisional itinerary can be shared through the existing protected
+    // partner boundary, then revised as the same trip. These organizations
+    // exist only in this disposable PostgreSQL run.
+    const companyOnePhone = syntheticPhone();
+    await page.selectOption('#locale', 'en-US');
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    const companyOneIdentity = await signIn(page, api.controlPort, api.controlToken, companyOnePhone);
+    await page.goto(`${webOrigin}/partners`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Partner workspace' }).waitFor({ state: 'visible' });
+    const createCompany = async (label, identityForCompany) => {
+      const orgForm = page.locator('form.partner-card').filter({
+        has: page.getByRole('heading', { name: 'Organization', exact: true }),
+      });
+      const legalName = `V2 acceptance ${label}`;
+      const displayName = `V2 acceptance ${label}`;
+      await orgForm.getByLabel('Legal name').fill(legalName);
+      await orgForm.getByLabel('Display name').fill(displayName);
+      const createPromise = page.waitForResponse(response =>
+        new URL(response.url()).pathname === '/api/v1/partners/organizations'
+        && response.request().method() === 'POST');
+      await orgForm.getByRole('button', { name: 'Create organization', exact: true }).click();
+      if ((await createPromise).status() !== 201) throw new Error('real_provider_company_create_failed');
+      const rows = await requestBrowserJson(page, '/api/v1/partners/organizations', 'GET', undefined, undefined);
+      const row = rows.items.find(item => item.display_name === displayName);
+      if (!row?.organization_id) throw new Error('real_provider_company_not_persisted');
+      const approved = await controlRequest(api.controlPort, api.controlToken, {
+        action: 'approve_isolated_test_organization', organization_id: row.organization_id,
+        created_by: identityForCompany.userId, display_name: displayName,
+      });
+      if (!approved.ok) throw new Error(`real_provider_isolated_company_approval_failed_${approved.reason || 'unknown'}`);
+      return row.organization_id;
+    };
+    const companyOne = await createCompany(`Company ${companyOnePhone.slice(-4)}`, companyOneIdentity);
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    const companyTwoPhone = syntheticPhone();
+    const companyTwoIdentity = await signIn(page, api.controlPort, api.controlToken, companyTwoPhone);
+    await page.goto(`${webOrigin}/partners`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Partner workspace' }).waitFor({ state: 'visible' });
+    const companyTwo = await createCompany(`Company ${companyTwoPhone.slice(-4)}`, companyTwoIdentity);
+    if (companyOne === companyTwo) throw new Error('real_provider_company_tenants_not_distinct');
+
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    identity = await signIn(page, api.controlPort, api.controlToken, phone);
+    const shareOptions = await requestBrowserJson(page,
+      `/api/v1/partners/trips/${tripId}/company-share-options`, 'GET', undefined, undefined);
+    if (!shareOptions.items.some(item => item.organization_id === companyOne)) {
+      throw new Error('real_provider_approved_company_not_share_eligible');
+    }
+    const share = await requestBrowserJson(page, `/api/v1/partners/trips/${tripId}/company-shares`, 'POST', identity.csrfToken, {
+      organization_ids: [companyOne], consent_confirmed: true,
+      include_original_request: false, consent_policy_version: 'company-request-share-v1',
+    });
+    if (!share.shared || share.shares.length !== 1) throw new Error('real_provider_traveler_share_failed');
+    const shareId = share.shares[0].share_id;
+    const latestTrip = await requestBrowserJson(page, `/api/v1/trips/${tripId}`, 'GET');
+    const revisedRequirements = structuredClone(latestTrip.confirmed_requirements);
+    // The read representation nests the persisted consent receipt; PATCH only
+    // accepts the profile without that field and the explicit top-level
+    // consent request below.
+    delete revisedRequirements.requirement_consent;
+    revisedRequirements.soft_preferences = [...new Set([...(revisedRequirements.soft_preferences ?? []), 'acceptance revision'])];
+    const revisedTrip = await requestBrowserJson(page, `/api/v1/trips/${tripId}`, 'PATCH', identity.csrfToken, {
+      expected_version: latestTrip.version,
+      confirmed_requirements: revisedRequirements,
+      destination_ids: latestTrip.destination_ids ?? [],
+      requirement_consent: { contract_version: 'recommendation-consent-v1', field_decisions: {}, advisory_acknowledged_fields: [] },
+    });
+    if (revisedTrip.trip_id !== tripId || revisedTrip.version !== latestTrip.version + 1) {
+      throw new Error('real_provider_trip_revision_identity_or_version_failed');
+    }
+    safeResult.sharedRevisionPersisted = true;
+
+    const signedOutCompanyOne = await requestBrowserJson(page,
+      `/api/v1/partners/organizations/${companyOne}/requests`, 'GET');
+    if (signedOutCompanyOne.items.length !== 0) throw new Error('real_provider_traveler_saw_company_inbox');
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    const outsider = await signIn(page, api.controlPort, api.controlToken, companyTwoPhone);
+    const crossTenantInbox = await requestBrowserJson(page,
+      `/api/v1/partners/organizations/${companyOne}/requests`, 'GET');
+    const crossTenantWorkspace = await browserApi(page,
+      `/api/v1/partners/organizations/${companyOne}/workspace`, 'GET');
+    const crossTenantWrite = await browserApi(page,
+      `/api/v1/partners/organizations/${companyOne}/services`, 'POST', outsider.csrfToken,
+      { service_type: 'tour', service_key: 'unauthorized-v2-acceptance-write', locale: 'en-US', display_name: 'forged' });
+    if (crossTenantInbox.items.length !== 0 || crossTenantWorkspace.status !== 200
+      || crossTenantWorkspace.payload?.services?.length !== 0
+      || ![403, 422].includes(crossTenantWrite.status)) {
+      throw new Error('real_provider_cross_tenant_company_access_not_denied');
+    }
+    safeResult.crossTenantDenied = true;
+
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    const authorizedCompany = await signIn(page, api.controlPort, api.controlToken, companyOnePhone);
+    const inbox = await requestBrowserJson(page,
+      `/api/v1/partners/organizations/${companyOne}/requests`, 'GET');
+    const revisions = await requestBrowserJson(page,
+      `/api/v1/partners/organizations/${companyOne}/requests/${shareId}/revisions`, 'GET');
+    const sharedRevision = inbox.items.find(item => item.event_kind === 'request_shared');
+    const changedRevision = inbox.items.find(item => item.event_kind === 'request_revised');
+    const protectedRequest = sharedRevision?.request_snapshot;
+    const protectedItinerary = sharedRevision?.itinerary_snapshot;
+    if (!sharedRevision || !changedRevision || inbox.items.some(item => item.request_snapshot?.original_request != null)
+      || protectedRequest?.trip_id !== tripId || !protectedRequest?.requirements
+      || !protectedItinerary?.provisional || protectedItinerary.provisional.status !== 'provisional_unverified'
+      || revisions.items.length !== 2 || revisions.items[0].share_id !== shareId) {
+      throw new Error('real_provider_company_protected_request_and_itinerary_views_failed');
+    }
+    const anonymousContext = await browser.newContext();
+    try {
+      const anonymousPage = await anonymousContext.newPage();
+      const anonymousResponse = await anonymousPage.request.get(
+        `${webOrigin}/api/v1/partners/organizations/${companyOne}/requests`);
+      if (anonymousResponse.status() !== 401) throw new Error('real_provider_anonymous_company_inbox_not_denied');
+    } finally {
+      await anonymousContext.close();
+    }
+    safeResult.protectedCompanyViews = true;
+
+    // Return to the traveler identity so the remaining conversation and trip
+    // reads prove the original owner can still access their own saved records.
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    identity = await signIn(page, api.controlPort, api.controlToken, phone);
+    const conversationResponse = await page.request.get(`${webOrigin}/api/v1/conversations/${conversationId}`);
+    const conversation = await conversationResponse.json();
+    if (conversationResponse.status() !== 200
+      || conversation.messages?.filter(message => message.role === 'assistant').length < 2) {
+      throw new Error('real_chat_conversation_turns_not_persisted');
+    }
+    await page.goto(webOrigin, { waitUntil: 'domcontentloaded' });
+    await page.locator(`.history-trip[data-trip-id="${tripId}"]`).waitFor({ state: 'visible' });
+    await page.locator(`.history-trip[data-trip-id="${tripId}"] button`).first().click();
+    await page.locator('.provisional-itinerary').waitFor({ state: 'visible' });
+    const finalProviderStatus = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' });
+    safeResult.providerTelemetry = {
+      route: finalProviderStatus.route,
+      attempts: finalProviderStatus.attempts,
+      successes: finalProviderStatus.successes,
+      failures: finalProviderStatus.failures,
+      latencyMs: finalProviderStatus.latency_ms,
+      responseFieldKeys: finalProviderStatus.response_field_keys,
+      responseEvidenceKeys: finalProviderStatus.response_evidence_keys,
+    };
+
+    await page.evaluate(() => {
+      document.querySelectorAll('input,textarea').forEach(element => { element.value = ''; });
+      document.querySelectorAll('#trip-prompt,#trip-follow-up').forEach(element => {
+        element.setAttribute('placeholder', '[redacted acceptance input]');
+      });
+      document.querySelectorAll('.saved-message-user p,.saved-message-assistant p,#trip-prompt,.history-trip > button:first-child')
+        .forEach(element => { element.textContent = '[redacted acceptance text]'; });
+      document.querySelectorAll('.auth-signed-in *').forEach(element => {
+        if (/^\+?[0-9]{8,15}$/.test(element.textContent.trim())) element.textContent = '[test account]';
+      });
+    });
+    await page.screenshot({ path: resolve(artifactRoot, `real-chat-${provider.provider}.png`), fullPage: true });
+    const report = {
+      status: 'passed', mode: 'authenticated_real_chat_provider_local_acceptance',
+      provider: safeResult, browser: `Chromium ${browser.version()}`,
+      database: { host: '127.0.0.1', majorVersion: 17, markerValidated: true, tripPersisted: true },
+      privacy: { rawPromptsSaved: false, providerTokenSaved: false, browserTokenStorage: false },
+      screenshot: `real-chat-${provider.provider}.png`,
+    };
+    writeFileSync(resolve(artifactRoot, `real-chat-${provider.provider}.json`), `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+    return report;
+  } finally {
+    if (page) await page.close().catch(() => {});
+    await context.close().catch(() => {});
+  }
+}
+
+async function runForcedOutageFallbackJourney(browser, api, audit, artifactRoot) {
+  const context = await browser.newContext({ locale: 'fa-IR', timezoneId: 'Asia/Tehran' });
+  const page = await context.newPage();
+  page.setDefaultTimeout(45_000);
+  const phone = syntheticPhone();
+  try {
+    await attachBrowserGuards(page, audit);
+    await page.goto(webOrigin, { waitUntil: 'domcontentloaded' });
+    await selectAndVerifyLocale(page, 'fa-IR');
+    await signIn(page, api.controlPort, api.controlToken, phone);
+    const before = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' });
+    if (before.attempts !== 0 || before.route?.scheme !== 'http'
+      || before.route?.host !== '127.0.0.1' || before.route?.port === 1234) {
+      throw new Error('forced_outage_route_not_isolated_loopback');
+    }
+    const requestText = '\u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc\u200c\u062e\u0648\u0627\u0645 \u0627\u0632 \u067e\u0633\u200c\u0641\u0631\u062f\u0627 \u0628\u0631\u0627\u06cc \u067e\u0646\u062c \u0631\u0648\u0632 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632. \u067e\u0646\u062c \u0646\u0641\u0631 \u0647\u0633\u062a\u06cc\u0645 \u0648 \u0628\u0648\u062f\u062c\u0647\u200c\u0645\u0648\u0646 \u06f3\u06f0 \u0645\u06cc\u0644\u06cc\u0648\u0646 \u062a\u0648\u0645\u0627\u0646\u0647.';
+    const turnPromise = page.waitForResponse(response =>
+      new URL(response.url()).pathname.endsWith('/assistant-turns') && response.request().method() === 'POST');
+    await page.locator('#trip-prompt').fill(requestText);
+    await page.locator('.trip-form button[type="submit"]').click();
+    const failedTurn = await turnPromise;
+    if (failedTurn.status() !== 503) throw new Error(`forced_outage_expected_safe_503_got_${failedTurn.status()}`);
+    const diagnostic = page.locator('.extraction-diagnostic');
+    await diagnostic.waitFor({ state: 'visible' });
+    if (await diagnostic.getAttribute('data-extraction-path') !== 'fallback') {
+      throw new Error('forced_outage_fallback_provenance_not_visible');
+    }
+
+    const historyResponse = await page.request.get(`${webOrigin}/api/v1/conversations?limit=50`);
+    const history = await historyResponse.json();
+    const conversation = history.items?.[0];
+    const trip = conversation?.trips?.[0];
+    if (historyResponse.status() !== 200 || !conversation?.conversation_id || !trip?.trip_id) {
+      throw new Error('forced_outage_saved_trip_not_listed');
+    }
+    const tripResponse = await page.request.get(`${webOrigin}/api/v1/trips/${trip.trip_id}`);
+    const saved = await tripResponse.json();
+    const fields = saved.extracted_requirements?.requirements_v1?.fields ?? {};
+    const expected = {
+      origin: fields.origin?.status === 'known' && fields.origin?.source === 'fallback',
+      destination: fields.destination?.status === 'known' && fields.destination?.source === 'fallback',
+      duration: fields.duration_days?.value === 5 && fields.duration_days?.source === 'fallback',
+      travelers: fields.travelers?.value === 5 && fields.travelers?.source === 'fallback',
+      budget: fields.budget?.status === 'known' && fields.budget?.source === 'fallback',
+      relative_date: fields.relative_start_date?.value?.offset_days === 2
+        && fields.relative_start_date?.source === 'fallback',
+    };
+    if (tripResponse.status() !== 200 || Object.values(expected).some(value => !value)) {
+      throw new Error(`forced_outage_regex_fields_failed_${Object.entries(expected).filter(([, ok]) => !ok).map(([key]) => key).join('_')}`);
+    }
+    await page.waitForFunction(() => {
+      const origin = document.querySelector('#profile-origin')?.value || '';
+      const duration = document.querySelector('#profile-duration')?.value || '';
+      const travelers = document.querySelector('#profile-travelers')?.value || '';
+      return origin.includes('\u0645\u0634\u0647\u062f') && duration === '5' && travelers === '5';
+    });
+    if (!normalizedPersianText(await page.locator('#profile-origin').inputValue()).includes('\u0645\u0634\u0647\u062f')
+      || await page.locator('#profile-duration').inputValue() !== '5'
+      || await page.locator('#profile-travelers').inputValue() !== '5') {
+      throw new Error('forced_outage_fallback_not_synchronized_to_form');
+    }
+    await page.locator('#profile-origin').fill('\u06a9\u0631\u0645\u0627\u0646\u0634\u0627\u0647');
+    const confirm = page.locator('.profile-confirm-action');
+    if (await confirm.isDisabled()) throw new Error('forced_outage_manual_profile_cannot_be_confirmed');
+    const patchPromise = page.waitForResponse(response =>
+      new URL(response.url()).pathname === `/api/v1/trips/${trip.trip_id}` && response.request().method() === 'PATCH');
+    await confirm.click();
+    const patchResponse = await patchPromise;
+    if (patchResponse.status() !== 200) throw new Error('forced_outage_manual_override_not_saved');
+    const confirmedResponse = await page.request.get(`${webOrigin}/api/v1/trips/${trip.trip_id}`);
+    const confirmed = await confirmedResponse.json();
+    if (confirmedResponse.status() !== 200 || confirmed.confirmed_requirements?.origin !== '\u06a9\u0631\u0645\u0627\u0646\u0634\u0627\u0647') {
+      throw new Error('forced_outage_confirmed_override_not_persistent');
+    }
+    const counts = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' });
+    if (counts.attempts !== 1 || counts.successes !== 0 || counts.failures !== 1) {
+      throw new Error('forced_outage_call_count_or_no_retry_failed');
+    }
+    await page.evaluate(() => {
+      document.querySelectorAll('input,textarea').forEach(element => { element.value = ''; });
+      document.querySelectorAll('#trip-prompt,#trip-follow-up').forEach(element => {
+        element.setAttribute('placeholder', '[redacted acceptance input]');
+      });
+      document.querySelectorAll('.saved-message-user p,.saved-message-assistant p,#trip-prompt,.history-trip > button:first-child')
+        .forEach(element => { element.textContent = '[redacted acceptance text]'; });
+      document.querySelectorAll('.auth-signed-in *').forEach(element => {
+        if (/^\+?[0-9]{8,15}$/.test(element.textContent.trim())) element.textContent = '[test account]';
+      });
+    });
+    await page.screenshot({ path: resolve(artifactRoot, 'real-chat-forced-outage-fallback.png'), fullPage: true });
+    const report = {
+      status: 'passed', mode: 'actual_adapter_forced_loopback_outage_and_regex_fallback',
+      provider: { route: 'loopback_http_closed_port', attempts: counts.attempts,
+        successes: counts.successes, failures: counts.failures, fallbackFormAndPersistence: expected,
+        manualOverridePersisted: true, automaticRetry: false },
+      database: { host: '127.0.0.1', majorVersion: 17, markerValidated: true, tripPersisted: true },
+      privacy: { rawPromptsSaved: false, providerTokenSaved: false, browserTokenStorage: false },
+      screenshot: 'real-chat-forced-outage-fallback.png',
+    };
+    writeFileSync(resolve(artifactRoot, 'real-chat-forced-outage-fallback.json'), `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+    return report;
+  } finally {
+    await page.close().catch(() => {});
+    await context.close().catch(() => {});
+  }
+}
+
 async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
   const copy = localeCopy[locale];
   const assistantCallsBeforeLocale = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_count' });
@@ -2294,6 +2933,7 @@ async function main() {
     throw new Error('invalid_or_forbidden_test_ports');
   }
   const runName = `run-${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}`;
+  const realChat = realChatConfiguration();
   const artifactRoot = resolve(root, 'artifacts/visual-qa-task15d', runName);
   if (existsSync(artifactRoot)) throw new Error('task15d_artifact_path_collision');
   mkdirSync(artifactRoot, { recursive: true });
@@ -2311,6 +2951,21 @@ async function main() {
       // process budget while still exercising the real installed Chromium.
       args: ['--disable-gpu', '--renderer-process-limit=2', '--disable-background-networking', '--no-first-run'],
     });
+    if (realChat) {
+      const report = realChat.provider === 'forced_outage'
+        ? await runForcedOutageFallbackJourney(browser, api, audit, artifactRoot)
+        : await runRealProviderJourney(browser, api, audit, artifactRoot, realChat);
+      if (audit.pageErrors) throw new Error('real_chat_browser_page_error');
+      console.log(JSON.stringify({ status: report.status, provider: report.provider.provider || 'forced_outage',
+        model: report.provider.model || null, invocationAttempts: report.provider.invocationAttempts ?? report.provider.attempts,
+        successfulInvocations: report.provider.successfulInvocations ?? report.provider.successes,
+        extractionPath: report.provider.extractionPath || 'fallback',
+        correctionTurn: report.provider.correctionTurn ?? false,
+        itineraryGenerated: report.provider.itineraryGenerated ?? false,
+        persistedAndReopened: report.provider.persistedAndReopened ?? report.provider.manualOverridePersisted,
+        artifactRoot }));
+      return;
+    }
     if (process.env.RAHGARD_NATIONAL_CATALOGUE_E2E === '1') {
       if (process.env.RAHGARD_OWNER_ARCHIVE_PATH == null || process.env.AUTH_TEST_DATABASE_OWNER_PASSWORD == null
           || process.env.RAHGARD_REAL_GEO_E2E === '1' || api.ownerRagEnabled) {

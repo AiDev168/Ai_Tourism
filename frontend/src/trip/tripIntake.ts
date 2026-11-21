@@ -191,7 +191,9 @@ function extractPlaces(source:string, locale:Locale, spans:ReturnType<typeof dur
   void locale;
   const text=normalize(source);
   // Fallback for explicit colloquial departure grammar, not the primary LLM interpretation.
-  const originMatch=text.match(/(?:from|از|من)\s+(.{1,70}?)\s+(?:to|به|إلى|الى)\s+/iu)
+  const spokenOriginPattern=/(?:^|\s)از\s+([\u0600-\u06ff][\u0600-\u06ff\u200c-]*(?:\s+[\u0600-\u06ff][\u0600-\u06ff\u200c-]{1,30})?)\s+می[\s\u200c]*(?:خواهم|خواهیم|خوام|خوایم|میخوام|میخوایم)[\s\S]{0,100}?\s+(?:برم|بریم|برویم|سفر\s+کنم)(?=\s|$)/iu;
+  const spokenOrigin=text.match(spokenOriginPattern);
+  const originMatch=spokenOrigin ?? text.match(/(?:from|از|من)\s+(.{1,70}?)\s+(?:to|به|إلى|الى)\s+/iu)
     ?? text.match(/(?:^|\s)از\s+([\p{Script=Arabic}]{2,50}(?:\s+[\p{Script=Arabic}]{2,50})?)\s+می\s*(?:خوام|خواهم|خوایم|خواهیم)\s+(?:برم|بریم|برویم|سفر)/iu);
   let origin:Field<string>={value:null,status:'unknown',evidence:null};
   if(originMatch){const candidate=cleanPlace(originMatch[1].replace(/^(?:tehran|تهران|طهران)$/iu,'$&'));if(candidate&&!genericPlace.test(candidate)&&!/^(?:امروز|فردا|پس\s*فردا|دیروز|[0-9]+\s*روز)$/u.test(candidate))origin={value:candidate,status:'extracted',evidence:originMatch[0]};}

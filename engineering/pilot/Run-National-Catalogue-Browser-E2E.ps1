@@ -1,13 +1,63 @@
 # Full application-schema acceptance against a new tmpfs PostgreSQL 17 container.
 # The container is created and removed by the guarded MVP runner; never targets shared or live DBs.
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$ArchivePath)
+param(
+  [string]$ArchivePath,
+  [ValidateSet('simulated','lm_studio','remote_vllm','forced_outage')][string]$ChatProvider = 'simulated',
+  [string]$ChatEndpoint,
+  [string]$ChatModel,
+  [ValidateRange(1024,65535)][int]$ChatLoopbackPort = 1234
+)
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Runner = Join-Path $ProjectRoot 'engineering\database-prep\scripts\Start-Disposable-Mvp-E2E.ps1'
 $container = $null
-$keys = @('AUTH_INTEGRATION_TESTS','AUTH_TEST_DATABASE_HOST','AUTH_TEST_DATABASE_PORT','AUTH_TEST_DATABASE_NAME','AUTH_TEST_DATABASE_USER','AUTH_TEST_DATABASE_PASSWORD','AUTH_TEST_DATABASE_OWNER_PASSWORD','AUTH_TEST_DATABASE_MARKER','AI_TOURISM_MVP_E2E_CONTAINER','RAHGARD_NATIONAL_CATALOGUE_E2E','RAHGARD_OWNER_ARCHIVE_PATH','ASSISTANT_INTEGRATION_TESTS','TOURISM_RAG_ENABLED')
+$keys = @('AUTH_INTEGRATION_TESTS','AUTH_TEST_DATABASE_HOST','AUTH_TEST_DATABASE_PORT','AUTH_TEST_DATABASE_NAME','AUTH_TEST_DATABASE_USER','AUTH_TEST_DATABASE_PASSWORD','AUTH_TEST_DATABASE_OWNER_PASSWORD','AUTH_TEST_DATABASE_MARKER','AI_TOURISM_MVP_E2E_CONTAINER','RAHGARD_NATIONAL_CATALOGUE_E2E','RAHGARD_OWNER_ARCHIVE_PATH','RAHGARD_REAL_CHAT_PROVIDER','RAHGARD_REAL_CHAT_ENDPOINT','RAHGARD_REAL_CHAT_MODEL','RAHGARD_REAL_CHAT_TOKEN','RAHGARD_REAL_CHAT_LOOPBACK_HTTP_PORT','ASSISTANT_INTEGRATION_TESTS','TOURISM_RAG_ENABLED')
 $before = @{}; foreach ($key in $keys) { $before[$key] = [Environment]::GetEnvironmentVariable($key,'Process') }
+if ($ChatProvider -eq 'simulated') {
+  if (-not $ArchivePath) { throw 'Simulated national-catalogue mode requires the audited archive path.' }
+  if (-not (Test-Path -LiteralPath $ArchivePath -PathType Leaf)) { throw 'Owner archive file was not found.' }
+  $archiveHash = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($archiveHash -ne '7e9a27654535590f593aeea8e9f7ba9422fb128ca2c4fc93129061c544aff397') {
+    throw 'Owner archive checksum does not match the audited input.'
+  }
+}
+else {
+  if ($ChatProvider -eq 'lm_studio') {
+    if (-not $ChatEndpoint) { $ChatEndpoint = "http://127.0.0.1:$ChatLoopbackPort/v1/chat/completions" }
+    if (-not $ChatModel) { $ChatModel = 'qwen3-8b-abliterated' }
+    # LM Studio's local endpoint does not require a provider secret. The
+    # adapter requires a non-empty bearer field; this sentinel is not secret.
+    $realChatToken = 'lm-studio-loopback-development'
+  }
+  elseif ($ChatProvider -eq 'remote_vllm') {
+    if (-not $ChatEndpoint) { $ChatEndpoint = 'https://llm.hinaa.ir/v1/chat/completions' }
+    if (-not $ChatModel) { $ChatModel = 'TaHa1_VL' }
+    $realChatToken = [Environment]::GetEnvironmentVariable('RAHGARD_REAL_CHAT_TOKEN','Process')
+    if (-not $realChatToken) { $realChatToken = [Environment]::GetEnvironmentVariable('INTERNAL_CHAT_TOKEN','Process') }
+    if (-not $realChatToken) { throw 'Remote vLLM acceptance is blocked: no authorized provider token is configured in the process environment.' }
+  }
+  else {
+    if ($ChatLoopbackPort -eq 1234) { $ChatLoopbackPort = 1235 }
+    $probe = New-Object System.Net.Sockets.TcpClient
+    try {
+      $connect = $probe.BeginConnect('127.0.0.1',$ChatLoopbackPort,$null,$null)
+      if ($connect.AsyncWaitHandle.WaitOne(500) -and $probe.Connected) {
+        throw 'Forced-outage acceptance requires the selected loopback port to be closed.'
+      }
+    } finally { $probe.Dispose() }
+    $ChatEndpoint = "http://127.0.0.1:$ChatLoopbackPort/v1/chat/completions"
+    $ChatModel = 'forced-unavailable-test'
+    $realChatToken = 'local-fallback-test-sentinel'
+  }
+  [Environment]::SetEnvironmentVariable('RAHGARD_REAL_CHAT_PROVIDER',$ChatProvider,'Process')
+  [Environment]::SetEnvironmentVariable('RAHGARD_REAL_CHAT_ENDPOINT',$ChatEndpoint,'Process')
+  [Environment]::SetEnvironmentVariable('RAHGARD_REAL_CHAT_MODEL',$ChatModel,'Process')
+  [Environment]::SetEnvironmentVariable('RAHGARD_REAL_CHAT_TOKEN',$realChatToken,'Process')
+  if ($ChatProvider -in @('lm_studio','forced_outage')) {
+    [Environment]::SetEnvironmentVariable('RAHGARD_REAL_CHAT_LOOPBACK_HTTP_PORT',[string]$ChatLoopbackPort,'Process')
+  }
+}
 function Hex([int]$Length) {
   $buffer = New-Object byte[] $Length; $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
   try { $rng.GetBytes($buffer) } finally { $rng.Dispose() }
@@ -31,11 +81,6 @@ function Apply([string]$Id,[string]$File,[string]$User,[string]$Password,[hashta
   return $hash
 }
 try {
-  if (-not (Test-Path -LiteralPath $ArchivePath -PathType Leaf)) { throw 'Owner archive file was not found.' }
-  $archiveHash = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-  if ($archiveHash -ne '7e9a27654535590f593aeea8e9f7ba9422fb128ca2c4fc93129061c544aff397') {
-    throw 'Owner archive checksum does not match the audited input.'
-  }
   . $Runner -ProjectRoot $ProjectRoot
   $container = $env:AI_TOURISM_MVP_E2E_CONTAINER
   if ($container -notmatch '^ai-tourism-mvp-pg17-[a-f0-9]{12}$' -or $env:AUTH_TEST_DATABASE_HOST -ne '127.0.0.1' -or [int]$env:AUTH_TEST_DATABASE_PORT -eq 55433) { throw 'Disposable database identity guard failed.' }
@@ -146,14 +191,27 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
   $testDb = $env:AUTH_TEST_DATABASE_NAME
   Psql 'postgres' "ALTER DATABASE $migrationTarget RENAME TO $testDb;" | Out-Null
   $env:AUTH_TEST_DATABASE_NAME = $testDb
-  $env:RAHGARD_NATIONAL_CATALOGUE_E2E = '1'
-  $env:RAHGARD_OWNER_ARCHIVE_PATH = (Resolve-Path -LiteralPath $ArchivePath).Path
   $env:ASSISTANT_INTEGRATION_TESTS = '1'
   $env:TOURISM_RAG_ENABLED = 'false'
+  if ($ChatProvider -eq 'simulated') {
+    $env:RAHGARD_NATIONAL_CATALOGUE_E2E = '1'
+    $env:RAHGARD_OWNER_ARCHIVE_PATH = (Resolve-Path -LiteralPath $ArchivePath).Path
+  }
+  else {
+    $env:RAHGARD_REAL_CHAT_PROVIDER = $ChatProvider
+  }
   Push-Location (Join-Path $ProjectRoot 'frontend')
   try { node scripts/traveler-e2e.mjs; if ($LASTEXITCODE -ne 0) { throw 'National-catalogue browser acceptance failed.' } }
   finally { Pop-Location }
-  Write-Host 'PASS: full app migrations 0013-0022 and authenticated national-catalogue Chromium journey completed in isolated PG17.' -ForegroundColor Green
+  if ($ChatProvider -eq 'simulated') {
+    Write-Host 'PASS: full app migrations 0013-0022 and authenticated national-catalogue Chromium journey completed in isolated PG17.' -ForegroundColor Green
+  }
+  elseif ($ChatProvider -eq 'forced_outage') {
+    Write-Host 'PASS: production Chat adapter failure and deterministic fallback were exercised through authenticated Chromium/FastAPI on disposable PG17.' -ForegroundColor Green
+  }
+  else {
+    Write-Host "PASS: authenticated real-provider Chromium journey via $ChatProvider completed on disposable PG17; no persistent database or VPS was used." -ForegroundColor Green
+  }
 }
 finally {
   if ($container -and $container -match '^ai-tourism-mvp-pg17-[a-f0-9]{12}$') {

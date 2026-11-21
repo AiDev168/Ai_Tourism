@@ -270,13 +270,18 @@ class RemoteChatAdapter:
 
     def __init__(self, *, enabled: bool, environment: str, endpoint: str,
                  model: str, token: SecretStr | None,
+                 loopback_http_port: int | None = None,
                  transport: httpx.AsyncBaseTransport | None = None) -> None:
         self.enabled, self.environment = enabled, environment
         self.endpoint, self.model, self.token = endpoint, model, token
+        self.loopback_http_port = loopback_http_port
         self.transport = transport
+        self.last_failure_category: str | None = None
 
     async def invoke(self, request: ChatRequest) -> ChatReply:
+        self.last_failure_category = None
         parsed = urlsplit(self.endpoint)
+        loopback_http_enabled = False
         if (not self.enabled or self.environment not in {"development", "test", "local_pilot", "staging"}
                 or not parsed.hostname
                 or parsed.username or parsed.password or parsed.query or parsed.fragment
@@ -288,9 +293,21 @@ class RemoteChatAdapter:
                     or parsed.port != 8000):
                 raise AiCapabilityUnavailable()
         elif parsed.scheme != "https":
-            raise AiCapabilityUnavailable()
+            loopback_http_enabled = (
+                self.environment in {"development", "test"}
+                and parsed.scheme == "http"
+                and parsed.hostname in {"127.0.0.1", "localhost"}
+                and parsed.port is not None
+                and parsed.port == self.loopback_http_port
+                and self.loopback_http_port is not None
+            )
+            if not loopback_http_enabled:
+                raise AiCapabilityUnavailable()
         payload = {
             "model": self.model,
+            # Keep extraction/correction turns reproducible for a traveler.
+            # Provider output is still validated and never gains authority.
+            "temperature": 0,
             # Five-day provisional plans need a bounded but larger completion
             # budget than a short clarification turn. Keep all calls capped.
             "max_tokens": 1600,
@@ -315,7 +332,19 @@ class RemoteChatAdapter:
                 "weather_preference, and local_cuisine (one short exact phrase from the current message). "
                 "Resolve relative date phrases only as an offset from the supplied "
                 "traveler_reference_date in traveler_timezone; never use server/current time. "
-                "Do not turn a relative departure offset into trip duration or an end date. "
+                "Relative departure dates are mandatory structured fields when stated: tomorrow/"
+                "فردا/غدا means relative_start_date=1; day after tomorrow/"
+                "پس‌فردا/بعد غد means relative_start_date=2. Quote the exact date phrase in "
+                "requirement_evidence. Do not turn a relative departure offset into trip duration or an end date. "
+                "Interpret route roles semantically: in Persian or Arabic wording equivalent to "
+                "'from X ... go/travel to Y' (including a destination after a future travel verb), "
+                "set origin to X and destination to Y, and quote the exact place-name spans from this turn. "
+                "Do not leave destination for fallback when this explicit route relation is present. "
+                "For relative date phrases, always include relative_start_date and its exact phrase evidence. "
+                "Keep stay length separate from departure time: 'for 3 days' or the equivalent Persian/Arabic "
+                "duration phrase means duration_days=3, while 'tomorrow' or its equivalent means "
+                "relative_start_date=1. If both occur in the same message, return both fields with separate "
+                "exact evidence quotes. Do not omit an explicit duration or relative departure. "
                 "Never return a field unless requirement_evidence contains its exact wording "
                 "from the current message. Do not cite conversation history as current-turn evidence. "
                     "Use these fields ONLY when explicitly supported by traveler statements. "
@@ -345,32 +374,53 @@ class RemoteChatAdapter:
                 )},
             ],
         }
+        # Local models can need substantially longer to emit a bounded
+        # day-by-day JSON draft than to answer a short clarification. Keep the
+        # exception limited to the explicitly configured development loopback;
+        # all HTTPS providers retain the existing 15/20-second bounds.
+        request_timeout = 45 if loopback_http_enabled else 15
         try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=False,
+            async with httpx.AsyncClient(timeout=request_timeout, follow_redirects=False,
                                          trust_env=False, transport=self.transport) as client:
-                async with asyncio.timeout(20):
+                async with asyncio.timeout(request_timeout + 5):
                     async with client.stream(
                         "POST", self.endpoint, json=payload,
                         headers={"Authorization": f"Bearer {self.token.get_secret_value()}"},
                     ) as response:
                         if response.status_code != 200:
+                            self.last_failure_category = f"upstream_http_{response.status_code}"
                             logger.warning("chat.upstream.unavailable status_code=%s", response.status_code)
                             raise AiCapabilityUnavailable()
                         data = bytearray()
                         async for chunk in response.aiter_bytes():
                             data.extend(chunk)
                             if len(data) > 65536:
+                                self.last_failure_category = "response_oversize"
                                 raise AiCapabilityUnavailable()
             envelope = json.loads(data)
             choices = envelope["choices"]
             finish_reason = choices[0].get("finish_reason") if len(choices) == 1 else "other"
             if len(choices) != 1 or finish_reason != "stop":
+                self.last_failure_category = "incomplete_completion"
                 safe_finish_reason = finish_reason if finish_reason in {"stop", "length", "content_filter", "tool_calls"} else "other"
                 logger.warning("chat.response.incomplete choice_count=%s finish_reason=%s", len(choices), safe_finish_reason)
                 raise AiCapabilityUnavailable()
-            return _parse_provider_content(choices[0]["message"]["content"])
+            try:
+                return _parse_provider_content(choices[0]["message"]["content"])
+            except AiCapabilityUnavailable:
+                self.last_failure_category = "invalid_reply_contract"
+                raise
         except Exception as error:
-            logger.warning("chat.upstream.failed error_type=%s", type(error).__name__)
+            if self.last_failure_category is None:
+                if isinstance(error, (httpx.TimeoutException, TimeoutError)):
+                    self.last_failure_category = "timeout"
+                elif isinstance(error, json.JSONDecodeError):
+                    self.last_failure_category = "malformed_json"
+                elif isinstance(error, (KeyError, IndexError, TypeError)):
+                    self.last_failure_category = "invalid_provider_envelope"
+                else:
+                    self.last_failure_category = "provider_or_contract_failure"
+            logger.warning("chat.upstream.failed category=%s", self.last_failure_category)
             raise AiCapabilityUnavailable() from None
 
 
@@ -384,5 +434,6 @@ def make_chat_gateway(settings: Settings) -> AiProviderGateway[ChatRequest, Chat
             endpoint=settings.internal_chat_endpoint,
             model=settings.internal_chat_model,
             token=settings.internal_chat_token,
+            loopback_http_port=settings.internal_chat_loopback_http_port,
         ),
     )

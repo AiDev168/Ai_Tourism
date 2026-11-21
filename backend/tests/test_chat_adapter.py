@@ -111,6 +111,62 @@ def test_server_configuration_is_disabled_by_default_and_rejects_production():
         )
 
 
+def test_loopback_http_chat_is_explicitly_bounded_to_one_development_port():
+    base = dict(
+        _env_file=None, database_password="test", app_env="development",
+        internal_chat_enabled=True, internal_chat_endpoint="http://127.0.0.1:1234/v1/chat/completions",
+        internal_chat_model="loaded-local-model", internal_chat_token=SecretStr("local-only-test-token"),
+        internal_chat_loopback_http_port=1234,
+    )
+    assert Settings(**base).internal_chat_endpoint.startswith("http://127.0.0.1:1234/")
+    for unsafe in (
+        {"internal_chat_loopback_http_port": None},
+        {"internal_chat_loopback_http_port": 1235},
+        {"internal_chat_endpoint": "http://example.invalid:1234/v1/chat/completions"},
+        {"internal_chat_endpoint": "http://0.0.0.0:1234/v1/chat/completions"},
+        {"app_env": "staging", "staging_auth_enabled": True,
+         "staging_public_host": "staging.example.test",
+         "auth_allowed_origins": "https://staging.example.test"},
+        {"app_env": "local_pilot"},
+    ):
+        with pytest.raises(ValidationError):
+            Settings(**(base | unsafe))
+
+
+def test_remote_chat_adapter_allows_only_explicit_loopback_http_transport():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop", "message": {"content": json.dumps({"reply": "پاسخ آزمایشی"})},
+        }]})
+
+    permitted = RemoteChatAdapter(
+        enabled=True, environment="test", endpoint="http://127.0.0.1:1234/v1/chat/completions",
+        model="loaded-local-model", token=SecretStr("local-only-test-token"),
+        loopback_http_port=1234, transport=httpx.MockTransport(handler),
+    )
+    result = asyncio.run(permitted.invoke(ChatRequest(locale="fa-IR", text="آزمون محلی")))
+    assert result.reply == "پاسخ آزمایشی"
+    assert len(calls) == 1
+
+    for endpoint, port, environment in (
+        ("http://example.invalid:1234/v1/chat/completions", 1234, "test"),
+        ("http://127.0.0.1:1235/v1/chat/completions", 1234, "test"),
+        ("http://127.0.0.1:1234/v1/chat/completions", 1234, "local_pilot"),
+        ("http://host.docker.internal:8001/v1/chat/completions", 1234, "staging"),
+    ):
+        rejected = RemoteChatAdapter(
+            enabled=True, environment=environment, endpoint=endpoint,
+            model="model", token=SecretStr("local-only-test-token"),
+            loopback_http_port=port, transport=httpx.MockTransport(handler),
+        )
+        with pytest.raises(AiCapabilityUnavailable):
+            asyncio.run(rejected.invoke(ChatRequest(locale="fa-IR", text="must not send")))
+    assert len(calls) == 1
+
+
 def test_explicit_local_pilot_chat_profile_requires_secure_authenticated_loopback():
     token = SecretStr("local-pilot-test-token")
     valid = Settings(
@@ -257,6 +313,7 @@ def test_bounded_persian_reply_accepts_prose_and_json_fences(
 def test_travel_origin_and_party_size_remain_bounded_unconfirmed_hints():
     def handler(request):
         payload = json.loads(request.content)
+        assert payload["temperature"] == 0
         prompt = payload["messages"][0]["content"]
         assert "traveler_count" in prompt and "explicitly supported by traveler statements" in prompt
         return httpx.Response(200, json={"choices": [{

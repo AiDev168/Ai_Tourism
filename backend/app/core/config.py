@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     internal_chat_endpoint: str = ""
     internal_chat_model: str = ""
     internal_chat_token: SecretStr | None = None
+    # Explicitly opt into one development/test loopback HTTP listener only.
+    # Staging, local_pilot and production never use this exception.
+    internal_chat_loopback_http_port: int | None = Field(default=None, ge=1024, le=65535)
     internal_chat_daily_user_limit: int = Field(default=8, ge=1, le=1000)
     internal_chat_daily_global_limit: int = Field(default=100, ge=1, le=100000)
     ai_provider_admin_enabled: bool = False
@@ -133,7 +136,15 @@ class Settings(BaseSettings):
                         or chat_url.hostname != "host.docker.internal" or chat_url.port != 8000):
                     raise ValueError("Staging Chat may use only the private host vLLM endpoint")
             elif chat_url.scheme != "https":
-                raise ValueError("Internal Chat configuration is invalid")
+                loopback_http = (
+                    environment in {"development", "test"}
+                    and chat_url.scheme == "http"
+                    and chat_url.hostname in {"127.0.0.1", "localhost"}
+                    and chat_url.port is not None
+                    and chat_url.port == self.internal_chat_loopback_http_port
+                )
+                if not loopback_http:
+                    raise ValueError("Internal Chat configuration is invalid")
             if self.app_env.lower() == "local_pilot":
                 allowed = urlsplit(self.auth_allowed_origins.strip())
                 if (

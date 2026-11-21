@@ -434,6 +434,14 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const displayedItineraryStatus = itineraryDirty
     ? !dayCountValid || locallyUnplannedDays.length ? 'partial' : 'complete'
     : itinerary?.status;
+  // A city name can be a known traveler requirement even when no approved
+  // catalogue identity resolves it. In that one case a clearly unverified
+  // provisional plan is safe; unresolved mandatory trip constraints continue
+  // to block this path.
+  const provisionalPlanningAllowed = recommendations?.status === 'empty'
+    || (recommendations?.status === 'needs_confirmation'
+      && recommendations.unresolved_fields.length === 1
+      && recommendations.unresolved_fields[0] === 'destination_resolution');
 
   const resolveNames = async (names: string[], explicitChoices: readonly { index: number; destinationId: string }[] = []) => {
     const sequence = ++resolutionSequenceRef.current;
@@ -670,6 +678,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       setDirty(false);
       
       setStatus(copy.saveSuccess);
+      if (assistantConfigured !== true) setExtractionPath('fallback');
       if (assistantConfigured) {
         try {
           const firstReply = await travelerApi.assistantTurn(csrf, savedConversation.conversation_id, {
@@ -780,6 +789,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                 : 'The assistant daily limit is reached. Your request is saved; it will not be retried automatically.');
           } else if (value instanceof TravelerApiError && value.status === 503) {
             setAssistantState('unavailable');
+            setExtractionPath('fallback');
             setError(assistantCopy[locale].unavailable);
           } else applyFailure(value);
           // The request/conversation remains saved even if the provider fails.
@@ -1033,48 +1043,54 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
 
   const applyAssistantCandidate = () => {
     if (!reviewedAssistantCandidate || !activeTrip) return;
-    if (reviewedAssistantCandidate.destination !== null) {
+    // A blanket "use suggestions" action must not silently override a field
+    // the traveler edited after the model suggestion. They can edit/confirm a
+    // specific replacement in the form; other model suggestions remain usable.
+    const canAcceptModelField = (field: string) =>
+      !manualProfileFieldsRef.current.has(field) || assistantProfileFieldsRef.current.has(field);
+    if (reviewedAssistantCandidate.destination !== null && canAcceptModelField('destination')) {
       acceptAssistantProfileField('destination');
       const names = [reviewedAssistantCandidate.destination];
       setDestinationNames(names);
       void resolveNames(names); // Catalogue verification is separate from AI text.
     }
-    if (reviewedAssistantCandidate.durationDays !== null) {
+    if (reviewedAssistantCandidate.durationDays !== null && canAcceptModelField('duration')) {
       acceptAssistantProfileField('duration');
       setDurationText(String(reviewedAssistantCandidate.durationDays));
     }
-    if (reviewedAssistantCandidate.origin !== undefined) {
+    if (reviewedAssistantCandidate.origin !== undefined && canAcceptModelField('origin')) {
       acceptAssistantProfileField('origin');
       setOriginText(reviewedAssistantCandidate.origin);
     }
-    if (reviewedAssistantCandidate.travelerCount !== undefined) {
+    if (reviewedAssistantCandidate.travelerCount !== undefined && canAcceptModelField('travelers')) {
       acceptAssistantProfileField('travelers');
       setTravelerCountText(String(reviewedAssistantCandidate.travelerCount));
     }
-    if (reviewedAssistantCandidate.budgetText !== undefined) {
+    if (reviewedAssistantCandidate.budgetText !== undefined && canAcceptModelField('budget')) {
       acceptAssistantProfileField('budget');
       setBudgetText(reviewedAssistantCandidate.budgetText);
     }
-    if (reviewedAssistantCandidate.travelStart !== undefined && reviewedAssistantCandidate.travelEnd !== undefined) {
+    if (reviewedAssistantCandidate.travelStart !== undefined && reviewedAssistantCandidate.travelEnd !== undefined
+        && canAcceptModelField('travelStart') && canAcceptModelField('travelEnd')) {
       acceptAssistantProfileField('travelStart'); acceptAssistantProfileField('travelEnd');
       setTravelStartText(reviewedAssistantCandidate.travelStart);
       setTravelEndText(reviewedAssistantCandidate.travelEnd);
     }
-    if (reviewedAssistantCandidate.interest !== undefined) {
+    if (reviewedAssistantCandidate.interest !== undefined && canAcceptModelField('interests')) {
       acceptAssistantProfileField('interests');
       setInterestText(current => displayInterests(parseInterests([current, reviewedAssistantCandidate.interest!].filter(Boolean).join('، ')), locale));
     }
-    if (reviewedAssistantCandidate.softPreferences?.length) {
+    if (reviewedAssistantCandidate.softPreferences?.length && canAcceptModelField('softPreferences')) {
       acceptAssistantProfileField('softPreferences');
       setSoftPreferenceText(current => displayInterests(parseInterests([current, ...reviewedAssistantCandidate.softPreferences!].filter(Boolean).join('، ')), locale));
     }
-    if (reviewedAssistantCandidate.travelDifficulty?.length) {
+    if (reviewedAssistantCandidate.travelDifficulty?.length && canAcceptModelField('difficulty')) {
       acceptAssistantProfileField('difficulty'); setDifficultyText(displayInterests(reviewedAssistantCandidate.travelDifficulty, locale));
     }
-    if (reviewedAssistantCandidate.weatherPreferences?.length) {
+    if (reviewedAssistantCandidate.weatherPreferences?.length && canAcceptModelField('weather')) {
       acceptAssistantProfileField('weather'); setWeatherPreferenceText(displayInterests(reviewedAssistantCandidate.weatherPreferences, locale));
     }
-    if (reviewedAssistantCandidate.localCuisine?.length) {
+    if (reviewedAssistantCandidate.localCuisine?.length && canAcceptModelField('cuisine')) {
       acceptAssistantProfileField('cuisine'); setLocalCuisineText(displayInterests(reviewedAssistantCandidate.localCuisine, locale));
     }
     setDirty(true);
@@ -1690,7 +1706,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                 </ul>}
               </>}
             </div>}
-            {recommendations?.status === 'empty' && !provisionalCandidate && !provisionalItinerary && <section className="provisional-plan-card" aria-label={provisionalText[locale].title}>
+            {provisionalPlanningAllowed && !provisionalCandidate && !provisionalItinerary && <section className="provisional-plan-card" aria-label={provisionalText[locale].title}>
               <span className="provisional-plan-badge">{provisionalText[locale].heading}</span>
               <h4>{provisionalText[locale].title}</h4>
               <p>{provisionalText[locale].warning}</p>
@@ -1717,7 +1733,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
               <button className="secondary" type="button" disabled={busy || !online || !dayCountValid}
                 onClick={() => void saveProvisionalDraft()}>{locale === 'fa-IR' ? 'ساخت برنامهٔ خالی برای ویرایش دستی' : locale === 'ar' ? 'إنشاء خطة فارغة للتحرير اليدوي' : 'Create an editable blank itinerary'}</button>
             </section>}
-            {(provisionalCandidate || provisionalItinerary) && recommendations?.status === 'empty' && <section className="provisional-plan-card" aria-labelledby="provisional-plan-title">
+            {(provisionalCandidate || provisionalItinerary) && provisionalPlanningAllowed && <section className="provisional-plan-card" aria-labelledby="provisional-plan-title">
               <span className="provisional-plan-badge">{provisionalText[locale].heading}</span>
               <h4 id="provisional-plan-title">{provisionalText[locale].title}</h4>
               <p>{provisionalText[locale].warning}</p>
