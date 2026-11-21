@@ -2379,6 +2379,14 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       || ![403, 422].includes(crossTenantWrite.status)) {
       throw new Error('real_provider_cross_tenant_company_access_not_denied');
     }
+    const crossTenantCompanyResponse = await browserApi(page,
+      `/api/v1/partners/organizations/${companyOne}/requests/${shareId}/responses`,
+      'POST', outsider.csrfToken,
+      { client_request_id:crypto.randomUUID(), revision_id:crypto.randomUUID(),
+        response_kind:'accepted_as_requested', message:'forged company response' });
+    if (crossTenantCompanyResponse.status !== 403) {
+      throw new Error('real_provider_cross_tenant_company_response_was_not_denied');
+    }
     safeResult.crossTenantDenied = true;
 
     await page.locator('.auth-signed-in button').first().click();
@@ -2426,6 +2434,13 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     safeResult.protectedCompanyDeepLinks = { request: true, itinerary: true, revision: 2 };
     safeResult.protectedCompanyBrowserViews = 2;
     const companyResponsePath = `/api/v1/partners/organizations/${companyOne}/requests/${shareId}/responses`;
+    const staleCompanyResponse = await browserApi(page,companyResponsePath,'POST',companyOneIdentity.csrfToken,{
+      client_request_id:crypto.randomUUID(),revision_id:sharedRevision.revision_id,
+      response_kind:'accepted_as_requested',message:'stale offer',
+    });
+    if (staleCompanyResponse.status !== 409) {
+      throw new Error('real_provider_stale_company_revision_not_rejected');
+    }
     const acceptedResponse = await requestBrowserJson(page,companyResponsePath,'POST',companyOneIdentity.csrfToken,{
       client_request_id:crypto.randomUUID(),revision_id:changedRevision.revision_id,
       response_kind:'accepted_as_requested',message:'QA: We can support this as requested.',
