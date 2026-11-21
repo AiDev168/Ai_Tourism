@@ -1,3 +1,5 @@
+> **Owner's V2 domain change (2026-11-21):** the *new* Rahgard V2 must use **https://hinaa.ir/** at the root, not the old `rahgard.hinaa.ir` hostname documented below. The old dedicated `:63202` Nginx installer and existing private VPS `.env` should remain untouched until [V2 apex cutover](../../docs/operations/RAHGARD_V2_APEX_DOMAIN_CUTOVER.md) has passed read-only occupancy/TLS/Arvan/vhost review and the owner separately approves the live switch. If `hinaa.ir` already serves an unrelated site, STOP rather than overwrite it.
+
 # Rahgard private Ubuntu staging
 
 This package is an isolated, invitation-only staging deployment. It uses a new

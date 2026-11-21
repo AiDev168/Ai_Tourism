@@ -1,3 +1,5 @@
+> **NEW DOMAIN GATE R0-DOMAIN (BLOCKED until measured):** V2's mandatory canonical URL is **https://hinaa.ir/** (apex root, secure port 443), **not** the historical `rahgard.hinaa.ir`. Read [domain-specific cutover plan](RAHGARD_V2_APEX_DOMAIN_CUTOVER.md). First audit apex ownership/occupancy, public TLS SAN, DNS/Arvan/Nginx/SNI and the old `:63202` listener with read-only probes. The old `install-nginx-vhost.sh` is pinned to `rahgard.hinaa.ir` and cannot be repurposed by simply changing the host string. Exact apex HTTPS, company/traveler auth+PWA functionality and preservation of unrelated services are mandatory acceptance conditions. No DNS or running-service changes without separate owner approval.
+
 # Rahgard V2 — VPS readiness and three-environment release identity (2026-11-21)
 
 **Decision: PREPARATION GO; LIVE DEPLOYMENT NO-GO pending explicit, evidence-based owner approval.**
