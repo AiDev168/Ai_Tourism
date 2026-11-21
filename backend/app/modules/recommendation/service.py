@@ -109,7 +109,7 @@ _FIELD_REASON_CODES = {
     "hard_constraint": "hard_constraints_unverifiable",
     "soft_preference": "preference_unverifiable",
     "duration_days": "requirements_incomplete",
-    "destination_resolution": "requirements_incomplete", "trip_profile": "requirements_incomplete",
+    "destination_resolution": "destination_identity_unresolved", "trip_profile": "requirements_incomplete",
 }
 _KNOWN_FIELD_REASON_CODES = {
     "destination": "requested_destination_identity_unresolved",
@@ -359,10 +359,8 @@ def _assess_requirements(
     ambiguous_codes = _canonical_list(ambiguous)
     confirmation_codes = _canonical_list(confirmation)
 
-    unresolved: list[str] = [*missing_codes, *ambiguous_codes, *confirmation_codes]
+    unresolved: list[str] = [*ambiguous_codes, *confirmation_codes]
     known_fields: list[str] = []
-    if extraction_status == "needs_clarification":
-        unresolved.append("trip_profile")
     for key in requirements:
         if (
             key in _FIELD_WRAPPED_KEYS and isinstance(requirements[key], Mapping)
@@ -498,6 +496,22 @@ def _assess_requirements(
         normalized_profile_ids = ()
     if destinations and not profile_destination_ids:
         unresolved.append("destination_resolution")
+
+    # Some older reviewed snapshots retain intake flags. Validate the current
+    # values before ignoring an obsolete missing flag. Explicit ambiguity,
+    # confirmation requirements and unresolved safety fields still block.
+    repaired_missing: set[str] = set()
+    if requirements.get("confirmation_source") == "traveler_reviewed":
+        if destinations and isinstance(requirements.get("destinations"), (tuple, list)):
+            repaired_missing.add("destination_resolution")
+        if "duration_days" in known_fields and type(requirements.get("duration_days")) is int:
+            repaired_missing.add("duration_days")
+    current_missing = [code for code in missing_codes if code not in repaired_missing]
+    if extraction_status == "needs_clarification" and (
+        not missing_codes or current_missing or ambiguous_codes or confirmation_codes
+    ):
+        unresolved.append("trip_profile")
+    unresolved = [*current_missing, *unresolved]
 
     has_destination_text = bool(destinations)
     unique_unresolved = tuple(dict.fromkeys(unresolved))
@@ -680,9 +694,16 @@ def recommend_trip(
         # An exact requested place with no resolved production identity is a
         # catalogue-unavailable outcome when the approved view is empty. Other
         # explicit, unverifiable requirements still need traveler confirmation.
-        if not catalogue and blocking_fields == ["destination_resolution"] and has_destination_text:
+        if blocking_fields == ["destination_resolution"] and has_destination_text:
+            if catalogue:
+                return RecommendationOutcome(
+                    status="needs_confirmation", reason_code="destination_identity_unresolved",
+                    unresolved_fields=blocking_fields, duration_days=duration_days,
+                    **consent_metadata, items=[],
+                )
             return RecommendationOutcome(
-                status="empty", reason_code="catalogue_empty", **consent_metadata, items=[]
+                status="empty", reason_code="catalogue_empty", duration_days=duration_days,
+                **consent_metadata, items=[],
             )
         if "hard_constraint" in blocking_fields:
             reason = "hard_constraints_unverifiable"

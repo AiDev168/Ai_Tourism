@@ -311,12 +311,13 @@ export type TravelerJourneyProps = {
   travelerTimezone?: string;
   suggestedOrigin?: { approximateText: string; accuracyMeters: number } | null;
   onManualDateOverride?: () => void;
+  onConversationVisibilityChange?: (active: boolean) => void;
   onSessionExpired: () => void;
   onRestoreRequest: (text: string, requirements: TripRequirements) => void;
   onStartNewDraft: () => void;
 };
 
-export function TravelerJourney({ locale, session, online, requirements, autoStartConversation = false, assistantConfigured = true, travelerTimezone = 'Asia/Tehran', suggestedOrigin = null, onManualDateOverride, onSessionExpired, onRestoreRequest, onStartNewDraft }: TravelerJourneyProps) {
+export function TravelerJourney({ locale, session, online, requirements, autoStartConversation = false, assistantConfigured = true, travelerTimezone = 'Asia/Tehran', suggestedOrigin = null, onManualDateOverride, onConversationVisibilityChange, onSessionExpired, onRestoreRequest, onStartNewDraft }: TravelerJourneyProps) {
   const copy = journeyMessages[locale];
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversation, setActiveConversation] = useState<ConversationRecord | null>(null);
@@ -346,7 +347,8 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const [messageText, setMessageText] = useState('');
   const [assistantPromptSelected, setAssistantPromptSelected] = useState(false);
   // AI is available by default; the server/provider still enforces access and quotas.
-  const [assistantState, setAssistantState] = useState<'loading' | 'configured' | 'disabled' | 'unavailable' | 'quota_exhausted' | 'responded'>('loading');
+  const [assistantState, setAssistantState] = useState<'loading' | 'configured' | 'connected' | 'disabled' | 'unavailable' | 'quota_exhausted' | 'responded'>('loading');
+  const [assistantReplyPending, setAssistantReplyPending] = useState(false);
   const [assistantRemaining, setAssistantRemaining] = useState<number | null>(null);
   const [shareOptions, setShareOptions] = useState<Array<{ organization_id: string; display_name: string; organization_type: string }>>([]);
   const [tripShares, setTripShares] = useState<Array<{ share_id: string; organization_id: string; display_name: string; revoked_at: string | null; latest_revision: number | null }>>([]);
@@ -395,9 +397,15 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const travelerCountValid = travelerCountText.trim() === '' || (/^[0-9]{1,2}$/.test(travelerCountText.trim())
     && Number(travelerCountText) >= 1 && Number(travelerCountText) <= 50);
   const consentComplete = consentIsComplete(consentFields, requirementChoices, advisoryAcknowledgements);
+  const hasDestination = destinationNames.some(name => name.trim());
+  const reviewedDuration = validDayCount(Number(durationText));
+  const [attemptedProfileReview, setAttemptedProfileReview] = useState(false);
+  const optionalField = locale === 'fa-IR' ? '(اختیاری)' : locale === 'ar' ? '(اختياري)' : '(Optional)';
   const reviewedAssistantCandidate = reviewableAssistantCandidate(assistantCandidate);
   const requirementCopy = requirementClarificationMessages[locale];
   const guidedQuestion = activeTrip ? nextTripQuestion(locale, destinationNames, durationText) : null;
+  const conversationVisible = Boolean(session && activeTrip && activeConversation);
+  useEffect(() => onConversationVisibilityChange?.(conversationVisible), [conversationVisible, onConversationVisibilityChange]);
   const invalidateConsent = () => {
     setRequirementChoices({});
     setAdvisoryAcknowledgements({});
@@ -680,6 +688,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       setStatus(copy.saveSuccess);
       if (assistantConfigured !== true) setExtractionPath('fallback');
       if (assistantConfigured) {
+        setAssistantReplyPending(true);
         try {
           const firstReply = await travelerApi.assistantTurn(csrf, savedConversation.conversation_id, {
             trip_id: savedTrip.trip_id,
@@ -717,6 +726,22 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
           };
           const canApply = (fieldName: string, manualField: string) => candidateCanReplace(fieldName, manualField);
           if (interpreted && typed && typed.original_text === requirements.requestText) {
+            const modelLeftOpen = (field: keyof typeof typed.fields, draftField: string, manualField: string) =>
+              typed.fields[field]?.status !== 'known' && typed.fields[field]?.source === 'llm'
+              && canApply(draftField, manualField);
+            if (modelLeftOpen('destination', 'destinations', 'destination')) {
+              setDestinationNames([]); void resolveNames([]);
+            }
+            if (modelLeftOpen('duration_days', 'durationDays', 'duration')) setDurationText('');
+            if (modelLeftOpen('origin', 'origin', 'origin')) setOriginText('');
+            if (modelLeftOpen('travelers', 'travelerCount', 'travelers')) setTravelerCountText('');
+            if (modelLeftOpen('budget', 'budget', 'budget')) setBudgetText('');
+            if (modelLeftOpen('interests', 'interests', 'interests')) setInterestText('');
+            if (modelLeftOpen('travel_dates', 'travelDates', 'travelStart')
+                && modelLeftOpen('relative_start_date', 'relativeStartDate', 'travelStart')) {
+              setTravelStartText('');
+              if (canApply('travelDates', 'travelEnd')) setTravelEndText('');
+            }
             if (interpreted.destination && canApply('destinations', 'destination') && hasDirectEvidence('destination')) {
               setDestinationNames([interpreted.destination]); void resolveNames([interpreted.destination]); acceptAssistantProfileField('destination'); improved = true;
             }
@@ -801,7 +826,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
           savedTrip = freshTrip;
           setActiveConversation(savedConversation);
           setActiveTrip(savedTrip);
-        }
+        } finally { setAssistantReplyPending(false); }
       }
       const history = await travelerApi.listConversations(50);
       setConversations(history.items);
@@ -848,10 +873,10 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       setDurationText(restoredDays === null ? '' : String(restoredDays));
       const approvedOrigin = trip.confirmed_requirements.origin;
       const restoredOrigin = hasReviewedProfile && typeof approvedOrigin === 'string' && approvedOrigin.length <= 100
-        ? approvedOrigin : (parsed?.origin.value ?? '');
+        ? approvedOrigin : hasReviewedProfile ? '' : (parsed?.origin.value ?? '');
       const approvedCount = validDayCount(trip.confirmed_requirements.traveler_count);
       const restoredTravelerCount = hasReviewedProfile && approvedCount !== null && approvedCount <= 50
-        ? String(approvedCount) : (parsed?.travelerCount.value !== null && parsed?.travelerCount.value !== undefined
+        ? String(approvedCount) : hasReviewedProfile ? '' : (parsed?.travelerCount.value !== null && parsed?.travelerCount.value !== undefined
           ? String(parsed.travelerCount.value)
           : trip.traveler_count !== null ? String(trip.traveler_count) : '');
       setOriginText(restoredOrigin);
@@ -859,15 +884,16 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       const savedBudget = trip.confirmed_requirements.budget;
       const restoredBudget = hasReviewedProfile && savedBudget && typeof savedBudget === 'object'
         && !Array.isArray(savedBudget) && typeof (savedBudget as Record<string, unknown>).raw === 'string'
-        ? String((savedBudget as Record<string, unknown>).raw) : (parsed?.budget.value?.raw ?? '');
+        ? String((savedBudget as Record<string, unknown>).raw) : hasReviewedProfile ? '' : (parsed?.budget.value?.raw ?? '');
       const savedDates = trip.confirmed_requirements.travel_dates;
       const restoredDates = hasReviewedProfile && savedDates && typeof savedDates === 'object'
         && !Array.isArray(savedDates) ? savedDates as Record<string, unknown> : null;
-      const restoredStart = typeof restoredDates?.start === 'string' ? restoredDates.start : (parsed?.travelDates.value?.start ?? parsed?.relativeStartDate.value?.anchor_date ?? '');
+      const restoredStart = typeof restoredDates?.start === 'string' ? restoredDates.start
+        : hasReviewedProfile ? '' : (parsed?.travelDates.value?.start ?? parsed?.relativeStartDate.value?.anchor_date ?? '');
       const inferredEnd = restoredStart && restoredDays !== null ? inclusiveEndDate(restoredStart, restoredDays) : null;
       const restoredEnd = typeof restoredDates?.end === 'string' && restoredDates.end.trim()
         ? restoredDates.end
-        : (parsed?.travelDates.value?.end || inferredEnd || '');
+        : hasReviewedProfile ? '' : (parsed?.travelDates.value?.end || inferredEnd || '');
       const savedInterests = trip.confirmed_requirements.interests;
       const restoredInterests = hasReviewedProfile && Array.isArray(savedInterests)
         && savedInterests.every(value => typeof value === 'string')
@@ -988,6 +1014,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     const content = overrideContent?.trim() || messageText.trim() || assistantCopy[locale].initial;
     if (content.length > 1200) return;
     setBusy(true); setError(''); setStatus('');
+    setAssistantReplyPending(true);
     setAssistantCandidate(null);
     try {
       const result = await travelerApi.assistantTurn(csrf, activeConversation.conversation_id, {
@@ -1038,7 +1065,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
         ]);
         setActiveConversation(conversation); setActiveTrip(trip);
       } catch { /* Keep the original safe error. */ }
-    } finally { setBusy(false); }
+    } finally { setAssistantReplyPending(false); setBusy(false); }
   };
 
   const applyAssistantCandidate = () => {
@@ -1075,6 +1102,17 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       acceptAssistantProfileField('travelStart'); acceptAssistantProfileField('travelEnd');
       setTravelStartText(reviewedAssistantCandidate.travelStart);
       setTravelEndText(reviewedAssistantCandidate.travelEnd);
+    } else if (reviewedAssistantCandidate.relativeStartDate?.anchorDate && canAcceptModelField('travelStart')) {
+      const start = reviewedAssistantCandidate.relativeStartDate.anchorDate;
+      acceptAssistantProfileField('travelStart');
+      setTravelStartText(start);
+      if (canAcceptModelField('travelEnd')) {
+        const end = inclusiveEndDate(start, reviewedAssistantCandidate.durationDays ?? Number(durationText));
+        if (end) {
+          acceptAssistantProfileField('travelEnd');
+          setTravelEndText(end);
+        }
+      }
     }
     if (reviewedAssistantCandidate.interest !== undefined && canAcceptModelField('interests')) {
       acceptAssistantProfileField('interests');
@@ -1096,9 +1134,15 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     setDirty(true);
     invalidateConsent(); // Explicit profile confirmation remains mandatory.
     setAssistantCandidate(null);
+    document.getElementById('trip-profile-editor')?.focus();
   };
 
   const confirmProfile = async () => {
+    setAttemptedProfileReview(true);
+    if (!hasDestination || reviewedDuration === null) {
+      document.getElementById(!hasDestination ? 'profile-destination-0' : 'profile-duration')?.focus();
+      return;
+    }
     if (!session || !activeTrip || !online || !consentComplete || !travelerCountValid
         || !budgetValid || !datesValid || !interestsValid || !softPreferencesValid) {
       if (!online) setError(copy.offline);
@@ -1109,7 +1153,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       return;
     }
     setBusy(true); setError(''); setStatus('');
-    const duration = durationText.trim() === '' ? null : Number(durationText);
+    const duration = reviewedDuration;
     const fieldSource = (manualField: string, source: string | undefined) =>
       manualProfileFieldsRef.current.has(manualField) && !assistantProfileFieldsRef.current.has(manualField)
         ? 'correction' : assistantProfileFieldsRef.current.has(manualField) ? 'llm' : source ?? 'traveler';
@@ -1118,15 +1162,15 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       duration_days: duration,
       origin: originText.trim() || null,
       travel_dates: travelStartText && travelEndText
-        ? { start: travelStartText, end: travelEndText } : (extracted?.travelDates.value ?? null),
+        ? { start: travelStartText, end: travelEndText } : null,
       traveler_count: travelerCountText.trim() ? Number(travelerCountText.trim()) : null,
       accessibility: extracted?.accessibility?.value ?? [],
       travel_difficulty: parseInterests(difficultyText),
       weather_preferences: parseInterests(weatherPreferenceText),
       local_cuisine: parseInterests(localCuisineText),
-      budget: parseReviewedBudget(budgetText, locale) ?? extracted?.budget.value ?? null,
-      soft_preferences: softPreferences.length ? softPreferences : (extracted?.softPreferences.value ?? []),
-      interests: interests.length ? interests : (extracted?.interests.value ?? []),
+      budget: parseReviewedBudget(budgetText, locale),
+      soft_preferences: softPreferences,
+      interests,
       constraints: extracted?.constraints.value ?? [],
       confirmation_source: 'traveler_reviewed',
       field_provenance: {
@@ -1203,7 +1247,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     if (!session || !activeTrip || !confirmed || dirty || !online) { if (!online) setError(copy.offline); return; }
     setBusy(true); setError(''); setStatus('');
     try {
-      const result = await travelerApi.recommend(csrf, activeTrip.trip_id, selectedIds);
+      const result = await travelerApi.recommend(csrf, activeTrip.trip_id, activeTrip.destination_ids ?? []);
       setRecommendations(result); setItinerary(null);
       if (result.status === 'empty' || result.status === 'needs_confirmation') {
         const savedDraft = await travelerApi.getProvisionalItinerary(activeTrip.trip_id).catch(() => null);
@@ -1211,6 +1255,11 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       }
       const refreshed = await travelerApi.getTrip(activeTrip.trip_id);
       setActiveTrip(refreshed);
+      if (result.reason_code === 'requirement_consent_stale') {
+        setConfirmed(false);
+        setError(localizeRecommendationCode(locale, result.reason_code));
+        document.querySelector('.profile-confirm-action')?.scrollIntoView({ block: 'center' });
+      }
     } catch (value) { applyFailure(value); }
     finally { setBusy(false); }
   };
@@ -1447,16 +1496,19 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
             onChange={event => { setMessageText(event.target.value); setAssistantPromptSelected(false); }}
             maxLength={1200} rows={3} dir="auto" />
           {assistantPromptSelected && <p className="assistant-prompt-warning" role="status">{assistantCopy[locale].promptForAi}</p>}
-          <div className="conversation-local-action">
+          <details className="conversation-local-action">
+            <summary>{assistantCopy[locale].saveWithoutAI}</summary>
             <button type="button" onClick={() => void sendMessage()}
               disabled={busy || !messageText.trim() || !online || assistantPromptSelected}>{assistantCopy[locale].saveWithoutAI}</button>
             <small>{copy.localSaveHelp}</small>
-          </div>
+          </details>
           <div className="assistant-controls">
 
             <p className="assistant-provider-state" role="status" data-provider-state={assistantState}>
-              {assistantState === 'loading' ? (locale === 'fa-IR' ? 'در حال بررسی وضعیت دستیار…' : locale === 'ar' ? 'جارٍ التحقق من حالة المساعد…' : 'Checking assistant status…')
+              {assistantReplyPending ? (locale === 'fa-IR' ? 'دستیار در حال پاسخ‌گویی است…' : locale === 'ar' ? 'يكتب المساعد الرد…' : 'The assistant is replying…')
+                : assistantState === 'loading' ? (locale === 'fa-IR' ? 'در حال بررسی وضعیت دستیار…' : locale === 'ar' ? 'جارٍ التحقق من حالة المساعد…' : 'Checking assistant status…')
                 : assistantState === 'configured' ? (locale === 'fa-IR' ? 'مسیر دستیار تنظیم شده است؛ پاسخ موفق هنوز در این گفت‌وگو ثبت نشده.' : locale === 'ar' ? 'مسار المساعد مُعدّ؛ لم يُسجّل رد ناجح في هذه المحادثة بعد.' : 'Assistant route is configured; no successful reply is recorded in this conversation yet.')
+                  : assistantState === 'connected' ? (locale === 'fa-IR' ? 'اتصال به سرویس هوش مصنوعی برقرار است.' : locale === 'ar' ? 'تم الاتصال بخدمة الذكاء الاصطناعي.' : 'Connected to the AI service.')
                   : assistantState === 'responded' ? (locale === 'fa-IR' ? 'دستیار در همین گفت‌وگو پاسخ داده است.' : locale === 'ar' ? 'أجاب المساعد في هذه المحادثة.' : 'The assistant has replied in this conversation.')
                     : assistantState === 'quota_exhausted' ? (locale === 'fa-IR' ? 'سهمیهٔ روزانهٔ دستیار تمام شده است.' : locale === 'ar' ? 'اكتملت الحصة اليومية للمساعد.' : 'The assistant daily limit is reached.')
                       : assistantState === 'disabled' ? (locale === 'fa-IR' ? 'پاسخ‌گویی هوشمند فعال نیست؛ می‌توانید اطلاعات سفر را دستی ذخیره کنید.' : locale === 'ar' ? 'المساعد غير مفعّل؛ يمكنك حفظ تفاصيل الرحلة يدوياً.' : 'AI replies are disabled; you can still save trip details manually.')
@@ -1465,7 +1517,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
             </p>
             <p className="assistant-action-help">{assistantCopy[locale].advisorActionHelp}</p>
             <button className="primary" type="button" onClick={() => void askAssistant()}
-              disabled={busy || !online || messageText.length > 1200}>
+              disabled={busy || !online || !messageText.trim() || messageText.length > 1200}>
               {assistantCopy[locale].send}
             </button>
             {reviewedAssistantCandidate &&
@@ -1524,7 +1576,9 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                   </>}
                 </dl>
                 <p>{assistantCopy[locale].unsaved}</p>
-                <button type="button" onClick={applyAssistantCandidate} disabled={busy}>{assistantCopy[locale].apply}</button>
+                <button type="button" onClick={applyAssistantCandidate} disabled={busy}>
+                  {locale === 'fa-IR' ? 'استخراج نیازهای سفر' : locale === 'ar' ? 'استخراج متطلبات الرحلة' : 'Extract trip requirements'}
+                </button>
                 <button type="button" onClick={() => setAssistantCandidate(null)} disabled={busy}>{assistantCopy[locale].dismiss}</button>
               </div>}
           </div>
@@ -1536,12 +1590,12 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
             {extractionPath === 'llm' ? 'Extraction: configured LLM' : extractionPath === 'user_override' ? 'Extraction: traveler correction' : 'Extraction: deterministic fallback'}
           </small>}
           <p className="profile-next-step">{chatFlowCopy[locale].review}</p>
-          {extracted && <div className="profile-editor">
+          {extracted && <div className="profile-editor" id="trip-profile-editor" tabIndex={-1}>
             <fieldset>
               <legend>{copy.profileDestination} <span className="trip-field-required">{locale === 'fa-IR' ? '(ضروری)' : locale === 'ar' ? '(مطلوب)' : '(Required)'}</span></legend>
-              {destinationNames.map((name, index) => <div className="destination-edit-row" key={index}>
+              {(destinationNames.length ? destinationNames : ['']).map((name, index) => <div className="destination-edit-row" key={index}>
                 <label htmlFor={`profile-destination-${index}`}>{copy.profileDestination} {formatNumber(locale, index + 1)}</label>
-                <input id={`profile-destination-${index}`} aria-required="true" aria-invalid={!name.trim()} value={name} onChange={event => {
+                <input id={`profile-destination-${index}`} aria-required={index === 0} aria-invalid={attemptedProfileReview && !hasDestination && index === 0} value={name} onChange={event => {
                   markProfileFieldEdited('destination');
                   const next = destinationNames.slice(); next[index] = event.target.value; setDestinationNames(next); setDirty(true); invalidateConsent(); void resolveNames(next);
                 }} dir="auto" />
@@ -1580,10 +1634,13 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                       {catalogueNextCursor && <button type="button" disabled={catalogueLoading} onClick={() => void browseCatalogue(catalogueNextCursor,true)}>{locale === 'fa-IR' ? 'نتایج بیشتر' : locale === 'ar' ? 'المزيد من النتائج' : 'Load more results'}</button>}
                     </>}
               </div>}
-              {!destinationNames.length && <p>{copy.noDestination}</p>}
+              {!hasDestination && <p role={attemptedProfileReview ? 'alert' : undefined}>{copy.noDestination}</p>}
             </fieldset>
             <label htmlFor="profile-duration">{copy.profileDuration} <span className="trip-field-required">{locale === 'fa-IR' ? '(ضروری)' : locale === 'ar' ? '(مطلوب)' : '(Required)'}</span></label>
-            <input id="profile-duration" type="number" min="1" max="365" aria-required="true" aria-invalid={!durationText.trim() || !Number.isInteger(Number(durationText)) || Number(durationText) < 1 || Number(durationText) > 365} value={durationText} onChange={event => { const value = event.target.value; markProfileFieldEdited('duration'); setDurationText(value); const duration = Number(value); const start = travelStartText || extracted?.relativeStartDate.value?.anchor_date || extracted?.relativeDateResolution?.start || ''; if (start && extracted?.relativeStartDate.value && !manualProfileFieldsRef.current.has('travelEnd')) { const end = inclusiveEndDate(start, duration); if (end) setTravelEndText(end); } setDirty(true); invalidateConsent(); }} />
+            <input id="profile-duration" type="number" min="1" max="365" aria-required="true" aria-invalid={attemptedProfileReview && reviewedDuration === null} aria-describedby={attemptedProfileReview && reviewedDuration === null ? 'profile-duration-error' : undefined} value={durationText} onChange={event => { const value = event.target.value; markProfileFieldEdited('duration'); setDurationText(value); const duration = Number(value); const start = travelStartText || extracted?.relativeStartDate.value?.anchor_date || extracted?.relativeDateResolution?.start || ''; if (start && extracted?.relativeStartDate.value && !manualProfileFieldsRef.current.has('travelEnd')) { const end = inclusiveEndDate(start, duration); if (end) setTravelEndText(end); } setDirty(true); invalidateConsent(); }} />
+            {attemptedProfileReview && reviewedDuration === null && <p id="profile-duration-error" className="journey-error" role="alert">
+              {locale === 'fa-IR' ? 'مدت سفر را به‌صورت عدد صحیح بین ۱ تا ۳۶۵ روز وارد کنید.' : locale === 'ar' ? 'أدخل مدة الرحلة بعدد صحيح بين يوم واحد و٣٦٥ يومًا.' : 'Enter a whole number from 1 to 365 days.'}
+            </p>}
             <label htmlFor="profile-origin">{copy.profileOrigin} <span className="trip-field-optional">{locale === 'fa-IR' ? '(اختیاری)' : locale === 'ar' ? '(اختياري)' : '(Optional)'}</span></label>
             <input id="profile-origin" type="text" maxLength={100} dir="auto" value={originText}
               onChange={event => { markProfileFieldEdited('origin'); setOriginText(event.target.value); setDirty(true); invalidateConsent(); }} />
@@ -1632,7 +1689,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
             <label htmlFor="profile-travel-difficulty">{locale === 'fa-IR' ? 'ترجیح سختی مسیر' : locale === 'ar' ? 'مستوى صعوبة المسار' : 'Travel difficulty preference'}</label>
             <textarea id="profile-travel-difficulty" maxLength={300} rows={2} dir="auto" value={difficultyText}
               onChange={event => { markProfileFieldEdited('difficulty'); setDifficultyText(event.target.value); setDirty(true); invalidateConsent(); }} />
-            <label htmlFor="profile-weather-preferences">{locale === 'fa-IR' ? 'ترجیح‌های آب‌وهوا' : locale === 'ar' ? 'تفضيلات الطقس' : 'Weather preferences'}</label>
+            <label htmlFor="profile-weather-preferences">{locale === 'fa-IR' ? 'ترجیح‌های آب‌وهوا' : locale === 'ar' ? 'تفضيلات الطقس' : 'Weather preferences'} {optionalField}</label>
             <textarea id="profile-weather-preferences" maxLength={300} rows={2} dir="auto" value={weatherPreferenceText}
               onChange={event => { markProfileFieldEdited('weather'); setWeatherPreferenceText(event.target.value); setDirty(true); invalidateConsent(); }} />
             <label htmlFor="profile-local-cuisine">{locale === 'fa-IR' ? 'علاقه به خوراک محلی' : locale === 'ar' ? 'اهتمام بالمأكولات المحلية' : 'Local cuisine interests'}</label>
@@ -1690,7 +1747,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
               <legend>{item.originalPhrase}</legend>
               {item.candidates.map(candidate => <label key={candidate.destinationId} dir="auto"><input type="radio" name={`traveler-choice-${index}`} checked={resolution.items[index]?.kind === 'confirmed' && resolution.items[index].destination.destinationId === candidate.destinationId} onChange={() => { resolutionSequenceRef.current += 1; setResolution(current => current ? confirmDestinationCandidate(current, index, candidate.destinationId) : current); }} />{candidate.localizedNames[locale] ?? candidate.canonicalName} · {candidate.provinceName}</label>)}
               <button type="button" onClick={() => { setError(copy.recommendationClarify); document.getElementById(`profile-destination-${index}`)?.focus(); }}>{copy.noneOfThese}</button>
-            </fieldset> : item.kind === 'resolved' || item.kind === 'confirmed' ? <p key={index} role="status" dir="auto">{item.destination.localizedNames[locale] ?? item.destination.canonicalName} · {item.kind === 'resolved' ? copy.catalogueMatch : copy.selectedByYou}</p> : item.kind === 'not-found' ? <p key={index} role="status">{item.originalPhrase}: {copy.recommendationClarify}</p> : null)}
+            </fieldset> : item.kind === 'resolved' || item.kind === 'confirmed' ? <p key={index} role="status" dir="auto">{item.destination.localizedNames[locale] ?? item.destination.canonicalName} · {item.kind === 'resolved' ? copy.catalogueMatch : copy.selectedByYou}</p> : item.kind === 'not-found' ? <p key={index} role="status">{item.originalPhrase}: {localizeRecommendationCode(locale, 'destination_identity_unresolved')}</p> : null)}
             <button type="button" className="primary profile-confirm-action" onClick={() => void confirmProfile()} disabled={busy || (!dirty && confirmed) || !online || !consentComplete || !travelerCountValid
               || !budgetValid || !datesValid || !interestsValid}>{copy.confirmProfile}</button>
           </div>}
@@ -1698,9 +1755,10 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
             <h3>{copy.recommendationTitle}</h3>
             <button type="button" onClick={() => void findRecommendations()} disabled={busy || !online}>{busy ? copy.checkingRecommendations : copy.findRecommendations}</button>
             {recommendations && recommendations.status !== 'available' && <div className="empty-state" role="status">
-              <p>{recommendations.status === 'needs_confirmation' ? copy.recommendationClarify : copy.recommendationEmpty}</p>
+              <p>{recommendations.status === 'empty' ? copy.recommendationEmpty : recommendations.reason_code
+                ? localizeRecommendationCode(locale, recommendations.reason_code)
+                : copy.recommendationClarify}</p>
               {recommendations.status === 'needs_confirmation' && <>
-                {recommendations.reason_code && <p>{localizeRecommendationCode(locale, recommendations.reason_code)}</p>}
                 {!!recommendations.unresolved_fields.length && <ul className="unresolved-requirements">
                   {recommendations.unresolved_fields.map(field => <li key={field}>{localizeRecommendationCode(locale, `field:${field}`)}</li>)}
                 </ul>}
@@ -1711,17 +1769,18 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
               <h4>{provisionalText[locale].title}</h4>
               <p>{provisionalText[locale].warning}</p>
               <p>{locale === 'fa-IR'
-                ? 'کاتالوگ مقصد هنوز خالی است؛ این موضوع نباید مانع ساخت یک پیش‌نویس روزبه‌روزِ قابل ویرایش شود.'
+                ? 'برای این درخواست پیشنهاد تأییدشده‌ای پیدا نشد. می‌توانید یک پیش‌نویس روزبه‌روز و قابل ویرایش تهیه کنید.'
                 : locale === 'ar'
-                  ? 'فهرس الوجهات المعتمدة فارغ، لكن يمكنك إنشاء خطة أولية يومية قابلة للتعديل.'
-                  : 'The verified destination catalogue is empty. You can still create an editable day-by-day draft.'}</p>
-              <button className="primary" type="button" disabled={busy || !online || !assistantConfigured}
+                  ? 'لا توجد توصية موثقة لهذا الطلب. يمكنك إنشاء مسودة يومية قابلة للتعديل.'
+                  : 'There are no verified suggestions for this request. You can create an editable day-by-day draft.'}</p>
+              <button id="generate-provisional-itinerary" className="primary" type="button" disabled={busy || !online || !assistantConfigured}
                 onClick={() => {
                   const duration = requestedTripDays ?? Number(durationText);
                   const summary = [
                     destinationNames.filter(Boolean).join('، '),
                     Number.isInteger(duration) && duration > 0 ? String(duration) : '',
                     originText, travelStartText, travelEndText, travelerCountText, budgetText, interestText,
+                    difficultyText, weatherPreferenceText, localCuisineText, softPreferenceText,
                   ].filter(Boolean).join(' | ').slice(0, 650);
                   const instruction = locale === 'fa-IR'
                     ? `برای این اطلاعات تأییدشدهٔ سفر (${summary})، لطفاً یک پیش‌نویس برنامهٔ روزبه‌روز با نام مکان‌های پیشنهادی در قالب provisional_itinerary تهیه کن. همهٔ مکان‌ها تأییدنشده‌اند؛ ساعت، هزینه، مسیر و اطلاعات ایمنی را ادعا نکن.`
@@ -1747,7 +1806,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                     </div>;
                   })}
                 </div>
-                <button className="primary" type="button" onClick={() => void saveProvisionalDraft()} disabled={busy || !online || !dayCountValid}>{busy ? copy.saving : provisionalText[locale].save}</button>
+                <button id="save-provisional-itinerary" className="primary" type="button" onClick={() => void saveProvisionalDraft()} disabled={busy || !online || !dayCountValid}>{busy ? copy.saving : provisionalText[locale].save}</button>
               </>}
               {provisionalItinerary && <p role="status">{provisionalText[locale].saved}</p>}
             </section>}
@@ -1822,9 +1881,12 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
           <legend>{locale === 'fa-IR' ? 'شرکت‌های تأییدشده' : locale === 'ar' ? 'الشركات المعتمدة' : 'Verified companies'}</legend>
           {shareOptions.map(option => <label key={option.organization_id}>
             <input type="checkbox" checked={selectedShareOrganizations.includes(option.organization_id)}
-              onChange={event => setSelectedShareOrganizations(current => event.currentTarget.checked
-                ? [...new Set([...current, option.organization_id])].slice(0, 10)
-                : current.filter(id => id !== option.organization_id))} />
+              onChange={event => {
+                const checked = event.currentTarget.checked;
+                setSelectedShareOrganizations(current => checked
+                  ? [...new Set([...current, option.organization_id])].slice(0, 10)
+                  : current.filter(id => id !== option.organization_id));
+              }} />
             <span>{option.display_name}</span>
           </label>)}
           <label><input type="checkbox" checked={includeOriginalRequestInShare}

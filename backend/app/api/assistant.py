@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import date, timedelta
+from time import monotonic
 from typing import Annotated, Any, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -19,11 +20,12 @@ from app.core.config import Settings, get_settings
 from app.modules.identity.authorization import Principal, get_principal
 from app.modules.integrations.ai_gateway import AiProviderGateway
 from app.modules.integrations.chat_adapter import (
-    ChatRequest, ChatReply, ProvisionalItinerary, make_chat_gateway,
+    ChatRequest, ChatReply, ProvisionalItinerary, make_chat_adapter, make_chat_gateway,
 )
 from app.modules.trip.assistant_turns import AssistantTurnRepository, ChatBudgetExceeded
 from app.modules.trip.requirements_interpretation import (
-    EvidenceSpan, RelativeStartDateValue, RequirementValue, TripRequirementsV1, interpret_trip_requirements,
+    EvidenceSpan, RelativeStartDateValue, RequirementValue, TripClarification, TripRequirementsV1,
+    interpret_trip_requirements,
     parse_explicit_budget_text,
 )
 from app.modules.trip.repository import (
@@ -34,6 +36,7 @@ from app.modules.provider_admin.runtime import make_admin_chat_gateway, provider
 
 router = APIRouter(prefix='/api/v1', tags=['traveler'])
 logger = logging.getLogger('ai_tourism.assistant')
+_model_readiness: tuple[int, float, bool] | None = None
 
 
 class AssistantTurnRequest(BaseModel):
@@ -230,17 +233,18 @@ def _chat_route_state(settings: Settings) -> str:
 
 
 @router.get('/assistant/status')
-def assistant_status(
+async def assistant_status(
     response: Response,
     principal: Annotated[Principal, Depends(get_principal)],
     settings: Annotated[Settings, Depends(get_settings)],
     repository: Annotated[AssistantTurnRepository, Depends(get_assistant_turn_repository)],
 ):
     """Return safe route/quota facts without spending an assistant invocation."""
+    global _model_readiness
     response.headers['Cache-Control'] = 'no-store'
     try:
-        route_state = _chat_route_state(settings)
-        budget = repository.budget_status(
+        route_state = await run_in_threadpool(_chat_route_state, settings)
+        budget = await run_in_threadpool(repository.budget_status,
             user_id=principal.user_id,
             per_user_limit=settings.internal_chat_daily_user_limit,
             global_limit=settings.internal_chat_daily_global_limit,
@@ -250,6 +254,16 @@ def assistant_status(
             budget['user_remaining'] == 0 or budget['global_remaining'] == 0
         ):
             state = 'quota_exhausted'
+        if state == 'configured' and not settings.ai_provider_admin_enabled:
+            settings_identity = id(settings)
+            now = monotonic()
+            if (_model_readiness is None or _model_readiness[0] != settings_identity
+                    or _model_readiness[1] <= now):
+                _model_readiness = (settings_identity, now + 30, False)
+                available = await make_chat_adapter(settings).check_model_available()
+                _model_readiness = (settings_identity, monotonic() + 30, available)
+            if _model_readiness[2]:
+                state = 'connected'
         return {'state': state, **budget}
     except Exception:
         return _error(503, 'assistant_status_unavailable')
@@ -265,10 +279,34 @@ def _normalize_evidence(value: str) -> str:
     return re.sub(r"[\s\u200c\u200d\u0640]+", "", value).casefold()
 
 
+def _interest_source_span(text: str, phrases: list[str]) -> tuple[int, str] | None:
+    """Locate model-selected interest phrases in the original traveler text."""
+    characters: list[str] = []
+    indexes: list[int] = []
+    for index, char in enumerate(text):
+        normalized = _normalize_evidence(char)
+        characters.extend(normalized)
+        indexes.extend([index] * len(normalized))
+    normalized_text = ''.join(characters)
+    spans = []
+    for phrase in phrases:
+        normalized = _normalize_evidence(phrase)
+        if len(normalized) < 2:
+            return None
+        start = normalized_text.find(normalized)
+        if start < 0:
+            return None
+        spans.append((indexes[start], indexes[start + len(normalized) - 1] + 1))
+    start = min(left for left, _ in spans)
+    end = max(right for _, right in spans)
+    return (start, text[start:end]) if end - start <= 200 else None
+
+
 def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: dict[str, str],
                        ambiguous: dict[str, list[str]] | None = None, *,
                        traveler_timezone: str | None = None,
-                       traveler_reference_date: date | None = None) -> TripRequirementsV1:
+                       traveler_reference_date: date | None = None,
+                       model_only: bool = False) -> TripRequirementsV1:
     """Use evidenced LLM semantics first; deterministic extraction only fills gaps.
 
     The result is an advisory review candidate, never a confirmed profile.
@@ -311,6 +349,14 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
         if raw_value is None or not isinstance(quote, str) or len(quote) > 200:
             continue
         start = text.find(quote)
+        interests = []
+        if key == 'interest' and isinstance(raw_value, str) and raw_value.strip():
+            interests = [raw_value.strip()]
+            if start < 0 or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(quote):
+                interests = [item.strip() for item in re.split(r'[,،;؛]|\s+و\s+', raw_value) if item.strip()]
+                interest_span = _interest_source_span(text, interests) if interests else None
+                if interest_span is not None:
+                    start, quote = interest_span
         if start < 0:
             continue
         current = getattr(profile.fields, field_name)
@@ -359,17 +405,18 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
             value = parse_explicit_budget_text(raw_value.strip())
             if value is None:
                 continue
-        elif key in {'interest', 'soft_preference'}:
+        elif key == 'interest':
+            if not interests or any(_normalize_evidence(item) not in _normalize_evidence(quote) for item in interests):
+                continue
+            value = list(dict.fromkeys(interests))
+        elif key == 'soft_preference':
             if (not isinstance(raw_value, str) or not raw_value.strip()
                     or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(quote)):
                 continue
-            if key == 'soft_preference':
-                if (not _explicit_soft_preference(quote) or quoted_field is None
-                        or quoted_field.status != 'known'):
-                    continue
-                value = list(dict.fromkeys([*(current.value or []), *(quoted_field.value or [])]))
-            else:
-                value = list(dict.fromkeys([*(current.value or []), raw_value.strip()]))
+            if (not _explicit_soft_preference(quote) or quoted_field is None
+                    or quoted_field.status != 'known'):
+                continue
+            value = list(dict.fromkeys([*(current.value or []), *(quoted_field.value or [])]))
         elif key in {'travel_difficulty', 'weather_preference', 'local_cuisine'}:
             if (not isinstance(raw_value, str) or not raw_value.strip()
                     or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(quote)):
@@ -429,7 +476,25 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
                         status='known', value={'start': parsed_start, 'end': parsed_end},
                         evidence_span=EvidenceSpan(start=left, end=right, text=text[left:right]), source='llm',
                     ).model_dump()
-    return profile.model_copy(update={'fields': profile.fields.model_validate(fields)})
+    if model_only:
+        for field_name, field in fields.items():
+            # Keep the deterministic safety detector for explicit restrictions.
+            # For other fields, partial inference leaves an unanswered slot.
+            if field_name not in {'hard_constraints', 'accessibility'} and field['source'] != 'llm':
+                fields[field_name] = RequirementValue(status='missing', source='llm').model_dump()
+    interpreted = profile.fields.model_validate(fields)
+    required = ('destination', 'duration_days')
+    missing = [name for name in required if getattr(interpreted, name).status == 'missing']
+    ambiguous_fields = [name for name in required if getattr(interpreted, name).status == 'ambiguous']
+    questions = [*missing, *ambiguous_fields]
+    if interpreted.budget.value is not None and interpreted.budget.value.currency_status != 'known':
+        questions.append('budget.currency')
+    return profile.model_copy(update={
+        'fields': interpreted,
+        'clarification': TripClarification(
+            missing_fields=missing, ambiguous_fields=ambiguous_fields, question_fields=questions,
+        ),
+    })
 
 
 @router.post('/conversations/{conversation_id}/assistant-turns', response_model=AssistantTurnResponse)
@@ -555,6 +620,7 @@ async def assistant_turn(
                 reply.ambiguous_requirements,
                 traveler_timezone=traveler_timezone if isinstance(traveler_timezone, str) else None,
                 traveler_reference_date=traveler_reference_date,
+                model_only=True,
             )
             await run_in_threadpool(
                 repository.complete, user_id=principal.user_id,
@@ -584,17 +650,12 @@ async def assistant_turn(
             return _error(503, 'assistant_unavailable')
         metadata = message.pop('metadata', {}) or {}
         candidate = metadata.get('requirements_candidate') or {}
-        fields = candidate.get('fields', {}) if isinstance(candidate, dict) else {}
-        extraction_path: Literal['llm', 'fallback'] = (
-            'llm' if isinstance(fields, dict) and any(
-                isinstance(field, dict) and field.get('source') == 'llm'
-                for field in fields.values()
-            ) else 'fallback'
-        )
         return {
             'conversation': conversation, 'trip': trip, 'message': message,
             'candidate_requirements': candidate,
-            'extraction_path': extraction_path,
+            # A completed provider turn may only have asked a question.
+            # Field-level sources report what was actually extracted.
+            'extraction_path': 'llm',
             'provisional_itinerary': metadata.get('provisional_itinerary'),
             'clarification': metadata.get('clarification'), 'replayed': replayed,
         }

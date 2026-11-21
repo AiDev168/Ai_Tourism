@@ -278,8 +278,7 @@ class RemoteChatAdapter:
         self.transport = transport
         self.last_failure_category: str | None = None
 
-    async def invoke(self, request: ChatRequest) -> ChatReply:
-        self.last_failure_category = None
+    def _validated_loopback(self) -> bool:
         parsed = urlsplit(self.endpoint)
         loopback_http_enabled = False
         if (not self.enabled or self.environment not in {"development", "test", "local_pilot", "staging"}
@@ -303,6 +302,36 @@ class RemoteChatAdapter:
             )
             if not loopback_http_enabled:
                 raise AiCapabilityUnavailable()
+        return loopback_http_enabled
+
+    async def check_model_available(self) -> bool:
+        """Check model discovery without sending conversation data or running inference."""
+        try:
+            self._validated_loopback()
+            if not self.endpoint.endswith('/chat/completions'):
+                return False
+            url = self.endpoint.removesuffix('/chat/completions') + '/models'
+            async with asyncio.timeout(3):
+                async with httpx.AsyncClient(follow_redirects=False, trust_env=False,
+                                             transport=self.transport) as client:
+                    async with client.stream('GET', url, headers={
+                        'Authorization': f'Bearer {self.token.get_secret_value()}',
+                    }) as response:
+                        if response.status_code != 200:
+                            return False
+                        data = bytearray()
+                        async for chunk in response.aiter_bytes():
+                            data.extend(chunk)
+                            if len(data) > 65536:
+                                return False
+            return any(item.get('id') == self.model for item in json.loads(data)['data'])
+        except (AiCapabilityUnavailable, httpx.HTTPError, TimeoutError, ValueError,
+                KeyError, TypeError, AttributeError):
+            return False
+
+    async def invoke(self, request: ChatRequest) -> ChatReply:
+        self.last_failure_category = None
+        loopback_http_enabled = self._validated_loopback()
         payload = {
             "model": self.model,
             # Keep extraction/correction turns reproducible for a traveler.
@@ -310,7 +339,7 @@ class RemoteChatAdapter:
             "temperature": 0,
             # Five-day provisional plans need a bounded but larger completion
             # budget than a short clarification turn. Keep all calls capped.
-            "max_tokens": 1600,
+            "max_tokens": 2400 if loopback_http_enabled else 1600,
             "messages": [
                 {"role": "system", "content": (
                 "Return one JSON object with reply (string), requirements (object), "
@@ -341,6 +370,10 @@ class RemoteChatAdapter:
                 "set origin to X and destination to Y, and quote the exact place-name spans from this turn. "
                 "Do not leave destination for fallback when this explicit route relation is present. "
                 "For relative date phrases, always include relative_start_date and its exact phrase evidence. "
+                "When clearly stated, include travel_difficulty, weather_preference and local_cuisine "
+                "as separate fields with their own exact source phrases, even if the traveler mentions "
+                "them together with general interests. For interest copy one contiguous phrase from the "
+                "message; put the same phrase in requirement_evidence. "
                 "Keep stay length separate from departure time: 'for 3 days' or the equivalent Persian/Arabic "
                 "duration phrase means duration_days=3, while 'tomorrow' or its equivalent means "
                 "relative_start_date=1. If both occur in the same message, return both fields with separate "
@@ -360,7 +393,8 @@ class RemoteChatAdapter:
                     "When the traveler asks for a draft itinerary and enough destination/duration "
                     "context exists, you may include provisional_itinerary with status "
                     "provisional_unverified and days containing day_number plus stops containing "
-                    "only a proposed name and role=model_proposed. Names are unverified suggestions; "
+                    "only a proposed name and role=model_proposed. Use up to two short named stops per "
+                    "day, a short reply, and no prose outside the JSON. Names are unverified suggestions; "
                     "never include citations, coordinates, opening hours, prices, route times, access, "
                     "availability, safety, accessibility, or other factual claims in these stops."
                 )},
@@ -424,16 +458,17 @@ class RemoteChatAdapter:
             raise AiCapabilityUnavailable() from None
 
 
+def make_chat_adapter(settings: Settings) -> RemoteChatAdapter:
+    return RemoteChatAdapter(
+        enabled=settings.internal_chat_enabled,
+        environment=settings.app_env.lower(),
+        endpoint=settings.internal_chat_endpoint,
+        model=settings.internal_chat_model,
+        token=settings.internal_chat_token,
+        loopback_http_port=settings.internal_chat_loopback_http_port,
+    )
+
+
 def make_chat_gateway(settings: Settings) -> AiProviderGateway[ChatRequest, ChatReply]:
     """Build a gateway from server-only settings; this does not invoke it."""
-    return AiProviderGateway(
-        AiCapability.CHAT,
-        RemoteChatAdapter(
-            enabled=settings.internal_chat_enabled,
-            environment=settings.app_env.lower(),
-            endpoint=settings.internal_chat_endpoint,
-            model=settings.internal_chat_model,
-            token=settings.internal_chat_token,
-            loopback_http_port=settings.internal_chat_loopback_http_port,
-        ),
-    )
+    return AiProviderGateway(AiCapability.CHAT, make_chat_adapter(settings))

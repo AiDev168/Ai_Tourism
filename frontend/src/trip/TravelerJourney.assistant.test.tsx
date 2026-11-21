@@ -221,7 +221,7 @@ describe('assistant suggestions and reviewed trip restoration', () => {
     expect(host.querySelector<HTMLInputElement>('#profile-destination-0')?.value).toBe('Yazd');
     expect(fetchMock.mock.calls.filter(call => call[1]?.method === 'PATCH')).toHaveLength(0);
 
-    await act(async () => clickLabel('Use in trip form')); await settle();
+    await act(async () => clickLabel('Extract trip requirements')); await settle();
     expect(host.querySelector<HTMLInputElement>('#profile-destination-0')?.value).toBe('Kashan');
     expect(host.querySelector<HTMLInputElement>('#profile-duration')?.value).toBe('1');
     expect(host.querySelector<HTMLInputElement>('#profile-origin')?.value).toBe('Tehran');

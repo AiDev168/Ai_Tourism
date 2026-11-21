@@ -154,6 +154,8 @@ button { cursor: pointer; }
 .jalali-calendar-grid button:focus-visible, .jalali-date-trigger:focus-visible { outline: 3px solid #ca8a3a; outline-offset: 2px; }
 .jalali-clear-date { margin-block-start: 8px; border: 0; background: transparent; color: var(--muted); text-decoration: underline; }
 .assistant-provider-state { margin-block: 8px; color: var(--muted); font-size: 12px; }
+.local-owner-login p { margin: 0 0 8px; color: var(--muted); line-height: 1.55; }
+.trip-intake-panel > summary { cursor: pointer; color: var(--muted); margin-block: 0 12px; }
 .trip-response { margin-block-start: 13px; padding: 14px; border-inline-start: 3px solid var(--saffron); border-radius: 10px; color: var(--ink); background: #f7f3e9; }
 .trip-response h2 { margin: 0 0 8px; font-size: 13px; line-height: 1.6; }
 .trip-response ul { margin: 0; padding-inline-start: 20px; font-size: 12px; line-height: 1.8; }
@@ -760,6 +762,7 @@ body {
   box-shadow: 0 0 0 3px rgba(180,35,24,.10);
 }
 .profile-editor input[aria-invalid="true"]:focus-visible { outline: 3px solid #ae3429; outline-offset: 2px; }
+.assistant-provider-state[data-provider-state="connected"],
 .assistant-provider-state[data-provider-state="responded"] {
   color: #125840; background: #edf8f1; border: 1px solid #8dc5a1;
   border-radius: 10px; padding: 9px 12px; font-weight: 750;

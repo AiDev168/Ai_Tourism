@@ -1874,6 +1874,13 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
   let identity;
   let tripId = null;
   let conversationId = null;
+  const endpointTrace = [];
+  page.on('response', response => {
+    const path = new URL(response.url()).pathname.replace(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi, ':id');
+    if (/^\/api\/v1\/(?:assistant\/status|conversations|trips|partners\/organizations|partners\/trips)(?:\/|$)/.test(path)) {
+      endpointTrace.push({ method: response.request().method(), path, status: response.status() });
+    }
+  });
   const safeResult = {
     provider: provider.provider,
     model: provider.model,
@@ -1896,12 +1903,14 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     await selectAndVerifyLocale(page, 'fa-IR');
     identity = await signIn(page, api.controlPort, api.controlToken, phone);
 
+    await page.locator('.trip-intake-panel [data-provider-state="connected"]').waitFor({ timeout: 12000 });
+    safeResult.providerHandshake = 'configured_model_found';
     const before = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' });
     if (before.attempts !== 0 || before.route?.model_id !== provider.model
       || before.route?.host !== new URL(provider.endpoint).hostname) {
       throw new Error('real_chat_provider_route_identity_mismatch');
     }
-    const requestText = '\u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645 \u0641\u0631\u062f\u0627 \u0628\u0631\u0627\u06cc 3 \u0631\u0648\u0632 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632. 5 \u0646\u0641\u0631 \u0647\u0633\u062a\u06cc\u0645\u060c \u0628\u0648\u062f\u062c\u0647 30 \u0645\u06cc\u0644\u06cc\u0648\u0646 \u062a\u0648\u0645\u0627\u0646 \u0627\u0633\u062a \u0648 \u0628\u0647 \u0622\u062b\u0627\u0631 \u062a\u0627\u0631\u06cc\u062e\u06cc \u0648 \u0628\u0627\u063a\u200c\u0647\u0627 \u0639\u0644\u0627\u0642\u0647 \u062f\u0627\u0631\u06cc\u0645.';
+    const requestText = 'برای سه نفر از مشهد به شیراز، چهار روز، با بودجه ۲۰ میلیون تومان؛ علاقه‌مند به باغ‌ها، آثار تاریخی و غذای محلی، مسیرهای سبک و هوای معتدل هستیم.';
     const firstTurn = page.waitForResponse(response =>
       new URL(response.url()).pathname.endsWith('/assistant-turns') && response.request().method() === 'POST');
     await page.locator('#trip-prompt').fill(requestText);
@@ -1922,14 +1931,14 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     const fieldValue = name => fields[name]?.value;
     const originOk = normalizedPersianText(fieldValue('origin')).includes('\u0645\u0634\u0647\u062f');
     const destinationOk = normalizedPersianText(fieldValue('destination')).includes('\u0634\u06cc\u0631\u0627\u0632');
-    const durationOk = fieldValue('duration_days') === 3;
+    const durationOk = fieldValue('duration_days') === 4;
     // The canonical requirement model names this persisted form field
     // `travelers`; `traveler_count` is the provider extraction-contract key.
-    const travelersOk = fieldValue('travelers') === 5;
+    const travelersOk = fieldValue('travelers') === 3;
     const budgetOk = normalizedPersianText(JSON.stringify(fieldValue('budget') ?? fieldValue('budget_text')))
       .includes('\u062a\u0648\u0645\u0627\u0646');
     const dateField = fieldValue('relative_start_date');
-    const relativeDateOk = dateField?.offset_days === 1;
+    const relativeDateOk = dateField == null;
     safeResult.relativeStartDateSource = fields.relative_start_date?.source || 'missing';
     const initialStatus = await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' });
     safeResult.invocationAttempts = initialStatus.attempts;
@@ -1976,14 +1985,15 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     if (nonLlmFields.length) throw new Error(`real_chat_required_semantics_not_llm_${nonLlmFields.join('_')}`);
     await page.locator('.saved-message-assistant p').first().waitFor({ state: 'visible' });
     if (!normalizedPersianText(await page.locator('#profile-origin').inputValue()).includes('\u0645\u0634\u0647\u062f')
-      || await page.locator('#profile-duration').inputValue() !== '3'
-      || await page.locator('#profile-travelers').inputValue() !== '5'
+      || await page.locator('#profile-duration').inputValue() !== '4'
+      || await page.locator('#profile-travelers').inputValue() !== '3'
       || !normalizedPersianText(await page.locator('#profile-budget').inputValue()).includes('\u062a\u0648\u0645\u0627\u0646')) {
       throw new Error('real_chat_fields_not_synchronized_to_profile_form');
     }
 
-    await page.locator('#profile-origin').fill('\u06a9\u0631\u0645\u0627\u0646\u0634\u0627\u0647');
-    await page.locator('#trip-follow-up').fill('\u0645\u0642\u0635\u062f \u0631\u0627 \u0627\u0632 \u0634\u06cc\u0631\u0627\u0632 \u0628\u0647 \u0627\u0635\u0641\u0647\u0627\u0646 \u062a\u063a\u06cc\u06cc\u0631 \u0628\u062f\u0647؛ \u0645\u0628\u062f\u0623 \u0647\u0645\u0627\u0646 \u06a9\u0631\u0645\u0627\u0646\u0634\u0627\u0647 \u0628\u0645\u0627\u0646\u062f.');
+    await page.locator('#profile-origin').fill('مشهد');
+    await page.locator('#profile-budget').fill('۲۵ میلیون تومان');
+    await page.locator('#trip-follow-up').fill('تاریخ شروع سفر 2026-12-05 و تاریخ پایان 2026-12-08 است. بودجهٔ اصلاح‌شده ۲۵ میلیون تومان است.');
     const correctionResponsePromise = page.waitForResponse(response =>
       new URL(response.url()).pathname.endsWith('/assistant-turns') && response.request().method() === 'POST');
     await page.locator('.assistant-controls > button').click();
@@ -2002,10 +2012,12 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
         + `_failure_${correctionCalls.last_failure_category || 'none'}`);
     }
     safeResult.correctionTurn = true;
+    safeResult.correctionFields = providerFieldSnapshot(correctionBody.candidate_requirements);
     await page.locator('.assistant-candidate').waitFor({ state: 'visible' });
     await page.locator('.assistant-candidate button').first().click();
     const manualOrigin = normalizedPersianText(await page.locator('#profile-origin').inputValue());
-    safeResult.manualEditPreserved = manualOrigin.includes('\u06a9\u0631\u0645\u0627\u0646\u0634\u0627\u0647');
+    safeResult.manualEditPreserved = manualOrigin.includes('مشهد')
+      && await page.locator('#profile-budget').inputValue() === '۲۵ میلیون تومان';
     if (!safeResult.manualEditPreserved) throw new Error('real_chat_candidate_overwrote_manual_origin');
     safeResult.invocationAttempts = (await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' })).attempts;
     safeResult.successfulInvocations = (await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' })).successes;
@@ -2017,10 +2029,13 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     await confirmation.click();
     if ((await profileSaved).status() !== 200) throw new Error('real_chat_profile_save_failed');
     const confirmed = await (await page.request.get(`${webOrigin}/api/v1/trips/${tripId}`)).json();
-    if (confirmed.confirmed_requirements?.origin !== '\u06a9\u0631\u0645\u0627\u0646\u0634\u0627\u0647'
+    if (confirmed.confirmed_requirements?.origin !== 'مشهد'
+      || Number(confirmed.confirmed_requirements?.budget?.amount) !== 25
       || confirmed.confirmed_requirements?.confirmation_source !== 'traveler_reviewed') {
       throw new Error('real_chat_confirmed_snapshot_did_not_preserve_manual_edit');
     }
+    safeResult.followUpDatesConfirmed = confirmed.confirmed_requirements?.travel_dates?.start === '2026-12-05'
+      && confirmed.confirmed_requirements?.travel_dates?.end === '2026-12-08';
 
     const recResponsePromise = page.waitForResponse(response =>
       new URL(response.url()).pathname === `/api/v1/trips/${tripId}/recommendations`
@@ -2034,6 +2049,17 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       throw new Error(`real_chat_recommendation_failed_status_${recResponse.status()}`);
     }
     safeResult.recommendationStatus = recBody.status;
+    safeResult.recommendationReason = recBody.reason_code;
+    safeResult.requirementAssessments = recBody.requirement_assessments ?? [];
+    safeResult.confirmedProfileVersion = confirmed.version;
+    safeResult.confirmationSource = confirmed.confirmed_requirements?.confirmation_source;
+    safeResult.selectedDestinationCount = (confirmed.destination_ids ?? []).length;
+    const knownForPlanning = new Set(safeResult.requirementAssessments
+      .filter(item => item.status === 'known').map(item => item.field));
+    if (!knownForPlanning.has('destination') || !knownForPlanning.has('duration_days')
+      || recBody.reason_code === 'requirements_incomplete') {
+      throw new Error('confirmed_destination_or_duration_misclassified_as_missing');
+    }
     safeResult.recommendationCount = Array.isArray(recBody.items) ? recBody.items.length : 0;
     safeResult.unresolvedFields = Array.isArray(recBody.unresolved_fields) ? recBody.unresolved_fields : [];
     const mayUseProvisionalDraft = recBody.status === 'empty'
@@ -2042,10 +2068,11 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
         && recBody.unresolved_fields.length === 1
         && recBody.unresolved_fields[0] === 'destination_resolution');
     if (mayUseProvisionalDraft) {
-      await page.locator('.provisional-plan-card button.primary').first().waitFor({ state: 'visible' });
+      const generateDraft = page.locator('#generate-provisional-itinerary');
+      await generateDraft.waitFor({ state: 'visible', timeout: 15000 });
       const itineraryTurn = page.waitForResponse(response =>
         new URL(response.url()).pathname.endsWith('/assistant-turns') && response.request().method() === 'POST');
-      await page.locator('.provisional-plan-card button.primary').first().click();
+      await generateDraft.click({ timeout: 15000 });
       const itineraryResponse = await itineraryTurn;
       const itineraryBody = await itineraryResponse.json().catch(() => ({}));
       if (itineraryResponse.status() !== 200 || itineraryBody.provisional_itinerary?.status !== 'provisional_unverified') {
@@ -2057,10 +2084,11 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       safeResult.itineraryGenerated = true;
       safeResult.invocationAttempts = (await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' })).attempts;
       safeResult.successfulInvocations = (await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' })).successes;
-      await page.locator('.provisional-plan-card button.primary').first().click();
-      const savedResponse = await page.waitForResponse(response =>
+      const saveDraftResponse = page.waitForResponse(response =>
         new URL(response.url()).pathname === `/api/v1/trips/${tripId}/provisional-itineraries`
         && response.request().method() === 'POST');
+      await page.locator('#save-provisional-itinerary').click({ timeout: 15000 });
+      const savedResponse = await saveDraftResponse;
       if (savedResponse.status() !== 201) throw new Error('real_chat_provisional_itinerary_save_failed');
       const savedDraft = await savedResponse.json();
       const restoredDraftResponse = await page.request.get(`${webOrigin}/api/v1/trips/${tripId}/provisional-itineraries`);
@@ -2175,7 +2203,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     const companyOneIdentity = await signIn(page, api.controlPort, api.controlToken, companyOnePhone);
     await page.goto(`${webOrigin}/partners`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Partner workspace' }).waitFor({ state: 'visible' });
-    const createCompany = async (label, identityForCompany) => {
+    const createCompany = async (label, identityForCompany, approve = true) => {
       const orgForm = page.locator('form.partner-card').filter({
         has: page.getByRole('heading', { name: 'Organization', exact: true }),
       });
@@ -2191,6 +2219,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       const rows = await requestBrowserJson(page, '/api/v1/partners/organizations', 'GET', undefined, undefined);
       const row = rows.items.find(item => item.display_name === displayName);
       if (!row?.organization_id) throw new Error('real_provider_company_not_persisted');
+      if (!approve) return row.organization_id;
       const approved = await controlRequest(api.controlPort, api.controlToken, {
         action: 'approve_isolated_test_organization', organization_id: row.organization_id,
         created_by: identityForCompany.userId, display_name: displayName,
@@ -2208,20 +2237,40 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     const companyTwo = await createCompany(`Company ${companyTwoPhone.slice(-4)}`, companyTwoIdentity);
     if (companyOne === companyTwo) throw new Error('real_provider_company_tenants_not_distinct');
 
+    const switchIdentity = async targetPhone => {
+      await page.locator('.auth-signed-in button').first().click();
+      await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+      return signIn(page, api.controlPort, api.controlToken, targetPhone);
+    };
+    const rejectedPhone = syntheticPhone();
+    const rejectedIdentity = await switchIdentity(rejectedPhone);
+    const rejectedCompany = await createCompany('Company REJECTED', rejectedIdentity, false);
+
     await page.locator('.auth-signed-in button').first().click();
     await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
     identity = await signIn(page, api.controlPort, api.controlToken, phone);
     const shareOptions = await requestBrowserJson(page,
       `/api/v1/partners/trips/${tripId}/company-share-options`, 'GET', undefined, undefined);
-    if (!shareOptions.items.some(item => item.organization_id === companyOne)) {
-      throw new Error('real_provider_approved_company_not_share_eligible');
+    const recipients = new Set(shareOptions.items.map(item => item.organization_id));
+    if (!recipients.has(companyOne) || !recipients.has(companyTwo) || recipients.has(rejectedCompany)) {
+      throw new Error('real_provider_company_share_eligibility_incorrect');
     }
-    const share = await requestBrowserJson(page, `/api/v1/partners/trips/${tripId}/company-shares`, 'POST', identity.csrfToken, {
-      organization_ids: [companyOne], consent_confirmed: true,
-      include_original_request: false, consent_policy_version: 'company-request-share-v1',
-    });
-    if (!share.shared || share.shares.length !== 1) throw new Error('real_provider_traveler_share_failed');
-    const shareId = share.shares[0].share_id;
+    await page.goto(webOrigin, { waitUntil: 'domcontentloaded' });
+    await page.locator(`.history-trip[data-trip-id="${tripId}"] button`).first().click();
+    for (const targetPhone of [companyOnePhone, companyTwoPhone]) {
+      await page.locator('.company-share-options label').filter({ hasText: `Company ${targetPhone.slice(-4)}` })
+        .locator('input').check();
+    }
+    await page.locator('.company-share-consent input').check();
+    const shareResponse = page.waitForResponse(response =>
+      new URL(response.url()).pathname === `/api/v1/partners/trips/${tripId}/company-shares`
+      && response.request().method() === 'POST');
+    await page.locator('.company-share-options button').click();
+    const share = await (await shareResponse).json();
+    if (!share.shared || share.shares.length !== 2) throw new Error('real_provider_traveler_share_failed');
+    const shareId = share.shares.find(item => item.organization_id === companyOne)?.share_id;
+    const companyTwoShare = share.shares.find(item => item.organization_id === companyTwo)?.share_id;
+    if (!shareId || !companyTwoShare) throw new Error('real_provider_company_share_ids_missing');
     const latestTrip = await requestBrowserJson(page, `/api/v1/trips/${tripId}`, 'GET');
     const revisedRequirements = structuredClone(latestTrip.confirmed_requirements);
     // The read representation nests the persisted consent receipt; PATCH only
@@ -2246,6 +2295,13 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     await page.locator('.auth-signed-in button').first().click();
     await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
     const outsider = await signIn(page, api.controlPort, api.controlToken, companyTwoPhone);
+    const secondInbox = await requestBrowserJson(page,
+      `/api/v1/partners/organizations/${companyTwo}/requests`, 'GET');
+    if (!['request_shared', 'request_revised'].every(kind => secondInbox.items.some(item =>
+      item.share_id === companyTwoShare && item.event_kind === kind
+      && item.request_snapshot?.trip_id === tripId && item.itinerary_snapshot?.provisional))) {
+      throw new Error('real_provider_second_company_request_or_revision_missing');
+    }
     const crossTenantInbox = await requestBrowserJson(page,
       `/api/v1/partners/organizations/${companyOne}/requests`, 'GET');
     const crossTenantWorkspace = await browserApi(page,
@@ -2262,7 +2318,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
 
     await page.locator('.auth-signed-in button').first().click();
     await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
-    const authorizedCompany = await signIn(page, api.controlPort, api.controlToken, companyOnePhone);
+    await signIn(page, api.controlPort, api.controlToken, companyOnePhone);
     const inbox = await requestBrowserJson(page,
       `/api/v1/partners/organizations/${companyOne}/requests`, 'GET');
     const revisions = await requestBrowserJson(page,
@@ -2287,6 +2343,25 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       await anonymousContext.close();
     }
     safeResult.protectedCompanyViews = true;
+    identity = await switchIdentity(phone);
+    const revoked = await requestBrowserJson(page,
+      `/api/v1/partners/trips/${tripId}/company-shares/${companyTwoShare}`, 'DELETE', identity.csrfToken);
+    if (!revoked.revoked) throw new Error('real_provider_revocation_failed');
+    for (const deniedPhone of [companyTwoPhone, rejectedPhone]) {
+      await switchIdentity(deniedPhone);
+      const denied = await requestBrowserJson(page,
+        `/api/v1/partners/organizations/${companyTwo}/requests`, 'GET');
+      if (denied.items.length) throw new Error('real_provider_revoked_or_unverified_company_saw_request');
+    }
+    await switchIdentity(companyOnePhone);
+    const retained = await requestBrowserJson(page,
+      `/api/v1/partners/organizations/${companyOne}/requests`, 'GET');
+    if (retained.items.length !== 2) throw new Error('real_provider_revocation_changed_other_recipient');
+    safeResult.companyDelivery = {
+      channel: 'authenticated_in_app_inbox', recipients: ['QA_COMPANY_A', 'QA_COMPANY_B'],
+      eventKinds: ['request_shared', 'request_revised'], revisionCount: 2,
+      rejectedCompanyExcluded: true, companyBRevoked: true, companyARetained: true,
+    };
 
     // Return to the traveler identity so the remaining conversation and trip
     // reads prove the original owner can still access their own saved records.
@@ -2325,16 +2400,30 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
         if (/^\+?[0-9]{8,15}$/.test(element.textContent.trim())) element.textContent = '[test account]';
       });
     });
-    await page.screenshot({ path: resolve(artifactRoot, `real-chat-${provider.provider}.png`), fullPage: true });
+    const screenshots = [];
+    for (const [width, height] of [[390, 844], [1440, 1000]]) {
+      await page.setViewportSize({ width, height });
+      if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)) {
+        throw new Error('real_provider_horizontal_overflow_' + width);
+      }
+      const screenshot = 'real-chat-' + provider.provider + '-' + width + '.png';
+      await page.screenshot({ path: resolve(artifactRoot, screenshot), fullPage: true });
+      screenshots.push(screenshot);
+    }
     const report = {
       status: 'passed', mode: 'authenticated_real_chat_provider_local_acceptance',
       provider: safeResult, browser: `Chromium ${browser.version()}`,
       database: { host: '127.0.0.1', majorVersion: 17, markerValidated: true, tripPersisted: true },
       privacy: { rawPromptsSaved: false, providerTokenSaved: false, browserTokenStorage: false },
-      screenshot: `real-chat-${provider.provider}.png`,
+      caseId: 'ISSUE23_QA_TRAVELER_A', endpointTrace, screenshots,
     };
     writeFileSync(resolve(artifactRoot, `real-chat-${provider.provider}.json`), `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
     return report;
+  } catch (error) {
+    writeFileSync(resolve(artifactRoot, 'issue23-partial-trace.json'), JSON.stringify({
+      status: 'failed', provider: safeResult, endpointTrace,
+    }, null, 2) + '\n', 'utf8');
+    throw error;
   } finally {
     if (page) await page.close().catch(() => {});
     await context.close().catch(() => {});

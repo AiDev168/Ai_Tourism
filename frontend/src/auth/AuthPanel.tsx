@@ -214,8 +214,11 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
             </button>
           )}
           {ownerMode && capabilities?.methods.includes('local_owner') ? (
-            <form onSubmit={event => void submitLocalOwner(event)}>
+            <form className="local-owner-login" onSubmit={event => void submitLocalOwner(event)}>
               <h2>{localCopy.title}</h2>
+              <p>{locale === 'fa-IR' ? 'برای ورود با حساب مالک همین دستگاه، نام کاربری و گذرواژه را وارد کنید.'
+                : locale === 'ar' ? 'أدخل اسم المستخدم وكلمة المرور لحساب مالك هذا الجهاز.'
+                  : 'Enter the username and password for the owner account on this device.'}</p>
               <label htmlFor="auth-local-login">{localCopy.loginName}</label>
               <input id="auth-local-login" name="username" autoComplete="username" required
                 minLength={3} maxLength={40} value={loginName} onChange={event => setLoginName(event.target.value)} />

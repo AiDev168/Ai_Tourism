@@ -42,6 +42,17 @@ def test_gateway_validates_chat_and_treats_input_as_data():
     assert "all explicitly stated interests" in calls[0]["messages"][0]["content"]
 
 
+@pytest.mark.parametrize("discovered_model,expected", [("test-model", True), ("another-model", False)])
+def test_chat_readiness_only_requests_model_metadata(discovered_model, expected):
+    def handler(request):
+        assert request.method == "GET"
+        assert request.url.path == "/v1/models"
+        assert request.content == b""
+        return httpx.Response(200, json={"data": [{"id": discovered_model}]})
+
+    assert asyncio.run(adapter(handler).check_model_available()) is expected
+
+
 def test_truncated_provider_response_is_a_safe_non_retryable_failure():
     calls = []
 

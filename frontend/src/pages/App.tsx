@@ -151,7 +151,8 @@ export function App() {
     }).catch(() => { /* Browsers may not support querying geolocation permissions. */ });
     return () => { active = false; };
   }, [authSession?.user.user_id]);
-  const [assistantRouteState, setAssistantRouteState] = useState<'loading' | 'configured' | 'disabled' | 'unavailable' | 'quota_exhausted'>('loading');
+  const [assistantRouteState, setAssistantRouteState] = useState<'loading' | 'configured' | 'connected' | 'disabled' | 'unavailable' | 'quota_exhausted'>('loading');
+  const [conversationVisible, setConversationVisible] = useState(false);
   const [assistantRemaining, setAssistantRemaining] = useState<number | null>(null);
   const manualDateOverrideRequestRef = useRef<string | null>(null);
   useEffect(() => {
@@ -324,6 +325,8 @@ export function App() {
             <p className="eyebrow"><span className="sun">✳</span>{t('heroEyebrow')}</p>
             <h1>{authSession ? plannerCopy[locale].title : t('heroTitle')}</h1>
             <p className="hero-body">{authSession ? plannerCopy[locale].intro : t('heroBody')}</p>
+            <details className="trip-intake-panel" open={!authSession || !conversationVisible}>
+            <summary hidden={!authSession || !conversationVisible}>{tripCopy.requestLabel}</summary>
             <form className="trip-form" onSubmit={submit} noValidate>
               <label htmlFor="trip-prompt">{tripCopy.requestLabel}</label>
               <p className="trip-form-help" id="trip-prompt-help">{tripCopy.requestHelp}</p>
@@ -348,7 +351,8 @@ export function App() {
                 </p>
                 <p className="assistant-provider-state" role="status" data-provider-state={assistantRouteState}>
                   {assistantRouteState === 'loading' ? (locale === 'fa-IR' ? 'در حال بررسی وضعیت دستیار…' : locale === 'ar' ? 'جارٍ التحقق من حالة المساعد…' : 'Checking assistant status…')
-                    : assistantRouteState === 'configured' ? (locale === 'fa-IR' ? 'مسیر دستیار تنظیم شده است؛ این وضعیت به‌تنهایی پاسخ موفق را ثابت نمی‌کند.' : locale === 'ar' ? 'مسار المساعد مُعدّ؛ وهذا لا يثبت وحده نجاح الرد.' : 'Assistant route is configured; this alone does not prove a successful reply.')
+                    : assistantRouteState === 'connected' ? (locale === 'fa-IR' ? 'اتصال به سرویس هوش مصنوعی برقرار است.' : locale === 'ar' ? 'تم الاتصال بخدمة الذكاء الاصطناعي.' : 'Connected to the AI service.')
+                    : assistantRouteState === 'configured' ? (locale === 'fa-IR' ? 'مسیر دستیار تنظیم شده است؛ اتصال هنوز تأیید نشده.' : locale === 'ar' ? 'مسار المساعد مُعدّ؛ لم يُتحقق من الاتصال بعد.' : 'Assistant route configured. Connection has not been verified.')
                       : assistantRouteState === 'quota_exhausted' ? (locale === 'fa-IR' ? 'سهمیهٔ روزانهٔ دستیار تمام شده است.' : locale === 'ar' ? 'اكتملت الحصة اليومية للمساعد.' : 'The assistant daily limit is reached.')
                         : assistantRouteState === 'disabled' ? (locale === 'fa-IR' ? 'پاسخ‌گویی هوشمند فعال نیست؛ می‌توانید دستی برنامه‌ریزی کنید.' : locale === 'ar' ? 'المساعد غير مفعّل؛ يمكنك التخطيط يدوياً.' : 'AI replies are disabled; manual planning remains available.')
                           : (locale === 'fa-IR' ? 'وضعیت دستیار در دسترس نیست؛ درخواست سفر را می‌توانید ذخیره کنید.' : locale === 'ar' ? 'حالة المساعد غير متاحة؛ يمكنك حفظ طلب الرحلة.' : 'Assistant status is unavailable; you can still save the trip request.')}
@@ -407,6 +411,7 @@ export function App() {
                 {authSession && <a className="planner-next-link" href="#itinerary">{plannerCopy[locale].next} ↓</a>}
               </section>}
             </form>
+            </details>
           </div>
 
           {!authSession && <figure className="hero-art">
@@ -447,6 +452,7 @@ export function App() {
           travelerTimezone={travelerTimezone}
           suggestedOrigin={suggestedOrigin}
           onManualDateOverride={() => { manualDateOverrideRequestRef.current = requestTextRef.current; }}
+          onConversationVisibilityChange={setConversationVisible}
           onSessionExpired={() => setAuthSession(null)}
           onRestoreRequest={(text, restored) => {
             manualDateOverrideRequestRef.current = text;

@@ -323,7 +323,7 @@ const json = (method: string, body: unknown): RequestInit => ({ method, body: JS
 
 export const travelerApi = {
   assistantStatus: () => request<{
-    state: 'configured' | 'disabled' | 'unavailable' | 'quota_exhausted';
+    state: 'configured' | 'connected' | 'disabled' | 'unavailable' | 'quota_exhausted';
     user_used: number; user_remaining: number; user_limit: number;
     global_used: number; global_remaining: number; global_limit: number;
   }>('/assistant/status', undefined),

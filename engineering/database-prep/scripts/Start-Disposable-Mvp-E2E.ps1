@@ -108,7 +108,9 @@ try {
     }
     $Ready = $false
     for ($i = 0; $i -lt 60; $i++) {
-        & docker exec $Name pg_isready -U $Owner -d ai_tourism_dev | Out-Null
+        # PostGIS initializes its extensions using a temporary socket-only
+        # server. Wait for the final TCP server before running bootstrap SQL.
+        & docker exec $Name pg_isready -h 127.0.0.1 -U $Owner -d ai_tourism_dev | Out-Null
         if ($LASTEXITCODE -eq 0) { $Ready = $true; break }
         Start-Sleep -Seconds 2
     }

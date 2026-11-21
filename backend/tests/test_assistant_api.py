@@ -205,7 +205,7 @@ def test_model_provisional_itinerary_is_returned_and_replayed_without_provider_r
         assert first.json()['provisional_itinerary'] == itinerary
         assert repo.finished['provisional_itinerary'] == itinerary
         assert first.json()['candidate_requirements']['original_text'] == body()['content']
-        assert first.json()['extraction_path'] == 'fallback'
+        assert first.json()['extraction_path'] == 'llm'
         repo.status = 'completed'
         repo.is_replay = True
         replay = c.post(f'/api/v1/conversations/{CONV}/assistant-turns', json=body())
@@ -300,8 +300,14 @@ def test_initial_persisted_request_can_be_reused_as_the_first_ai_turn():
         c.app.dependency_overrides.clear()
 
 
-def test_assistant_status_reports_configuration_and_budget_without_invocation():
+def test_assistant_status_reports_configuration_and_budget_without_invocation(monkeypatch):
     c, repo, gateway = client()
+    async def unavailable(_adapter):
+        return False
+
+    monkeypatch.setattr(
+        'app.modules.integrations.chat_adapter.RemoteChatAdapter.check_model_available', unavailable,
+    )
     try:
         result = c.get('/api/v1/assistant/status')
         assert result.status_code == 200
@@ -329,7 +335,7 @@ def test_assistant_candidate_uses_trip_contract_and_only_accepts_exact_source_sp
     assert candidate.fields.origin.value == 'تهران'
     assert candidate.fields.origin.source == 'llm'
     assert candidate.fields.duration_days.status == 'missing'
-    assert candidate.fields.interests.value == ['historical_attractions', 'hiking']
+    assert candidate.fields.interests.value == ['hiking']
     assert candidate.fields.interests.source == 'llm'
     assert candidate.fields.destination.evidence_span.text == 'شیراز'
 
@@ -416,7 +422,7 @@ def test_p0_reference_request_accepts_llm_semantics_for_all_core_fields():
     assert (budget.amount, budget.scale, budget.currency, budget.raw) == (
         '30', 'million', 'TOMAN', evidence['budget_text'],
     )
-    assert candidate.fields.interests.value == ['historical_attractions', 'gardens', evidence['interest']]
+    assert candidate.fields.interests.value == [evidence['interest']]
     assert all(getattr(candidate.fields, name).source == 'llm' for name in (
         'origin', 'destination', 'relative_start_date', 'duration_days',
         'travelers', 'budget', 'interests',

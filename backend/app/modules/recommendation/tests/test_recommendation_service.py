@@ -73,6 +73,25 @@ def requirements(**values: object) -> dict[str, object]:
     return {"durationDays": {"value": 10, "status": "confirmed"}, **values}
 
 
+def test_reviewed_destination_name_without_catalogue_match_is_known():
+    result = recommend_trip(
+        requirements={
+            "confirmation_source": "traveler_reviewed",
+            "destinations": ["Shiraz"], "duration_days": 4,
+            "extractionStatus": "needs_clarification",
+            "missingRequired": ["destination", "duration_days"],
+        },
+        selected_destination_ids=[], catalogue=[candidate("1")],
+        evidence_by_destination={}, locale="fa-IR",
+    )
+    assert result.reason_code == "destination_identity_unresolved"
+    assert result.duration_days == 4
+    assert result.unresolved_fields == ["destination_resolution"]
+    assert {item.field for item in result.requirement_assessments if item.status == "known"} == {
+        "destination", "duration_days",
+    }
+
+
 def test_returns_only_selected_currently_sourced_production_candidates_in_user_order() -> None:
     items = [candidate("2"), candidate("1")]
     result = recommend_trip(
