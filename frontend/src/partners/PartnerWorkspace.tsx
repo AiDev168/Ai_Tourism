@@ -92,13 +92,41 @@ export function PartnerWorkspace({ locale, csrfToken }: { locale: Locale; csrfTo
           {typeof linkedItem.request_snapshot.original_request === 'string' && <div><dt>{locale === 'fa-IR' ? 'متن اصلی درخواست (با اجازهٔ مسافر)' : 'Original request with consent'}</dt><dd dir="auto">{linkedItem.request_snapshot.original_request}</dd></div>}
         </dl> : <div className="partner-readable-itinerary">
           {Array.isArray(linkedItem.itinerary_snapshot.published_itineraries)
-            && linkedItem.itinerary_snapshot.published_itineraries.map((plan,index) =>
-              <article key={index}><h3>{String((plan as Record<string,unknown>).title || t.itinerary)}</h3>
-                <pre>{JSON.stringify((plan as Record<string,unknown>).stops ?? [], null, 2)}</pre></article>)}
+            && linkedItem.itinerary_snapshot.published_itineraries.map((plan,index) => {
+              const planData = plan as Record<string,unknown>;
+              const stops = Array.isArray(planData.stops) ? planData.stops as Array<Record<string,unknown>> : [];
+              return <article className="partner-shared-plan" key={String(planData.itinerary_id ?? index)}>
+                <h3>{String(planData.title || t.itinerary)}</h3>
+                <ol>{stops.map((stop,position)=><li key={position} dir="auto">
+                  {locale === 'fa-IR' ? 'روز' : 'Day'} {String(stop.day_number ?? '—')}
+                  {' · '}{locale === 'fa-IR' ? 'مقصد ثبت‌شده' : 'Recorded stop'}
+                  {stop.notes_fa && <p>{String(stop.notes_fa)}</p>}
+                </li>)}</ol>
+                {!stops.length && <p>{locale === 'fa-IR' ? 'هنوز توقفی ثبت نشده است.' : 'No stops saved yet.'}</p>}
+              </article>;
+            })}
           {linkedItem.itinerary_snapshot.provisional && typeof linkedItem.itinerary_snapshot.provisional === 'object'
-            && <article><strong>{t.unverified}</strong>
-              <pre>{JSON.stringify((linkedItem.itinerary_snapshot.provisional as Record<string,unknown>).days ?? [],null,2)}</pre>
+            && <article className="partner-shared-plan">
+              <strong className="partner-unverified-label">{locale === 'fa-IR' ? 'برنامهٔ موقت — تأییدنشده' : t.unverified}</strong>
+              {(Array.isArray((linkedItem.itinerary_snapshot.provisional as Record<string,unknown>).days)
+                ? (linkedItem.itinerary_snapshot.provisional as Record<string,unknown>).days as Array<Record<string,unknown>>
+                : []).map((day,index) => {
+                  const stops = Array.isArray(day.stops) ? day.stops as Array<Record<string,unknown>> : [];
+                  return <section className="partner-shared-day" key={index}>
+                    <h4>{locale === 'fa-IR' ? 'روز' : 'Day'} {String(day.day_number ?? index+1)}</h4>
+                    {stops.length ? <ul>{stops.map((stop,position) => {
+                      const notes = stop.notes_by_locale && typeof stop.notes_by_locale === 'object'
+                        ? stop.notes_by_locale as Record<string,unknown> : {};
+                      return <li key={position} dir="auto"><strong>{String(stop.name ?? '—')}</strong>
+                        {notes[locale] && <p>{String(notes[locale])}</p>}</li>;
+                    })}</ul> : <p>{locale === 'fa-IR' ? 'هنوز برنامه‌ای برای این روز ثبت نشده است.' : 'No stops planned for this day.'}</p>}
+                  </section>;
+                })}
+              <p>{t.unverified}</p>
             </article>}
+          {!(Array.isArray(linkedItem.itinerary_snapshot.published_itineraries) && linkedItem.itinerary_snapshot.published_itineraries.length)
+            && !linkedItem.itinerary_snapshot.provisional
+            && <p>{locale === 'fa-IR' ? 'برنامه‌ای برای این نسخه به اشتراک گذاشته نشده است.' : 'No itinerary has been shared in this revision.'}</p>}
         </div>}
       </>}
     </section>}
