@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
@@ -124,6 +124,42 @@ class TravelerCompanyShareInput(BaseModel):
             if self.include_original_request:
                 raise ValueError("broadcast_cannot_include_original_request")
         return self
+
+
+class CompanyTripResponseInput(BaseModel):
+    """Response to an immutable, consented share revision; never edits the trip."""
+
+    model_config = ConfigDict(extra="forbid")
+    client_request_id: UUID
+    revision_id: UUID
+    response_kind: Literal["accepted_as_requested", "counter_offer"]
+    message: str = Field(default="", max_length=2000)
+    proposed_price_toman: Decimal | None = Field(
+        default=None, ge=0, max_digits=14, decimal_places=2
+    )
+    proposed_start_date: date | None = None
+    proposed_end_date: date | None = None
+    proposed_schedule_notes: str = Field(default="", max_length=1500)
+
+    @model_validator(mode="after")
+    def validate_changes(self):
+        dates = self.proposed_start_date is not None, self.proposed_end_date is not None
+        if dates[0] != dates[1]:
+            raise ValueError("proposed_dates_must_be_a_complete_range")
+        if dates[0] and self.proposed_end_date < self.proposed_start_date:
+            raise ValueError("proposed_end_must_not_precede_start")
+        changed = (self.proposed_price_toman is not None or dates[0]
+                   or bool(self.proposed_schedule_notes.strip()))
+        if self.response_kind == "accepted_as_requested" and changed:
+            raise ValueError("as_requested_cannot_change_price_or_schedule")
+        if self.response_kind == "counter_offer" and not changed:
+            raise ValueError("counter_offer_requires_a_specific_change")
+        return self
+
+
+class TravelerCompanyDecisionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["accepted", "declined"]
 
 
 def _connection(settings: Settings):
@@ -663,5 +699,164 @@ def create_availability(
                 ),
             )
             return cur.fetchone()
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.post("/organizations/{organization_id}/requests/{share_id}/responses", status_code=201)
+def submit_company_trip_response(
+    organization_id: UUID,
+    share_id: UUID,
+    body: CompanyTripResponseInput,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Submit an authenticated accept-as-requested or a counter-offer.
+
+    A company cannot modify traveler records; it may only respond to a specific
+    immutable revision that the traveler actually shared with its organization.
+    Delivery is the authenticated in-app traveler response inbox, not SMS/email.
+    """
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """SELECT s.trip_id,s.traveler_id FROM partner.traveler_request_shares s
+                   WHERE s.share_id=%s AND s.organization_id=%s AND s.revoked_at IS NULL
+                   AND EXISTS (SELECT 1 FROM partner.share_eligible_organizations e
+                               WHERE e.organization_id=s.organization_id)
+                   AND EXISTS (SELECT 1 FROM partner.memberships m
+                               WHERE m.organization_id=s.organization_id
+                                 AND m.user_id=%s AND m.status='active'
+                                 AND m.role IN ('owner','manager','editor'))""",
+                (share_id, organization_id, user.user_id),
+            )
+            shared = cur.fetchone()
+            if shared is None:
+                raise HTTPException(403, "company_share_access_denied")
+            cur.execute(
+                """SELECT revision_id FROM partner.traveler_request_revisions
+                   WHERE share_id=%s AND organization_id=%s
+                   ORDER BY revision_number DESC LIMIT 1""",
+                (share_id, organization_id),
+            )
+            latest = cur.fetchone()
+            if latest is None or latest["revision_id"] != body.revision_id:
+                raise HTTPException(409, "company_share_revision_stale")
+            cur.execute(
+                """INSERT INTO partner.trip_company_responses
+                   (client_request_id,share_id,organization_id,revision_id,trip_id,
+                    traveler_id,submitted_by,response_kind,message,proposed_price_toman,
+                    proposed_start_date,proposed_end_date,proposed_schedule_notes)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (share_id,client_request_id) DO NOTHING
+                   RETURNING response_id,response_kind,traveler_decision,created_at""",
+                (body.client_request_id,share_id,organization_id,body.revision_id,
+                 shared["trip_id"],shared["traveler_id"],user.user_id,
+                 body.response_kind,body.message,body.proposed_price_toman,
+                 body.proposed_start_date,body.proposed_end_date,body.proposed_schedule_notes),
+            )
+            created = cur.fetchone()
+            if created is None:
+                cur.execute(
+                    """SELECT response_id,response_kind,revision_id,traveler_decision,created_at
+                       FROM partner.trip_company_responses
+                       WHERE share_id=%s AND client_request_id=%s""",
+                    (share_id,body.client_request_id),
+                )
+                created = cur.fetchone()
+                if created is None or created["revision_id"] != body.revision_id or created["response_kind"] != body.response_kind:
+                    raise HTTPException(409, "company_response_idempotency_conflict")
+            return {"response": created, "delivery_channel": "authenticated_traveler_inbox",
+                    "contract_status": "nonbinding_proposal_or_confirmation" }
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.get("/organizations/{organization_id}/requests/{share_id}/responses")
+def company_trip_responses(
+    organization_id: UUID,
+    share_id: UUID,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """SELECT response_id,revision_id,response_kind,message,proposed_price_toman,
+                          proposed_start_date,proposed_end_date,proposed_schedule_notes,
+                          traveler_decision,created_at,decided_at
+                   FROM partner.trip_company_responses
+                   WHERE share_id=%s AND organization_id=%s ORDER BY created_at DESC LIMIT 100""",
+                (share_id,organization_id),
+            )
+            return {"items":cur.fetchall()}
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.get("/trips/{trip_id}/company-responses")
+def traveler_company_responses(
+    trip_id: UUID,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Traveler can review persistent private replies, including past revisions."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """SELECT r.response_id,r.organization_id,o.display_name,r.share_id,r.revision_id,
+                          r.response_kind,r.message,r.proposed_price_toman,r.proposed_start_date,
+                          r.proposed_end_date,r.proposed_schedule_notes,r.traveler_decision,
+                          r.created_at,r.decided_at
+                   FROM partner.trip_company_responses r
+                   JOIN partner.organizations o USING (organization_id)
+                   WHERE r.trip_id=%s AND r.traveler_id=%s
+                   ORDER BY r.created_at DESC LIMIT 200""",
+                (trip_id,user.user_id),
+            )
+            return {"items":cur.fetchall()}
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.post("/trips/{trip_id}/company-responses/{response_id}/decision")
+def decide_company_response(
+    trip_id: UUID,
+    response_id: UUID,
+    body: TravelerCompanyDecisionInput,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Traveler accepts/declines one current proposal; does not auto-edit itinerary."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """UPDATE partner.trip_company_responses r
+                   SET traveler_decision=%s,decided_at=now()
+                   WHERE r.response_id=%s AND r.trip_id=%s AND r.traveler_id=%s
+                     AND r.traveler_decision='pending'
+                     AND EXISTS (
+                       SELECT 1 FROM partner.traveler_request_shares s
+                       WHERE s.share_id=r.share_id AND s.revoked_at IS NULL)
+                     AND r.revision_id=(
+                       SELECT rv.revision_id FROM partner.traveler_request_revisions rv
+                       WHERE rv.share_id=r.share_id ORDER BY rv.revision_number DESC LIMIT 1)
+                   RETURNING r.response_id,r.traveler_decision,r.decided_at""",
+                (body.decision,response_id,trip_id,user.user_id),
+            )
+            result = cur.fetchone()
+            if result is None:
+                raise HTTPException(409, "company_response_decision_unavailable_or_stale")
+            return result
+    except HTTPException:
+        raise
     except psycopg.Error as exc:
         _db_error(exc)
