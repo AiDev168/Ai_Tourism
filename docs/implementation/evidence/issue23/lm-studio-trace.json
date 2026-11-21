@@ -100,9 +100,9 @@
       "successes": 3,
       "failures": 0,
       "latencyMs": [
-        9085,
-        11981,
-        19153
+        9274,
+        11859,
+        18735
       ],
       "responseFieldKeys": [
         "budget_text",
@@ -287,6 +287,7 @@
     "unresolvedFields": [
       "destination_resolution"
     ],
+    "provisionalEdited": true,
     "syntheticCatalogueAcceptance": {
       "status": "test_only_dependency_override",
       "recommendation": true,
@@ -442,47 +443,12 @@
     },
     {
       "method": "GET",
-      "path": "/api/v1/assistant/status",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
-      "status": 200
-    },
-    {
-      "method": "POST",
-      "path": "/api/v1/partners/organizations",
-      "status": 201
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations/:id/requests",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations/:id/workspace",
-      "status": 200
-    },
-    {
-      "method": "GET",
       "path": "/api/v1/partners/organizations",
       "status": 200
     },
     {
       "method": "GET",
       "path": "/api/v1/assistant/status",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
       "status": 200
     },
     {
@@ -513,6 +479,41 @@
     {
       "method": "GET",
       "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/partners/organizations",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
       "status": 200
     },
     {
@@ -577,136 +578,21 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/conversations",
       "status": 200
     },
     {
       "method": "GET",
-      "path": "/api/v1/assistant/status",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/assistant/status",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/assistant/status",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations/:id/requests",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations/:id/workspace",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/assistant/status",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations/:id/requests",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations/:id/workspace",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/assistant/status",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations/:id/workspace",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations/:id/requests",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/assistant/status",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/assistant/status",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations/:id/requests",
-      "status": 200
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/partners/organizations/:id/workspace",
-      "status": 200
-    },
-    {
-      "method": "GET",
       "path": "/api/v1/partners/organizations",
       "status": 200
     },
@@ -753,6 +639,121 @@
     {
       "method": "GET",
       "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
       "status": 200
     },
     {

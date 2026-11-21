@@ -2,7 +2,7 @@
 
 **LOCAL GO for the demonstrated Persian planning and two-company sharing journey.** Chromium used the real FastAPI app, marked disposable PostgreSQL 17 and LM Studio. Remote TaHa1_VL remains blocked before a provider request because the authorized development token is absent from the runner process.
 
-The Windows branch fast-forwarded to `d76da457fde481c3e615a4cf33526b2e2c8dece1`, including the owner’s required-field and calendar patches. The tested code is `0cf4c349a30eb42f4b00ed2e093b3298e9afcdf0` on `feat/rahgard-unified-travel-v2`. There are no application migrations in this change. All database operations in the browser test used a newly created disposable database.
+The Windows branch fast-forwarded to `d76da457fde481c3e615a4cf33526b2e2c8dece1`, including the owner’s required-field and calendar patches. The tested code is `447b9f4d0fc029e4bf233d1174e6eed1a1c6bbda` on `feat/rahgard-unified-travel-v2`. There are no application migrations in this change. All database operations in the browser test used a newly created disposable database.
 
 ## What changed and what passed
 
@@ -21,11 +21,11 @@ The Windows branch fast-forwarded to `d76da457fde481c3e615a4cf33526b2e2c8dece1`,
 
 The input was the runbook’s three-person, four-day Mashhad-to-Shiraz request with 20 million TOMAN and interests in gardens, historical places and local food. The LM Studio model `qwen3-8b-abliterated` supplied origin, destination, duration, traveler count, budget, interests and weather. It replied to the date and budget follow-up. Its follow-up did not yield an accepted structured date pair in this run, so the traveler selected December 5–8, 2026 in the Jalali picker. The run used manual fields to complete route difficulty and food where the model omitted them. The edited budget and all three preference fields were persisted, and the user reopened the plan after reauthentication.
 
-The normal recommendation response contained zero eligible approved destinations for this route. The app generated and saved a distinct `provisional_unverified` four-day plan. A separate synthetic dependency override exercised positive catalogue recommendation and itinerary persistence in the same isolated stack, with the ordinary published-catalogue endpoint unchanged before and after.
+The normal recommendation response contained zero eligible approved destinations for this route. The app generated and saved a distinct `provisional_unverified` four-day plan. The traveler edited a stop note, saved it and recovered the edit after reauthentication. A separate synthetic dependency override exercised positive catalogue recommendation and itinerary persistence in the same isolated stack, with the ordinary published-catalogue endpoint unchanged before and after.
 
 The traveler selected two eligible companies and consented in the UI. Each company’s separate authenticated session opened the reviewed request and itinerary for the original and revised version of the same share in its inbox. The unverified company was excluded. The trace verifies cross-tenant denial, anonymous denial and revocation of the second recipient while the first retained both revisions. Delivery was via the authenticated in-app inbox.
 
-Run `06-20-09-125Z-39400` captured 97 allowlisted API response events. The three model calls took 9.085, 11.981 and 19.153 seconds. The screenshots contain redacted field values and content. Horizontal overflow checks passed at both captured widths.
+Run `06-55-02-312Z-34780` captured 97 allowlisted API response events. The three model calls took 9.274, 11.859 and 18.735 seconds. The screenshots contain redacted field values and content. Horizontal overflow checks passed at both captured widths.
 
 - [Sanitized trace](evidence/issue23/lm-studio-trace.json)
 - [Persian mobile screenshot at 390 px](evidence/issue23/lm-studio-390.png)
