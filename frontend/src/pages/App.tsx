@@ -358,6 +358,12 @@ export function App() {
                 rows={4}
                 maxLength={1200}
                 defaultValue=""
+                onKeyDown={event => {
+                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
                 onInput={event => { catalogueRequestVersion.current += 1; requestTextRef.current = event.currentTarget.value; setRequirements(null); setClarifications([]); setAmbiguities([]); setDestinationResolution(null); setCatalogueLoading(false); setError(''); }}
                 placeholder={tripCopy.placeholder}
                 aria-describedby={error ? 'form-error trip-prompt-help' : 'trip-prompt-help'}
