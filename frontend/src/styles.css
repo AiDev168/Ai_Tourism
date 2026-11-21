@@ -1479,3 +1479,17 @@ html[data-rahgard-theme="light"] .company-share-broadcast-note { background: #f1
   .partner-response-wide { grid-column: auto; }
   .partner-response-actions, .traveler-company-responses { padding: 14px; }
 }
+
+.partner-response-share-url { display: grid; gap: 7px; margin-block: 10px; }
+.partner-response-share-url input {
+  width: 100%; min-height: 44px; padding: 9px 11px; border-radius: 11px;
+  color: #f8f0ff; background: #11172b; border: 1px solid #716295;
+  font-size: 12px; direction: ltr; text-align: start;
+}
+.traveler-company-response[data-linked="true"] {
+  border: 2px solid #b080f2; outline: 3px solid rgba(176,128,242,.25);
+  scroll-margin-block: 92px;
+}
+html[data-rahgard-theme="light"] .partner-response-share-url input {
+  color: #26304c; background: #fff; border-color: #a5a1be;
+}
