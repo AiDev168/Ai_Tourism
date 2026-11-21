@@ -1,0 +1,46 @@
+name: Rahgard V2 isolated code quality
+on:
+  push:
+    branches: [feat/rahgard-unified-travel-v2]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend typecheck, tests and PWA production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test -- --reporter=dot
+      - run: npm run build
+      - run: npm run test:pwa-build
+
+  backend-contract:
+    name: Partner contracts, Ruff and Python syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: |
+          python -m pip install --upgrade pip
+          python -m pip install "fastapi==0.121.0" "httpx==0.28.1" "psycopg[binary]==3.2.12" "pydantic-settings==2.11.0" "uvicorn==0.38.0" "pytest==8.4.2" "ruff==0.14.3"
+      - run: python -m compileall -q backend/app/api/partners.py
+      - run: python -m ruff check backend/app/api/partners.py backend/tests/test_partner_share_contract.py
+      - run: python -m pytest backend/tests/test_partner_share_contract.py -q
