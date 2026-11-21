@@ -1957,7 +1957,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
           </label>)}
           {!shareToAllEligible && <label><input type="checkbox" checked={includeOriginalRequestInShare}
             onChange={event => setIncludeOriginalRequestInShare(event.currentTarget.checked)} />
-            {locale === 'fa-IR' ? 'متن اولیهٔ درخواست هم ارسال شود' : locale === 'ar' ? 'تضمين نص الطلب الأصلي' : 'Include the original request text'}</label}
+            {locale === 'fa-IR' ? 'متن اولیهٔ درخواست هم ارسال شود' : locale === 'ar' ? 'تضمين نص الطلب الأصلي' : 'Include the original request text'}</label>}
           <label className="company-share-consent"><input type="checkbox" checked={shareConsentAccepted}
             onChange={event => setShareConsentAccepted(event.currentTarget.checked)} />
             {locale === 'fa-IR' ? (shareToAllEligible
