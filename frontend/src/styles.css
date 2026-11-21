@@ -1083,7 +1083,8 @@ body:has(.partner-workspace) .partner-workspace { color: #eeeafc; max-width: 128
   color: #ffc8ae; border-color: #9e694d; background: #33222a;
 }
 .rahgard-chat-entrance .ai-processing-notice > .assistant-provider-state {
-  display: none;
+  display: block; /* Keep readiness visible for users and existing browser acceptance. */
+  margin: 9px 0 0;
 }
 @media (min-width: 901px) {
   .rahgard-chat-entrance .hero-copy { min-height: 560px; }
