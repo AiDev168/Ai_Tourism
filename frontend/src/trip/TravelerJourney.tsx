@@ -1538,10 +1538,10 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
           <p className="profile-next-step">{chatFlowCopy[locale].review}</p>
           {extracted && <div className="profile-editor">
             <fieldset>
-              <legend>{copy.profileDestination}</legend>
+              <legend>{copy.profileDestination} <span className="trip-field-required">{locale === 'fa-IR' ? '(ضروری)' : locale === 'ar' ? '(مطلوب)' : '(Required)'}</span></legend>
               {destinationNames.map((name, index) => <div className="destination-edit-row" key={index}>
                 <label htmlFor={`profile-destination-${index}`}>{copy.profileDestination} {formatNumber(locale, index + 1)}</label>
-                <input id={`profile-destination-${index}`} value={name} onChange={event => {
+                <input id={`profile-destination-${index}`} aria-required="true" aria-invalid={!name.trim()} value={name} onChange={event => {
                   markProfileFieldEdited('destination');
                   const next = destinationNames.slice(); next[index] = event.target.value; setDestinationNames(next); setDirty(true); invalidateConsent(); void resolveNames(next);
                 }} dir="auto" />
@@ -1582,9 +1582,9 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
               </div>}
               {!destinationNames.length && <p>{copy.noDestination}</p>}
             </fieldset>
-            <label htmlFor="profile-duration">{copy.profileDuration}</label>
-            <input id="profile-duration" type="number" min="1" max="365" value={durationText} onChange={event => { const value = event.target.value; markProfileFieldEdited('duration'); setDurationText(value); const duration = Number(value); const start = travelStartText || extracted?.relativeStartDate.value?.anchor_date || extracted?.relativeDateResolution?.start || ''; if (start && extracted?.relativeStartDate.value && !manualProfileFieldsRef.current.has('travelEnd')) { const end = inclusiveEndDate(start, duration); if (end) setTravelEndText(end); } setDirty(true); invalidateConsent(); }} />
-            <label htmlFor="profile-origin">{copy.profileOrigin}</label>
+            <label htmlFor="profile-duration">{copy.profileDuration} <span className="trip-field-required">{locale === 'fa-IR' ? '(ضروری)' : locale === 'ar' ? '(مطلوب)' : '(Required)'}</span></label>
+            <input id="profile-duration" type="number" min="1" max="365" aria-required="true" aria-invalid={!durationText.trim() || !Number.isInteger(Number(durationText)) || Number(durationText) < 1 || Number(durationText) > 365} value={durationText} onChange={event => { const value = event.target.value; markProfileFieldEdited('duration'); setDurationText(value); const duration = Number(value); const start = travelStartText || extracted?.relativeStartDate.value?.anchor_date || extracted?.relativeDateResolution?.start || ''; if (start && extracted?.relativeStartDate.value && !manualProfileFieldsRef.current.has('travelEnd')) { const end = inclusiveEndDate(start, duration); if (end) setTravelEndText(end); } setDirty(true); invalidateConsent(); }} />
+            <label htmlFor="profile-origin">{copy.profileOrigin} <span className="trip-field-optional">{locale === 'fa-IR' ? '(اختیاری)' : locale === 'ar' ? '(اختياري)' : '(Optional)'}</span></label>
             <input id="profile-origin" type="text" maxLength={100} dir="auto" value={originText}
               onChange={event => { markProfileFieldEdited('origin'); setOriginText(event.target.value); setDirty(true); invalidateConsent(); }} />
             {suggestedOrigin && <div className="approximate-origin-proposal" role="note">
