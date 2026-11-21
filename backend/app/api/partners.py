@@ -121,6 +121,8 @@ class TravelerCompanyShareInput(BaseModel):
                 raise ValueError("broadcast_must_not_include_named_recipients")
             if not self.broad_sharing_consent_confirmed:
                 raise ValueError("broadcast_requires_explicit_consent")
+            if self.include_original_request:
+                raise ValueError("broadcast_cannot_include_original_request")
         return self
 
 
