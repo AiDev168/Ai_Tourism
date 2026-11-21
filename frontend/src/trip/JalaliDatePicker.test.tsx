@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { JalaliDatePicker } from './JalaliDatePicker';
 
 let root: Root | undefined;
 let host: HTMLDivElement | undefined;
+
+beforeEach(() => {
+  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+});
 
 afterEach(() => {
   if (root) act(() => root?.unmount());

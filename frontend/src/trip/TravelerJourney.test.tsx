@@ -155,6 +155,10 @@ describe('persisted traveler journey', () => {
     expect(second.disabled).toBe(false);
     await act(async () => { second.click(); }); await settle();
     expect(host.querySelector<HTMLInputElement>('#profile-destination-1')?.value).toBe('Garden');
+    // Two same-named destinations legitimately coexist; repeated catalogue
+    // queries must not render duplicate React keys for either approved ID.
+    expect(host.querySelectorAll('button[aria-label="Add to trip: Garden · Shiraz"]')).toHaveLength(1);
+    expect(host.querySelectorAll('button[aria-label="Add to trip: Garden · Lahijan"]')).toHaveLength(1);
     const confirm = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].confirmProfile)!;
     await act(async () => { confirm.click(); }); await settle();
     const patchCall = fetchMock.mock.calls.find(call => (call[1] as RequestInit | undefined)?.method === 'PATCH')!;

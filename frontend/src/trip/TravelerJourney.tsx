@@ -175,6 +175,18 @@ function safeRequirements(value: unknown, locale: Locale, originalRequest?: stri
   };
 }
 
+// Several name queries or paginated results can return the same approved ID.
+// Keep the first catalogue record per identity while preserving route phrases
+// (which may legitimately repeat) in the separate resolution state.
+function uniqueCatalogueDestinations(items: readonly ProductionDestinationCandidate[]): ProductionDestinationCandidate[] {
+  const seen = new Set<string>();
+  return items.filter(item => {
+    if (seen.has(item.destinationId)) return false;
+    seen.add(item.destinationId);
+    return true;
+  });
+}
+
 function choiceIds(resolution: DestinationResolution | null): string[] {
   if (!resolution || resolution.kind !== 'resolved') return [];
   return resolution.items.flatMap(item => item.kind === 'resolved' || item.kind === 'confirmed'
@@ -464,7 +476,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       if (sequence !== resolutionSequenceRef.current) return;
       const allAvailable = pages.every(item => item.kind === 'available' && item.boundary === 'knowledge.production_destinations');
       const catalogue = allAvailable
-        ? { kind:'available' as const, boundary:'knowledge.production_destinations', destinations:pages.flatMap(item => item.kind === 'available' ? item.destinations : []) }
+        ? { kind:'available' as const, boundary:'knowledge.production_destinations', destinations:uniqueCatalogueDestinations(pages.flatMap(item => item.kind === 'available' ? item.destinations : [])) }
         : { kind:'unavailable' as const };
       setCatalogueDestinations(catalogue.kind === 'available' ? catalogue.destinations : []);
       let resolved = resolveDestinationNames(names, locale, catalogue);
@@ -487,7 +499,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
       const result = await catalog.load(catalogueSearch.trim() || undefined, cursor);
       if (sequence !== catalogueBrowseSequenceRef.current) return;
       if (result.kind === 'available' && result.boundary === 'knowledge.production_destinations') {
-        setCatalogueDestinations(current => append ? [...current, ...result.destinations.filter(item => !current.some(existing => existing.destinationId === item.destinationId))] : result.destinations);
+        setCatalogueDestinations(current => uniqueCatalogueDestinations(append ? [...current, ...result.destinations] : result.destinations));
         setCatalogueNextCursor(result.nextCursor ?? null);
       } else { setCatalogueDestinations([]); setCatalogueNextCursor(null); setCatalogueUnavailable(true); }
     } catch {
