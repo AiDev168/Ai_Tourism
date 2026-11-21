@@ -2390,7 +2390,9 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
 
     await page.locator('.auth-signed-in button').first().click();
     await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
-    const companyOneIdentity = await signIn(page, api.controlPort, api.controlToken, companyOnePhone);
+    // This is a second login of the same company, not another declaration
+    // of the identity created earlier in this journey.
+    const companyOneReauthenticated = await signIn(page, api.controlPort, api.controlToken, companyOnePhone);
     const inbox = await requestBrowserJson(page,
       `/api/v1/partners/organizations/${companyOne}/requests`, 'GET');
     const revisions = await requestBrowserJson(page,
@@ -2433,7 +2435,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     safeResult.protectedCompanyDeepLinks = { request: true, itinerary: true, revision: 2 };
     safeResult.protectedCompanyBrowserViews = 2;
     const companyResponsePath = `/api/v1/partners/organizations/${companyOne}/requests/${shareId}/responses`;
-    const staleCompanyResponse = await browserApi(page,companyResponsePath,'POST',companyOneIdentity.csrfToken,{
+    const staleCompanyResponse = await browserApi(page,companyResponsePath,'POST',companyOneReauthenticated.csrfToken,{
       client_request_id:crypto.randomUUID(),revision_id:sharedRevision.revision_id,
       response_kind:'accepted_as_requested',message:'stale offer',
     });
@@ -2441,16 +2443,16 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       throw new Error('real_provider_stale_company_revision_not_rejected');
     }
     const acceptedClientRequestId = crypto.randomUUID();
-    const acceptedResponse = await requestBrowserJson(page,companyResponsePath,'POST',companyOneIdentity.csrfToken,{
+    const acceptedResponse = await requestBrowserJson(page,companyResponsePath,'POST',companyOneReauthenticated.csrfToken,{
       client_request_id:acceptedClientRequestId,revision_id:changedRevision.revision_id,
       response_kind:'accepted_as_requested',message:'QA: We can support this as requested.',
     });
-    const conflictingRetry = await browserApi(page,companyResponsePath,'POST',companyOneIdentity.csrfToken,{
+    const conflictingRetry = await browserApi(page,companyResponsePath,'POST',companyOneReauthenticated.csrfToken,{
       client_request_id:acceptedClientRequestId,revision_id:changedRevision.revision_id,
       response_kind:'accepted_as_requested',message:'QA: attempt to change original acceptance',
     });
     if (conflictingRetry.status !== 409) throw new Error('real_provider_company_idempotency_key_conflict_not_rejected');
-    const counterResponse = await requestBrowserJson(page,companyResponsePath,'POST',companyOneIdentity.csrfToken,{
+    const counterResponse = await requestBrowserJson(page,companyResponsePath,'POST',companyOneReauthenticated.csrfToken,{
       client_request_id:crypto.randomUUID(),revision_id:changedRevision.revision_id,
       response_kind:'counter_offer',message:'QA: Revised price and dates.',
       proposed_price_toman:27000000,proposed_start_date:'2026-12-05',
