@@ -300,7 +300,7 @@ describe('persisted traveler journey', () => {
     const dayTwo = host.querySelector<HTMLDetailsElement>('.provisional-day[data-provisional-day="2"]')!;
     expect(dayOne.open).toBe(true);
     expect(dayTwo.open).toBe(false);
-    expect(dayOne.querySelector('summary')?.textContent).toContain('Unplanned');
+    expect(dayOne.querySelector('summary')?.textContent).toContain(journeyMessages['en-US'].unplannedDay);
     const addInput = host.querySelector<HTMLInputElement>('#provisional-add-1')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(addInput, 'Traveler-selected museum');
