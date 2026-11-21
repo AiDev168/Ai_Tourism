@@ -760,13 +760,23 @@ def submit_company_trip_response(
             created = cur.fetchone()
             if created is None:
                 cur.execute(
-                    """SELECT response_id,response_kind,revision_id,traveler_decision,created_at
+                    """SELECT response_id,response_kind,revision_id,traveler_decision,created_at,
+                              message,proposed_price_toman,proposed_start_date,
+                              proposed_end_date,proposed_schedule_notes,submitted_by
                        FROM partner.trip_company_responses
                        WHERE share_id=%s AND client_request_id=%s""",
                     (share_id,body.client_request_id),
                 )
                 created = cur.fetchone()
-                if created is None or created["revision_id"] != body.revision_id or created["response_kind"] != body.response_kind:
+                if (created is None
+                    or created["revision_id"] != body.revision_id
+                    or created["response_kind"] != body.response_kind
+                    or created["message"] != body.message
+                    or created["proposed_price_toman"] != body.proposed_price_toman
+                    or created["proposed_start_date"] != body.proposed_start_date
+                    or created["proposed_end_date"] != body.proposed_end_date
+                    or created["proposed_schedule_notes"] != body.proposed_schedule_notes
+                    or created["submitted_by"] != user.user_id):
                     raise HTTPException(409, "company_response_idempotency_conflict")
             return {"response": created, "delivery_channel": "authenticated_traveler_inbox",
                     "contract_status": "nonbinding_proposal_or_confirmation" }
