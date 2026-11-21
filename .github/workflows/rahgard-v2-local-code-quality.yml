@@ -44,7 +44,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm.cmd ci
       - run: npm.cmd test -- --reporter=dot
-      - run: .\\node_modules\\.bin\\tsc.cmd -p tsconfig.json --noEmit
+      - run: npx.cmd tsc -p tsconfig.json --noEmit
 
   backend-contract:
     name: Partner contracts, Ruff and Python syntax
