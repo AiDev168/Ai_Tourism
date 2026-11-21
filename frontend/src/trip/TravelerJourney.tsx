@@ -13,6 +13,7 @@ import { TravelerGuidance } from './TravelerGuidance';
 import { nextTripQuestion } from './clarificationGuide';
 import { displayTripInterest, reviewedTripInterests } from './interestDisplay';
 import { JalaliDatePicker } from './JalaliDatePicker';
+import { TravelerCompanyResponses } from './TravelerCompanyResponses';
 import { deviceCalendarDate } from './jalaliDate';
 import {
   travelerApi, TravelerApiError, parseRetrievalEvidence, type ConversationRecord, type ConversationSummary,
@@ -1984,6 +1985,9 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
           </li>)}
         </ul>}
       </section>}
+
+      {confirmed && activeTrip && session && <TravelerCompanyResponses
+        locale={locale} csrfToken={csrf} tripId={activeTrip.trip_id} />}
 
       {itinerary && <section className="saved-itinerary" aria-labelledby="saved-itinerary-title">
         <h3 id="saved-itinerary-title">{copy.itineraryTitle}</h3>
