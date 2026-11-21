@@ -126,7 +126,8 @@ export function PartnerWorkspace({ locale, csrfToken }: { locale: Locale; csrfTo
             && <p>{locale === 'fa-IR' ? 'برنامه‌ای برای این نسخه به اشتراک گذاشته نشده است.' : 'No itinerary has been shared in this revision.'}</p>}
         </div>}
         <CompanyResponseActions locale={locale} csrfToken={csrfToken} organizationId={orgId}
-          shareId={linkedItem.share_id} revisionId={linkedItem.revision_id} />
+          shareId={linkedItem.share_id} revisionId={linkedItem.revision_id}
+          tripId={String(linkedItem.request_snapshot.trip_id ?? '')} />
       </>}
     </section>}
 
