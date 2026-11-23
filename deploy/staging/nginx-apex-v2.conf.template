@@ -1,0 +1,33 @@
+# Review-only origin vhost for https://hinaa.ir/. Keep the existing :63202
+# default_server and legacy upstream unchanged. Arvan must send apex SNI and
+# Host over HTTPS, verify the origin certificate, and stop redirecting apex.
+server {
+    listen 63202 ssl;
+    server_name hinaa.ir;
+    server_tokens off;
+    client_max_body_size 128k;
+
+    ssl_certificate /etc/letsencrypt/live/hinaa.ir/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/hinaa.ir/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_tickets off;
+
+    if ($ssl_server_name != hinaa.ir) { return 421; }
+    if ($host != hinaa.ir) { return 421; }
+
+    location ~* ^/(admin|api/v1/admin|api/v1/auth/(otp|debug|local-owner))(/|$) {
+        return 404;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:18081;
+        proxy_http_version 1.1;
+        proxy_set_header Host hinaa.ir;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header Forwarded "";
+        proxy_set_header X-Forwarded-Host "";
+        proxy_read_timeout 80s;
+        proxy_send_timeout 30s;
+    }
+}

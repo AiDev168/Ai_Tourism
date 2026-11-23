@@ -26,6 +26,21 @@ SELECT 1 / CASE WHEN current_database() = 'rahgard_pilot_vps_staging'
 ALTER TABLE partner.organizations
   ADD COLUMN is_test BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Migration 0019 granted table-level INSERT and UPDATE. Those privileges
+-- would automatically cover a new column. Preserve access to the original
+-- columns while reserving this flag to the database operator.
+REVOKE INSERT, UPDATE ON partner.organizations FROM ai_tourism_app;
+GRANT INSERT (
+    organization_id, legal_name, display_name, organization_type, registration_country,
+    registration_number, primary_admin_area_id, verification_status, participation_status,
+    application_status, created_by, created_at, updated_at, closed_at
+) ON partner.organizations TO ai_tourism_app;
+GRANT UPDATE (
+    organization_id, legal_name, display_name, organization_type, registration_country,
+    registration_number, primary_admin_area_id, verification_status, participation_status,
+    application_status, created_by, created_at, updated_at, closed_at
+) ON partner.organizations TO ai_tourism_app;
+
 CREATE OR REPLACE VIEW partner.share_eligible_organizations
 WITH (security_barrier=true) AS
 SELECT organization_id,display_name,organization_type
