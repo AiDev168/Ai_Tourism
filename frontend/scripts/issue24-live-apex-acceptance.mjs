@@ -30,6 +30,8 @@ page.setDefaultTimeout(25_000);
 let phase = 'open';
 let pageErrors = 0;
 const apiEvents = [];
+let omittedApiEvents = 0;
+const maxApiEvents = 80;
 page.on('pageerror', () => { pageErrors += 1; });
 page.on('response', async response => {
   try {
@@ -48,7 +50,8 @@ page.on('response', async response => {
       const code = body?.detail?.code ?? body?.detail ?? body?.error?.code;
       if (typeof code === 'string' && /^[a-z0-9_]{1,80}$/i.test(code)) event.error_code = code;
     }
-    apiEvents.push(event);
+    if (apiEvents.length < maxApiEvents) apiEvents.push(event);
+    else omittedApiEvents += 1;
   } catch { /* Never let diagnostics interfere with the real browser journey. */ }
 });
 
@@ -115,14 +118,24 @@ try {
 
   phase = 'assistant_reply_persistence';
   let assistantPersisted = false;
+  let assistantProviderTagged = false;
+  let assistantModelTagged = false;
   for (let i = 0; i < 60; i += 1) {
     const state = await page.evaluate(async id => {
       const response = await fetch(`/api/v1/conversations/${id}`, { credentials: 'same-origin', cache: 'no-store' });
-      if (!response.ok) return { status: response.status, assistant: 0 };
+      if (!response.ok) return { status: response.status, assistant: 0, providerTagged: false, modelTagged: false };
       const body = await response.json();
-      return { status: response.status, assistant: body.messages?.filter(message => message.role === 'assistant').length ?? 0 };
+      const messages = body.messages?.filter(message => message.role === 'assistant') ?? [];
+      return { status: response.status, assistant: messages.length,
+        providerTagged: messages.some(message => typeof message.provider_name === 'string' && message.provider_name.length > 0),
+        modelTagged: messages.some(message => typeof message.model_name === 'string' && message.model_name.length > 0) };
     }, conversationId);
-    if (state.status === 200 && state.assistant > 0) { assistantPersisted = true; break; }
+    if (state.status === 200 && state.assistant > 0) {
+      assistantPersisted = true;
+      assistantProviderTagged = state.providerTagged;
+      assistantModelTagged = state.modelTagged;
+      break;
+    }
     await page.waitForTimeout(1000);
   }
   assert(assistantPersisted, 'assistant_reply_not_persisted');
@@ -150,17 +163,26 @@ try {
   const confirmed = confirmedProfile?.confirmed_requirements ?? {};
   const destinations = Array.isArray(confirmed.destinations) ? confirmed.destinations.map(value => normalized(value)) : [];
   const budget = confirmed.budget ?? {};
+  const budgetEvidence = `${normalized(budget.raw)} ${normalized(budget.unit)}`;
   assert(destinations.some(value => value.includes('شیراز')) && normalized(confirmed.origin).includes('مشهد'), 'confirmed_trip_locations_mismatch');
   assert(confirmed.duration_days === 5 && confirmedProfile?.duration_days === 5, 'confirmed_duration_mismatch');
   assert(confirmed.traveler_count === 5 && confirmedProfile?.traveler_count === 5, 'confirmed_traveler_count_mismatch');
-  assert(Number(budget.amount) === 30_000_000 && budget.unit === 'toman', 'confirmed_budget_mismatch');
+  // The canonical profile intentionally preserves magnitude + denomination
+  // (for example 30 + “million toman”). Legacy trip columns only represent an
+  // exact IRR amount and must stay NULL when that shape cannot be represented.
+  assert(Number(budget.amount) === 30
+    && String(budget.currency ?? '').toUpperCase() === 'TOMAN'
+    && /million|میلیون|ملیون/iu.test(budgetEvidence)
+    && /toman|تومان|تومن/iu.test(budgetEvidence), 'confirmed_budget_mismatch');
 
   phase = 'recommendation_and_company_eligibility';
   const recommendationPromise = page.waitForResponse(r => new URL(r.url()).pathname === `/api/v1/trips/${tripId}/recommendations` && r.request().method() === 'POST');
   await page.locator('.recommendation-controls button').first().click();
   const recommendationResponse = await recommendationPromise;
-  assert(recommendationResponse.status() === 200, 'recommendation_request_failed');
-  const recommendationStatus = (await recommendationResponse.json()).status;
+  assert(recommendationResponse.status() === 201, 'recommendation_request_failed');
+  const recommendationBody = await recommendationResponse.json();
+  const recommendationStatus = recommendationBody.status;
+  assert(['available', 'empty', 'needs_confirmation'].includes(recommendationStatus), 'recommendation_status_invalid');
   const optionsResponse = await page.evaluate(async id => {
     const response = await fetch(`/api/v1/partners/trips/${id}/company-share-options`, { credentials: 'same-origin', cache: 'no-store' });
     return { status: response.status, body: response.ok ? await response.json() : null };
@@ -226,14 +248,16 @@ try {
   process.stdout.write(`${JSON.stringify({ status: 'PASS', origin, viewport: '390x844',
     hashedCssDelivered: true, hashedJsDelivered: true, accountMode: generated ? 'one-time-test-registration' : 'existing-test-login',
     secureHostCookie: true, tripSaved: true, conversationSaved: true, assistantPersisted,
-    persistedProfile: { destination: 'شیراز', origin: 'مشهد', durationDays: 5, travelers: 5, budgetAmount: 30_000_000, budgetUnit: 'toman' },
+    assistantProviderTagged, assistantModelTagged, realProviderInferenceVerified: assistantProviderTagged && assistantModelTagged,
+    persistedProfile: { destination: 'شیراز', origin: 'مشهد', durationDays: 5, travelers: 5,
+      budgetMagnitude: 30, budgetCurrency: 'TOMAN', budgetScaleAndSourceRetained: true },
     profileConfirmed: true, recommendationStatus, eligibleCompanyCount: optionsResponse.body.eligible_count,
     companySharingSent: sharedRecipientCount > 0, sharedRecipientCount, fiveDayPlanSavedEditedReopened: true, reauthenticated: true,
-    screenshotPrivate: Boolean(screenshot), pageErrors, apiEvents })}\n`);
+    screenshotPrivate: Boolean(screenshot), pageErrors, apiEvents, omittedApiEvents })}\n`);
 } catch (error) {
   const failedEvents = apiEvents.filter(event => event.method !== 'GET' && event.status >= 400);
   process.stderr.write(`LIVE_APEX_ACCEPTANCE_BLOCKED ${JSON.stringify({ phase, error: String(error?.message ?? 'unknown').slice(0, 160),
-    failedEvents, lastApiEvents: apiEvents.slice(-8), pageErrors })}\n`);
+    failedEvents, lastApiEvents: apiEvents.slice(-8), omittedApiEvents, pageErrors })}\n`);
   process.exitCode = 1;
 } finally {
   await context.close();
