@@ -462,6 +462,11 @@ describe('persisted traveler journey', () => {
     await act(async () => { openTrip.click(); }); await settle();
 
     expect(host.querySelector('.recommendation-controls')).toBeNull();
+    // Sharing must be discoverable before confirmation, but no consent or send
+    // controls may appear until the saved trip profile has been reviewed.
+    expect(host.querySelector('#company-request-share-title')).not.toBeNull();
+    expect(host.textContent).toContain('Review and confirm your trip details above before sharing with companies.');
+    expect(host.querySelector('.company-share-options')).toBeNull();
     expect(host.textContent).toContain(journeyMessages['en-US'].profileTitle);
     expect(host.textContent).not.toContain(journeyMessages['en-US'].findRecommendations);
   });
