@@ -280,6 +280,9 @@ describe('persisted traveler journey', () => {
 
     const confirm = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].confirmProfile)!;
     await act(async () => { confirm.click(); }); await settle();
+    // The safe, explicitly unverified day-by-day draft must be available
+    // immediately after profile review, without an extra catalogue click.
+    expect([...host.querySelectorAll('button')].some(button => button.textContent === 'Create an editable blank itinerary')).toBe(true);
     const recommendations = [...host.querySelectorAll('button')].find(button => button.textContent === journeyMessages['en-US'].findRecommendations)!;
     await act(async () => { recommendations.click(); }); await settle();
     expect(host.textContent).toContain(journeyMessages['en-US'].recommendationEmpty);
