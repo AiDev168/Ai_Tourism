@@ -1,0 +1,167 @@
+{
+  "backup": "rahgard-20261123T030841Z-97fd9c17.dump.enc",
+  "backup_sha256": "1efc1760cfac0d64a1cc9173717209b326ae9ce05825a184879bc268aa37167f",
+  "checksum_hmac_and_archive": "passed",
+  "tested_source_sha": "36625ecf269c2a3d5590528257d32af2b6f47dd0",
+  "postgresql_image_id": "sha256:a30c041297b2306a8bb79cc6ed737f16bfca3078a3024324bb8115b302e83535",
+  "before_migration_count": 20,
+  "after_migration_count": 22,
+  "after_ledger": [
+    "0000_legacy_tourism_points_baseline|0f09e1a1b003e76b67134cc5e1f74b37fa5a0a89f62e4b4ecd534c14c823314f",
+    "0001_core_schema|00b4d8616f4e1622191e982c4a388feb20c41a6e46778ce0770c40339a48063e",
+    "0002_synthetic_knowledge_seed|ec6ea33a5f3c9e8b902050015bd24672e25e112f7852bc7d936d48cc6d944ec7",
+    "0003_synthetic_e2e_seed|9ef84f906ba33988ac3cfaa176856c1dbc1f9003060c60dd90c60359e2066383",
+    "0004_app_role_grants|b3b9903dcfed60417aeb8fcd690c34fbc933477491f908a3b02fc80c2fc8b6a7",
+    "0005_verified_unesco_destination_seed|9ad5523af9733da845df8c8c090862e29d877b72ac3951053cb0c3580e9a3218",
+    "0006_verified_unesco_destination_seed_batch2|c0a935c7c7b17f085107643a9ea0911cac4378adb945cdf3348146efc56ada63",
+    "0007_shiraz_dalahoo_wikipedia_dataset_v1|b95891fe6de229ea51a2cc446fc0e5f0cb03dbe3e7c34914a4becf67ee78a7c2",
+    "0008_authentication_foundation|bba9a0bb08e7c86429ebb67bda443aeca268f47d41d10d8ee09bd188127a23e3",
+    "0009_traveler_core|8e77827f318e2acd3ccc5be020e5229f989cb4bbfadc73de75ed109a7750a91b",
+    "0010_task31_content_privacy_full_itinerary|f9c83fefbbc8f48b362ebf42f8ea4e2558192657d4f6f1dd804a69aa39529db5",
+    "0011_internal_chat_turns|0d325f3968932fa06a6aef38c92b980b41e72dffd62711933f205ca4b8dce927",
+    "0012_task5_published_claim_evidence|cfce395ed1f2bf3dc01f7b42e47d64434a32bb2638e4e30ff27da5b4f22dfa9a",
+    "0013_private_pilot_geo_audit|c5db92c206faad0af63b0789d5445894b8872d511306c11c387d1c9cdd978591",
+    "0016_staging_invitation_auth|702b113f2a26856836d1eb64320cb13c97626e61f588244faa3923ae23b03016",
+    "0017_provisional_itineraries|4576f4e1390de68345866e0d99815d1644833f577266539d47075da26776de6d",
+    "0018_national_catalogue_ingestion|f5fc0cb3e3fcf61b36a5d21f9c98c3d75e04581cb19d4e22ad1754d53480dd36",
+    "0019_partner_workspace|8f7c745e128faf0d9d91bf808159367a7a2636ac31b4544147619a9af751dd56",
+    "0020_archive_candidate_publication|b6822a3401cef3f7ac8c85ce0577eb71d0373bc34bf4ec2d8c65b0a812f13326",
+    "0021_postgis_security_definer_publication|bc0b6abb335549ddff91a811aeeca30bc5ba75d3e3f5f3fe81f7ded4b3bee650",
+    "0022_traveler_company_requests|e6b7db49abc0ff76c2620b2cc8d5dded0f4255f8533efd20bd5b402a0ba57eda",
+    "0023_partner_trip_responses|deef8c5016f26aa646b9ff22346fad4ade3c6780ff447f701aa9e8a8e28571ac"
+  ],
+  "migration_seconds": {
+    "0022_traveler_company_requests": 0.174,
+    "0023_partner_trip_responses": 0.167
+  },
+  "counts_before": {
+    "identity.users": 12,
+    "identity.web_sessions": 21,
+    "conversation.conversations": 6,
+    "conversation.messages": 42,
+    "travel.trips": 6,
+    "travel.itineraries": 1,
+    "travel.itinerary_stops": 6,
+    "travel.provisional_itineraries": 2,
+    "partner.organizations": 0,
+    "partner.memberships": 0,
+    "partner.services": 0,
+    "partner.offers": 0,
+    "partner.prices": 0,
+    "partner.schedules": 0,
+    "partner.availability_snapshots": 0,
+    "knowledge.destinations": 66,
+    "knowledge.knowledge_sources": 58,
+    "knowledge.destination_sources": 116,
+    "knowledge.knowledge_documents": 52,
+    "knowledge.knowledge_chunks": 81,
+    "knowledge.production_destinations": 0,
+    "knowledge.destination_candidates": 0,
+    "knowledge.catalogue_publication_events": 0
+  },
+  "counts_after": {
+    "identity.users": 12,
+    "identity.web_sessions": 21,
+    "conversation.conversations": 6,
+    "conversation.messages": 42,
+    "travel.trips": 6,
+    "travel.itineraries": 1,
+    "travel.itinerary_stops": 6,
+    "travel.provisional_itineraries": 2,
+    "partner.organizations": 0,
+    "partner.memberships": 0,
+    "partner.services": 0,
+    "partner.offers": 0,
+    "partner.prices": 0,
+    "partner.schedules": 0,
+    "partner.availability_snapshots": 0,
+    "knowledge.destinations": 66,
+    "knowledge.knowledge_sources": 58,
+    "knowledge.destination_sources": 116,
+    "knowledge.knowledge_documents": 52,
+    "knowledge.knowledge_chunks": 81,
+    "knowledge.production_destinations": 0,
+    "knowledge.destination_candidates": 0,
+    "knowledge.catalogue_publication_events": 0
+  },
+  "new_share_response_rows": 0,
+  "existing_account_and_credential_contents_preserved": true,
+  "rls_and_app_grants": "passed",
+  "isolation": "network none, no published ports, tmpfs data",
+  "runtime_image_checks": {
+    "rahgard-api:5e2664fb51e18f52549aa37a8b5793e12ace09b2": {
+      "image_id": "sha256:8017e31258b13adc0dcbd9e96e3bb8e40dc874394c4dfb75e391513fc449a3b3",
+      "health": "ready",
+      "catalogue_count": 0
+    },
+    "rahgard-api:36625ecf269c2a3d5590528257d32af2b6f47dd0": {
+      "image_id": "sha256:2c814062db391b3b484b8c45b622329e9f8519a1bf0cc1627828744b23ab497e",
+      "health": "ready",
+      "catalogue_count": 0
+    }
+  },
+  "isolated_apex_auth": {
+    "legacy": {
+      "legacy_apex_login": 401,
+      "legacy_apex_register": 401,
+      "legacy_8_char_registration": 422,
+      "legacy_15_char_registration": 422,
+      "legacy_16_char_registration": 200
+    },
+    "invite": {
+      "email_signup": false,
+      "otp_delivery": "unavailable",
+      "existing_legacy_credential": "pass",
+      "secure_host_only_cookie": "pass",
+      "csrf_and_logout": "pass",
+      "apex_root_and_pwa_assets": "pass",
+      "uninvited_registration": 401,
+      "invited_8_char_registration": 200,
+      "chromium": {
+        "mode": "invite",
+        "chromium": "157.0.8103.40",
+        "origin": "https://hinaa.ir",
+        "signedInAfterReload": true,
+        "secureHostCookie": true,
+        "manifestRoot": true,
+        "unicodeBoundaries": null
+      }
+    },
+    "signup": {
+      "email_signup": true,
+      "otp_delivery": "unavailable",
+      "existing_legacy_credential": "pass",
+      "secure_host_only_cookie": "pass",
+      "csrf_and_logout": "pass",
+      "apex_root_and_pwa_assets": "pass",
+      "registration_boundary_status": {
+        "7": 422,
+        "8": 200,
+        "24": 200,
+        "25": 200,
+        "256": 200,
+        "257": 422
+      },
+      "supplementary_unicode_boundary_status": {
+        "7": 422,
+        "8": 200,
+        "256": 200,
+        "257": 422
+      },
+      "chromium": {
+        "mode": "signup",
+        "chromium": "157.0.8103.40",
+        "origin": "https://hinaa.ir",
+        "signedInAfterReload": true,
+        "secureHostCookie": true,
+        "manifestRoot": true,
+        "unicodeBoundaries": {
+          "7": "client_rejected",
+          "256": "registered",
+          "257": "client_rejected"
+        }
+      }
+    }
+  },
+  "migration_and_checks_seconds": 29.572
+}

@@ -246,7 +246,7 @@ exec psql -Xq -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_
         if args.apex_auth_images:
             from test_rahgard_apex_auth import test_apex_auth
 
-            apex_auth = test_apex_auth(container, *args.apex_auth_images, args.openssl)
+            apex_auth = test_apex_auth(container, *args.apex_auth_images, args.openssl, browser=args.apex_browser)
         return {
             "backup": args.backup.name, "backup_sha256": digest, "checksum_hmac_and_archive": "passed",
             "tested_source_sha": args.source_sha, "postgresql_image_id": PG_IMAGE,
@@ -274,6 +274,7 @@ def main() -> None:
     parser.add_argument("--openssl", default="openssl")
     parser.add_argument("--runtime-image", action="append", default=[], help="Local API image for isolated smoke")
     parser.add_argument("--apex-auth-images", nargs=3, metavar=("LEGACY_API", "V2_API", "V2_WEB"))
+    parser.add_argument("--apex-browser", action="store_true", help="Run Chromium via an apex-only local fixture tunnel")
     args = parser.parse_args()
     try:
         print(json.dumps(rehearse(args), indent=2))

@@ -1,5 +1,7 @@
 # Rahgard V2 Issue #24 preparation
 
+The [apex authentication follow-up](RAHGARD_V2_ISSUE24_APEX_AUTH_GATE.md) records the runtime origin check, the exact-host rehearsal and the password-compatible successor to the candidate documented below.
+
 **Decision: NO-GO / BLOCKED.** The release candidate, encrypted off-host snapshot, restored-data migrations and local browser journey passed the checks below. Live apex cutover requires the owner’s routing decision and the remaining deployment checks. The sole canonical target is **https://hinaa.ir/**.
 
 ## Current state and apex ownership decision

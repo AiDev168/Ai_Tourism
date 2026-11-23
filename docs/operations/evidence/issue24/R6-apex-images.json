@@ -1,0 +1,25 @@
+{
+  "source_sha": "36625ecf269c2a3d5590528257d32af2b6f47dd0",
+  "platform": "linux/amd64",
+  "workflow_run_id": 45112204219,
+  "artifact_id": 14789748576,
+  "outer_zip_sha256": "5f5500dfe539211c2cf9e5754207b2aaa54f6c6bf8dd1ede05aa7555c0c88ae8",
+  "docker_archive_sha256": "2c0c252946804679242ceeae7b3bad5dab5960388b9eac0251422e0382f8384c",
+  "release_manifest_sha256": "49df9545a389f6db39a5aca6ad68bdacae23998700cfba6bc2eeada3b3d32efa",
+  "api": {
+    "hosted_image_id": "sha256:966b76bc28fcb295bc92eddce11cc020c885e8a762a23c7ce49b35c7bf3bf319",
+    "windows_image_id": "sha256:2c814062db391b3b484b8c45b622329e9f8519a1bf0cc1627828744b23ab497e"
+  },
+  "web": {
+    "hosted_image_id": "sha256:28326afb19d80aea61ff478b9e244ada7733b68f97553f07b011b80101897029",
+    "windows_image_id": "sha256:44fb963eea6b5fa0dbd2a876036906c15581eec8677e34f3111781229eabd375"
+  },
+  "checks": {
+    "loaded_config_and_layers": "containerd-export-equivalent",
+    "checksum": "pass",
+    "secret_scan": "pass",
+    "pwa_image": "pass",
+    "isolated_apex_tls_and_auth": "pass",
+    "public_vps_activation": "not_performed"
+  }
+}

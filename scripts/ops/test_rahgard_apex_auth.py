@@ -113,7 +113,9 @@ else:
 '''
 
 
-def test_apex_auth(db: str, legacy_image: str, api_image: str, web_image: str, openssl: str) -> dict:
+def test_apex_auth(
+    db: str, legacy_image: str, api_image: str, web_image: str, openssl: str, browser: bool = False,
+) -> dict:
     from rehearse_rahgard_v2_migrations import DATABASE, require, run, sql
 
     state = json.loads(run("docker", "inspect", db))[0]
@@ -220,6 +222,20 @@ def test_apex_auth(db: str, legacy_image: str, api_image: str, web_image: str, o
                     reason = last[0].split(": ", 1)[-1] if last and last[0].startswith("AssertionError: ") else "transport"
                     raise RuntimeError(f"Isolated apex auth fixture failed in {mode}: {reason}")
                 results[mode] = json.loads(checked.stdout)
+                if browser and mode != "legacy":
+                    email_role = "legacy" if mode == "invite" else "browser"
+                    driver = Path(__file__).resolve().parents[2] / "frontend/scripts/rahgard-apex-auth-e2e.mjs"
+                    fixture = json.dumps({
+                        "container": api, "mode": mode, "email": f"v2-{tag}-{email_role}@example.test",
+                        "password": password if mode == "invite" else "",
+                    }).encode()
+                    driven = subprocess.run(["node", str(driver)], input=fixture, capture_output=True, timeout=120)
+                    if driven.returncode:
+                        error_text = driven.stderr.decode(errors="replace")
+                        failure = re.search(r"Exact apex Chromium fixture failed in ([a-z_]+)\.", error_text)
+                        phase = failure[1] if failure else "driver_guard_or_start"
+                        raise RuntimeError(f"Exact apex Chromium fixture failed in {mode}: {phase}")
+                    results[mode]["chromium"] = json.loads(driven.stdout)
                 stop(api)
         return results
     finally:
