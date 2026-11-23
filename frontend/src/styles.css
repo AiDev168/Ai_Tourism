@@ -1565,3 +1565,96 @@ html[data-rahgard-theme="dark"] .unified-trip-experience .provisional-day-summar
   .unified-trip-experience .provisional-day-summary { padding: 14px 12px; }
   .unified-trip-experience .provisional-day-editor { padding: 0 9px 12px; }
 }
+
+/* Accessibility hotfix: pair text/background colors explicitly across the
+   authenticated light/dark shells. Do not rely on text inherited from body,
+   especially for the auth dialog rendered as a portal under document.body. */
+html[data-rahgard-theme="light"] .auth-panel {
+  background: #ffffff;
+  color: #182638;
+}
+html[data-rahgard-theme="light"] .auth-panel input {
+  background: #ffffff;
+  color: #182638;
+}
+html[data-rahgard-theme="dark"] .auth-panel {
+  background: #1a2235;
+  color: #f4f0ff;
+  border-color: #636987;
+}
+html[data-rahgard-theme="dark"] .auth-panel :where(h2,label) {
+  color: #f4f0ff;
+}
+html[data-rahgard-theme="dark"] .auth-panel p {
+  color: #d0d1e4;
+}
+html[data-rahgard-theme="dark"] .auth-panel input {
+  background: #0e1729;
+  color: #f5f2ff;
+  border-color: #8185aa;
+  caret-color: #f5f2ff;
+}
+html[data-rahgard-theme="dark"] .auth-panel input::placeholder {
+  color: #c6c5df;
+  opacity: 1;
+}
+html[data-rahgard-theme="dark"] .auth-panel .auth-mode-switch button {
+  background: #26304a;
+  color: #f5f2ff;
+  border-color: #72739a;
+}
+html[data-rahgard-theme="dark"] .auth-panel .auth-mode-switch button[aria-pressed="true"] {
+  background: #513873;
+  color: #ffffff;
+  border-color: #bf9af1;
+}
+html[data-rahgard-theme="dark"] .auth-panel .auth-back {
+  background: #26304a;
+  color: #f5f2ff;
+  border-color: #72739a;
+}
+html[data-rahgard-theme="dark"] .auth-panel [role="alert"] {
+  color: #ffbec5;
+}
+
+/* Confirmed contrast defect: the base green h3 (#174b3d) had only
+   1.47:1 contrast on the dark company-sharing surface (#21283d). */
+html[data-rahgard-theme="dark"] .unified-trip-experience .company-request-sharing h3 {
+  color: #f4efff;
+}
+
+/* The progress panel was always pastel, even in night mode.
+   Make its headings, steps, and navigation consistently legible. */
+html[data-rahgard-theme="dark"] .unified-trip-experience .rahgard-progress {
+  background: linear-gradient(130deg, #192238, #232a44);
+  border-color: #626a8a;
+  color: #f4f0ff;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience .rahgard-progress-header h3 {
+  color: #f4f0ff;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience .rahgard-progress-header > div > p:last-child,
+html[data-rahgard-theme="dark"] .unified-trip-experience .rahgard-progress-next {
+  color: #d2d8eb;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience .rahgard-progress-count {
+  background: #29324e;
+  color: #f4f0ff;
+  border-color: #747d9f;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience .rahgard-progress-steps li {
+  background: #27324c;
+  color: #edf0ff;
+  border-color: #606b8e;
+  opacity: 1;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience .rahgard-progress-steps li.is-current {
+  background: #523c76;
+  color: #ffffff;
+  border-color: #ba9af2;
+}
+html[data-rahgard-theme="dark"] .unified-trip-experience .rahgard-progress-steps li.is-complete {
+  background: #22433e;
+  color: #d2ffe7;
+  border-color: #649e89;
+}
