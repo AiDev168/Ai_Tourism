@@ -4,6 +4,7 @@
   "windows_and_github_sha": "9ae8cc508f9bc0985aae022bce0af2b5495a6279",
   "vps": {
     "ssh_alias": "rahgard-vps",
+    "ssh_host_key_fingerprint": "ssh-ed25519 SHA256:uyqGrqLvgNGeE2nIqQSJ16vvD+UNTut0Gj7K3zrpFpE",
     "release_sha": "5e2664fb51e18f52549aa37a8b5793e12ace09b2",
     "compose_file_sha256": "60bc1c55d70d42d0388cf806f95152e966bd9e3aadac1c02decaf3c78a1858e2",
     "api_image_id": "sha256:8017e31258b13adc0dcbd9e96e3bb8e40dc874394c4dfb75e391513fc449a3b3",
@@ -115,6 +116,9 @@
     "www_status": 502,
     "historical_subdomain_status": 200,
     "cdn": "ArvanCloud",
+    "observed_a_records": ["185.143.233.134", "185.143.234.134"],
+    "nameservers": ["j.ns.arvancdn.ir", "t.ns.arvancdn.ir"],
+    "legacy_pwa": {"root": 200, "service_worker": 200, "manifest": 200},
     "edge_san": [
       "hinaa.ir",
       "*.hinaa.ir"
@@ -124,6 +128,8 @@
     ],
     "historical_origin_tls_port": 63202,
     "historical_web_loopback_port": 18080,
-    "apex_nginx_server_name_present": false
+    "apex_nginx_server_name_present": false,
+    "final_read_only_recheck_utc": "2026-11-23T03:19:25Z",
+    "final_live_migration_count": 20
   }
 }

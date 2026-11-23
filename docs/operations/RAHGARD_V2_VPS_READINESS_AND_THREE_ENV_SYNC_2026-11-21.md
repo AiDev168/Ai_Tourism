@@ -2,6 +2,8 @@
 
 # Rahgard V2 — VPS readiness and three-environment release identity (2026-11-21)
 
+> **2026-11-23 observation and decision:** See the [Issue #24 preparation result](RAHGARD_V2_ISSUE24_PREPARATION_RESULT_2026-11-23.md) for the fresh read-only baseline, actual restored-data 0022/0023 results, image verification and the exact-apex NO-GO. The remainder of this document preserves the earlier preparation contract.
+
 **Decision: PREPARATION GO; LIVE DEPLOYMENT NO-GO pending explicit, evidence-based owner approval.**
 **Scope:** invitation-only/staging-style V2 application candidate; not a public verified travel-planning launch.
 **Working branch:** `feat/rahgard-unified-travel-v2`. **Last screenshot review HEAD (before this documentation commit):** `89fb21c03a120e50b8c9fccadfc94846e6ef75ea`. This document's own commit will advance that SHA; no SHA in this document is authorization to deploy.

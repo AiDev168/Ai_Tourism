@@ -1,0 +1,33 @@
+{
+  "source_sha": "cb5952bac5d13753e41b5845b1d3663eae4c0708",
+  "workflow_run_id": 45104565876,
+  "artifact_id": 14787231271,
+  "artifact_expires_at": "2026-11-30T03:13:00Z",
+  "platform": "linux/amd64",
+  "outer_zip_sha256": "bfe86f5b79b8a3bd3b7e0e26ce29c9030707f8aee636e4d645920af64d7236ed",
+  "docker_archive_sha256": "fe75addbecc654dd2af0297c9367cc29a9eb9346235bdc1378b63adfc918cf0a",
+  "release_manifest_sha256": "bd3e5e55c97dedfbab588569588168810e32bd090cdaaad69d4813376fe75b5b",
+  "application": {
+    "api": {
+      "hosted_image_id": "sha256:f1664185a5a00e8681d8977cd3c88b6238e90f8d7a4bd641b31351b83f1c2eb1",
+      "loaded_image_id": "sha256:30bdbfdd7a54b291897a3c52681288e711cd874a659132a5c9cae18711e02b9f"
+    },
+    "web": {
+      "hosted_image_id": "sha256:fe55e30d13709def9d55278da4a3651bdcd5181ea3520732282cf87f469e9e0c",
+      "loaded_image_id": "sha256:43b8862104912fadba6b8c5dc5dcb95c0c5cc35853d4bd3c62d41028766b5960"
+    }
+  },
+  "base_repo_digests": [
+    "nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10",
+    "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944",
+    "python@sha256:b685a4fa58bb19d1814d78a1ec0f0208f351452724f78b20212c984d6e124a34"
+  ],
+  "loaded_identity_method": "containerd-export-equivalent",
+  "checks": {
+    "checksum": "pass",
+    "secret_scan": "pass",
+    "pwa_image": "pass",
+    "apex_tls_fixture": "pass",
+    "vps_artifact_transfer": "not_performed"
+  }
+}

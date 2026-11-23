@@ -1,0 +1,1123 @@
+{
+  "status": "passed",
+  "mode": "authenticated_real_chat_provider_local_acceptance",
+  "provider": {
+    "provider": "lm_studio",
+    "model": "qwen3-8b-abliterated",
+    "routeType": "loopback_http",
+    "invocationAttempts": 3,
+    "successfulInvocations": 3,
+    "extractionPath": "llm",
+    "fields": {
+      "destination": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "origin": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "relative_start_date": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "duration_days": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "travel_dates": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "travelers": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "budget": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "interests": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "soft_preferences": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "hard_constraints": {
+        "status": "missing",
+        "source": "fallback",
+        "hasValue": false
+      },
+      "accessibility": {
+        "status": "missing",
+        "source": "fallback",
+        "hasValue": false
+      },
+      "travel_difficulty": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "weather_preferences": {
+        "status": "known",
+        "source": "llm",
+        "hasValue": true
+      },
+      "local_cuisine": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      }
+    },
+    "correctionTurn": true,
+    "manualEditPreserved": true,
+    "itineraryGenerated": true,
+    "persistedAndReopened": true,
+    "protectedCompanyViews": true,
+    "sharedRevisionPersisted": true,
+    "crossTenantDenied": true,
+    "providerHandshake": "configured_model_found",
+    "relativeStartDateSource": "llm",
+    "providerTelemetry": {
+      "route": {
+        "scheme": "http",
+        "host": "127.0.0.1",
+        "port": 1234,
+        "model_id": "qwen3-8b-abliterated"
+      },
+      "attempts": 3,
+      "successes": 3,
+      "failures": 0,
+      "latencyMs": [
+        9095,
+        11848,
+        19384
+      ],
+      "responseFieldKeys": [
+        "budget_text",
+        "destination",
+        "duration_days",
+        "interest",
+        "local_cuisine",
+        "origin",
+        "travel_difficulty",
+        "travel_end",
+        "travel_start",
+        "traveler_count",
+        "weather_preference"
+      ],
+      "responseEvidenceKeys": [
+        "budget_text",
+        "destination",
+        "duration_days",
+        "interest",
+        "local_cuisine",
+        "origin",
+        "travel_difficulty",
+        "travel_end",
+        "travel_start",
+        "traveler_count",
+        "weather_preference"
+      ]
+    },
+    "correctionFields": {
+      "destination": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "origin": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "relative_start_date": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "duration_days": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "travel_dates": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "travelers": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "budget": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "interests": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "soft_preferences": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "hard_constraints": {
+        "status": "missing",
+        "source": "fallback",
+        "hasValue": false
+      },
+      "accessibility": {
+        "status": "missing",
+        "source": "fallback",
+        "hasValue": false
+      },
+      "travel_difficulty": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "weather_preferences": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      },
+      "local_cuisine": {
+        "status": "missing",
+        "source": "llm",
+        "hasValue": false
+      }
+    },
+    "followUpDatesFromModel": false,
+    "followUpDatesConfirmed": true,
+    "confirmedPreferenceFields": [
+      "travel_difficulty",
+      "weather_preferences",
+      "local_cuisine"
+    ],
+    "recommendationStatus": "needs_confirmation",
+    "recommendationReason": "destination_identity_unresolved",
+    "requirementAssessments": [
+      {
+        "field": "duration_days",
+        "decision": null,
+        "status": "known",
+        "reason_code": "traveler_value_known"
+      },
+      {
+        "field": "origin",
+        "decision": null,
+        "status": "known",
+        "reason_code": "known_fit_not_catalogue_verified"
+      },
+      {
+        "field": "travel_dates",
+        "decision": null,
+        "status": "known",
+        "reason_code": "known_fit_not_catalogue_verified"
+      },
+      {
+        "field": "traveler_count",
+        "decision": null,
+        "status": "known",
+        "reason_code": "known_fit_not_catalogue_verified"
+      },
+      {
+        "field": "budget",
+        "decision": null,
+        "status": "known",
+        "reason_code": "known_fit_not_catalogue_verified"
+      },
+      {
+        "field": "travel_difficulty",
+        "decision": null,
+        "status": "known",
+        "reason_code": "traveler_value_known"
+      },
+      {
+        "field": "weather_preferences",
+        "decision": null,
+        "status": "known",
+        "reason_code": "traveler_value_known"
+      },
+      {
+        "field": "local_cuisine",
+        "decision": null,
+        "status": "known",
+        "reason_code": "traveler_value_known"
+      },
+      {
+        "field": "destination",
+        "decision": null,
+        "status": "known",
+        "reason_code": "requested_destination_identity_unresolved"
+      },
+      {
+        "field": "interests",
+        "decision": null,
+        "status": "known",
+        "reason_code": "interest_match_not_catalogue_verified"
+      },
+      {
+        "field": "destination_resolution",
+        "decision": "must_have",
+        "status": "unresolved",
+        "reason_code": "destination_identity_unresolved"
+      }
+    ],
+    "confirmedProfileVersion": 2,
+    "confirmationSource": "traveler_reviewed",
+    "selectedDestinationCount": 0,
+    "recommendationCount": 0,
+    "unresolvedFields": [
+      "destination_resolution"
+    ],
+    "provisionalEdited": true,
+    "syntheticCatalogueAcceptance": {
+      "status": "test_only_dependency_override",
+      "recommendation": true,
+      "itineraryPersisted": true,
+      "publicCatalogueBeforeAndAfterEmpty": true
+    },
+    "bulkSharing": {
+      "eligibleRecipients": 2,
+      "deduplicated": true,
+      "originalRequestExcluded": true
+    },
+    "protectedCompanyDeepLinks": {
+      "request": true,
+      "itinerary": true,
+      "revision": 2
+    },
+    "protectedCompanyBrowserViews": 2,
+    "releaseThemeMatrix": [
+      {
+        "surface": "company",
+        "theme": "light",
+        "width": 390,
+        "screenshot": "release-company-light-390.png",
+        "overflow": false,
+        "buttonWidth": 44,
+        "buttonHeight": 44,
+        "labeled": true,
+        "foreground": "rgb(58, 36, 105)",
+        "background": "rgb(247, 242, 255)"
+      },
+      {
+        "surface": "company",
+        "theme": "light",
+        "width": 1440,
+        "screenshot": "release-company-light-1440.png",
+        "overflow": false,
+        "buttonWidth": 72,
+        "buttonHeight": 44,
+        "labeled": true,
+        "foreground": "rgb(58, 36, 105)",
+        "background": "rgb(247, 242, 255)"
+      },
+      {
+        "surface": "company",
+        "theme": "dark",
+        "width": 390,
+        "screenshot": "release-company-dark-390.png",
+        "overflow": false,
+        "buttonWidth": 44,
+        "buttonHeight": 44,
+        "labeled": true,
+        "foreground": "rgb(255, 255, 255)",
+        "background": "rgb(40, 32, 61)"
+      },
+      {
+        "surface": "company",
+        "theme": "dark",
+        "width": 1440,
+        "screenshot": "release-company-dark-1440.png",
+        "overflow": false,
+        "buttonWidth": 80,
+        "buttonHeight": 44,
+        "labeled": true,
+        "foreground": "rgb(255, 255, 255)",
+        "background": "rgb(40, 32, 61)"
+      },
+      {
+        "surface": "traveler",
+        "theme": "light",
+        "width": 390,
+        "screenshot": "release-traveler-light-390.png",
+        "overflow": false,
+        "buttonWidth": 44,
+        "buttonHeight": 44,
+        "labeled": true,
+        "foreground": "rgb(58, 36, 105)",
+        "background": "rgb(247, 242, 255)"
+      },
+      {
+        "surface": "traveler",
+        "theme": "light",
+        "width": 1440,
+        "screenshot": "release-traveler-light-1440.png",
+        "overflow": false,
+        "buttonWidth": 70,
+        "buttonHeight": 44,
+        "labeled": true,
+        "foreground": "rgb(58, 36, 105)",
+        "background": "rgb(247, 242, 255)"
+      },
+      {
+        "surface": "traveler",
+        "theme": "dark",
+        "width": 390,
+        "screenshot": "release-traveler-dark-390.png",
+        "overflow": false,
+        "buttonWidth": 44,
+        "buttonHeight": 44,
+        "labeled": true,
+        "foreground": "rgb(255, 255, 255)",
+        "background": "rgb(40, 32, 61)"
+      },
+      {
+        "surface": "traveler",
+        "theme": "dark",
+        "width": 1440,
+        "screenshot": "release-traveler-dark-1440.png",
+        "overflow": false,
+        "buttonWidth": 70,
+        "buttonHeight": 44,
+        "labeled": true,
+        "foreground": "rgb(255, 255, 255)",
+        "background": "rgb(40, 32, 61)"
+      }
+    ],
+    "companyProposals": {
+      "acceptedAsRequested": true,
+      "counterOffer": true,
+      "travelerAcceptedCounterOffer": true,
+      "travelerTripUnchanged": true
+    },
+    "companyDelivery": {
+      "channel": "authenticated_in_app_inbox",
+      "recipients": [
+        "QA_COMPANY_A",
+        "QA_COMPANY_B"
+      ],
+      "eventKinds": [
+        "request_shared",
+        "request_revised"
+      ],
+      "revisionCount": 2,
+      "rejectedCompanyExcluded": true,
+      "companyBRevoked": true,
+      "companyARetained": true
+    },
+    "jalaliTodayAndSelectionDistinct": true
+  },
+  "browser": "Chromium 157.0.8103.40",
+  "database": {
+    "host": "127.0.0.1",
+    "majorVersion": 17,
+    "markerValidated": true,
+    "tripPersisted": true
+  },
+  "privacy": {
+    "rawPromptsSaved": false,
+    "providerTokenSaved": false,
+    "browserTokenStorage": false
+  },
+  "caseId": "ISSUE23_QA_TRAVELER_A",
+  "endpointTrace": [
+    {
+      "method": "GET",
+      "path": "/api/v1/conversations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/conversations",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/conversations/:id/assistant-turns",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/conversations",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/conversations/:id/assistant-turns",
+      "status": 200
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/trips/:id",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-shares",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-share-options",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-responses",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-responses",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/trips/:id/recommendations",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trips/:id/provisional-itineraries",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trips/:id",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/conversations/:id/assistant-turns",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/trips/:id/provisional-itineraries",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/partners/organizations",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/partners/organizations",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/partners/organizations",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/conversations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/conversations/:id",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trips/:id",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trips/:id/recommendations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-responses",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-shares",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-responses",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-share-options",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trips/:id/provisional-itineraries",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/partners/trips/:id/company-shares",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-share-options",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-shares",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/conversations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests/:id/responses",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests/:id/responses",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests/:id/responses",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests/:id/responses",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/conversations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/conversations/:id",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trips/:id",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trips/:id/provisional-itineraries",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-responses",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-responses",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-shares",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-share-options",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/conversations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/workspace",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations/:id/requests",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assistant/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/conversations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/conversations/:id",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trips/:id",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/trips/:id/provisional-itineraries",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-responses",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-responses",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-shares",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partners/trips/:id/company-share-options",
+      "status": 200
+    }
+  ],
+  "screenshots": [
+    "real-chat-lm_studio-390.png",
+    "real-chat-lm_studio-1440.png"
+  ]
+}

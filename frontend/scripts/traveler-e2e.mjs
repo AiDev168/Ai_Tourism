@@ -1866,6 +1866,44 @@ function providerFieldSnapshot(candidate) {
   }]));
 }
 
+async function captureReleaseThemeMatrix(page, artifactRoot, surface) {
+  const originalSize = page.viewportSize();
+  const toggle = page.locator('.rahgard-theme-toggle');
+  const originalTheme = await page.locator('html').getAttribute('data-rahgard-theme');
+  const results = [];
+  for (const theme of ['light', 'dark']) {
+    if (await page.locator('html').getAttribute('data-rahgard-theme') !== theme) {
+      await toggle.focus();
+      await toggle.press('Enter');
+    }
+    await page.waitForFunction(value => document.documentElement.dataset.rahgardTheme === value, theme);
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+      const metrics = await toggle.evaluate(element => {
+        const box = element.getBoundingClientRect();
+        return {
+          overflow: document.documentElement.scrollWidth > window.innerWidth,
+          buttonWidth: Math.round(box.width), buttonHeight: Math.round(box.height),
+          labeled: Boolean(element.getAttribute('aria-label')),
+          foreground: getComputedStyle(element).color,
+          background: getComputedStyle(element).backgroundColor,
+        };
+      });
+      if (metrics.overflow || !metrics.labeled || metrics.buttonWidth < 24 || metrics.buttonHeight < 24) {
+        throw new Error(`release_theme_layout_${surface}_${theme}_${width}`);
+      }
+      const screenshot = `release-${surface}-${theme}-${width}.png`;
+      await page.locator(surface === 'company' ? '.partner-request-inbox' : '.traveler-workspace-heading')
+        .first().scrollIntoViewIfNeeded();
+      await page.screenshot({ path: resolve(artifactRoot, screenshot), animations: 'disabled' });
+      results.push({ surface, theme, width, screenshot, ...metrics });
+    }
+  }
+  if (originalSize) await page.setViewportSize(originalSize);
+  if (await page.locator('html').getAttribute('data-rahgard-theme') !== originalTheme) await toggle.click();
+  return results;
+}
+
 async function runRealProviderJourney(browser, api, audit, artifactRoot, provider) {
   const context = await browser.newContext({ locale: 'fa-IR', timezoneId: 'Asia/Tehran' });
   const page = await context.newPage();
@@ -2434,6 +2472,13 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     }
     safeResult.protectedCompanyDeepLinks = { request: true, itinerary: true, revision: 2 };
     safeResult.protectedCompanyBrowserViews = 2;
+    if (process.env.RAHGARD_RELEASE_THEME_QA === '1') {
+      await page.evaluate(() => {
+        document.querySelectorAll('.auth-signed-in span, .partner-request-item pre, .partner-request-item dl dd, .partner-request-item blockquote')
+          .forEach(element => { element.textContent = '[redacted acceptance text]'; });
+      });
+      safeResult.releaseThemeMatrix = await captureReleaseThemeMatrix(page, artifactRoot, 'company');
+    }
     const companyResponsePath = `/api/v1/partners/organizations/${companyOne}/requests/${shareId}/responses`;
     const staleCompanyResponse = await browserApi(page,companyResponsePath,'POST',companyOneReauthenticated.csrfToken,{
       client_request_id:crypto.randomUUID(),revision_id:sharedRevision.revision_id,
@@ -2594,6 +2639,9 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       privacy: { rawPromptsSaved: false, providerTokenSaved: false, browserTokenStorage: false },
       caseId: 'ISSUE23_QA_TRAVELER_A', endpointTrace, screenshots,
     };
+    if (process.env.RAHGARD_RELEASE_THEME_QA === '1') {
+      safeResult.releaseThemeMatrix.push(...await captureReleaseThemeMatrix(page, artifactRoot, 'traveler'));
+    }
     writeFileSync(resolve(artifactRoot, `real-chat-${provider.provider}.json`), `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
     return report;
   } catch (error) {

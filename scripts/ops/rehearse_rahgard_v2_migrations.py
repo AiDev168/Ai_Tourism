@@ -83,6 +83,47 @@ def require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def check_api(db_container: str, image: str, label: str, expected_count: int) -> dict:
+    image_state = json.loads(run("docker", "image", "inspect", image))[0]
+    require(image_state["Os"] == "linux" and image_state["Architecture"] == "amd64", "Wrong API platform")
+    name = f"rahgard-v2-restore-api-{label}"
+    environment = {
+        "APP_ENV": "test", "DATABASE_HOST": "127.0.0.1", "DATABASE_PORT": "5432",
+        "DATABASE_NAME": DATABASE, "DATABASE_USER": "ai_tourism_app", "DATABASE_PASSWORD": label,
+        "AUTH_ENABLED": "false", "AUTH_LOCAL_OWNER_ENABLED": "false", "STAGING_AUTH_ENABLED": "false",
+        "AUTH_SMS_ADAPTER": "disabled", "INTERNAL_CHAT_ENABLED": "false", "TOURISM_RAG_ENABLED": "false",
+        "AI_PROVIDER_ADMIN_ENABLED": "false",
+    }
+    flags = [arg for key, value in environment.items() for arg in ("-e", f"{key}={value}")]
+    api = run(
+        "docker", "run", "-d", "--name", name, "--network", f"container:{db_container}",
+        "--label", f"rahgard.v2.restore={label}", "--read-only", "--tmpfs", "/tmp",
+        "--security-opt", "no-new-privileges", "--cap-drop", "ALL",
+        *flags, "--entrypoint", "python", image_state["Id"], "-m", "uvicorn",
+        "app.main:app", "--host", "127.0.0.1", "--port", "8000",
+    ).decode().strip()
+    try:
+        probe = (
+            "import json,urllib.request; base='http://127.0.0.1:8000';"
+            "urllib.request.urlopen(base+'/health/ready',timeout=2).close();"
+            "body=json.load(urllib.request.urlopen(base+'/api/v1/catalog/destinations',timeout=2));"
+            "print(body['count'])"
+        )
+        for _ in range(30):
+            try:
+                count = int(run("docker", "exec", api, "python", "-c", probe).decode().strip())
+            except RuntimeError:
+                time.sleep(1)
+            else:
+                require(count == expected_count, "API catalogue count differs from the restored database")
+                return {"image_id": image_state["Id"], "health": "ready", "catalogue_count": count}
+        raise RuntimeError("API readiness and catalogue checks did not succeed on the migrated clone")
+    finally:
+        state = json.loads(run("docker", "inspect", api))[0]
+        require(state["Config"]["Labels"].get("rahgard.v2.restore") == label, "API cleanup identity mismatch")
+        run("docker", "rm", "-f", api)
+
+
 def rehearse(args: argparse.Namespace) -> dict:
     manifest = json.loads(args.baseline.read_text(encoding="utf-8"))
     expected = check(manifest, args.source_sha)
@@ -181,6 +222,10 @@ exec psql -Xq -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_
               + (SELECT count(*) FROM partner.traveler_request_inbox)
               + (SELECT count(*) FROM partner.trip_company_responses)
         """) == "0", "Migration created unexpected shares or responses")
+        api_checks = {}
+        for image in args.runtime_image:
+            api_checks[image] = check_api(container, image, label, before["knowledge.production_destinations"])
+            require(counts(container) == after, "API compatibility check changed restored row counts")
         return {
             "backup": args.backup.name, "backup_sha256": digest, "checksum_hmac_and_archive": "passed",
             "tested_source_sha": args.source_sha, "postgresql_image_id": PG_IMAGE,
@@ -188,6 +233,7 @@ exec psql -Xq -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_
             "after_ledger": base, "migration_seconds": elapsed,
             "counts_before": before, "counts_after": after, "new_share_response_rows": 0,
             "rls_and_app_grants": "passed", "isolation": "network none, no published ports, tmpfs data",
+            "runtime_image_checks": api_checks,
             "migration_and_checks_seconds": round(time.monotonic() - started, 3),
         }
     finally:
@@ -203,6 +249,7 @@ def main() -> None:
     parser.add_argument("backup", type=Path)
     parser.add_argument("key_dir", type=Path)
     parser.add_argument("--openssl", default="openssl")
+    parser.add_argument("--runtime-image", action="append", default=[], help="Local API image for isolated smoke")
     args = parser.parse_args()
     try:
         print(json.dumps(rehearse(args), indent=2))
