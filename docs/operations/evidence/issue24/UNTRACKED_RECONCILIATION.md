@@ -1,7 +1,7 @@
 # Issue #24 recovered-file reconciliation
 
-Updated 2026-11-23 on `feat/rahgard-unified-travel-v2`, starting at
-`8a8237806095ef9fbf5fc9d71433efe7c84f7304`.
+Updated 2026-11-23 on `feat/rahgard-unified-travel-v2`; current branch HEAD at the
+time of this update is `7cbcb851d925357d1a58a46e1ca8981c1379b95e`.
 
 The original recovery copy remains intact at
 `%LOCALAPPDATA%\Rahgard-Untracked-Recovery-940c8c4e38c9438ca3a1c751389330e7`.
@@ -13,7 +13,7 @@ request and account/workspace state. Its original and checkout SHA-256 are
 | Recovered path | Recovery SHA-256 | Current checkout SHA-256 | Disposition |
 |---|---|---|---|
 | `docs/operations/evidence/issue24/live-v2-mobile-390.png` | `13976bdbc9efe9dcf4d2a199a9ca3b7a93703f8a7339f7ebfbbc8b0b7a40f688` | `13976bdbc9efe9dcf4d2a199a9ca3b7a93703f8a7339f7ebfbbc8b0b7a40f688` | Retained owner-private; not staged or published. No redacted derivative created. |
-| `frontend/scripts/issue24-live-apex-acceptance.mjs` | `82a2950b35629279220869f0d279b158e4865c0fe5d43791670ee983178d5ec8` | `2c8403b9af701edd2df0f47b9779be899acbfc0e4de0628e70b34553e996352a` | Reworked with consent gates, non-PII API diagnostics, proper Unicode test prompt, private-only screenshot output, and persisted 5-day itinerary checks. |
+| `frontend/scripts/issue24-live-apex-acceptance.mjs` | `82a2950b35629279220869f0d279b158e4865c0fe5d43791670ee983178d5ec8` | `6232fc11bb3d4f02e1d667e0508e6b63b58ddda2b6cb6c5cbe777243653a3845` | Reworked with consent gates, non-PII API diagnostics, Unicode request coverage, private-only screenshots and persistence checks; corrected budget-shape and documented HTTP 201 recommendation contract. The scenario has not passed on the live site. |
 | `frontend/scripts/issue24-public-intake-diagnostic.mjs` | `e478e94e9a6f49963c7d12b4a9af261843847e172f1e27e1354bc5400c09f6b8` | `a6218af5290db9a565230dee4876d9d6b2e174653bef3aba143401ce1a7595d5` | Converted to a strictly read-only public UI/asset diagnostic; it never fills or submits the form. |
 | `frontend/scripts/issue24-requirements-shape-check.mjs` | `bc6421055213d42d7a07c1f367bd1da34a559ac86f961b7a720e8cee62f7b4ab` | `468be1cf62a1bb050934638bff90a2b04341aff079bb2217333d361ba22bfca0` | Bounded stdin and removed exception detail that could echo traveler input. |
 | `scripts/ops/execute_rahgard_v2_live_migrations.py` | `e35cf9524f3ea701feaeaab18aa43d5701d1c0f89bf487a00900f53120473aa3` | `f7c03be31f15f6207fd293bb44db5355f89e0ea4825f93113b1c2866dca1b28a` | Replaced DDL executor with a pinned, read-only ledger/runtime verifier; reports `ALREADY_APPLIED_NO_DDL` only for the exact 22-row 0022/0023 state. |
@@ -36,3 +36,9 @@ request and account/workspace state. Its original and checkout SHA-256 are
 - External read-only probes: `https://hinaa.ir/` returned 200 and Chromium loaded current hashed CSS/JS without page errors or horizontal overflow. `https://www.hinaa.ir/` and `https://rahgard.hinaa.ir/` currently returned 503 with `Retry-After: 120`. No live Nginx or database changes were performed.
 
 `shellcheck` is not installed. Static shell parsing and the full isolated shell rehearsals ran under the already-installed WSL Ubuntu Bash.
+
+All seven entries were rechecked against the private recovery manifest. The six
+reviewed source files are tracked in the V2 branch; the original screenshot
+remains the only untracked artifact and is intentionally private. The detailed
+acceptance and release boundary is recorded in
+`2026-11-23-closeout.md`.

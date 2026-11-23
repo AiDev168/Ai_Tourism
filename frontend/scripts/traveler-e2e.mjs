@@ -900,6 +900,10 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
       created_by: currentIdentity.userId, display_name: 'Acceptance Travel Co',
     });
     if (!approvedTestOrganization.ok) throw new Error(`isolated_test_company_approval_failed_${approvedTestOrganization.reason || 'unknown'}`);
+    const partnerManagement = page.locator('.partner-management-advanced');
+    if (!await partnerManagement.evaluate(element => element.open)) {
+      await partnerManagement.locator('summary').click();
+    }
     await page.locator('.partner-forms').waitFor({ state: 'visible', timeout: 15_000 });
 
     const serviceForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Service', exact: true }) });
