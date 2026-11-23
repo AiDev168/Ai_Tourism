@@ -8,6 +8,17 @@ import { localOwnerMessages } from './localOwnerMessages';
 type Phase = 'phone' | 'code';
 type StagingMode = 'login' | 'register' | 'redeem';
 
+const stagingPasswordLength = {
+  'fa-IR': 'گذرواژهٔ جدید باید بین ۸ تا ۲۵۶ نویسه باشد.',
+  'en-US': 'Use between 8 and 256 characters for a new password.',
+  ar: 'استخدم من ٨ إلى ٢٥٦ حرفًا لكلمة المرور الجديدة.',
+} as const;
+const stagingPasswordMaximum = {
+  'fa-IR': 'گذرواژه نباید بیش از ۲۵۶ نویسه باشد.',
+  'en-US': 'The password can have at most 256 characters.',
+  ar: 'يجب ألّا تتجاوز كلمة المرور ٢٥٦ حرفًا.',
+} as const;
+
 const stagingCopy = {
   'fa-IR': { account: 'ورود آزمایشی', email: 'ایمیل', password: 'گذرواژه (حداقل ۸ نویسه)', invite: 'کد دعوت', redeem: 'فعال‌سازی دعوت', switchToRedeem: 'کد دعوت دارید؟ ایجاد حساب', switchToLogin: 'بازگشت به ورود', invalid: 'ورود یا کد دعوت معتبر نیست.', smsUnavailable: 'ارسال پیامک در این محیط تنظیم نشده است؛ کد ورود پیامکی ارسال نمی‌شود.' },
   'en-US': { account: 'Private pilot sign in', email: 'Email', password: 'Password (at least 8 characters)', invite: 'Invitation code', redeem: 'Activate invitation', switchToRedeem: 'Have an invitation? Create account', switchToLogin: 'Back to sign in', invalid: 'The sign-in details or invitation are invalid.', smsUnavailable: 'SMS delivery is not configured in this environment. No OTP will be sent.' },
@@ -149,7 +160,17 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
   };
 
   const submitStaging = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); setBusy(true); setError('');
+    event.preventDefault();
+    const length = Array.from(stagingPassword).length;
+    const creating = stagingMode !== 'login';
+    // HTML measures UTF-16 code units. Match Python's Unicode code point
+    // limits before sending, and avoid silently truncating pasted passwords.
+    if (length > 256 || (creating && length < 8)) {
+      setError(creating ? stagingPasswordLength[locale] : stagingPasswordMaximum[locale]);
+      event.currentTarget.querySelector<HTMLInputElement>('#auth-stage-password')?.focus();
+      return;
+    }
+    setBusy(true); setError('');
     try {
       const value = stagingMode === 'login'
         ? await authApi.stagingLogin(stagingEmail, stagingPassword)
@@ -248,7 +269,7 @@ export function AuthPanel({ locale, onSessionChange }: { locale: Locale; onSessi
                 <label htmlFor="auth-stage-email">{stageCopy.email}</label>
                 <input id="auth-stage-email" name="email" type="email" autoComplete="email" required maxLength={254} value={stagingEmail} onChange={event => setStagingEmail(event.target.value)} />
                 <label htmlFor="auth-stage-password">{stageCopy.password}</label>
-                <input id="auth-stage-password" name="password" type="password" autoComplete={stagingMode === 'login' ? 'current-password' : 'new-password'} required minLength={stagingMode === 'login' ? 1 : 8} maxLength={256} value={stagingPassword} onChange={event => setStagingPassword(event.target.value)} />
+                <input id="auth-stage-password" name="password" type="password" autoComplete={stagingMode === 'login' ? 'current-password' : 'new-password'} required minLength={stagingMode === 'login' ? 1 : 8} value={stagingPassword} onChange={event => setStagingPassword(event.target.value)} />
                 <button type="submit" disabled={busy}>{busy ? copy.loading : stagingMode === 'login' ? copy.signIn : stagingMode === 'register' ? emailCopy.registerTitle : stageCopy.redeem}</button>
               </form>
             </section>

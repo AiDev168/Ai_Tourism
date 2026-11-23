@@ -99,14 +99,66 @@ describe('OTP delivery failure UX', () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     await act(async () => {
       setter?.call(email, 'new@example.test'); email.dispatchEvent(new Event('input', { bubbles: true }));
-      setter?.call(password, 'a-very-long-pilot-password'); password.dispatchEvent(new Event('input', { bubbles: true }));
+      setter?.call(password, 'ژ'.repeat(8)); password.dispatchEvent(new Event('input', { bubbles: true }));
       document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
     await settle();
     expect(String(fetchMock.mock.calls[2][0])).toContain('/staging/register');
-    expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual({ email: 'new@example.test', password: 'a-very-long-pilot-password' });
+    expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual({ email: 'new@example.test', password: 'ژ'.repeat(8) });
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(onSessionChange).toHaveBeenCalledWith(expect.objectContaining({ user: expect.objectContaining({ user_id: 'new-user' }) }));
+  });
+
+  it('offers invitation redemption without exposing open signup when the server flag is off', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ methods: ['otp', 'staging_invite'], otp_delivery: 'unavailable', staging_email_signup: false }))
+      .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401))
+      .mockResolvedValueOnce(response({ user: { user_id: 'invite-fixture', phone_e164: null,
+        phone_verified: null, auth_method: 'staging_invite' }, csrf_token: 'csrf' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => { root.render(<AuthPanel locale="en-US" />); });
+    await settle();
+    await act(async () => { (host.querySelector('.auth-entry > button') as HTMLButtonElement).click(); });
+    expect(document.body.textContent).not.toContain('Create a pilot email account');
+    const invite = [...document.querySelectorAll('button')]
+      .find(button => button.textContent === 'Have an invitation? Create account')!;
+    await act(async () => { invite.click(); });
+    const password = document.querySelector<HTMLInputElement>('#auth-stage-password')!;
+    expect(password.minLength).toBe(8);
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => {
+      for (const [input, value] of [
+        [document.querySelector('#auth-stage-email'), 'invited@example.test'],
+        [document.querySelector('#auth-stage-invite'), 'a'.repeat(32)],
+        [password, '🌿'.repeat(7)],
+      ] as const) {
+        setter?.call(input, value);
+        input!.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+    await act(async () => {
+      document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(document.body.textContent).toContain('Use between 8 and 256 characters');
+    await act(async () => {
+      setter?.call(password, '🌿'.repeat(257));
+      password.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      setter?.call(password, '🌿'.repeat(256));
+      password.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await settle();
+    expect(String(fetchMock.mock.calls[2][0])).toContain('/staging/redeem');
+    expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body)).password).toBe('🌿'.repeat(256));
   });
 
   it('keeps OTP as primary when live SMS is available and exposes invitation fallback', async () => {

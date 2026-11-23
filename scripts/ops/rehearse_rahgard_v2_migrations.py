@@ -78,6 +78,19 @@ def ledger(container: str) -> list[str]:
     ).splitlines()
 
 
+def account_fingerprints(container: str) -> str:
+    # Return these only to the rehearsal process for comparison. The report
+    # carries a boolean and never includes a credential/verifier or row hash.
+    return sql(container, """
+        BEGIN READ ONLY;
+        SELECT md5(coalesce(jsonb_agg(to_jsonb(u) ORDER BY user_id)::text, '')) FROM identity.users u
+        UNION ALL
+        SELECT md5(coalesce(jsonb_agg(to_jsonb(c) ORDER BY user_id)::text, ''))
+        FROM identity.staging_password_credentials c;
+        COMMIT;
+    """)
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
@@ -136,6 +149,7 @@ def rehearse(args: argparse.Namespace) -> dict:
     container = run(
         "docker", "run", "--detach", "--name", f"rahgard-v2-restore-{label}", "--network", "none",
         "--label", f"rahgard.v2.restore={label}", "--tmpfs", "/var/lib/postgresql/data:rw,size=1g",
+        "--add-host", "api:127.0.0.1",
         "-e", f"POSTGRES_USER={OWNER}", "-e", f"POSTGRES_DB={DATABASE}",
         "-e", "POSTGRES_HOST_AUTH_METHOD=trust", PG_IMAGE,
     ).decode().strip()
@@ -172,6 +186,7 @@ def rehearse(args: argparse.Namespace) -> dict:
         )
         require(len(base) == len(BASE_NUMBERS) and ledger(container) == base, "Restore ledger differs from observed VPS")
         before = counts(container)
+        accounts_before = account_fingerprints(container)
         live = manifest["vps"]["database"]["aggregate_counts"]
         for table, field in (
             ("identity.users", "users"), ("identity.web_sessions", "sessions"), ("travel.trips", "trips"),
@@ -205,6 +220,7 @@ exec psql -Xq -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_
             prior_hash = current_hash
         after = counts(container)
         require(after == before, "Existing row counts changed during migration")
+        require(account_fingerprints(container) == accounts_before, "Existing account or credential data drift")
         require(sql(container, """
             SELECT
               (SELECT NOT rolsuper AND NOT rolbypassrls FROM pg_roles WHERE rolname='ai_tourism_app')
@@ -226,14 +242,21 @@ exec psql -Xq -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_
         for image in args.runtime_image:
             api_checks[image] = check_api(container, image, label, before["knowledge.production_destinations"])
             require(counts(container) == after, "API compatibility check changed restored row counts")
+        apex_auth = None
+        if args.apex_auth_images:
+            from test_rahgard_apex_auth import test_apex_auth
+
+            apex_auth = test_apex_auth(container, *args.apex_auth_images, args.openssl)
         return {
             "backup": args.backup.name, "backup_sha256": digest, "checksum_hmac_and_archive": "passed",
             "tested_source_sha": args.source_sha, "postgresql_image_id": PG_IMAGE,
             "before_migration_count": len(BASE_NUMBERS), "after_migration_count": len(base),
             "after_ledger": base, "migration_seconds": elapsed,
             "counts_before": before, "counts_after": after, "new_share_response_rows": 0,
+            "existing_account_and_credential_contents_preserved": True,
             "rls_and_app_grants": "passed", "isolation": "network none, no published ports, tmpfs data",
             "runtime_image_checks": api_checks,
+            "isolated_apex_auth": apex_auth,
             "migration_and_checks_seconds": round(time.monotonic() - started, 3),
         }
     finally:
@@ -250,6 +273,7 @@ def main() -> None:
     parser.add_argument("key_dir", type=Path)
     parser.add_argument("--openssl", default="openssl")
     parser.add_argument("--runtime-image", action="append", default=[], help="Local API image for isolated smoke")
+    parser.add_argument("--apex-auth-images", nargs=3, metavar=("LEGACY_API", "V2_API", "V2_WEB"))
     args = parser.parse_args()
     try:
         print(json.dumps(rehearse(args), indent=2))

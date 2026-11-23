@@ -142,7 +142,7 @@ describe('localized OTP panel', () => {
     ['fa-IR', '۸'],
     ['en-US', '8'],
     ['ar', '8'],
-  ] as const)('uses the 8-character regular-user password floor in %s without changing the 256 maximum', async (locale, numeral) => {
+  ] as const)('shows the 8-character regular-user password floor in %s', async (locale, numeral) => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({ methods: ['otp', 'staging_invite'], otp_delivery: 'unavailable', staging_email_signup: true }))
       .mockResolvedValueOnce(response({ error: { code: 'unauthenticated' } }, 401));
@@ -154,7 +154,6 @@ describe('localized OTP panel', () => {
     await act(async () => { register.click(); });
     const password = document.querySelector<HTMLInputElement>('#auth-stage-password');
     expect(password?.minLength).toBe(8);
-    expect(password?.maxLength).toBe(256);
     expect(document.body.textContent).toContain(numeral);
   });
 });
