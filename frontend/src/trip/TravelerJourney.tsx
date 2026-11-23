@@ -460,14 +460,15 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
   const displayedItineraryStatus = itineraryDirty
     ? !dayCountValid || locallyUnplannedDays.length ? 'partial' : 'complete'
     : itinerary?.status;
-  // A city name can be a known traveler requirement even when no approved
-  // catalogue identity resolves it. In that one case a clearly unverified
-  // provisional plan is safe; unresolved mandatory trip constraints continue
-  // to block this path.
-  const provisionalPlanningAllowed = recommendations?.status === 'empty'
-    || (recommendations?.status === 'needs_confirmation'
-      && recommendations.unresolved_fields.length === 1
-      && recommendations.unresolved_fields[0] === 'destination_resolution');
+  // Once a traveler has reviewed/confirmed their trip, they can make a clearly
+  // unverified, editable draft without first pressing "Find recommendations".
+  // If an actual catalogue check reports unresolved mandatory constraints,
+  // retain the existing restrictive needs_confirmation gate.
+  const provisionalPlanningAllowed = confirmed && Boolean(activeTrip)
+    && (!recommendations || recommendations.status === 'empty'
+      || (recommendations.status === 'needs_confirmation'
+        && recommendations.unresolved_fields.length === 1
+        && recommendations.unresolved_fields[0] === 'destination_resolution'));
 
   const resolveNames = async (names: string[], explicitChoices: readonly { index: number; destinationId: string }[] = []) => {
     const sequence = ++resolutionSequenceRef.current;
@@ -1956,14 +1957,14 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
         </article>
       </div>}
 
-      {confirmed && activeTrip && session && <section className="company-request-sharing" aria-labelledby="company-request-share-title">
+      {activeTrip && session && <section className="company-request-sharing" aria-labelledby="company-request-share-title">
         <h3 id="company-request-share-title">{locale === 'fa-IR' ? 'اشتراک‌گذاری اختیاری با شرکت‌های گردشگری' : locale === 'ar' ? 'مشاركة اختيارية مع شركات السياحة' : 'Optional sharing with tourism companies'}</h3>
         <p>{locale === 'fa-IR'
           ? 'می‌توانید شرکت‌های خاص را انتخاب کنید یا با اجازهٔ جداگانه، اطلاعات تأییدشدهٔ سفر را به همهٔ شرکت‌های مجاز فعلی در صندوق داخلی بفرستید. نسخه‌های اصلاحی در همان درخواست ثبت می‌شوند. پیامک یا ارسال عمومی وجود ندارد.'
           : locale === 'ar'
             ? 'لا ترى الطلب المؤكد وخطة الرحلة إلا الشركات المعتمدة التي تختارها. تُضاف التعديلات كإصدارات جديدة في صندوق المؤسسة نفسه. لا تُرسل رسائل عامة أو رسائل نصية.'
             : 'Only verified companies you select can see your reviewed request and itinerary. Later edits create a new revision in the same inbox. No public broadcast or SMS is sent.'}</p>
-        {shareOptions.length > 0 ? <fieldset className="company-share-options">
+        {!confirmed ? <p role="status" className="journey-alert">{locale === 'fa-IR' ? 'برای ارسال درخواست به شرکت‌ها، ابتدا مشخصات و شرایط سفر را در بخش بالا بررسی و تأیید کنید. سپس شرکت‌های واجد شرایط نمایش داده می‌شوند.' : locale === 'ar' ? 'لتشارك طلبك مع الشركات، راجع تفاصيل الرحلة وأكّدها أولاً. بعدها تظهر الشركات المؤهلة.' : 'Review and confirm your trip details above before sharing with companies. Eligible companies will then appear.'}</p> : shareOptions.length > 0 ? <fieldset className="company-share-options">
           <legend>{locale === 'fa-IR' ? 'روش اشتراک‌گذاری' : locale === 'ar' ? 'طريقة المشاركة' : 'Sharing method'}</legend>
           <label className="company-share-mode">
             <input type="radio" name="company-share-mode" checked={!shareToAllEligible}
