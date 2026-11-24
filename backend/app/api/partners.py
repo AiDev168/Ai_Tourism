@@ -14,6 +14,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.api.auth import authenticated_user, require_authenticated_csrf
+from app.api.admin_guards import require_privileged_admin_step_up
 from app.core.config import Settings, get_settings
 from app.modules.identity.auth_service import AuthenticatedUser
 
@@ -690,6 +691,32 @@ def organization_review_queue(
         _db_error(exc)
 
 
+@router.get("/platform/review-events")
+def platform_review_events(
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    """Read recent company governance audit history for explicit reviewers."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            _require_platform_capability(cur, user, "organization_review")
+            cur.execute(
+                """SELECT o.display_name,e.entity_type,e.decision,e.reason,
+                          e.policy_version,e.occurred_at
+                   FROM partner.review_events e
+                   JOIN partner.organizations o USING (organization_id)
+                   ORDER BY e.occurred_at DESC,e.review_event_id DESC LIMIT %s""",
+                (limit,),
+            )
+            return {"items": cur.fetchall()}
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
 @router.post("/platform/verification-cases/{case_id}/decision")
 def decide_organization_verification(
     case_id: UUID,
@@ -703,6 +730,7 @@ def decide_organization_verification(
         with _connection(settings) as conn, conn.cursor() as cur:
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
             _require_platform_capability(cur, user, "organization_review")
+            require_privileged_admin_step_up(settings.app_env)
             case = cur.execute(
                 """SELECT c.case_id,c.organization_id,c.submitted_by,c.status,
                           o.created_by,o.application_status,o.verification_status
@@ -767,6 +795,7 @@ def decide_organization_application(
         with _connection(settings) as conn, conn.cursor() as cur:
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
             _require_platform_capability(cur, user, "organization_review")
+            require_privileged_admin_step_up(settings.app_env)
             org = cur.execute(
                 """SELECT organization_id,created_by,verification_status,application_status
                    FROM partner.organizations WHERE organization_id=%s FOR UPDATE""",
@@ -815,6 +844,7 @@ def decide_organization_participation(
         with _connection(settings) as conn, conn.cursor() as cur:
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
             _require_platform_capability(cur, user, "organization_review")
+            require_privileged_admin_step_up(settings.app_env)
             org = cur.execute(
                 """SELECT organization_id,created_by,verification_status,application_status,participation_status
                    FROM partner.organizations WHERE organization_id=%s FOR UPDATE""",

@@ -19,6 +19,7 @@ import { requestDeviceOrigin, withApproximateDeviceOrigin } from './locationOrig
 import { PartnerWorkspace } from '../partners/PartnerWorkspace';
 import { ThemeSwitcher } from '../theme/ThemeSwitcher';
 import { CatalogueReviewPanel } from '../admin/catalogue/CatalogueReviewPanel';
+import { AdminControlCenter } from '../admin/AdminControlCenter';
 
 const destinationCatalog = new ApiDestinationCatalogPort();
 
@@ -115,12 +116,27 @@ export function App() {
   const [error, setError] = useState('');
   const [heroImageFailed, setHeroImageFailed] = useState(false);
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const [adminAccess, setAdminAccess] = useState(false);
+  const [adminWritesAvailable, setAdminWritesAvailable] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   // Smart conversation is the default workflow; no separate opt-in checkbox.
   const [suggestedOrigin, setSuggestedOrigin] = useState<{ approximateText: string; accuracyMeters: number } | null>(null);
   const [, setLocationStatus] = useState('');
   const [travelerTimezone, setTravelerTimezone] = useState(() =>
     Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  useEffect(() => {
+    if (!authSession) { setAdminAccess(false); setAdminWritesAvailable(false); return; }
+    let active = true;
+    void fetch('/api/v1/admin/capabilities', { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } })
+      .then(async response => response.ok ? response.json() as Promise<{ sections?: Record<string, boolean>; privileged_writes_available?: boolean }> : null)
+      .then(result => {
+        if (!active) return;
+        setAdminAccess(Boolean(result?.sections && Object.values(result.sections).some(Boolean)));
+        setAdminWritesAvailable(result?.privileged_writes_available === true);
+      })
+      .catch(() => { if (active) { setAdminAccess(false); setAdminWritesAvailable(false); } });
+    return () => { active = false; };
+  }, [authSession?.csrf_token, authSession?.user.user_id]);
   const requestDeviceLocation = () => {
     if (!navigator.geolocation) {
       setLocationStatus(locationMessages[locale].unsupported);
@@ -270,7 +286,7 @@ export function App() {
   const tripCopy = tripMessages[locale];
   const requirementCopy = requirementClarificationMessages[locale];
 
-  if (window.location.pathname === '/admin/ai-providers' || window.location.pathname === '/admin/catalogue-review') {
+  if (window.location.pathname === '/admin' || window.location.pathname === '/admin/ai-providers' || window.location.pathname === '/admin/catalogue-review') {
     return <>
       <header className="topbar">
         <a className="brand" href="/"><span className="brand-mark" aria-hidden="true">Ø±</span><span>{t('brand')}<small>{t('tagline')}</small></span></a>
@@ -283,8 +299,11 @@ export function App() {
           </select>
         </div>
       </header>
-      {window.location.pathname === '/admin/catalogue-review'
-        ? <CatalogueReviewPanel locale={locale} csrfToken={authSession?.csrf_token ?? ''} />
+      {!authSession ? <main className="partner-workspace"><h1>{locale === 'fa-IR' ? 'برای ادامه وارد شوید' : locale === 'ar' ? 'سجّل الدخول للمتابعة' : 'Sign in to continue'}</h1></main>
+      : window.location.pathname === '/admin'
+        ? <AdminControlCenter locale={locale} csrfToken={authSession.csrf_token} />
+      : window.location.pathname === '/admin/catalogue-review'
+        ? <CatalogueReviewPanel locale={locale} csrfToken={authSession?.csrf_token ?? ''} readOnly={!adminWritesAvailable} />
         : <AiProviderAdminPanel locale={locale} csrfToken={authSession?.csrf_token ?? ''}
         authMethod={authSession?.user.auth_method === 'staging_invite' ? undefined : authSession?.user.auth_method} />
       }
@@ -302,8 +321,7 @@ export function App() {
           <a href="#discover">{t('navExplore')}</a>
           <a href="#itinerary">{t('navPlan')}</a>
           {authSession && <a href="/partners">{locale === 'fa-IR' ? 'فضای کسب‌وکار' : locale === 'ar' ? 'مساحة الشركاء' : 'Partner workspace'}</a>}
-          {authSession?.user.auth_method === 'local_owner' && <a href="/admin/catalogue-review">{locale === 'fa-IR' ? 'بازبینی کاتالوگ' : locale === 'ar' ? 'مراجعة الدليل' : 'Catalogue review'}</a>}
-          {authSession?.user.auth_method === 'local_owner' && <a href="/admin/ai-providers">AI admin</a>}
+          {authSession && adminAccess && <a href="/admin">{locale === 'fa-IR' ? 'مرکز راهبری' : locale === 'ar' ? 'مركز الإدارة' : 'Admin'}</a>}
         </nav>
         <div className="top-actions">
           <ThemeSwitcher locale={locale} />

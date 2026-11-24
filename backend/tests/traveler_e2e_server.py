@@ -8,6 +8,7 @@ debug endpoint is registered. Run with cwd=backend so the repository-root
 from __future__ import annotations
 
 import ipaddress
+import hashlib
 import json
 import os
 import re
@@ -84,11 +85,13 @@ def _verify_disposable_database() -> dict[str, Any]:
     return {"host": host, "port": port, "dbname": database, "user": user, "password": password}
 
 
-def _grant_catalogue_capabilities(database: dict[str, Any], user_id: str, capabilities: list[str]) -> bool:
+def _grant_catalogue_capabilities(database: dict[str, Any], user_id: str, capabilities: list[str], granted_by: str) -> bool:
     """Test-control-only grants on the marked national-catalogue disposable DB."""
     if os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") != "1":
         return False
-    if not re.fullmatch(r"[0-9a-fA-F-]{36}", user_id) or not capabilities or len(capabilities) > 3:
+    if (not re.fullmatch(r"[0-9a-fA-F-]{36}", user_id)
+            or not re.fullmatch(r"[0-9a-fA-F-]{36}", granted_by)
+            or user_id == granted_by or not capabilities or len(capabilities) > 3):
         return False
     allowed = {"candidate_review", "source_review", "catalogue_publish"}
     if any(value not in allowed for value in capabilities) or len(set(capabilities)) != len(capabilities):
@@ -111,14 +114,22 @@ def _grant_catalogue_capabilities(database: dict[str, Any], user_id: str, capabi
                 row["marker"] or "", os.environ.get("AUTH_TEST_DATABASE_MARKER", "")
             ):
                 return False
-            exists = connection.execute("SELECT 1 FROM identity.users WHERE user_id=%s", (user_id,)).fetchone()
+            exists = connection.execute("SELECT count(*)=2 AS ok FROM identity.users WHERE user_id IN (%s,%s)",
+                                        (user_id, granted_by)).fetchone()["ok"]
             if not exists:
                 return False
             for capability in capabilities:
                 connection.execute(
                     """INSERT INTO identity.catalogue_review_grants(user_id,capability,granted_by,reason)
                        VALUES (%s,%s,%s,'Isolated national catalogue browser acceptance only')""",
-                    (user_id, capability, user_id),
+                    (user_id, capability, granted_by),
+                )
+                connection.execute(
+                    """INSERT INTO partner.platform_grant_events
+                       (grant_domain,target_user_id,capability,action,actor_user_id,reason)
+                       VALUES ('catalogue',%s,%s,'granted',%s,
+                               'Isolated national catalogue browser acceptance only')""",
+                    (user_id, capability, granted_by),
                 )
         return True
     except Exception:
@@ -223,11 +234,13 @@ def _national_catalogue_counts(database: dict[str, Any]) -> dict[str, int] | Non
         return None
 
 
-def _grant_isolated_partner_reviewer(database: dict[str, Any], user_id: str) -> dict[str, Any]:
+def _grant_isolated_partner_reviewer(database: dict[str, Any], user_id: str, actor_id: str) -> dict[str, Any]:
     """Provision only the reviewer used by this disposable browser acceptance."""
     if os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") != "1":
         return {"ok": False, "reason": "acceptance_mode_disabled"}
-    if not re.fullmatch(r"[0-9a-fA-F-]{36}", user_id):
+    if (not re.fullmatch(r"[0-9a-fA-F-]{36}", user_id)
+            or not re.fullmatch(r"[0-9a-fA-F-]{36}", actor_id)
+            or user_id == actor_id):
         return {"ok": False, "reason": "invalid_test_identity"}
     owner_password = os.environ.get("AUTH_TEST_DATABASE_OWNER_PASSWORD", "")
     marker = os.environ.get("AUTH_TEST_DATABASE_MARKER", "")
@@ -247,19 +260,86 @@ def _grant_isolated_partner_reviewer(database: dict[str, Any], user_id: str) -> 
                     or not __import__("hmac").compare_digest(identity["marker"] or "", marker)):
                 return {"ok": False, "reason": "database_marker_mismatch"}
             if not connection.execute(
-                "SELECT 1 FROM identity.users WHERE user_id=%s", (user_id,),
-            ).fetchone():
+                "SELECT count(*)=2 AS ok FROM identity.users WHERE user_id IN (%s,%s)", (user_id, actor_id),
+            ).fetchone()["ok"]:
                 return {"ok": False, "reason": "test_user_not_found"}
             connection.execute(
                 """INSERT INTO partner.platform_grants(user_id,capability,granted_by,reason)
                    VALUES (%s,'organization_review',%s,
                            'Disposable partner workspace browser acceptance only')""",
-                (user_id, user_id),
+                (user_id, actor_id),
+            )
+            connection.execute(
+                """INSERT INTO partner.platform_grant_events
+                   (grant_domain,target_user_id,capability,action,actor_user_id,reason)
+                   VALUES ('partner',%s,'organization_review','granted',%s,
+                           'Disposable partner workspace browser acceptance only')""",
+                (user_id, actor_id),
             )
         return {"ok": True}
     except psycopg.Error as exc:
         return {"ok": False, "sqlstate": exc.sqlstate or "unknown_sqlstate",
                 "error_class": type(exc).__name__}
+    except Exception as exc:
+        return {"ok": False, "error_class": type(exc).__name__}
+
+
+def _grant_isolated_admin_overview(database: dict[str, Any], user_id: str, actor_id: str) -> dict[str, Any]:
+    """Seed the aggregate-only owner overview grant in marked disposable PG17."""
+    if os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") != "1":
+        return {"ok": False, "reason": "acceptance_mode_disabled"}
+    if (not re.fullmatch(r"[0-9a-fA-F-]{36}", user_id)
+            or not re.fullmatch(r"[0-9a-fA-F-]{36}", actor_id)
+            or user_id == actor_id):
+        return {"ok": False, "reason": "invalid_or_self_grant_identity"}
+    owner_password = os.environ.get("AUTH_TEST_DATABASE_OWNER_PASSWORD", "")
+    marker = os.environ.get("AUTH_TEST_DATABASE_MARKER", "")
+    if not owner_password or not marker:
+        return {"ok": False, "reason": "isolated_owner_guard_unavailable"}
+    try:
+        with psycopg.connect(
+            **{**database, "user": "ai_tourism_owner", "password": owner_password},
+            connect_timeout=2, row_factory=dict_row,
+        ) as connection, connection.transaction():
+            identity = connection.execute(
+                """SELECT current_database() AS db,
+                          current_setting('server_version_num')::integer AS version_num,
+                          COALESCE(inet_server_port(),0) AS port,
+                          (SELECT count(*) FROM public.ai_tourism_auth_test_marker) AS marker_count,
+                          (SELECT min(marker_value) FROM public.ai_tourism_auth_test_marker) AS marker,
+                          (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0025_owner_control_center') AS migration_hash"""
+            ).fetchone()
+            expected_hash = hashlib.sha256(
+                (Path(__file__).resolve().parents[2] / "engineering/pilot/sql/025_owner_control_center.sql").read_bytes()
+            ).hexdigest()
+            if (identity["db"] != database["dbname"]
+                    or not 170000 <= identity["version_num"] < 180000
+                    or identity["port"] == 55433
+                    or identity["marker_count"] != 1
+                    or not __import__("hmac").compare_digest(identity["marker"] or "", marker)
+                    or (identity["migration_hash"] or "").strip() != expected_hash):
+                return {"ok": False, "reason": "disposable_database_or_migration_guard_failed"}
+            if not connection.execute(
+                "SELECT count(*)=2 AS ok FROM identity.users WHERE user_id IN (%s,%s)",
+                (user_id, actor_id),
+            ).fetchone()["ok"]:
+                return {"ok": False, "reason": "test_identities_not_found"}
+            connection.execute(
+                """INSERT INTO partner.platform_grants(user_id,capability,granted_by,reason)
+                   VALUES (%s,'admin_overview_read',%s,
+                           'Disposable owner control-center browser acceptance only')""",
+                (user_id, actor_id),
+            )
+            connection.execute(
+                """INSERT INTO partner.platform_grant_events
+                   (grant_domain,target_user_id,capability,action,actor_user_id,reason)
+                   VALUES ('partner',%s,'admin_overview_read','granted',%s,
+                           'Disposable owner control-center browser acceptance only')""",
+                (user_id, actor_id),
+            )
+        return {"ok": True}
+    except psycopg.Error as exc:
+        return {"ok": False, "sqlstate": exc.sqlstate or "unknown_sqlstate"}
     except Exception as exc:
         return {"ok": False, "error_class": type(exc).__name__}
 
@@ -433,11 +513,18 @@ class _ControlHandler(socketserver.StreamRequestHandler):
             elif action == "grant_catalogue_capabilities":
                 caps = command.get("capabilities")
                 result = {"ok": isinstance(caps, list) and _grant_catalogue_capabilities(
-                    self.server.database, str(command.get("user_id", "")), caps
+                    self.server.database, str(command.get("user_id", "")), caps,
+                    str(command.get("granted_by", "")),
                 )}
             elif action == "grant_isolated_partner_reviewer":
                 result = _grant_isolated_partner_reviewer(
                     self.server.database, str(command.get("user_id", "")),
+                    str(command.get("actor_id", "")),
+                )
+            elif action == "grant_isolated_admin_overview":
+                result = _grant_isolated_admin_overview(
+                    self.server.database, str(command.get("user_id", "")),
+                    str(command.get("actor_id", "")),
                 )
             elif action == "isolated_partner_counts":
                 counts = _isolated_partner_counts(self.server.database)

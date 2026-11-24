@@ -134,6 +134,56 @@ def test_source_registration_requires_review_evidence_before_database_access(mon
         app.dependency_overrides.clear()
 
 
+def test_public_runtime_reviewer_can_read_source_queue_without_write_step_up(monkeypatch):
+    user = AuthenticatedUser(UUID(int=1), None, UUID(int=2), "test")
+    app.dependency_overrides[authenticated_user] = lambda: user
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None, database_password="test-only", database_user="ai_tourism_app", app_env="staging"
+    )
+
+    class Cursor:
+        def __init__(self):
+            self.query = ""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query, _params=None):
+            self.query = query
+            return self
+
+        def fetchone(self):
+            return {"allowed": True}
+
+        def fetchall(self):
+            return []
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def cursor(self):
+            return Cursor()
+
+    monkeypatch.setattr("app.api.catalogue_review._connect", lambda _settings: Connection())
+    monkeypatch.setattr(
+        "app.api.catalogue_review.require_privileged_admin_step_up",
+        lambda _env: (_ for _ in ()).throw(AssertionError("read-only queue must not require write step-up")),
+    )
+    try:
+        response = TestClient(app).get("/api/v1/catalogue-review/sources")
+        assert response.status_code == 200
+        assert response.json() == {"items": [], "next_cursor": None}
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_identity_approval_rejects_archive_reference_instead_of_real_field_evidence(monkeypatch):
     user = AuthenticatedUser(UUID(int=1), None, UUID(int=2), "test")
     app.dependency_overrides[authenticated_user] = lambda: user

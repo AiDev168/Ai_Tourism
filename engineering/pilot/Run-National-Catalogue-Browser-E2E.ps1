@@ -204,6 +204,12 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
   $h24 = Apply '024_partner_review_audit_actions' 'engineering/pilot/sql/024_partner_review_audit_actions.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0023_SHA256=$h23; RAHGARD_PILOT_MIGRATION_0024_SHA256=$h24Expected }
   $migration24Assertions = (Psql $migrationTarget "SELECT (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0024_partner_review_audit_actions')='$h24Expected', NOT has_table_privilege('ai_tourism_app','partner.platform_grants','INSERT'), NOT has_table_privilege('ai_tourism_app','partner.platform_grants','UPDATE'), (SELECT pg_get_constraintdef(oid) LIKE '%activate%' AND pg_get_constraintdef(oid) LIKE '%deactivate%' FROM pg_constraint WHERE conrelid='partner.review_events'::regclass AND conname='review_events_decision_check'), EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='partner.review_events'::regclass AND polname='review_events_platform_insert' AND pg_get_expr(polwithcheck,polrelid) ILIKE '%verification_case%' AND pg_get_expr(polwithcheck,polrelid) ILIKE '%organization_review%')") | Out-String
   if (($migration24Assertions -join '').Trim() -ne 't|t|t|t|t') { throw "Migration 0024 assertions failed (ledger, least privilege, audit vocabulary, reviewer audit RLS): $migration24Assertions" }
+  $h25File = Join-Path $ProjectRoot 'engineering/pilot/sql/025_owner_control_center.sql'
+  $h25Expected = (Get-FileHash -LiteralPath $h25File -Algorithm SHA256).Hash.ToLowerInvariant()
+  $h25 = Apply '025_owner_control_center' 'engineering/pilot/sql/025_owner_control_center.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0024_SHA256=$h24Expected; RAHGARD_PILOT_MIGRATION_0025_SHA256=$h25Expected }
+  $migration25Assertions = (Psql $migrationTarget "SELECT (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0025_owner_control_center')='$h25Expected', (SELECT count(*) IN (24,26) FROM system.schema_migrations), (SELECT max(migration_id)='0025_owner_control_center' FROM system.schema_migrations), (SELECT pg_get_constraintdef(oid) ILIKE '%admin_overview_read%' FROM pg_constraint WHERE conrelid='partner.platform_grants'::regclass AND conname='platform_grants_capability_check'), NOT has_table_privilege('ai_tourism_app','partner.platform_grant_events','SELECT'), NOT has_table_privilege('ai_tourism_app','partner.platform_grant_events','INSERT'), NOT has_table_privilege('ai_tourism_app','partner.platform_grants','INSERT'), NOT has_table_privilege('ai_tourism_app','partner.platform_grants','UPDATE'), has_function_privilege('ai_tourism_app','partner.admin_grant_counts()','EXECUTE'), (SELECT prosecdef FROM pg_proc WHERE oid='partner.admin_grant_counts()'::regprocedure)") | Out-String
+  if (($migration25Assertions -join '').Trim() -ne 't|t|t|t|t|t|t|t|t|t') { throw "Migration 0025 assertions failed (ledger, capability vocabulary, operator-only grant audit, guarded aggregate function): $migration25Assertions" }
+  $migrationCount = (Psql $migrationTarget 'SELECT count(*) FROM system.schema_migrations').Trim()
   $testDb = $env:AUTH_TEST_DATABASE_NAME
   Psql 'postgres' "ALTER DATABASE $migrationTarget RENAME TO $testDb;" | Out-Null
   $env:AUTH_TEST_DATABASE_NAME = $testDb
@@ -220,13 +226,13 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
   try { node scripts/traveler-e2e.mjs; if ($LASTEXITCODE -ne 0) { throw 'National-catalogue browser acceptance failed.' } }
   finally { Pop-Location }
   if ($ChatProvider -eq 'simulated') {
-    Write-Host 'PASS: full app migrations 0013-0024 and authenticated national-catalogue Chromium journey completed in isolated PG17.' -ForegroundColor Green
+    Write-Host "PASS: full app migrations 0013-0025 (ledger rows=$migrationCount) and authenticated national-catalogue Chromium journey completed in isolated PG17." -ForegroundColor Green
   }
   elseif ($ChatProvider -eq 'forced_outage') {
-    Write-Host 'PASS: production Chat adapter failure and deterministic fallback were exercised through authenticated Chromium/FastAPI on disposable PG17.' -ForegroundColor Green
+    Write-Host "PASS: production Chat adapter failure and deterministic fallback were exercised through authenticated Chromium/FastAPI on disposable PG17 with migrations through 0025 (ledger rows=$migrationCount)." -ForegroundColor Green
   }
   else {
-    Write-Host "PASS: authenticated real-provider Chromium journey via $ChatProvider completed on disposable PG17; no persistent database or VPS was used." -ForegroundColor Green
+    Write-Host "PASS: authenticated real-provider Chromium journey via $ChatProvider completed on disposable PG17 (ledger rows=$migrationCount); no persistent database or VPS was used." -ForegroundColor Green
   }
 }
 finally {

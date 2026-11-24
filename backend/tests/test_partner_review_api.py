@@ -18,6 +18,7 @@ class _Cursor:
         self.statements: list[str] = []
         self.params = None
         self.service_insert_params = None
+        self.audit_items = []
 
     def execute(self, query, params=()):
         self.statements.append(" ".join(query.split()))
@@ -31,6 +32,8 @@ class _Cursor:
             self.row = self.case
         elif "WITH latest_case AS" in query:
             self.row = []
+        elif "FROM partner.review_events" in query:
+            self.row = self.audit_items
         else:
             self.row = None
         return self
@@ -62,15 +65,15 @@ class _Connection:
         return False
 
 
-def _settings():
-    return Settings(_env_file=None, database_password="test-only", database_user="ai_tourism_app")
+def _settings(app_env="development"):
+    return Settings(_env_file=None, app_env=app_env, database_password="test-only", database_user="ai_tourism_app")
 
 
-def _client(monkeypatch, cursor: _Cursor, user_id: UUID = UUID(int=7)):
+def _client(monkeypatch, cursor: _Cursor, user_id: UUID = UUID(int=7), app_env="development"):
     user = AuthenticatedUser(user_id, None, UUID(int=8), "partner-review-test")
     app.dependency_overrides[authenticated_user] = lambda: user
     app.dependency_overrides[require_authenticated_csrf] = lambda: None
-    app.dependency_overrides[get_settings] = _settings
+    app.dependency_overrides[get_settings] = lambda: _settings(app_env)
     monkeypatch.setattr("app.api.partners._connection", lambda _settings: _Connection(cursor))
     return TestClient(app), user
 
@@ -117,6 +120,35 @@ def test_reviewer_queue_returns_only_latest_case_per_organization(monkeypatch):
         app.dependency_overrides.clear()
 
 
+def test_platform_reviewer_can_read_bounded_company_audit_history(monkeypatch):
+    cursor = _Cursor(capability=True)
+    cursor.audit_items = [{"display_name": "Reviewed Company", "entity_type": "organization",
+                           "decision": "approve", "reason": "Evidence reviewed independently.",
+                           "policy_version": "partner-application-v1", "occurred_at": "2026-11-24T00:00:00Z"}]
+    client, _ = _client(monkeypatch, cursor)
+    try:
+        response = client.get("/api/v1/partners/platform/review-events?limit=25")
+        assert response.status_code == 200
+        assert response.json()["items"] == cursor.audit_items
+        query = next(query for query in cursor.statements if "FROM partner.review_events" in query)
+        assert "ORDER BY e.occurred_at DESC" in query
+        assert cursor.params == (25,)
+        assert "reviewer_user_id" not in query
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_company_actor_cannot_read_platform_review_audit_history(monkeypatch):
+    cursor = _Cursor(capability=False)
+    client, _ = _client(monkeypatch, cursor)
+    try:
+        response = client.get("/api/v1/partners/platform/review-events")
+        assert response.status_code == 403
+        assert not any("FROM partner.review_events" in query for query in cursor.statements)
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_reviewer_cannot_review_own_organization_even_with_grant(monkeypatch):
     actor = UUID(int=7)
     case = {"case_id": UUID(int=1), "organization_id": UUID(int=2),
@@ -131,6 +163,22 @@ def test_reviewer_cannot_review_own_organization_even_with_grant(monkeypatch):
         assert response.json() == {"error": {"code": "request_rejected"}}
         assert not any("UPDATE partner.verification_cases" in query for query in cursor.statements)
         assert not any("INSERT INTO partner.review_events" in query for query in cursor.statements)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_public_staging_reviewer_write_fails_closed_before_lock_or_mutation(monkeypatch):
+    cursor = _Cursor(capability=True)
+    client, actor = _client(monkeypatch, cursor, app_env="staging")
+    try:
+        response = client.post(
+            "/api/v1/partners/platform/verification-cases/00000000-0000-0000-0000-000000000001/decision",
+            json={"decision": "verified", "reason": "Independent evidence review completed."},
+        )
+        assert response.status_code == 403
+        assert response.json() == {"error": {"code": "request_rejected"}}
+        assert not any("FOR UPDATE" in query for query in cursor.statements)
+        assert not any(query.lstrip().startswith(("UPDATE ", "INSERT ", "DELETE ")) for query in cursor.statements)
     finally:
         app.dependency_overrides.clear()
 

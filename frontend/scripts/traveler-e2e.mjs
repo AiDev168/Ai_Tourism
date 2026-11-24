@@ -637,14 +637,49 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
     if (!baselineCounts.ok) throw new Error('national_catalogue_baseline_counts_unavailable');
     await page.goto(webOrigin, { waitUntil: 'domcontentloaded' });
     await selectAndVerifyLocale(page, 'en-US');
+    const unauthenticatedAdmin = await browserApi(page, '/api/v1/admin/capabilities', 'GET');
+    if (unauthenticatedAdmin.status !== 401) throw new Error(`unauthenticated_admin_status_${unauthenticatedAdmin.status}`);
     currentPhone = operatorPhone;
     currentIdentity = await signIn(page, api.controlPort, api.controlToken, operatorPhone);
     reviewerUserId = currentIdentity.userId;
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = companyPhone;
+    const grantIssuer = await signIn(page, api.controlPort, api.controlToken, companyPhone);
+    const grantIssuerId = grantIssuer.userId;
+    const unprivilegedAdmin = await browserApi(page, '/api/v1/admin/capabilities', 'GET');
+    if (unprivilegedAdmin.status !== 403) throw new Error(`unprivileged_admin_status_${unprivilegedAdmin.status}`);
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = operatorPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, operatorPhone);
+    if (currentIdentity.userId !== reviewerUserId || grantIssuerId === reviewerUserId) {
+      throw new Error('admin_test_grant_identities_not_independent');
+    }
     const grant = await checkedControl(api.controlPort, api.controlToken, {
       action: 'grant_catalogue_capabilities', user_id: currentIdentity.userId,
+      granted_by: grantIssuerId,
       capabilities: ['candidate_review', 'source_review', 'catalogue_publish'],
     });
     if (!grant.ok) throw new Error('national_test_operator_capability_grant_failed');
+    await page.goto(`${webOrigin}/admin`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Rahgard owner control center' }).waitFor({ state: 'visible' });
+    const initialAdminCapabilities = await requestBrowserJson(page, '/api/v1/admin/capabilities', 'GET');
+    if (initialAdminCapabilities.sections.destinations !== true
+        || initialAdminCapabilities.sections.companies !== false
+        || initialAdminCapabilities.sections.users !== false
+        || initialAdminCapabilities.sections.system !== false) {
+      throw new Error('admin_capability_navigation_overexposed_or_missing');
+    }
+    if (await page.locator('.admin-control-nav').getByRole('button', { name: 'Users and access' }).count()) {
+      throw new Error('admin_user_overview_visible_without_dedicated_grant');
+    }
+    await page.locator('.admin-control-nav').getByRole('button', { name: 'Destination governance' }).click();
+    await page.getByRole('heading', { name: 'Catalogue review and publication' }).waitFor({ state: 'visible' });
+    const publicProviderAdmin = await browserApi(page, '/api/v1/admin/ai-providers/me', 'GET');
+    if (publicProviderAdmin.status !== 403) throw new Error('public_provider_admin_route_not_fail_closed');
+    await captureWithoutAccountIdentifier(page, resolve(artifactRoot, 'admin-destinations-390.png'), { fullPage: true });
+    milestone('capability-based admin landing, destination review reuse, and public AI-admin denial verified');
     await page.goto(`${webOrigin}/admin/catalogue-review`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Catalogue review and publication' }).waitFor({ state: 'visible' });
     milestone('operator authenticated; catalogue review UI loaded');
@@ -976,18 +1011,29 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
       throw new Error('partner_reviewer_must_be_independent_of_company_owner');
     }
     const partnerReviewerGrant = await controlRequest(api.controlPort, api.controlToken, {
-      action: 'grant_isolated_partner_reviewer', user_id: currentIdentity.userId,
+      action: 'grant_isolated_partner_reviewer', user_id: currentIdentity.userId, actor_id: companyUserId,
     });
     if (!partnerReviewerGrant.ok) {
       const reason = partnerReviewerGrant.sqlstate || partnerReviewerGrant.reason || partnerReviewerGrant.error_class || 'unknown';
       throw new Error(`isolated_partner_reviewer_grant_failed_${String(reason).replace(/[^A-Za-z0-9_-]/g, '_')}`);
     }
-    await page.goto(`${webOrigin}/partners`, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('heading', { name: 'Partner workspace' }).waitFor({ state: 'visible' });
+    const ownerOverviewGrant = await controlRequest(api.controlPort, api.controlToken, {
+      action: 'grant_isolated_admin_overview', user_id: currentIdentity.userId, actor_id: companyUserId,
+    });
+    if (!ownerOverviewGrant.ok) throw new Error('isolated_admin_overview_grant_failed');
+    await page.goto(`${webOrigin}/admin`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Rahgard owner control center' }).waitFor({ state: 'visible' });
+    await page.locator('.admin-control-nav').getByRole('button', { name: 'Company governance' }).click();
+    const reviewQueueCheck = await browserApi(page, '/api/v1/partners/platform/organization-review', 'GET');
+    if (reviewQueueCheck.status !== 200 || !Array.isArray(reviewQueueCheck.payload?.items)
+        || !reviewQueueCheck.payload.items.some(item => item.display_name === 'Acceptance Travel Company')) {
+      throw new Error(`company_review_queue_api_status_${reviewQueueCheck.status}_items_${Array.isArray(reviewQueueCheck.payload?.items) ? reviewQueueCheck.payload.items.length : 'invalid'}_detail_${String(reviewQueueCheck.payload?.detail ?? 'none').replace(/[^A-Za-z0-9_-]/g, '_')}`);
+    }
     const reviewItem = page.locator('.partner-review-item').filter({ hasText: 'Acceptance Travel Company' });
     await reviewItem.waitFor({ state: 'visible', timeout: 15_000 });
+    await captureWithoutAccountIdentifier(page, resolve(artifactRoot, 'admin-company-review-1440.png'), { fullPage: true });
     await reviewItem.getByLabel('Decision reason').fill('Reviewed the isolated acceptance evidence and registration fixture.');
-    await partnerSubmit(reviewItem.getByRole('button', { name: 'Review evidence', exact: true }),
+    await partnerSubmit(reviewItem.getByRole('button', { name: 'Verify evidence', exact: true }),
       /^\/api\/v1\/partners\/platform\/verification-cases\/[0-9a-f-]+\/decision$/i, 200);
     await reviewItem.getByRole('button', { name: 'Approve application', exact: true }).waitFor({ state: 'visible' });
     await partnerSubmit(reviewItem.getByRole('button', { name: 'Approve application', exact: true }),
@@ -1000,6 +1046,24 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
         || reviewedCounts.verification_cases !== 1 || reviewedCounts.review_events !== 3) {
       throw new Error('review_decisions_or_audit_events_not_persisted');
     }
+    const reviewAuditResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/partners/platform/review-events'
+      && response.request().method() === 'GET');
+    await page.getByRole('button', { name: 'Decision history', exact: true }).click();
+    const reviewAudit = await reviewAuditResponse;
+    if (reviewAudit.status() !== 200) throw new Error(`company_review_audit_http_${reviewAudit.status()}`);
+    await page.locator('.admin-review-audit li p').filter({ hasText: 'Reviewed the isolated acceptance evidence and registration fixture.' }).first().waitFor({ state: 'visible' });
+    trace.push({ method: 'GET', path: '/api/v1/partners/platform/review-events', status: reviewAudit.status() });
+    if ((await reviewItem.textContent())?.includes('reviewer_user_id')) throw new Error('company_review_audit_exposed_reviewer_identifier');
+    await page.locator('.admin-control-nav').getByRole('button', { name: 'Users and access' }).click();
+    await page.getByText('Active grant counts by area').waitFor({ state: 'visible' });
+    if (!(await page.locator('.admin-grant-counts li').count())) throw new Error('aggregate_grant_overview_missing');
+    await page.locator('.admin-control-nav').getByRole('button', { name: 'System health' }).click();
+    await page.getByText('PostgreSQL major').waitFor({ state: 'visible' });
+    if (!(await page.locator('.admin-metrics').textContent()).includes('17')) throw new Error('admin_postgres_health_missing');
+    await captureWithoutAccountIdentifier(page, resolve(artifactRoot, 'admin-system-health-1440.png'), { fullPage: true });
+    const adminUiMatrix = await captureAdminThemeMatrix(page, artifactRoot);
+    audit.adminUiMatrix = { case_count: adminUiMatrix.length, result: 'PASS' };
+    milestone('owner control center checked for RTL/LTR, light/dark, 390/1440, focus and WCAG AA text contrast');
     milestone('independent operator reviewed evidence, approved company and activated intake with audit events');
     await page.locator('.auth-signed-in button').first().click();
     await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
@@ -2117,6 +2181,97 @@ async function captureReleaseThemeMatrix(page, artifactRoot, surface) {
   if (await localePicker.inputValue() !== originalLocale) await localePicker.selectOption(originalLocale);
   if (await page.locator('html').getAttribute('data-rahgard-theme') !== originalTheme) await toggle.click();
   writeFileSync(resolve(artifactRoot, `release-${surface}-ui-matrix.json`), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
+  return results;
+}
+
+async function captureAdminThemeMatrix(page, artifactRoot) {
+  const originalSize = page.viewportSize();
+  const toggle = page.locator('.rahgard-theme-toggle');
+  const originalTheme = await page.locator('html').getAttribute('data-rahgard-theme');
+  const localePicker = page.locator('#locale');
+  const originalLocale = await localePicker.inputValue();
+  const results = [];
+  await page.locator('.admin-control-nav button').first().click();
+  for (const locale of ['fa-IR', 'en-US', 'ar']) {
+    if (await localePicker.inputValue() !== locale) await localePicker.selectOption(locale);
+    await page.waitForFunction(expected => document.documentElement.lang === expected
+      && document.querySelector('.admin-control')?.getAttribute('dir') === (expected === 'en-US' ? 'ltr' : 'rtl'), locale);
+    for (const theme of ['light', 'dark']) {
+      if (await page.locator('html').getAttribute('data-rahgard-theme') !== theme) {
+        await toggle.focus();
+        await toggle.press('Enter');
+      }
+      await page.waitForFunction(expected => document.documentElement.dataset.rahgardTheme === expected, theme);
+      for (const width of [390, 1440]) {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+        await page.locator('.admin-control-nav button').first().focus();
+        await page.keyboard.press('Tab');
+        const metrics = await page.evaluate(() => {
+          const rgb = value => {
+            const values = String(value).match(/[\d.]+/g)?.map(Number) ?? [];
+            return values.length < 3 ? null : values.slice(0, 3).map(value => value / 255);
+          };
+          const luminance = color => {
+            const values = rgb(color);
+            if (!values) return null;
+            const linear = values.map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+            return linear[0] * .2126 + linear[1] * .7152 + linear[2] * .0722;
+          };
+          const contrast = (foreground, background) => {
+            const a = luminance(foreground), b = luminance(background);
+            return a === null || b === null ? null : (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+          };
+          const visible = element => {
+            const style = getComputedStyle(element), box = element.getBoundingClientRect();
+            return box.width > 0 && box.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+          };
+          const backgrounds = element => {
+            for (let node = element; node; node = node.parentElement) {
+              const style = getComputedStyle(node);
+              const gradients = [...style.backgroundImage.matchAll(/rgba?\(([^)]+)\)/g)]
+                .map(match => `rgb(${match[1].split(',').slice(0, 3).join(',')})`);
+              if (gradients.length) return gradients;
+              const channels = style.backgroundColor.match(/[\d.]+/g)?.map(Number) ?? [];
+              if (channels.length === 3 || (channels.length >= 4 && channels[3] >= .98)) return [style.backgroundColor];
+            }
+            return [getComputedStyle(document.body).backgroundColor];
+          };
+          const nodes = [...document.querySelectorAll('.admin-control :is(h1,h2,h3,h4,p,small,button,a,span,strong,li)')]
+            .filter(element => visible(element) && element.textContent.trim() && !element.matches(':disabled'));
+          const violations = nodes.map(element => {
+            const style = getComputedStyle(element), size = parseFloat(style.fontSize);
+            const threshold = size >= 24 || (size >= 18.66 && Number(style.fontWeight) >= 700) ? 3 : 4.5;
+            return Math.min(...backgrounds(element).map(bg => contrast(style.color, bg))) + .01 < threshold;
+          }).filter(Boolean).length;
+          const focusTarget = document.activeElement;
+          const focusStyle = focusTarget ? getComputedStyle(focusTarget) : null;
+          const toggle = document.querySelector('.rahgard-theme-toggle'), box = toggle?.getBoundingClientRect();
+          return {
+            overflow: document.documentElement.scrollWidth > innerWidth || document.body.scrollWidth > innerWidth,
+            contrastViolations: violations,
+            focusVisible: Boolean(focusTarget?.closest('.admin-control-nav') && focusStyle
+              && ((focusStyle.outlineStyle !== 'none' && parseFloat(focusStyle.outlineWidth) >= 2) || focusStyle.boxShadow !== 'none')),
+            toggleLabeled: Boolean(toggle?.getAttribute('aria-label')),
+            toggleSize: box ? [Math.round(box.width), Math.round(box.height)] : [0, 0],
+          };
+        });
+        if (metrics.overflow || metrics.contrastViolations || !metrics.focusVisible || !metrics.toggleLabeled
+          || metrics.toggleSize[0] < 24 || metrics.toggleSize[1] < 24) {
+          throw new Error(`admin_accessibility_${locale}_${theme}_${width}_contrast=${metrics.contrastViolations}_focus=${metrics.focusVisible}_overflow=${metrics.overflow}`);
+        }
+        const screenshot = `admin-${locale}-${theme}-${width}.png`;
+        await captureWithoutAccountIdentifier(page, resolve(artifactRoot, screenshot), { fullPage: true });
+        results.push({ locale, theme, width, screenshot, ...metrics });
+      }
+    }
+  }
+  if (originalSize) await page.setViewportSize(originalSize);
+  if (await localePicker.inputValue() !== originalLocale) await localePicker.selectOption(originalLocale);
+  if (await page.locator('html').getAttribute('data-rahgard-theme') !== originalTheme) {
+    await toggle.focus();
+    await toggle.press('Enter');
+  }
+  writeFileSync(resolve(artifactRoot, 'admin-ui-matrix.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
   return results;
 }
 

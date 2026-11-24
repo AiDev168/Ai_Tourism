@@ -15,6 +15,7 @@ from psycopg.rows import dict_row
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.auth import authenticated_user, require_authenticated_csrf
+from app.api.admin_guards import require_privileged_admin_step_up
 from app.core.config import Settings, get_settings
 from app.modules.catalog.archive_ingest import stage_archive
 from app.modules.identity.auth_service import AuthenticatedUser
@@ -242,6 +243,7 @@ def decide_candidate(
             )
             if not cur.fetchone()["allowed"]:
                 raise HTTPException(403, "catalogue_review_not_granted")
+            require_privileged_admin_step_up(settings.app_env)
             decision_phase = "lock_candidate"
             cur.execute(
                 "SELECT candidate_status FROM knowledge.destination_candidates WHERE candidate_id=%s FOR UPDATE",
@@ -574,6 +576,13 @@ def verify_source(
         with _connect(settings) as conn, conn.cursor() as cur:
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
             cur.execute(
+                "SELECT identity.has_catalogue_review_capability(%s,'source_review') AS allowed",
+                (user.user_id,),
+            )
+            if not cur.fetchone()["allowed"]:
+                raise HTTPException(403, "source_review_not_granted")
+            require_privileged_admin_step_up(settings.app_env)
+            cur.execute(
                 """SELECT knowledge.verify_archive_source(%s,%s,%s,%s,%s,%s,%s) AS verification_id""",
                 (source_id, body.publisher, body.page_title, body.evidence_excerpt,
                  body.inspected_at, body.policy_version, user.user_id),
@@ -737,6 +746,13 @@ def publish_candidate(
         with _connect(settings) as conn, conn.cursor() as cur:
             publication_phase = "actor_context"
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                "SELECT identity.has_catalogue_review_capability(%s,'catalogue_publish') AS allowed",
+                (user.user_id,),
+            )
+            if not cur.fetchone()["allowed"]:
+                raise HTTPException(403, "catalogue_publish_not_granted")
+            require_privileged_admin_step_up(settings.app_env)
             publication_phase = "publish_function"
             cur.execute(
                 "SELECT knowledge.publish_archive_destination(%s,%s,%s,%s,%s) AS destination_id",

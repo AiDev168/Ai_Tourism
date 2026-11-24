@@ -1,0 +1,20 @@
+﻿{
+  "task": "GitHub Issue #27",
+  "run_date": "2026-11-24",
+  "acceptance": "PASS_ISOLATED_ONLY",
+  "browser": "Chromium",
+  "database": { "engine": "PostgreSQL", "major": 17, "disposable": true, "marker_verified": true, "live_database_accessed": false },
+  "integrations": { "otp": "fake isolated test adapter", "chat": "in-process simulated gateway", "live_provider_calls": 0 },
+  "archive": { "sha256": "7e9a27654535590f593aeea8e9f7ba9422fb128ca2c4fc93129061c544aff397", "candidate_rows": 700, "destination_identity_candidates": 167, "discovery_leads": 533, "source_candidates": 257 },
+  "journeys": {
+    "operator_catalogue_review_and_publication": "passed; inspected source evidence and published two supported records in disposable DB",
+    "company_governance": "passed; separate verification, application and activation decisions; three audit events persisted",
+    "partner_workspace": "passed; organization, service, destination link, schedule, offer, price and availability persisted and reopened",
+    "tenant_isolation": "passed; unauthorized cross-tenant write 403 and read returned zero rows",
+    "traveler": "passed; catalogue search, recommendation, itinerary persistence and reopen after new authentication",
+    "admin_control_center": "passed; server-grant navigation, aggregate-only user/system data, public provider-admin denied"
+  },
+  "migrations": { "isolated_ledger_rows": 26, "latest": "0025_owner_control_center", "migration_0025_sha256": "6b2602bf3ec970fcfcbc776993726bead450f99d178c8c51e3abedbe4f8fcf89", "live_migrations_run": false },
+  "ui_matrix": { "cases": 12, "locales": ["fa-IR", "en-US", "ar"], "themes": ["light", "dark"], "widths": [390, 1440], "horizontal_overflow_cases": 0, "computed_text_contrast_violations": 0, "keyboard_focus_visible_cases": 12 },
+  "personal_data": "No login identifiers, account IDs, trip IDs, request text, credentials, provider secrets or live database rows included. Company screenshot contains only the explicitly synthetic disposable acceptance fixture."
+}
