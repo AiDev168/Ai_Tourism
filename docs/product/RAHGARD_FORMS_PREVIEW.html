@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="fa" dir="rtl" data-rahgard-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>راهگرد | پیش‌نمایش روند سادهٔ پنل شرکت‌ها</title>
+  <style>
+    /* Standalone non-production preview of the EXISTING Rahgard V2 visual language.
+       The production implementation must reuse frontend/src/styles.css, PartnerWorkspace,
+       authentication and the existing API; never copy this into a new app shell. */
+    :root { color-scheme:light;font-family:"Estedad Variable","Noto Sans Arabic","Segoe UI",sans-serif;
+      --page:#f6f7fb;--top:#fff;--surface:#fff;--soft:#f3f5fd;--ink:#1d2540;
+      --muted:#465471;--line:#d2d6e6;--accent:#7044b6;--accent-ink:#fff;
+      --focus:#7950ba;--alert:#674421;--alert-bg:#fff5d9;--shadow:0 18px 48px #1c214017 }
+    :root[data-rahgard-theme="dark"] {color-scheme:dark;
+      --page:#080c16;--top:#0b101d;--surface:#151b2e;--soft:#232a40;--ink:#f1efff;
+      --muted:#c9c9dc;--line:#4b4b72;--accent:#a44bf3;--accent-ink:#fff;
+      --focus:#c0a5fc;--alert:#f4dfa8;--alert-bg:#303045;--shadow:0 16px 45px #0004}
+    *{box-sizing:border-box} html,body{margin:0;min-width:320px}body{background:var(--page);color:var(--ink);line-height:1.85}
+    button,input,select,textarea{font:inherit} button{cursor:pointer} a{color:inherit}
+    :focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+    .topbar{min-height:76px;background:var(--top);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:12px clamp(16px,4vw,54px)}
+    .brand{display:flex;align-items:center;gap:12px;font-weight:800;font-size:1.14rem}
+    .brand-mark{display:grid;place-items:center;width:40px;height:40px;color:#fff;background:linear-gradient(145deg,#a04dfc,#6122c1);border-radius:13px 13px 13px 4px}
+    .brand small{display:block;color:var(--muted);font-size:.72rem;font-weight:500;line-height:1.45}
+    .top-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+    .top-actions label{font-size:.84rem}.top-actions select{min-height:42px}
+    button,select,input,textarea{border:1px solid var(--line);border-radius:11px;background:var(--surface);color:var(--ink);min-height:44px;padding:10px 13px}
+    button{font-weight:650;line-height:1.5}button.primary{color:var(--accent-ink);background:linear-gradient(120deg,#a44bf3,#6430d8);border-color:#8650cd}
+    :root[data-rahgard-theme="light"] button.primary{background:linear-gradient(120deg,#8652cd,#6035a2)}
+    button.secondary{background:var(--soft)}button:disabled{opacity:.65;cursor:not-allowed}
+    main{width:min(1280px,calc(100% - 26px));margin:24px auto 56px}
+    .workspace{border:1px solid var(--line);border-radius:25px;background:var(--surface);box-shadow:var(--shadow);overflow:hidden}
+    .workspace-head{padding:clamp(19px,3vw,32px);background:var(--soft);border-bottom:1px solid var(--line)}
+    .eyebrow{font-size:.76rem;font-weight:800;color:var(--muted);margin:0}.workspace-head h1{margin:4px 0 7px;font-size:clamp(21px,3vw,29px);line-height:1.5}
+    p{margin:6px 0;line-height:1.9}.hint{color:var(--muted);font-size:.88rem}.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:.77rem}
+    .notice{background:var(--alert-bg);color:var(--alert);border:1px solid var(--line);padding:13px 16px;border-radius:14px;font-size:.85rem;margin-top:14px}
+    .step-strip{display:flex;gap:8px;flex-wrap:wrap;margin-top:17px}
+    .step-strip span{padding:7px 11px;border:1px solid var(--line);background:var(--surface);border-radius:12px;font-size:.82rem}
+    .layout{display:grid;grid-template-columns:minmax(190px,235px) minmax(0,1fr);gap:0}
+    .navigation{padding:16px;border-inline-end:1px solid var(--line);background:var(--top)}
+    .navigation nav{display:grid;gap:5px}
+    .navigation button{border:1px solid transparent;text-align:start;width:100%;background:transparent;font-size:.9rem;line-height:1.55}
+    .navigation button[aria-current="page"]{background:var(--soft);color:var(--ink);border-color:var(--line);font-weight:800;box-shadow:inset 3px 0 0 var(--accent)}
+    .navigation .aside-note{font-size:.78rem;color:var(--muted);border-top:1px solid var(--line);margin-top:22px;padding-top:15px}
+    .pane{padding:clamp(18px,3vw,34px);min-width:0;min-height:410px}
+    .pane h2{font-size:1.2rem;margin:0 0 6px}.pane .lead{color:var(--muted);font-size:.91rem;margin-bottom:19px}
+    .field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+    .field{min-width:0;display:grid;align-content:start;gap:5px}.field.wide{grid-column:1/-1}
+    .field label{font-weight:750;font-size:.9rem}.field input,.field textarea,.field select{min-width:0;width:100%}
+    .field textarea{min-height:92px;resize:vertical}.field small{color:var(--muted);font-size:.76rem;line-height:1.65}
+    .required{color:#e66c84;font-weight:900}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:23px}
+    .result,.empty,.intro-tile{margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:15px;background:var(--soft)}
+    .result{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.87rem}.empty{text-align:center;padding:28px 18px}
+    .empty strong{display:block;margin-bottom:5px}.intro-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .intro-tile{margin:0}.intro-tile b{display:block;margin-bottom:6px}.intro-tile span{font-size:.84rem;color:var(--muted)}
+    details.advanced{border:1px solid var(--line);border-radius:13px;margin-top:16px;padding:12px 15px;background:var(--soft)}
+    details.advanced summary{cursor:pointer;font-weight:750}details.advanced .field-grid{margin-top:14px}
+    .jump{display:inline-flex;margin-top:15px;gap:9px;align-items:center;text-decoration:none;font-size:.83rem}
+    .privacy{margin-top:24px;color:var(--muted);font-size:.77rem}
+    @media(max-width:780px){.layout{grid-template-columns:1fr}.navigation{border-inline-end:0;border-bottom:1px solid var(--line);padding:10px 12px;overflow:hidden}.navigation nav{display:flex;overflow-x:auto;gap:6px;scrollbar-width:thin}.navigation button{flex:none;width:auto;white-space:nowrap}.navigation .aside-note{display:none}}
+    @media(max-width:540px){main{width:calc(100% - 18px);margin:12px auto 35px}.topbar{min-height:69px;padding:10px 12px}.brand{font-size:.98rem}.brand-mark{width:34px;height:34px}.brand small{font-size:.65rem}.top-actions{width:100%;justify-content:space-between}.top-actions select{max-width:180px}.workspace{border-radius:18px}.workspace-head{padding:17px 16px}.pane{padding:19px 15px}.field-grid,.intro-grid{grid-template-columns:minmax(0,1fr)}.field.wide{grid-column:auto}}
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">ر</span><div>راهگرد <small>پنل شرکت‌ها / پیش‌نمایش هماهنگ با V2</small></div></div>
+    <div class="top-actions"><label for="role">نقش نمایشی</label><select id="role"><option value="company">نمایندهٔ شرکت</option><option value="owner">مدیر محتوا و شرکت‌ها</option></select><button id="theme" class="secondary" type="button" aria-pressed="false">حالت شب</button></div>
+  </header>
+  <main class="partner-workspace">
+    <div class="workspace">
+      <div class="workspace-head"><p class="eyebrow">RAHGARD · PARTNER WORKSPACE</p><h1 id="workspace-title">کارهای شرکت در راهگرد</h1>
+        <p class="hint" id="workspace-subtitle">فقط کارهای لازم برای شروع، به ترتیب انجام؛ اطلاعات فنی و شناسه‌ها از کاربر پنهان می‌مانند.</p>
+        <span class="pill">نمونهٔ نمایشی، بدون اتصال به API</span>
+        <div class="step-strip" id="steps"><span>۱ · معرفی شرکت</span><span>۲ · ثبت اولین خدمت</span><span>۳ · دریافت درخواست پس از تأیید</span></div>
+        <div class="notice">این پیش‌نمایش نه سازمانی ایجاد می‌کند، نه شرکت را تأیید می‌کند، نه داده‌ای ارسال یا در مرورگر ذخیره می‌کند. فیلدها و گزینه‌های قطعی باید از API واقعی خوانده شوند.</div>
+      </div>
+      <div class="layout"><aside class="navigation"><nav id="nav" aria-label="مراحل کاری"></nav><p class="aside-note">بخش‌های پیشرفته تنها هنگام نیاز باز می‌شوند. پنل اصلی و احراز هویت V2 باید بدون ایجاد نسخهٔ دوم استفاده شوند.</p></aside><section class="pane" id="content" aria-live="polite"></section></div>
+    </div>
+    <p class="privacy">این فایل فقط راهنمای ظاهر و جریان کار است؛ در سایت عملیاتی، مجوز هر عملیات باید در Backend و PostgreSQL کنترل شود.</p>
+  </main>
+<script>
+'use strict';
+const steps = {
+  company: [
+    {id:'start',title:'شروع و وضعیت شرکت',lead:'در سه گام می‌توانید شرکت را معرفی کنید، اولین خدمت را اضافه کنید و پس از تأیید درخواست‌ها را دریافت کنید.',kind:'start'},
+    {id:'organization',title:'۱. مشخصات شرکت',lead:'اطلاعات ضروری را وارد کنید. تأیید صلاحیت در مرحله‌ای مستقل توسط مدیر انجام می‌شود.',fields:[
+      {name:'legal_name',label:'نام حقوقی شرکت',required:true,max:160,help:'مطابق مدارک ثبتی'},
+      {name:'display_name',label:'نام قابل نمایش',required:true,max:100,help:'عنوانی که پس از تأیید به مسافران نشان داده می‌شود'},
+      {name:'organization_type',label:'حوزهٔ فعالیت',type:'select',required:true,options:['آژانس گردشگری','اقامتگاه','راهنمای گردشگری','حمل‌ونقل','سایر'],help:'در محصول واقعی از مقادیر معتبر API'},
+      {name:'registration_country',label:'کشور ثبت شرکت',type:'select',required:true,options:['ایران','سایر'],help:'کد کشور باید از قرارداد Backend تعیین شود'}]},
+    {id:'service',title:'۲. اولین خدمت',lead:'ابتدا فقط یک خدمت را معرفی کنید. شناسه‌ها و کدهای داخلی توسط سامانه مدیریت می‌شوند.',fields:[
+      {name:'service_type',label:'چه خدمتی ارائه می‌کنید؟',type:'select',required:true,options:['تور','اقامت','راهنمای محلی','حمل‌ونقل','سایر']},
+      {name:'display_name',label:'عنوان خدمت',required:true,max:160},
+      {name:'description',label:'توضیح کوتاه',type:'textarea',max:1000,wide:true,required:true}],advanced:[
+      {name:'locale',label:'زبان توضیح',type:'select',options:['fa-IR','en-US','ar'],help:'در نسخهٔ اصلی زبان از تنظیمات سایت پیشنهاد شود'},
+      {name:'service_key',label:'کد داخلی خدمت (اختیاری)',max:80,help:'در نسخهٔ اصلی به‌صورت امن از Backend تولید شود'}]},
+    {id:'offer',title:'۳. قیمت و دسترس‌پذیری',lead:'در قدم اول یک قیمت قابل‌فهم ثبت کنید؛ تاریخ‌های تکرار و جزئیات ظرفیت در «تنظیمات بیشتر» هستند.',fields:[
+      {name:'amount',label:'مبلغ',type:'number',required:true,min:0,step:'0.01'},
+      {name:'currency',label:'واحد پول',type:'select',required:true,options:['تومان','ریال'],help:'کد و مقیاس باید بدون تبدیل حدسی در API ثبت شوند'},
+      {name:'unit',label:'این قیمت برای چیست؟',type:'select',required:true,options:['هر نفر','هر شب','کل سفر','هر بسته']},
+      {name:'valid_until',label:'اعتبار قیمت تا',type:'date',required:true}],advanced:[
+      {name:'denomination',label:'مقیاس مبلغ',type:'select',options:['واحد','هزار','میلیون']},
+      {name:'capacity_limit',label:'ظرفیت (اختیاری)',type:'number',min:0,step:1},
+      {name:'start_date',label:'شروع خدمت',type:'date'},
+      {name:'end_date',label:'پایان خدمت',type:'date'},
+      {name:'timezone',label:'منطقه زمانی',type:'select',options:['Asia/Tehran','UTC','Asia/Dubai']}]},
+    {id:'inbox',title:'۴. درخواست‌های مسافران',lead:'تنها درخواست‌هایی که مسافر با رضایت برای شرکت تأییدشده فرستاده باشد نمایش داده می‌شوند.',kind:'inbox'},
+  ],
+  owner: [
+    {id:'review',title:'صف بررسی شرکت‌ها',lead:'ابتدا یک سازمان را از صف واقعی انتخاب کنید؛ شناسهٔ UUID را از کاربر نخواهید.',kind:'review'},
+    {id:'destinations',title:'بازبینی مقصدها',lead:'منبع، هویت و موقعیت مقصد را جداگانه بازبینی کنید؛ هیچ رکوردی خودکار منتشر نشود.',kind:'destinations'},
+    {id:'dictionary',title:'راهنمای دیتابیس',lead:'فهرست تمام جدول‌ها و شرح فیلدها فقط‌خواندنی است؛ اینجا SQL خام اجرا نمی‌شود.',kind:'dictionary'},
+  ]
+};
+const nav=document.getElementById('nav'),content=document.getElementById('content'),role=document.getElementById('role');
+let current='start';
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function renderField(f){const id='field-'+f.name;const attrs=`id="${id}" name="${escapeHtml(f.name)}" ${f.required?'required':''} ${Number.isInteger(f.max)?`maxlength="${f.max}"`:''} ${f.min!=null?`min="${f.min}"`:''} ${f.step?`step="${f.step}"`:''}`;
+  let input=f.type==='select'?`<select ${attrs}><option value="">انتخاب کنید</option>${f.options.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('')}</select>`:
+     f.type==='textarea'?`<textarea ${attrs}></textarea>`:`<input type="${escapeHtml(f.type||'text')}" ${attrs} />`;
+  return `<div class="field ${f.wide?'wide':''}"><label for="${id}">${escapeHtml(f.label)} ${f.required?'<span class="required" title="الزامی">*</span>':''}</label>${input}${f.help?`<small>${escapeHtml(f.help)}</small>`:''}</div>`;
+}
+function render(){const list=steps[role.value];if(!list.some(x=>x.id===current))current=list[0].id;
+  document.getElementById('workspace-title').textContent=role.value==='company'?'کارهای شرکت در راهگرد':'بررسی و مدیریت اطلاعات در راهگرد';
+  document.getElementById('workspace-subtitle').textContent=role.value==='company'?'مراحل اصلی کوتاه هستند؛ جزئیات فقط در زمان نیاز دیده می‌شوند.':'فقط عملیات مجاز مدیریتی با صف بررسی و ثبت اثر حسابرسی';
+  document.getElementById('steps').hidden=role.value!=='company';
+  nav.innerHTML=list.map(s=>`<button type="button" data-page="${s.id}" aria-current="${current===s.id?'page':'false'}">${escapeHtml(s.title)}</button>`).join('');
+  const f=list.find(s=>s.id===current);let body='';
+  if(f.kind==='start')body=`<div class="intro-grid"><div class="intro-tile"><b>معرفی شرکت</b><span>نام و نوع فعالیت؛ بدون فیلد فنی</span></div><div class="intro-tile"><b>معرفی یک خدمت</b><span>عنوان و توضیح؛ قیمت و زمان در صورت نیاز</span></div><div class="intro-tile"><b>دریافت درخواست</b><span>فقط بعد از تأیید شرکت و رضایت مسافر</span></div></div><div class="actions"><button class="primary" data-next="organization">شروع معرفی شرکت</button></div>`;
+  else if(f.kind==='inbox')body=`<div class="empty"><strong>در این پیش‌نمایش درخواست واقعی وجود ندارد.</strong><p class="hint">در سایت زنده، ابتدا وضعیت تأیید شرکت و تعداد درخواست‌های مجاز نمایش داده می‌شود. سپس درخواست‌ها از API خصوصی همان سازمان خوانده می‌شوند.</p></div>`;
+  else if(f.kind==='review')body=`<div class="empty"><strong>صف بررسی با دیتابیس واقعی متصل نشده است.</strong><p class="hint">مدیر باید سازمان را از فهرست انتخاب کند، مدارک و وضعیت را ببیند و سپس تصمیم احراز و فعال‌سازی را در دو عملیات مجزا با Audit ثبت کند.</p></div>`;
+  else if(f.kind==='destinations')body=`<div class="empty"><strong>هیچ مقصدی در این پیش‌نمایش منتشر نمی‌شود.</strong><p class="hint">کاندیدها از صف بررسی با نام و شواهد انتخاب می‌شوند؛ ثبت اطلاعات یا تشابه نام نباید به انتشار خودکار بینجامد.</p></div>`;
+  else if(f.kind==='dictionary')body=`<div class="empty"><strong>دیکشنری واقعی پس از استخراج pg_catalog نمایش داده می‌شود.</strong><p class="hint">کاربر مجاز می‌تواند فیلدها و فرمت‌هایشان را جست‌وجو کند، ولی نباید ویرایش مستقیم SQL در فرم داشته باشد.</p></div>`;
+  else body=`<form id="demo-form"><div class="field-grid">${f.fields.map(renderField).join('')}</div>${f.advanced?`<details class="advanced"><summary>تنظیمات بیشتر (اختیاری)</summary><div class="field-grid">${f.advanced.map(renderField).join('')}</div></details>`:''}<div class="actions"><button type="submit" class="primary">بررسی اطلاعات واردشده</button><button type="reset" class="secondary">پاک‌کردن همین فرم</button></div><output id="result" aria-live="polite"></output></form>`;
+  content.innerHTML=`<h2>${escapeHtml(f.title)}</h2><p class="lead">${escapeHtml(f.lead)}</p>${body}`;
+  content.querySelector('[data-next]')?.addEventListener('click',e=>{current=e.currentTarget.dataset.next;render();});
+  content.querySelector('#demo-form')?.addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;if(!form.reportValidity())return;
+    const raw=Object.fromEntries(new FormData(form).entries());const result=content.querySelector('#result');
+    if(raw.start_date&&raw.end_date&&raw.end_date<raw.start_date){result.innerHTML='<div class="result">تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.</div>';return;}
+    const fields=[...f.fields,...(f.advanced||[])];const readable=fields.filter(field=>raw[field.name]).map(field=>`${escapeHtml(field.label)}: ${escapeHtml(raw[field.name])}`).join('\n');
+    result.innerHTML=`<div class="result"><strong>پیش‌نمایش فقط در همین صفحه — ذخیره انجام نشده است</strong>\n${readable}</div>`;
+  });
+}
+nav.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(!b)return;current=b.dataset.page;render();});
+role.addEventListener('change',()=>{current=role.value==='company'?'start':'review';render();});
+document.getElementById('theme').addEventListener('click',e=>{const dark=document.documentElement.dataset.rahgardTheme!=='dark';document.documentElement.dataset.rahgardTheme=dark?'dark':'light';e.currentTarget.textContent=dark?'حالت روز':'حالت شب';e.currentTarget.setAttribute('aria-pressed',String(dark));});
+render();
+</script>
+</body></html>
