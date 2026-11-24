@@ -1,8 +1,14 @@
 {
   "schema": "rahgard.schema-catalogue.v1",
-  "created_utc": "2026-11-24T06:58:13Z",
+  "created_utc": "2026-11-24T11:28:13Z",
   "source": "PostgreSQL pg_catalog read-only transaction",
   "source_release": "9b5b07d0786578abdfac56848baf3c6d1260832e",
+  "source_release_evidence": "Read-only Docker OCI revision labels matched on rahgard-staging-api-1 and rahgard-staging-web-1; image IDs captured in this snapshot.",
+  "source_release_images": {
+    "api": "sha256:f9ecc39ae0fd2ab5df4f0983a93104e25d9010cdb4c9218484ceb8cda784dc6a",
+    "web": "sha256:a390a42fa43675e6b37add2ae135ca6623b785ff7a13d5fc8bb25f3852f73d02"
+  },
+  "source_snapshot_sha256": "98001be962cdb8459df9f9a84f24706ae5601221be87423b0051c562f3f92fb5",
   "database_identity": {
     "database": "rahgard_pilot_vps_staging",
     "server_version": "17.11 (Debian 17.11-1.pgdg13+2)",
@@ -10,10 +16,33 @@
     "port": 5432
   },
   "database_role": "ai_tourism_app",
+  "database_observations": [
+    {
+      "database": "rahgard_pilot_vps_staging",
+      "database_identity": {
+        "database": "rahgard_pilot_vps_staging",
+        "server_version": "17.11 (Debian 17.11-1.pgdg13+2)",
+        "server_version_num": "170011",
+        "port": 5432
+      },
+      "database_role": "ai_tourism_app"
+    }
+  ],
+  "databases_discovered_non_template": [
+    "postgres",
+    "rahgard_pilot_vps_staging"
+  ],
   "databases_attempted": [
     "rahgard_pilot_vps_staging"
   ],
   "databases_inaccessible": [],
+  "databases_skipped_outside_authorized_namespace": [
+    {
+      "database": "postgres",
+      "reason": "outside_rahgard_database_namespace"
+    }
+  ],
+  "database_inventory_complete": true,
   "relations": [
     {
       "database": "rahgard_pilot_vps_staging",
@@ -21,7 +50,8 @@
       "name": "assistant_turns",
       "kind": "r",
       "columns": 12,
-      "undocumented_columns": 2,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/conversation-8b34dbc2/tables/assistant_turns-f6adb88f.md"
     },
     {
@@ -30,7 +60,8 @@
       "name": "conversations",
       "kind": "r",
       "columns": 13,
-      "undocumented_columns": 7,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/conversation-8b34dbc2/tables/conversations-5c0dc939.md"
     },
     {
@@ -39,7 +70,8 @@
       "name": "messages",
       "kind": "r",
       "columns": 15,
-      "undocumented_columns": 6,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/conversation-8b34dbc2/tables/messages-f5cccfb7.md"
     },
     {
@@ -48,7 +80,8 @@
       "name": "admin_area_aliases",
       "kind": "r",
       "columns": 10,
-      "undocumented_columns": 10,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/geo-e81935fb/tables/admin_area_aliases-69b365be.md"
     },
     {
@@ -57,7 +90,8 @@
       "name": "admin_area_releases",
       "kind": "r",
       "columns": 11,
-      "undocumented_columns": 11,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/geo-e81935fb/tables/admin_area_releases-b7a694e4.md"
     },
     {
@@ -66,7 +100,8 @@
       "name": "admin_areas",
       "kind": "r",
       "columns": 13,
-      "undocumented_columns": 13,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/geo-e81935fb/tables/admin_areas-3e2eda73.md"
     },
     {
@@ -75,7 +110,8 @@
       "name": "auth_rate_limits",
       "kind": "r",
       "columns": 4,
-      "undocumented_columns": 4,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/auth_rate_limits-ab60a2e5.md"
     },
     {
@@ -84,7 +120,8 @@
       "name": "catalogue_review_grants",
       "kind": "r",
       "columns": 6,
-      "undocumented_columns": 6,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/catalogue_review_grants-2d028f1d.md"
     },
     {
@@ -93,7 +130,8 @@
       "name": "otp_challenges",
       "kind": "r",
       "columns": 13,
-      "undocumented_columns": 13,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/otp_challenges-1969c61e.md"
     },
     {
@@ -102,7 +140,8 @@
       "name": "staging_auth_limits",
       "kind": "r",
       "columns": 4,
-      "undocumented_columns": 4,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/staging_auth_limits-1f09c6f7.md"
     },
     {
@@ -111,7 +150,8 @@
       "name": "staging_invites",
       "kind": "r",
       "columns": 6,
-      "undocumented_columns": 6,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/staging_invites-0d54e43c.md"
     },
     {
@@ -120,7 +160,8 @@
       "name": "staging_password_credentials",
       "kind": "r",
       "columns": 6,
-      "undocumented_columns": 6,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/staging_password_credentials-617738de.md"
     },
     {
@@ -129,7 +170,8 @@
       "name": "user_consents",
       "kind": "r",
       "columns": 10,
-      "undocumented_columns": 10,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/user_consents-7a7aebd6.md"
     },
     {
@@ -138,7 +180,8 @@
       "name": "user_preferences",
       "kind": "r",
       "columns": 11,
-      "undocumented_columns": 11,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/user_preferences-7e378789.md"
     },
     {
@@ -147,7 +190,8 @@
       "name": "users",
       "kind": "r",
       "columns": 10,
-      "undocumented_columns": 10,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/users-7dfb4cf6.md"
     },
     {
@@ -156,7 +200,8 @@
       "name": "verified_phones",
       "kind": "r",
       "columns": 4,
-      "undocumented_columns": 4,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/verified_phones-66f7e274.md"
     },
     {
@@ -165,7 +210,8 @@
       "name": "web_sessions",
       "kind": "r",
       "columns": 10,
-      "undocumented_columns": 10,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/web_sessions-a075ea48.md"
     },
     {
@@ -175,6 +221,7 @@
       "kind": "r",
       "columns": 2,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/integration-eb92cc52/tables/chat_daily_global_budget-27b4bbd7.md"
     },
     {
@@ -184,6 +231,7 @@
       "kind": "r",
       "columns": 3,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/integration-eb92cc52/tables/chat_daily_user_budget-6c98bd64.md"
     },
     {
@@ -192,7 +240,8 @@
       "name": "external_links",
       "kind": "r",
       "columns": 9,
-      "undocumented_columns": 9,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/integration-eb92cc52/tables/external_links-b9ab75bd.md"
     },
     {
@@ -201,7 +250,8 @@
       "name": "outbound_clicks",
       "kind": "r",
       "columns": 9,
-      "undocumented_columns": 9,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/integration-eb92cc52/tables/outbound_clicks-19c8afdc.md"
     },
     {
@@ -210,7 +260,8 @@
       "name": "active_embedding_spaces",
       "kind": "v",
       "columns": 11,
-      "undocumented_columns": 11,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/active_embedding_spaces-1b30f488.md"
     },
     {
@@ -219,7 +270,8 @@
       "name": "catalogue_publication_events",
       "kind": "r",
       "columns": 7,
-      "undocumented_columns": 7,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/catalogue_publication_events-c4a82f50.md"
     },
     {
@@ -228,7 +280,8 @@
       "name": "chunk_embeddings",
       "kind": "r",
       "columns": 6,
-      "undocumented_columns": 6,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/chunk_embeddings-f9d8072c.md"
     },
     {
@@ -237,7 +290,8 @@
       "name": "culinary_item_sources",
       "kind": "r",
       "columns": 14,
-      "undocumented_columns": 14,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/culinary_item_sources-c8ea7adb.md"
     },
     {
@@ -246,7 +300,8 @@
       "name": "culinary_knowledge_items",
       "kind": "r",
       "columns": 21,
-      "undocumented_columns": 21,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/culinary_knowledge_items-39e2713d.md"
     },
     {
@@ -255,7 +310,8 @@
       "name": "destination_access_points",
       "kind": "r",
       "columns": 14,
-      "undocumented_columns": 14,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_access_points-0c087cc8.md"
     },
     {
@@ -264,7 +320,8 @@
       "name": "destination_aliases",
       "kind": "r",
       "columns": 10,
-      "undocumented_columns": 10,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_aliases-75309a16.md"
     },
     {
@@ -273,7 +330,8 @@
       "name": "destination_candidate_evidence",
       "kind": "r",
       "columns": 11,
-      "undocumented_columns": 11,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_candidate_evidence-92151fb7.md"
     },
     {
@@ -282,7 +340,8 @@
       "name": "destination_candidate_reviews",
       "kind": "r",
       "columns": 10,
-      "undocumented_columns": 10,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_candidate_reviews-4cf36b04.md"
     },
     {
@@ -291,7 +350,8 @@
       "name": "destination_candidates",
       "kind": "r",
       "columns": 21,
-      "undocumented_columns": 21,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_candidates-6a9824e7.md"
     },
     {
@@ -300,7 +360,8 @@
       "name": "destination_categories",
       "kind": "r",
       "columns": 6,
-      "undocumented_columns": 6,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_categories-6ec43aad.md"
     },
     {
@@ -309,7 +370,8 @@
       "name": "destination_category_map",
       "kind": "r",
       "columns": 5,
-      "undocumented_columns": 5,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_category_map-2776bfb3.md"
     },
     {
@@ -318,7 +380,8 @@
       "name": "destination_claim_evidence",
       "kind": "r",
       "columns": 23,
-      "undocumented_columns": 23,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_claim_evidence-c4355517.md"
     },
     {
@@ -327,7 +390,8 @@
       "name": "destination_enrichment_proposal_sources",
       "kind": "r",
       "columns": 14,
-      "undocumented_columns": 14,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_enrichment_proposal_sources-7ce2e624.md"
     },
     {
@@ -336,7 +400,8 @@
       "name": "destination_enrichment_proposals",
       "kind": "r",
       "columns": 16,
-      "undocumented_columns": 16,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_enrichment_proposals-253b2149.md"
     },
     {
@@ -345,7 +410,8 @@
       "name": "destination_localizations",
       "kind": "r",
       "columns": 11,
-      "undocumented_columns": 11,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_localizations-0eb8da97.md"
     },
     {
@@ -354,7 +420,8 @@
       "name": "destination_operational_assertions",
       "kind": "r",
       "columns": 17,
-      "undocumented_columns": 17,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_operational_assertions-5805af5e.md"
     },
     {
@@ -363,7 +430,8 @@
       "name": "destination_sources",
       "kind": "r",
       "columns": 7,
-      "undocumented_columns": 7,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_sources-52eec045.md"
     },
     {
@@ -372,7 +440,8 @@
       "name": "destination_tags",
       "kind": "r",
       "columns": 2,
-      "undocumented_columns": 2,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_tags-fe7b7ef7.md"
     },
     {
@@ -381,7 +450,8 @@
       "name": "destination_visit_duration_evidence",
       "kind": "r",
       "columns": 13,
-      "undocumented_columns": 13,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_visit_duration_evidence-5579d9f3.md"
     },
     {
@@ -390,7 +460,8 @@
       "name": "destinations",
       "kind": "r",
       "columns": 28,
-      "undocumented_columns": 28,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destinations-1af0500e.md"
     },
     {
@@ -399,7 +470,8 @@
       "name": "embedding_spaces",
       "kind": "r",
       "columns": 12,
-      "undocumented_columns": 12,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/embedding_spaces-f7a9b58b.md"
     },
     {
@@ -408,7 +480,8 @@
       "name": "knowledge_chunks",
       "kind": "r",
       "columns": 10,
-      "undocumented_columns": 10,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/knowledge_chunks-c1de8a43.md"
     },
     {
@@ -417,7 +490,8 @@
       "name": "knowledge_documents",
       "kind": "r",
       "columns": 18,
-      "undocumented_columns": 18,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/knowledge_documents-c8a3d0bd.md"
     },
     {
@@ -426,7 +500,8 @@
       "name": "knowledge_sources",
       "kind": "r",
       "columns": 10,
-      "undocumented_columns": 10,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/knowledge_sources-059f8744.md"
     },
     {
@@ -435,7 +510,8 @@
       "name": "production_chunk_embeddings",
       "kind": "v",
       "columns": 14,
-      "undocumented_columns": 14,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_chunk_embeddings-c270ebe9.md"
     },
     {
@@ -444,7 +520,8 @@
       "name": "production_culinary_knowledge",
       "kind": "v",
       "columns": 9,
-      "undocumented_columns": 9,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_culinary_knowledge-bb2646f2.md"
     },
     {
@@ -453,7 +530,8 @@
       "name": "production_destination_categories",
       "kind": "v",
       "columns": 5,
-      "undocumented_columns": 5,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_categories-afee998c.md"
     },
     {
@@ -462,7 +540,8 @@
       "name": "production_destination_category_map",
       "kind": "v",
       "columns": 4,
-      "undocumented_columns": 4,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_category_map-389c0e66.md"
     },
     {
@@ -471,7 +550,8 @@
       "name": "production_destination_claim_evidence",
       "kind": "v",
       "columns": 26,
-      "undocumented_columns": 26,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_claim_evidence-c36d86cb.md"
     },
     {
@@ -480,7 +560,8 @@
       "name": "production_destination_sources",
       "kind": "v",
       "columns": 11,
-      "undocumented_columns": 11,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_sources-9f650eaa.md"
     },
     {
@@ -489,7 +570,8 @@
       "name": "production_destination_tags",
       "kind": "v",
       "columns": 2,
-      "undocumented_columns": 2,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_tags-965cf515.md"
     },
     {
@@ -498,7 +580,8 @@
       "name": "production_destinations",
       "kind": "v",
       "columns": 27,
-      "undocumented_columns": 27,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destinations-40eadf41.md"
     },
     {
@@ -507,7 +590,8 @@
       "name": "production_retrieval_chunks",
       "kind": "v",
       "columns": 19,
-      "undocumented_columns": 19,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_retrieval_chunks-5c690ae9.md"
     },
     {
@@ -516,7 +600,8 @@
       "name": "production_retrieval_documents",
       "kind": "v",
       "columns": 22,
-      "undocumented_columns": 22,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_retrieval_documents-7946c5ed.md"
     },
     {
@@ -525,7 +610,8 @@
       "name": "source_candidate_reviews",
       "kind": "r",
       "columns": 9,
-      "undocumented_columns": 9,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/source_candidate_reviews-447c5344.md"
     },
     {
@@ -534,7 +620,8 @@
       "name": "source_candidates",
       "kind": "r",
       "columns": 17,
-      "undocumented_columns": 17,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/source_candidates-96f26cbd.md"
     },
     {
@@ -543,7 +630,8 @@
       "name": "source_registry_registration_events",
       "kind": "r",
       "columns": 10,
-      "undocumented_columns": 10,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/source_registry_registration_events-091879f4.md"
     },
     {
@@ -552,7 +640,8 @@
       "name": "source_verification_reviews",
       "kind": "r",
       "columns": 11,
-      "undocumented_columns": 11,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/source_verification_reviews-cc624d8f.md"
     },
     {
@@ -561,7 +650,8 @@
       "name": "ai_model_calls",
       "kind": "r",
       "columns": 12,
-      "undocumented_columns": 12,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/ai_model_calls-48e13f37.md"
     },
     {
@@ -570,7 +660,8 @@
       "name": "audit_events",
       "kind": "r",
       "columns": 9,
-      "undocumented_columns": 9,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/audit_events-14cca081.md"
     },
     {
@@ -579,7 +670,8 @@
       "name": "dataset_import_batches",
       "kind": "r",
       "columns": 8,
-      "undocumented_columns": 8,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/dataset_import_batches-df7cf9dc.md"
     },
     {
@@ -588,7 +680,8 @@
       "name": "dataset_import_files",
       "kind": "r",
       "columns": 15,
-      "undocumented_columns": 15,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/dataset_import_files-904901ca.md"
     },
     {
@@ -597,7 +690,8 @@
       "name": "feedback",
       "kind": "r",
       "columns": 10,
-      "undocumented_columns": 10,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/feedback-59bda3f8.md"
     },
     {
@@ -606,7 +700,8 @@
       "name": "private_pilot_geo_approvals",
       "kind": "r",
       "columns": 9,
-      "undocumented_columns": 9,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/private_pilot_geo_approvals-b1ba5af2.md"
     },
     {
@@ -615,7 +710,8 @@
       "name": "private_pilot_geo_authorizations",
       "kind": "r",
       "columns": 17,
-      "undocumented_columns": 17,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/private_pilot_geo_authorizations-4ca96d93.md"
     },
     {
@@ -625,6 +721,7 @@
       "kind": "r",
       "columns": 14,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/availability_snapshots-ba838abd.md"
     },
     {
@@ -634,6 +731,7 @@
       "kind": "r",
       "columns": 12,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/branches-dce19053.md"
     },
     {
@@ -643,6 +741,7 @@
       "kind": "r",
       "columns": 10,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/invitations-33cd5e40.md"
     },
     {
@@ -652,6 +751,7 @@
       "kind": "r",
       "columns": 9,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/memberships-5050625e.md"
     },
     {
@@ -661,6 +761,7 @@
       "kind": "r",
       "columns": 13,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/offers-92ab364e.md"
     },
     {
@@ -670,6 +771,7 @@
       "kind": "r",
       "columns": 15,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/organizations-f8a665a9.md"
     },
     {
@@ -679,6 +781,7 @@
       "kind": "r",
       "columns": 6,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/platform_grants-a4a5df9a.md"
     },
     {
@@ -688,6 +791,7 @@
       "kind": "r",
       "columns": 14,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/prices-fe81f939.md"
     },
     {
@@ -697,6 +801,7 @@
       "kind": "r",
       "columns": 9,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/review_events-3b16bd9c.md"
     },
     {
@@ -706,6 +811,7 @@
       "kind": "r",
       "columns": 12,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/schedules-6e9a1ab2.md"
     },
     {
@@ -715,6 +821,7 @@
       "kind": "r",
       "columns": 7,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/service_destinations-210419ff.md"
     },
     {
@@ -724,6 +831,7 @@
       "kind": "r",
       "columns": 9,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/service_localizations-51c8d7f8.md"
     },
     {
@@ -733,6 +841,7 @@
       "kind": "r",
       "columns": 12,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/services-ef1c4b45.md"
     },
     {
@@ -742,6 +851,7 @@
       "kind": "v",
       "columns": 3,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/views/share_eligible_organizations-ce33f94c.md"
     },
     {
@@ -751,6 +861,7 @@
       "kind": "r",
       "columns": 6,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/traveler_request_inbox-e77d4232.md"
     },
     {
@@ -760,6 +871,7 @@
       "kind": "r",
       "columns": 11,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/traveler_request_revisions-e7bb178d.md"
     },
     {
@@ -769,6 +881,7 @@
       "kind": "r",
       "columns": 9,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/traveler_request_shares-27951838.md"
     },
     {
@@ -778,6 +891,7 @@
       "kind": "r",
       "columns": 18,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/trip_company_responses-f5079928.md"
     },
     {
@@ -787,6 +901,7 @@
       "kind": "r",
       "columns": 11,
       "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/verification_cases-ccd9ee8c.md"
     },
     {
@@ -795,7 +910,8 @@
       "name": "geography_columns",
       "kind": "v",
       "columns": 7,
-      "undocumented_columns": 7,
+      "undocumented_columns": 0,
+      "object_owner": "extension",
       "path": "rahgard_pilot_vps_staging-6b3312d4/public-efa1f375/views/geography_columns-d4370c1b.md"
     },
     {
@@ -804,7 +920,8 @@
       "name": "geometry_columns",
       "kind": "v",
       "columns": 7,
-      "undocumented_columns": 7,
+      "undocumented_columns": 0,
+      "object_owner": "extension",
       "path": "rahgard_pilot_vps_staging-6b3312d4/public-efa1f375/views/geometry_columns-db35ba0f.md"
     },
     {
@@ -813,7 +930,8 @@
       "name": "rahgard_private_pilot_marker",
       "kind": "r",
       "columns": 1,
-      "undocumented_columns": 1,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/public-efa1f375/tables/rahgard_private_pilot_marker-64e06a2e.md"
     },
     {
@@ -822,7 +940,8 @@
       "name": "spatial_ref_sys",
       "kind": "r",
       "columns": 5,
-      "undocumented_columns": 5,
+      "undocumented_columns": 0,
+      "object_owner": "extension",
       "path": "rahgard_pilot_vps_staging-6b3312d4/public-efa1f375/tables/spatial_ref_sys-6b0f8c39.md"
     },
     {
@@ -831,7 +950,8 @@
       "name": "recommendation_requests",
       "kind": "r",
       "columns": 10,
-      "undocumented_columns": 10,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/recommendation-dbfe9375/tables/recommendation_requests-b58aca54.md"
     },
     {
@@ -840,7 +960,8 @@
       "name": "recommendation_score_components",
       "kind": "r",
       "columns": 10,
-      "undocumented_columns": 10,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/recommendation-dbfe9375/tables/recommendation_score_components-e3b855a1.md"
     },
     {
@@ -849,7 +970,8 @@
       "name": "recommendations",
       "kind": "r",
       "columns": 12,
-      "undocumented_columns": 12,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/recommendation-dbfe9375/tables/recommendations-f9b89ad4.md"
     },
     {
@@ -858,7 +980,8 @@
       "name": "schema_migrations",
       "kind": "r",
       "columns": 3,
-      "undocumented_columns": 3,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/system-bbc5e661/tables/schema_migrations-26bec784.md"
     },
     {
@@ -867,7 +990,8 @@
       "name": "itineraries",
       "kind": "r",
       "columns": 12,
-      "undocumented_columns": 12,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/itineraries-03a4100d.md"
     },
     {
@@ -876,7 +1000,8 @@
       "name": "itinerary_stops",
       "kind": "r",
       "columns": 13,
-      "undocumented_columns": 13,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/itinerary_stops-5025eb44.md"
     },
     {
@@ -885,7 +1010,8 @@
       "name": "provisional_itineraries",
       "kind": "r",
       "columns": 11,
-      "undocumented_columns": 11,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/provisional_itineraries-db7c0fe6.md"
     },
     {
@@ -894,7 +1020,8 @@
       "name": "trip_constraints",
       "kind": "r",
       "columns": 11,
-      "undocumented_columns": 11,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/trip_constraints-a41e8f02.md"
     },
     {
@@ -903,7 +1030,8 @@
       "name": "trip_interests",
       "kind": "r",
       "columns": 7,
-      "undocumented_columns": 7,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/trip_interests-7b9a4366.md"
     },
     {
@@ -912,7 +1040,8 @@
       "name": "trip_requirement_revisions",
       "kind": "r",
       "columns": 7,
-      "undocumented_columns": 7,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/trip_requirement_revisions-8de20de1.md"
     },
     {
@@ -921,13 +1050,22 @@
       "name": "trips",
       "kind": "r",
       "columns": 26,
-      "undocumented_columns": 26,
+      "undocumented_columns": 0,
+      "object_owner": "application",
       "path": "rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/trips-57866688.md"
     }
   ],
   "relation_count": 101,
-  "missing_field_descriptions": 876,
-  "complete": false,
-  "coverage_scope": "selected-databases-only",
-  "warning": "Complete means metadata coverage of databases accessible to the tested role; it does not mean all business meanings are known."
+  "missing_field_descriptions": 0,
+  "field_metadata_coverage": {
+    "total": 1106,
+    "complete": 1106,
+    "missing": 0
+  },
+  "metadata_complete": true,
+  "business_descriptions_complete": true,
+  "complete": true,
+  "coverage_scope": "authorized-rahgard-databases-only",
+  "database_access_mode": "application role; metadata catalog queries inside READ ONLY transactions; no application rows read",
+  "warning": "Complete requires metadata coverage of every accessible database in the explicitly authorized Rahgard namespace and zero unresolved business descriptions. Other applications' databases are listed but not opened."
 }

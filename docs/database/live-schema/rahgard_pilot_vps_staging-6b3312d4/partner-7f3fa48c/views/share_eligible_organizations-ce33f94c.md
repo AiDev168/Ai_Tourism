@@ -2,23 +2,23 @@
 
 - **دیتابیس:** `rahgard_pilot_vps_staging`
 - **نوع شیء:** View
-- **شرح:** نمای فقط‌خواندنی سازمان‌های فعال و تأییدشده که می‌توانند درخواست مسافر دریافت کنند.
-- **دسترسی خواندن:** Application can read the view; rows are not directly writable.
-- **دسترسی نوشتن:** Read-only view.
-- **نمایش عمومی:** Visible as recipient choices only through traveler share-options endpoint after authentication.
-- **API مدل/مسیر:** GET /trips/{trip_id}/company-share-options reads this projection.
-- **فیلد فرم UI:** TravelerWorkspace company-sharing selector; absent when there are no eligible organizations.
-- **منبع:** PostgreSQL `pg_catalog`، تراکنش فقط‌خواندنی، استخراج‌شده در `2026-11-24T06:58:13Z`
+- **شرح:** نیازمند توضیح دامنه‌ای تأییدشده از کد و مالک محصول
+- **دسترسی خواندن:** از RLS/GRANT واقعی و مسیر API تطبیق شود؛ این مستند مقدار ردیفی نمی‌خواند.
+- **دسترسی نوشتن:** از RLS/GRANT واقعی و مسیر API تطبیق شود؛ دسترسی مستقیم SQL به کاربر ندهید.
+- **نمایش عمومی:** نامشخص تا تطبیق با View انتشار و API؛ پیش‌فرض خصوصی.
+- **API مدل/مسیر:** مسیر مشخصی در کد پیدا نشده؛ نیازمند بررسی مالک ماژول.
+- **فیلد فرم UI:** فرم مشخصی در فهرست نگاشت پیدا نشده؛ نیازمند بررسی UI.
+- **منبع:** PostgreSQL `pg_catalog`، تراکنش فقط‌خواندنی، استخراج‌شده در `2026-11-24T11:28:13Z`
 - **امنیت ردیفی (RLS):** خاموش؛ Forced=خیر
 - **هشدار:** هیچ دادهٔ ردیفی، رمز، کوکی یا مقدار شخصی در این فایل استخراج نشده است.
 
 ## ستون‌ها و قرارداد داده
 
-| ستون | نوع PostgreSQL | Nullable | مقدار پیش‌فرض امن | پارامتر/معنی | قالب و اعتبارسنجی پایه |
-|---|---|---|---|---|---|
-| 'organization_id' | 'uuid' | بله | — | شناسه سازمان گیرنده. | UUID استاندارد با ۳۶ نویسه و خط تیره، مانند xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx |
-| 'display_name' | 'text' | بله | — | نام نمایشی گیرنده. | رشته Unicode؛ سقف کاربردی باید از اعتبارسنجی API استخراج شود |
-| 'organization_type' | 'text' | بله | — | نوع سازمان گیرنده. | رشته Unicode؛ سقف کاربردی باید از اعتبارسنجی API استخراج شود |
+| ستون | نوع PostgreSQL | Nullable | مقدار پیش‌فرض امن | معنی کسب‌وکاری | قالب/واحد/enum | منبع شواهد | حساسیت/مالک | سطح خواندن/نوشتن |
+|---|---|---|---|---|---|---|---|---|
+| 'organization_id' | 'uuid' | بله | — | شناسه سازمان گیرنده. | PostgreSQL 'uuid'; value range and accepted vocabulary follow listed database constraints and API validation. This is a projection/view column; it is not an independent writable field. | 'docs/database/live-schema/catalog_snapshot.json', 'engineering/pilot/sql/022_traveler_company_requests.sql', 'engineering/pilot/sql/023_partner_trip_responses.sql', 'backend/app/api/partners.py', 'frontend/src/partners/PartnerWorkspace.tsx', [https://www.postgresql.org/docs/17/datatype.html](https://www.postgresql.org/docs/17/datatype.html) | confidential_company_data; expose only through tenant and publication policy / organization owner/member for tenant fields; independent platform reviewer for review/audit fields | خواندن: /api/v1/partners organization workspace; filtered by membership/RLS and publication/consent; نوشتن: organization-scoped partner API with CSRF and tenant RLS |
+| 'display_name' | 'text' | بله | — | نام نمایشی گیرنده. | PostgreSQL 'text'; value range and accepted vocabulary follow listed database constraints and API validation. This is a projection/view column; it is not an independent writable field. | 'docs/database/live-schema/catalog_snapshot.json', 'engineering/pilot/sql/022_traveler_company_requests.sql', 'engineering/pilot/sql/023_partner_trip_responses.sql', 'backend/app/api/partners.py', 'frontend/src/partners/PartnerWorkspace.tsx', [https://www.postgresql.org/docs/17/datatype.html](https://www.postgresql.org/docs/17/datatype.html) | confidential_company_data; expose only through tenant and publication policy / organization owner/member for tenant fields; independent platform reviewer for review/audit fields | خواندن: /api/v1/partners organization workspace; filtered by membership/RLS and publication/consent; نوشتن: organization-scoped partner API with CSRF and tenant RLS |
+| 'organization_type' | 'text' | بله | — | نوع سازمان گیرنده. | PostgreSQL 'text'; value range and accepted vocabulary follow listed database constraints and API validation. This is a projection/view column; it is not an independent writable field. | 'docs/database/live-schema/catalog_snapshot.json', 'engineering/pilot/sql/022_traveler_company_requests.sql', 'engineering/pilot/sql/023_partner_trip_responses.sql', 'backend/app/api/partners.py', 'frontend/src/partners/PartnerWorkspace.tsx', [https://www.postgresql.org/docs/17/datatype.html](https://www.postgresql.org/docs/17/datatype.html) | confidential_company_data; expose only through tenant and publication policy / organization owner/member for tenant fields; independent platform reviewer for review/audit fields | خواندن: /api/v1/partners organization workspace; filtered by membership/RLS and publication/consent; نوشتن: organization-scoped partner API with CSRF and tenant RLS |
 
 ## محدودیت‌ها و ارتباط‌ها
 

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Capture metadata for the named Rahgard staging database only.
+"""Capture metadata for the authorized Rahgard database namespace only.
 
 Run this script on stdin inside the existing API container. It reads the
-mounted app database credential without printing or exporting it, and uses a
-single READ ONLY transaction against pg_catalog. No application rows are read.
-This uses the application's least-privilege account, but it is not a dedicated
-read-only login; the transaction itself is read-only and that limitation must
-be recorded in the resulting manifest.
+mounted app database credential without printing or exporting it, inventories
+connectable non-template database names, and attempts only databases with the
+explicit Rahgard prefix. Metadata is read in READ ONLY transactions. Database
+names outside that namespace are recorded as skipped and never opened. No
+application rows are read. The app login is not a dedicated read-only role;
+each inspection transaction is explicitly read-only.
 """
 from __future__ import annotations
 
@@ -19,9 +20,10 @@ from pathlib import Path
 import psycopg
 
 
-DATABASE = "rahgard_pilot_vps_staging"
+BASE_DATABASE = "rahgard_pilot_vps_staging"
 DATABASE_USER = "ai_tourism_app"
 PASSWORD_FILE = Path("/run/secrets/app_db_password")
+RAHGARD_DATABASE_PREFIX = "rahgard_"
 
 
 def safe_default(value: str | None) -> str | None:
@@ -44,7 +46,21 @@ def scrub_comment(value: str | None) -> str | None:
     return value[:1000]
 
 
-def collect(conn: psycopg.Connection) -> dict:
+def discover_databases(conn: psycopg.Connection) -> list[str]:
+    """List connectable non-template database names, without opening them."""
+    conn.execute("BEGIN READ ONLY")
+    conn.execute("SET LOCAL statement_timeout = '5s'")
+    rows = conn.execute(
+        """SELECT datname FROM pg_catalog.pg_database
+           WHERE datallowconn AND NOT datistemplate
+             AND datname NOT LIKE 'template%'
+           ORDER BY datname"""
+    ).fetchall()
+    conn.rollback()
+    return [row[0] for row in rows]
+
+
+def collect(conn: psycopg.Connection, database: str) -> dict:
     conn.execute("BEGIN READ ONLY")
     conn.execute("SET LOCAL statement_timeout = '12s'")
     conn.execute("SET LOCAL lock_timeout = '3s'")
@@ -52,7 +68,7 @@ def collect(conn: psycopg.Connection) -> dict:
         "SELECT current_database(), current_user, current_setting('server_version'), "
         "current_setting('server_version_num'), inet_server_port()"
     ).fetchone()
-    if identity[0] != DATABASE or identity[1] != DATABASE_USER:
+    if identity[0] != database or identity[1] != DATABASE_USER:
         raise RuntimeError("unexpected database identity")
 
     relations = conn.execute("""
@@ -100,7 +116,7 @@ def collect(conn: psycopg.Connection) -> dict:
             FROM pg_catalog.pg_trigger WHERE tgrelid=%s AND NOT tgisinternal ORDER BY tgname
         """, (oid,)).fetchall()
         relation = {
-            "database": DATABASE,
+            "database": database,
             "relation": {"schema": schema, "name": name, "oid": oid, "kind": kind,
                          "comment": scrub_comment(comment), "rls": rls, "force_rls": force_rls},
             "columns": [
@@ -118,15 +134,81 @@ def collect(conn: psycopg.Connection) -> dict:
     conn.rollback()
     return {
         "created_utc": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-        "scope": "selected-databases-only",
+        "scope": "authorized-rahgard-databases-only",
         "source_release": os.environ.get("RELEASE_COMMIT", "not exposed by container"),
         "database_identity": {"database": identity[0], "server_version": identity[2],
                               "server_version_num": identity[3], "port": identity[4]},
         "database_role": identity[1],
         "database_access_mode": "application role in read-only transaction; no dedicated read-only login was available",
-        "databases_attempted": [DATABASE],
-        "databases_inaccessible": [],
         "relations": output,
+    }
+
+
+def collect_instance(password: str) -> dict:
+    """Inventory one known Rahgard PostgreSQL instance, metadata only.
+
+    Database names outside the explicit Rahgard namespace are listed as
+    skipped and are never opened, preventing accidental cross-application
+    catalog inspection on a shared PostgreSQL server.
+    """
+    with psycopg.connect(
+        host="db", port=5432, dbname=BASE_DATABASE, user=DATABASE_USER,
+        password=password, connect_timeout=6,
+        application_name="rahgard_schema_documenter_ro_inventory",
+    ) as inventory_conn:
+        discovered = discover_databases(inventory_conn)
+    if BASE_DATABASE not in discovered:
+        raise RuntimeError("authorized_base_database_not_discovered")
+
+    attempted: list[str] = []
+    inaccessible: list[dict[str, str]] = []
+    skipped: list[dict[str, str]] = []
+    database_results: list[dict] = []
+    for database in discovered:
+        if not database.startswith(RAHGARD_DATABASE_PREFIX):
+            skipped.append({"database": database, "reason": "outside_rahgard_database_namespace"})
+            continue
+        attempted.append(database)
+        try:
+            with psycopg.connect(
+                host="db", port=5432, dbname=database, user=DATABASE_USER,
+                password=password, connect_timeout=6,
+                application_name="rahgard_schema_documenter_ro",
+            ) as conn:
+                database_results.append(collect(conn, database))
+        except psycopg.Error as exc:
+            # Record only a database name and SQLSTATE class; never echo the
+            # connection exception, which may contain network/config details.
+            inaccessible.append({
+                "database": database,
+                "sqlstate": (exc.sqlstate or "unknown")[:5],
+            })
+    relations = [relation for database_result in database_results for relation in database_result["relations"]]
+    image_ids = {
+        key: os.environ.get(env_name, "")
+        for key, env_name in (("api", "RAHGARD_API_IMAGE_ID"), ("web", "RAHGARD_WEB_IMAGE_ID"))
+        if os.environ.get(env_name)
+    }
+    if any(not re.fullmatch(r"sha256:[a-f0-9]{64}", value) for value in image_ids.values()):
+        raise RuntimeError("invalid OCI image identity")
+    observations = [{
+        "database": result.get("database_identity", {}).get("database"),
+        "database_identity": result.get("database_identity", {}),
+        "database_role": result.get("database_role"),
+    } for result in database_results]
+    return {
+        "created_utc": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "scope": "authorized-rahgard-databases-only",
+        "source_release": os.environ.get("RELEASE_COMMIT", "not exposed by container"),
+        "source_release_images": image_ids,
+        "instance_database_inventory": "read-only pg_database scan via ai_tourism_app",
+        "database_access_mode": "application role; metadata catalog queries inside READ ONLY transactions; no application rows read",
+        "discovered_non_template_databases": discovered,
+        "databases_attempted": attempted,
+        "databases_inaccessible": inaccessible,
+        "databases_skipped": skipped,
+        "database_observations": observations,
+        "relations": relations,
     }
 
 
@@ -139,12 +221,7 @@ def main() -> int:
         print(json.dumps({"error_class": "database_secret_empty"}))
         return 2
     try:
-        with psycopg.connect(
-            host="db", port=5432, dbname=DATABASE, user=DATABASE_USER,
-            password=password, connect_timeout=6,
-            application_name="rahgard_schema_documenter_read_only",
-        ) as conn:
-            result = collect(conn)
+        result = collect_instance(password)
         print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
         return 0
     except Exception as exc:  # never echo an exception string that may include DSN data

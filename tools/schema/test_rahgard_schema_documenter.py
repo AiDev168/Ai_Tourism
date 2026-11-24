@@ -16,6 +16,15 @@ spec.loader.exec_module(doc)
 
 
 class DocumenterTests(unittest.TestCase):
+    def test_checked_in_live_schema_package_has_no_drift(self):
+        validator_path = Path(__file__).with_name('validate_live_schema_docs.py')
+        validator_spec = importlib.util.spec_from_file_location('validate_live_schema_docs', validator_path)
+        validator = importlib.util.module_from_spec(validator_spec)
+        validator_spec.loader.exec_module(validator)
+        with contextlib.redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(validator.main(), 0)
+        self.assertIn('"result": "PASS"', stdout.getvalue())
+
     def test_safe_slug_no_path_traversal(self):
         self.assertNotIn('/', doc.safe_part('../../secrets'))
         self.assertNotIn('..', doc.safe_part('../../secrets'))

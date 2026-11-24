@@ -62,3 +62,18 @@ CRUD مستقیم SQL برای session، OTP، audit، grantها، migration led
 در acceptance مرورگر محلی، با PostgreSQL 17 موقت و حساب‌های fixture: ثبت/ویرایش سازمان، ارسال پرونده، بازبینی مستقل و فعال‌سازی با رخداد audit، خدمت، اتصال مقصد منتشرشده، برنامه، پیشنهاد، قیمت و availability ذخیره و بازخوانی شدند. سازمان دوم دادهٔ سازمان اول را نخواند (workspace خالی) و نوشتن cross-tenant با 403 رد شد. مسافر فقط پس از consent اشتراک ساخت؛ درخواست/نسخه در صندوق شرکت ظاهر شد و پس از احراز هویت جدید، trip و itinerary ذخیره‌شده بازشدند. این نتایج **دادهٔ fixture در DB موقت** هستند، نه ثبت شرکت یا انتشار محتوای زنده.
 
 Migration `0024_partner_review_audit_actions.sql` در همان DB موقت برای اصلاح ثبت audit تصمیم `verification_case` و محدودکردن دسترسی مستقیم app-role به platform grants آزموده شد. Migration 0024 روی VPS اجرا نشده است و دادهٔ زنده تغییر نکرده است.
+## 2026-11-24 isolated acceptance and branch-scope update
+
+The existing `/partners` workflow was re-exercised through authenticated Chromium, the real FastAPI application and a disposable PostgreSQL 17 database. The run used the supplied owner archive as discovery input; the operator reviewed source evidence and explicitly published only within the isolated test database. Results: operator review/publication PASS, company registration/review PASS, service and optional commercial data persistence/reopen PASS, cross-tenant browser/API read and write denial PASS, explicit traveler consent and request revision/inbox PASS, and traveler itinerary save/reopen PASS. The Chat outage fallback was tested separately. OTP/Chat test adapters and isolated catalogue rows are test-only evidence, not live-provider or production-content evidence.
+
+Reproduction:
+
+```powershell
+& .\engineering\pilot\Run-National-Catalogue-Browser-E2E.ps1 `
+  -ChatProvider simulated `
+  -ArchivePath "$env:USERPROFILE\Downloads\Tourism_Database\دیتابیس - توریسم.zip"
+```
+
+Migration 0024 passed in the runner's disposable database; it has not been applied to the VPS. The current live ledger remains through 0023. Live `knowledge.production_destinations` and `partner.share_eligible_organizations` remain at zero, so this acceptance does not establish live destination recommendations or eligible company-sharing recipients.
+
+`partner.branches` remains schema-only for company users. The normal service workflow permits `branch_id = NULL`, and no supported company branch create/edit API or form exists. A company can complete onboarding, create and submit a service, and enter optional schedule/offer/price/availability data without a branch. We therefore keep branch records out of the standard workflow until multi-location management is explicitly required; no generic branch CRUD was added.

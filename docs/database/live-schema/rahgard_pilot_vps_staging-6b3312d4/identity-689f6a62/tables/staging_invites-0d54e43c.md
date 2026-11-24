@@ -8,20 +8,20 @@
 - **نمایش عمومی:** نامشخص تا تطبیق با View انتشار و API؛ پیش‌فرض خصوصی.
 - **API مدل/مسیر:** مسیر مشخصی در کد پیدا نشده؛ نیازمند بررسی مالک ماژول.
 - **فیلد فرم UI:** فرم مشخصی در فهرست نگاشت پیدا نشده؛ نیازمند بررسی UI.
-- **منبع:** PostgreSQL `pg_catalog`، تراکنش فقط‌خواندنی، استخراج‌شده در `2026-11-24T06:58:13Z`
+- **منبع:** PostgreSQL `pg_catalog`، تراکنش فقط‌خواندنی، استخراج‌شده در `2026-11-24T11:28:13Z`
 - **امنیت ردیفی (RLS):** خاموش؛ Forced=خیر
 - **هشدار:** هیچ دادهٔ ردیفی، رمز، کوکی یا مقدار شخصی در این فایل استخراج نشده است.
 
 ## ستون‌ها و قرارداد داده
 
-| ستون | نوع PostgreSQL | Nullable | مقدار پیش‌فرض امن | پارامتر/معنی | قالب و اعتبارسنجی پایه |
-|---|---|---|---|---|---|
-| 'invite_id' | 'uuid' | خیر | 'gen_random_uuid()' | **نیازمند تکمیل از API / منطق دامنه** | UUID استاندارد با ۳۶ نویسه و خط تیره، مانند xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx |
-| 'token_digest' | 'bytea' | خیر | — | **نیازمند تکمیل از API / منطق دامنه** | دادهٔ دودویی؛ مقدار خام نباید در این مستندات نمایش داده شود |
-| 'created_at' | 'timestamp with time zone' | خیر | 'now()' | **نیازمند تکمیل از API / منطق دامنه** | زمان ISO 8601؛ وجود/نبود منطقهٔ زمانی مطابق نوع PostgreSQL |
-| 'expires_at' | 'timestamp with time zone' | خیر | — | **نیازمند تکمیل از API / منطق دامنه** | زمان ISO 8601؛ وجود/نبود منطقهٔ زمانی مطابق نوع PostgreSQL |
-| 'consumed_at' | 'timestamp with time zone' | بله | — | **نیازمند تکمیل از API / منطق دامنه** | زمان ISO 8601؛ وجود/نبود منطقهٔ زمانی مطابق نوع PostgreSQL |
-| 'consumed_by' | 'uuid' | بله | — | **نیازمند تکمیل از API / منطق دامنه** | UUID استاندارد با ۳۶ نویسه و خط تیره، مانند xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx |
+| ستون | نوع PostgreSQL | Nullable | مقدار پیش‌فرض امن | معنی کسب‌وکاری | قالب/واحد/enum | منبع شواهد | حساسیت/مالک | سطح خواندن/نوشتن |
+|---|---|---|---|---|---|---|---|---|
+| 'invite_id' | 'uuid' | خیر | 'gen_random_uuid()' | Primary identifier for one operator-issued, single-use staging invitation; the invitation secret is stored as a verifier, not in this identifier. | PostgreSQL 'uuid'; value range and accepted vocabulary follow listed database constraints and API validation. | 'docs/database/live-schema/catalog_snapshot.json', 'engineering/pilot/sql/016_staging_invitation_auth.sql', 'backend/app/api/auth.py', [https://www.postgresql.org/docs/17/datatype.html](https://www.postgresql.org/docs/17/datatype.html) | restricted_authentication_or_authorization_metadata / traveler/account owner, with authentication/system-managed fields writable only by backend services | خواندن: authentication/session endpoints only; secrets/digests never returned; نوشتن: backend auth service only; no direct client table writes |
+| 'token_digest' | 'bytea' | خیر | — | One-way digest of an invitation token; never expose or log the raw token. | PostgreSQL 'bytea'; value range and accepted vocabulary follow listed database constraints and API validation. DB CHECK: CHECK ((octet_length(token_digest) = 32)) | 'docs/database/live-schema/catalog_snapshot.json', 'engineering/pilot/sql/016_staging_invitation_auth.sql', 'backend/app/api/auth.py', [https://www.postgresql.org/docs/17/datatype.html](https://www.postgresql.org/docs/17/datatype.html) | restricted_authentication_or_authorization_metadata / traveler/account owner, with authentication/system-managed fields writable only by backend services | خواندن: authentication/session endpoints only; secrets/digests never returned; نوشتن: backend auth service only; no direct client table writes |
+| 'created_at' | 'timestamp with time zone' | خیر | 'now()' | Timestamp at which this row or event was created. | PostgreSQL 'timestamp with time zone'; timezone presence is part of the type and must not be inferred. DB CHECK: CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '14 days'::interval)))) | 'docs/database/live-schema/catalog_snapshot.json', 'engineering/pilot/sql/016_staging_invitation_auth.sql', 'backend/app/api/auth.py', [https://www.postgresql.org/docs/17/datatype-datetime.html](https://www.postgresql.org/docs/17/datatype-datetime.html) | restricted_authentication_or_authorization_metadata / traveler/account owner, with authentication/system-managed fields writable only by backend services | خواندن: authentication/session endpoints only; secrets/digests never returned; نوشتن: backend auth service only; no direct client table writes |
+| 'expires_at' | 'timestamp with time zone' | خیر | — | Expiry instant after which the associated credential, invitation, session, or record is no longer valid; see table context. | PostgreSQL 'timestamp with time zone'; timezone presence is part of the type and must not be inferred. DB CHECK: CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '14 days'::interval)))) | 'docs/database/live-schema/catalog_snapshot.json', 'engineering/pilot/sql/016_staging_invitation_auth.sql', 'backend/app/api/auth.py', [https://www.postgresql.org/docs/17/datatype-datetime.html](https://www.postgresql.org/docs/17/datatype-datetime.html) | restricted_authentication_or_authorization_metadata / traveler/account owner, with authentication/system-managed fields writable only by backend services | خواندن: authentication/session endpoints only; secrets/digests never returned; نوشتن: backend auth service only; no direct client table writes |
+| 'consumed_at' | 'timestamp with time zone' | بله | — | Time when the one-time challenge or invitation was consumed; null means it has not been consumed. | PostgreSQL 'timestamp with time zone'; timezone presence is part of the type and must not be inferred. DB CHECK: CHECK (((consumed_at IS NULL) = (consumed_by IS NULL))) | 'docs/database/live-schema/catalog_snapshot.json', 'engineering/pilot/sql/016_staging_invitation_auth.sql', 'backend/app/api/auth.py', [https://www.postgresql.org/docs/17/datatype-datetime.html](https://www.postgresql.org/docs/17/datatype-datetime.html) | restricted_authentication_or_authorization_metadata / traveler/account owner, with authentication/system-managed fields writable only by backend services | خواندن: authentication/session endpoints only; secrets/digests never returned; نوشتن: backend auth service only; no direct client table writes |
+| 'consumed_by' | 'uuid' | بله | — | User identity that redeemed this one-time staging invitation; null until successful redemption. | PostgreSQL 'uuid'; value range and accepted vocabulary follow listed database constraints and API validation. DB CHECK: CHECK (((consumed_at IS NULL) = (consumed_by IS NULL))) | 'docs/database/live-schema/catalog_snapshot.json', 'engineering/pilot/sql/016_staging_invitation_auth.sql', 'backend/app/api/auth.py', [https://www.postgresql.org/docs/17/datatype.html](https://www.postgresql.org/docs/17/datatype.html) | restricted_authentication_or_authorization_metadata / traveler/account owner, with authentication/system-managed fields writable only by backend services | خواندن: authentication/session endpoints only; secrets/digests never returned; نوشتن: backend auth service only; no direct client table writes |
 
 ## محدودیت‌ها و ارتباط‌ها
 
@@ -47,6 +47,6 @@
 
 ## نیازمندی تکمیل دامنه
 
-- تعداد ستون‌های فاقد شرح صریح: **6** از **6**.
+- تعداد ستون‌های فاقد شرح صریح: **0** از **6**.
 - مالک دامنه و توسعه‌دهنده باید تعریف تجاری، مقادیر مجاز، واحد پول/اندازه، مثال غیرواقعی، قواعد اعتبارسنجی و سطح دسترسی هر فیلد را از کد و API تأیید کنند.
 - ستون‌ها را با فرم عمومیِ ویرایش SQL در اختیار کاربر قرار ندهید. فرم‌ها باید براساس نقش/قرارداد API باشند.

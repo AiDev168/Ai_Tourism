@@ -23,6 +23,13 @@ def safe_part(raw: str) -> str:
     return clean[:64] + "-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
 
 
+def object_owner(schema: str, name: str) -> str:
+    """Separate PostGIS-owned catalog relations from Rahgard application objects."""
+    if schema == "public" and name in {"spatial_ref_sys", "geometry_columns", "geography_columns"}:
+        return "extension"
+    return "application"
+
+
 def escape_cell(value: object) -> str:
     s = str(value) if value is not None else "—"
     return s.replace("|", "\\|").replace("\n", " ").replace("\r", " ").replace("`", "'")
@@ -89,6 +96,7 @@ def markdown_for_relation(db: str, rel: dict, cols: list[dict], cons: list[dict]
     if not isinstance(more, dict):
         more = {}
     obj = more.get("_object", {}) if isinstance(more.get("_object", {}), dict) else {}
+    field_metadata = more.get("_field_metadata", {}) if isinstance(more.get("_field_metadata", {}), dict) else {}
     table_comment = rel.get("comment") or more.get("_table") or "نیازمند توضیح دامنه‌ای تأییدشده از کد و مالک محصول"
     kind = {"r": "جدول معمولی", "p": "جدول پارتیشن‌بندی‌شده", "v": "View", "m": "Materialized view", "f": "Foreign table"}.get(rel["kind"], rel["kind"])
     lines = [
@@ -105,12 +113,21 @@ def markdown_for_relation(db: str, rel: dict, cols: list[dict], cons: list[dict]
         f"- **امنیت ردیفی (RLS):** {'روشن' if rel['rls'] else 'خاموش'}؛ Forced={'بله' if rel['force_rls'] else 'خیر'}",
         "- **هشدار:** هیچ دادهٔ ردیفی، رمز، کوکی یا مقدار شخصی در این فایل استخراج نشده است.",
         "", "## ستون‌ها و قرارداد داده", "",
-        "| ستون | نوع PostgreSQL | Nullable | مقدار پیش‌فرض امن | پارامتر/معنی | قالب و اعتبارسنجی پایه |",
-        "|---|---|---|---|---|---|",
+        "| ستون | نوع PostgreSQL | Nullable | مقدار پیش‌فرض امن | معنی کسب‌وکاری | قالب/واحد/enum | منبع شواهد | حساسیت/مالک | سطح خواندن/نوشتن |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     undocumented = 0
     for c in cols:
+        spec = field_metadata.get(c["name"], {})
+        if not isinstance(spec, dict):
+            spec = {}
         meaning = c.get("comment") or more.get(c["name"])
+        if isinstance(meaning, dict):
+            meaning = meaning.get("meaning")
+        meaning = meaning or spec.get("meaning")
+        if spec.get("resolution") == "unresolved":
+            meaning = f"**حل‌نشده — بازبینی مالک دامنه لازم است.** {meaning or 'معنی تجاری از شواهد موجود تثبیت نشده است.'}"
+            undocumented += 1
         if not meaning:
             meaning = "**نیازمند تکمیل از API / منطق دامنه**"
             undocumented += 1
@@ -119,10 +136,21 @@ def markdown_for_relation(db: str, rel: dict, cols: list[dict], cons: list[dict]
             details += "; ستون Identity"
         if c.get("generated"):
             details += "; مقدار تولیدشده در DB"
+        evidence = spec.get("source_evidence", [])
+        evidence_text = ", ".join(
+            f"[{source}]({source})" if str(source).startswith("https://") else f"`{source}`"
+            for source in evidence
+        )
+        if not spec:
+            evidence_text = "**نقشهٔ شواهد فیلد موجود نیست**"
         lines.append("| " + " | ".join(escape_cell(v) for v in (
             f"`{c['name']}`", f"`{c['pg_type']}`", "خیر" if c["notnull"] else "بله",
             f"`{safe_default(c.get('default'))}`" if c.get("default") is not None else "—",
-            meaning, details)) + " |")
+            meaning,
+            spec.get("accepted_format_units_enums", details),
+            evidence_text,
+            f"{spec.get('sensitivity', 'رده‌بندی‌نشده')} / {spec.get('owner', 'مالک نامشخص')}",
+            f"خواندن: {spec.get('read_surface', 'نامشخص')}; نوشتن: {spec.get('write_surface', 'نامشخص')}")) + " |")
     lines += ["", "## محدودیت‌ها و ارتباط‌ها", ""]
     if cons:
         for c in cons:
@@ -251,11 +279,19 @@ def write_catalog_snapshot(snapshot: dict, output_root: Path, descriptions: dict
     if not isinstance(created_at, str) or not created_at.endswith("Z"):
         raise ValueError("snapshot timestamp must be UTC")
     inaccessible = snapshot.get("databases_inaccessible", [])
+    discovered = snapshot.get("discovered_non_template_databases", databases)
+    skipped = snapshot.get("databases_skipped", [])
     relations = snapshot.get("relations", [])
     if not isinstance(inaccessible, list) or not isinstance(relations, list):
         raise ValueError("snapshot collections are invalid")
     root = output_root.resolve()
     created: list[dict] = []
+    field_metadata_total = 0
+    field_metadata_complete = 0
+    required_field_metadata = {
+        "meaning", "resolution", "accepted_format_units_enums", "source_evidence",
+        "sensitivity", "owner", "read_surface", "write_surface",
+    }
     for item in relations:
         if not isinstance(item, dict):
             raise ValueError("snapshot relation is invalid")
@@ -270,6 +306,17 @@ def write_catalog_snapshot(snapshot: dict, output_root: Path, descriptions: dict
             isinstance(collection, list) for collection in (cols, cons, indexes, policies, triggers)
         ):
             raise ValueError("snapshot relation fields are invalid")
+        source_description = descriptions.get(
+            f"{db}.{rel.get('schema')}.{rel.get('name')}",
+            descriptions.get(f"{rel.get('schema')}.{rel.get('name')}", {}),
+        )
+        source_metadata = source_description.get("_field_metadata", {}) if isinstance(source_description, dict) else {}
+        for column in cols:
+            field_metadata_total += 1
+            field_spec = source_metadata.get(column.get("name"), {}) if isinstance(source_metadata, dict) else {}
+            if isinstance(field_spec, dict) and required_field_metadata.issubset(field_spec):
+                if field_spec.get("meaning") and field_spec.get("source_evidence") and field_spec.get("resolution") in {"resolved", "unresolved"}:
+                    field_metadata_complete += 1
         markdown, gaps = markdown_for_relation(
             db, rel, cols, cons, indexes, policies, descriptions, created_at, triggers
         )
@@ -280,7 +327,9 @@ def write_catalog_snapshot(snapshot: dict, output_root: Path, descriptions: dict
         target.write_text(markdown, encoding="utf-8")
         created.append({"database": db, "schema": rel.get("schema"), "name": rel.get("name"),
                         "kind": rel.get("kind"), "columns": len(cols),
-                        "undocumented_columns": gaps, "path": target.relative_to(root).as_posix()})
+                        "undocumented_columns": gaps,
+                        "object_owner": object_owner(str(rel.get("schema", "")), str(rel.get("name", ""))),
+                        "path": target.relative_to(root).as_posix()})
     for dbname in databases:
         subset = [entry for entry in created if entry["database"] == dbname]
         if not subset:
@@ -296,28 +345,58 @@ def write_catalog_snapshot(snapshot: dict, output_root: Path, descriptions: dict
             lines.append(f"- [{entry['schema']}.{entry['name']}]({Path(entry['path']).relative_to(safe_part(dbname)).as_posix()}) — {entry['columns']} ستون")
         (dbdir / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     missing = sum(item["undocumented_columns"] for item in created)
+    scope = snapshot.get("scope", "selected-databases-only")
+    inventory_complete = set(discovered) == set(databases) | {
+        item.get("database") for item in skipped if isinstance(item, dict)
+    } | {item.get("database") for item in inaccessible if isinstance(item, dict)}
+    metadata_complete = (
+        not inaccessible
+        and scope == "authorized-rahgard-databases-only"
+        and inventory_complete
+        and field_metadata_total == field_metadata_complete
+    )
     manifest = {
         "schema": "rahgard.schema-catalogue.v1", "created_utc": created_at,
         "source": "PostgreSQL pg_catalog read-only transaction",
         "source_release": snapshot.get("source_release"),
+        "source_release_evidence": snapshot.get("source_release_evidence"),
+        "source_release_images": snapshot.get("source_release_images", {}),
+        "source_snapshot_sha256": hashlib.sha256(
+            json.dumps(snapshot, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
         "database_identity": snapshot.get("database_identity", {}),
         "database_role": snapshot.get("database_role"),
+        "database_observations": snapshot.get("database_observations", []),
+        "databases_discovered_non_template": discovered,
         "databases_attempted": databases, "databases_inaccessible": inaccessible,
+        "databases_skipped_outside_authorized_namespace": skipped,
+        "database_inventory_complete": inventory_complete,
         "relations": created, "relation_count": len(created),
         "missing_field_descriptions": missing,
-        "complete": not inaccessible and snapshot.get("scope") == "all-accessible-databases",
-        "coverage_scope": snapshot.get("scope", "selected-databases-only"),
-        "warning": "Complete means metadata coverage of databases accessible to the tested role; it does not mean all business meanings are known.",
+        "field_metadata_coverage": {
+            "total": field_metadata_total,
+            "complete": field_metadata_complete,
+            "missing": field_metadata_total - field_metadata_complete,
+        },
+        "metadata_complete": metadata_complete,
+        "business_descriptions_complete": missing == 0,
+        "complete": metadata_complete and missing == 0,
+        "coverage_scope": scope,
+        "database_access_mode": snapshot.get("database_access_mode", "not recorded"),
+        "warning": "Complete requires metadata coverage of every accessible database in the explicitly authorized Rahgard namespace and zero unresolved business descriptions. Other applications' databases are listed but not opened.",
     }
     root.mkdir(parents=True, exist_ok=True)
     (root / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     index = ["# کاتالوگ زنده دیتابیس Rahgard", "", f"تهیه: `{created_at}`", "",
+             "Scope is limited to the authorized Rahgard database namespace; names outside scope were not opened.",
+             f"Discovered non-template names: {len(discovered)}; attempted: {len(databases)}; skipped outside scope: {len(skipped)}; inaccessible: {len(inaccessible)}.",
+             f"Field metadata: {field_metadata_complete}/{field_metadata_total}; unresolved business meanings: {missing}.", "",
              f"- Release source: `{manifest['source_release'] or 'not supplied'}`",
              f"- پایگاه‌های تلاش‌شده: {len(databases)}", f"- اشیا: {len(created)}",
              f"- فیلدهای نیازمند شرح: {missing}", ""]
     if inaccessible:
         index += ["## پایگاه‌های غیرقابل‌دسترسی", ""] + [
-            f"- `{item.get('database', 'unknown')}`: {item.get('error_class', 'unknown error')}" for item in inaccessible
+            f"- `{item.get('database', 'unknown')}`: SQLSTATE `{item.get('sqlstate', item.get('error_class', 'unknown'))}`" for item in inaccessible
         ] + [""]
     index += ["## فهرست اشیا", ""] + [
         f"- [{item['database']}.{item['schema']}.{item['name']}]({item['path']}) — {item['columns']} ستون؛ {item['undocumented_columns']} شرح ناقص"

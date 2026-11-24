@@ -1,81 +1,85 @@
 # کاتالوگ زنده دیتابیس Rahgard
 
-تهیه: `2026-11-24T06:58:13Z`
+تهیه: `2026-11-24T11:28:13Z`
+
+Scope is limited to the authorized Rahgard database namespace; names outside scope were not opened.
+Discovered non-template names: 2; attempted: 1; skipped outside scope: 1; inaccessible: 0.
+Field metadata: 1106/1106; unresolved business meanings: 0.
 
 - Release source: `9b5b07d0786578abdfac56848baf3c6d1260832e`
 - پایگاه‌های تلاش‌شده: 1
 - اشیا: 101
-- فیلدهای نیازمند شرح: 876
+- فیلدهای نیازمند شرح: 0
 
 ## فهرست اشیا
 
-- [rahgard_pilot_vps_staging.conversation.assistant_turns](rahgard_pilot_vps_staging-6b3312d4/conversation-8b34dbc2/tables/assistant_turns-f6adb88f.md) — 12 ستون؛ 2 شرح ناقص
-- [rahgard_pilot_vps_staging.conversation.conversations](rahgard_pilot_vps_staging-6b3312d4/conversation-8b34dbc2/tables/conversations-5c0dc939.md) — 13 ستون؛ 7 شرح ناقص
-- [rahgard_pilot_vps_staging.conversation.messages](rahgard_pilot_vps_staging-6b3312d4/conversation-8b34dbc2/tables/messages-f5cccfb7.md) — 15 ستون؛ 6 شرح ناقص
-- [rahgard_pilot_vps_staging.geo.admin_area_aliases](rahgard_pilot_vps_staging-6b3312d4/geo-e81935fb/tables/admin_area_aliases-69b365be.md) — 10 ستون؛ 10 شرح ناقص
-- [rahgard_pilot_vps_staging.geo.admin_area_releases](rahgard_pilot_vps_staging-6b3312d4/geo-e81935fb/tables/admin_area_releases-b7a694e4.md) — 11 ستون؛ 11 شرح ناقص
-- [rahgard_pilot_vps_staging.geo.admin_areas](rahgard_pilot_vps_staging-6b3312d4/geo-e81935fb/tables/admin_areas-3e2eda73.md) — 13 ستون؛ 13 شرح ناقص
-- [rahgard_pilot_vps_staging.identity.auth_rate_limits](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/auth_rate_limits-ab60a2e5.md) — 4 ستون؛ 4 شرح ناقص
-- [rahgard_pilot_vps_staging.identity.catalogue_review_grants](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/catalogue_review_grants-2d028f1d.md) — 6 ستون؛ 6 شرح ناقص
-- [rahgard_pilot_vps_staging.identity.otp_challenges](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/otp_challenges-1969c61e.md) — 13 ستون؛ 13 شرح ناقص
-- [rahgard_pilot_vps_staging.identity.staging_auth_limits](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/staging_auth_limits-1f09c6f7.md) — 4 ستون؛ 4 شرح ناقص
-- [rahgard_pilot_vps_staging.identity.staging_invites](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/staging_invites-0d54e43c.md) — 6 ستون؛ 6 شرح ناقص
-- [rahgard_pilot_vps_staging.identity.staging_password_credentials](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/staging_password_credentials-617738de.md) — 6 ستون؛ 6 شرح ناقص
-- [rahgard_pilot_vps_staging.identity.user_consents](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/user_consents-7a7aebd6.md) — 10 ستون؛ 10 شرح ناقص
-- [rahgard_pilot_vps_staging.identity.user_preferences](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/user_preferences-7e378789.md) — 11 ستون؛ 11 شرح ناقص
-- [rahgard_pilot_vps_staging.identity.users](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/users-7dfb4cf6.md) — 10 ستون؛ 10 شرح ناقص
-- [rahgard_pilot_vps_staging.identity.verified_phones](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/verified_phones-66f7e274.md) — 4 ستون؛ 4 شرح ناقص
-- [rahgard_pilot_vps_staging.identity.web_sessions](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/web_sessions-a075ea48.md) — 10 ستون؛ 10 شرح ناقص
+- [rahgard_pilot_vps_staging.conversation.assistant_turns](rahgard_pilot_vps_staging-6b3312d4/conversation-8b34dbc2/tables/assistant_turns-f6adb88f.md) — 12 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.conversation.conversations](rahgard_pilot_vps_staging-6b3312d4/conversation-8b34dbc2/tables/conversations-5c0dc939.md) — 13 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.conversation.messages](rahgard_pilot_vps_staging-6b3312d4/conversation-8b34dbc2/tables/messages-f5cccfb7.md) — 15 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.geo.admin_area_aliases](rahgard_pilot_vps_staging-6b3312d4/geo-e81935fb/tables/admin_area_aliases-69b365be.md) — 10 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.geo.admin_area_releases](rahgard_pilot_vps_staging-6b3312d4/geo-e81935fb/tables/admin_area_releases-b7a694e4.md) — 11 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.geo.admin_areas](rahgard_pilot_vps_staging-6b3312d4/geo-e81935fb/tables/admin_areas-3e2eda73.md) — 13 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.identity.auth_rate_limits](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/auth_rate_limits-ab60a2e5.md) — 4 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.identity.catalogue_review_grants](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/catalogue_review_grants-2d028f1d.md) — 6 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.identity.otp_challenges](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/otp_challenges-1969c61e.md) — 13 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.identity.staging_auth_limits](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/staging_auth_limits-1f09c6f7.md) — 4 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.identity.staging_invites](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/staging_invites-0d54e43c.md) — 6 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.identity.staging_password_credentials](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/staging_password_credentials-617738de.md) — 6 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.identity.user_consents](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/user_consents-7a7aebd6.md) — 10 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.identity.user_preferences](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/user_preferences-7e378789.md) — 11 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.identity.users](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/users-7dfb4cf6.md) — 10 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.identity.verified_phones](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/verified_phones-66f7e274.md) — 4 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.identity.web_sessions](rahgard_pilot_vps_staging-6b3312d4/identity-689f6a62/tables/web_sessions-a075ea48.md) — 10 ستون؛ 0 شرح ناقص
 - [rahgard_pilot_vps_staging.integration.chat_daily_global_budget](rahgard_pilot_vps_staging-6b3312d4/integration-eb92cc52/tables/chat_daily_global_budget-27b4bbd7.md) — 2 ستون؛ 0 شرح ناقص
 - [rahgard_pilot_vps_staging.integration.chat_daily_user_budget](rahgard_pilot_vps_staging-6b3312d4/integration-eb92cc52/tables/chat_daily_user_budget-6c98bd64.md) — 3 ستون؛ 0 شرح ناقص
-- [rahgard_pilot_vps_staging.integration.external_links](rahgard_pilot_vps_staging-6b3312d4/integration-eb92cc52/tables/external_links-b9ab75bd.md) — 9 ستون؛ 9 شرح ناقص
-- [rahgard_pilot_vps_staging.integration.outbound_clicks](rahgard_pilot_vps_staging-6b3312d4/integration-eb92cc52/tables/outbound_clicks-19c8afdc.md) — 9 ستون؛ 9 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.active_embedding_spaces](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/active_embedding_spaces-1b30f488.md) — 11 ستون؛ 11 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.catalogue_publication_events](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/catalogue_publication_events-c4a82f50.md) — 7 ستون؛ 7 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.chunk_embeddings](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/chunk_embeddings-f9d8072c.md) — 6 ستون؛ 6 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.culinary_item_sources](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/culinary_item_sources-c8ea7adb.md) — 14 ستون؛ 14 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.culinary_knowledge_items](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/culinary_knowledge_items-39e2713d.md) — 21 ستون؛ 21 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_access_points](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_access_points-0c087cc8.md) — 14 ستون؛ 14 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_aliases](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_aliases-75309a16.md) — 10 ستون؛ 10 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_candidate_evidence](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_candidate_evidence-92151fb7.md) — 11 ستون؛ 11 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_candidate_reviews](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_candidate_reviews-4cf36b04.md) — 10 ستون؛ 10 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_candidates](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_candidates-6a9824e7.md) — 21 ستون؛ 21 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_categories](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_categories-6ec43aad.md) — 6 ستون؛ 6 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_category_map](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_category_map-2776bfb3.md) — 5 ستون؛ 5 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_claim_evidence](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_claim_evidence-c4355517.md) — 23 ستون؛ 23 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_enrichment_proposal_sources](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_enrichment_proposal_sources-7ce2e624.md) — 14 ستون؛ 14 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_enrichment_proposals](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_enrichment_proposals-253b2149.md) — 16 ستون؛ 16 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_localizations](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_localizations-0eb8da97.md) — 11 ستون؛ 11 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_operational_assertions](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_operational_assertions-5805af5e.md) — 17 ستون؛ 17 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_sources](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_sources-52eec045.md) — 7 ستون؛ 7 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_tags](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_tags-fe7b7ef7.md) — 2 ستون؛ 2 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destination_visit_duration_evidence](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_visit_duration_evidence-5579d9f3.md) — 13 ستون؛ 13 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.destinations](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destinations-1af0500e.md) — 28 ستون؛ 28 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.embedding_spaces](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/embedding_spaces-f7a9b58b.md) — 12 ستون؛ 12 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.knowledge_chunks](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/knowledge_chunks-c1de8a43.md) — 10 ستون؛ 10 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.knowledge_documents](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/knowledge_documents-c8a3d0bd.md) — 18 ستون؛ 18 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.knowledge_sources](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/knowledge_sources-059f8744.md) — 10 ستون؛ 10 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.production_chunk_embeddings](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_chunk_embeddings-c270ebe9.md) — 14 ستون؛ 14 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.production_culinary_knowledge](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_culinary_knowledge-bb2646f2.md) — 9 ستون؛ 9 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.production_destination_categories](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_categories-afee998c.md) — 5 ستون؛ 5 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.production_destination_category_map](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_category_map-389c0e66.md) — 4 ستون؛ 4 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.production_destination_claim_evidence](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_claim_evidence-c36d86cb.md) — 26 ستون؛ 26 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.production_destination_sources](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_sources-9f650eaa.md) — 11 ستون؛ 11 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.production_destination_tags](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_tags-965cf515.md) — 2 ستون؛ 2 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.production_destinations](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destinations-40eadf41.md) — 27 ستون؛ 27 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.production_retrieval_chunks](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_retrieval_chunks-5c690ae9.md) — 19 ستون؛ 19 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.production_retrieval_documents](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_retrieval_documents-7946c5ed.md) — 22 ستون؛ 22 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.source_candidate_reviews](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/source_candidate_reviews-447c5344.md) — 9 ستون؛ 9 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.source_candidates](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/source_candidates-96f26cbd.md) — 17 ستون؛ 17 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.source_registry_registration_events](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/source_registry_registration_events-091879f4.md) — 10 ستون؛ 10 شرح ناقص
-- [rahgard_pilot_vps_staging.knowledge.source_verification_reviews](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/source_verification_reviews-cc624d8f.md) — 11 ستون؛ 11 شرح ناقص
-- [rahgard_pilot_vps_staging.operations.ai_model_calls](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/ai_model_calls-48e13f37.md) — 12 ستون؛ 12 شرح ناقص
-- [rahgard_pilot_vps_staging.operations.audit_events](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/audit_events-14cca081.md) — 9 ستون؛ 9 شرح ناقص
-- [rahgard_pilot_vps_staging.operations.dataset_import_batches](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/dataset_import_batches-df7cf9dc.md) — 8 ستون؛ 8 شرح ناقص
-- [rahgard_pilot_vps_staging.operations.dataset_import_files](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/dataset_import_files-904901ca.md) — 15 ستون؛ 15 شرح ناقص
-- [rahgard_pilot_vps_staging.operations.feedback](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/feedback-59bda3f8.md) — 10 ستون؛ 10 شرح ناقص
-- [rahgard_pilot_vps_staging.operations.private_pilot_geo_approvals](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/private_pilot_geo_approvals-b1ba5af2.md) — 9 ستون؛ 9 شرح ناقص
-- [rahgard_pilot_vps_staging.operations.private_pilot_geo_authorizations](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/private_pilot_geo_authorizations-4ca96d93.md) — 17 ستون؛ 17 شرح ناقص
+- [rahgard_pilot_vps_staging.integration.external_links](rahgard_pilot_vps_staging-6b3312d4/integration-eb92cc52/tables/external_links-b9ab75bd.md) — 9 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.integration.outbound_clicks](rahgard_pilot_vps_staging-6b3312d4/integration-eb92cc52/tables/outbound_clicks-19c8afdc.md) — 9 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.active_embedding_spaces](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/active_embedding_spaces-1b30f488.md) — 11 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.catalogue_publication_events](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/catalogue_publication_events-c4a82f50.md) — 7 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.chunk_embeddings](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/chunk_embeddings-f9d8072c.md) — 6 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.culinary_item_sources](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/culinary_item_sources-c8ea7adb.md) — 14 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.culinary_knowledge_items](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/culinary_knowledge_items-39e2713d.md) — 21 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_access_points](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_access_points-0c087cc8.md) — 14 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_aliases](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_aliases-75309a16.md) — 10 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_candidate_evidence](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_candidate_evidence-92151fb7.md) — 11 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_candidate_reviews](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_candidate_reviews-4cf36b04.md) — 10 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_candidates](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_candidates-6a9824e7.md) — 21 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_categories](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_categories-6ec43aad.md) — 6 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_category_map](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_category_map-2776bfb3.md) — 5 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_claim_evidence](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_claim_evidence-c4355517.md) — 23 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_enrichment_proposal_sources](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_enrichment_proposal_sources-7ce2e624.md) — 14 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_enrichment_proposals](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_enrichment_proposals-253b2149.md) — 16 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_localizations](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_localizations-0eb8da97.md) — 11 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_operational_assertions](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_operational_assertions-5805af5e.md) — 17 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_sources](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_sources-52eec045.md) — 7 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_tags](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_tags-fe7b7ef7.md) — 2 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destination_visit_duration_evidence](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destination_visit_duration_evidence-5579d9f3.md) — 13 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.destinations](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/destinations-1af0500e.md) — 28 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.embedding_spaces](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/embedding_spaces-f7a9b58b.md) — 12 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.knowledge_chunks](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/knowledge_chunks-c1de8a43.md) — 10 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.knowledge_documents](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/knowledge_documents-c8a3d0bd.md) — 18 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.knowledge_sources](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/knowledge_sources-059f8744.md) — 10 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.production_chunk_embeddings](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_chunk_embeddings-c270ebe9.md) — 14 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.production_culinary_knowledge](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_culinary_knowledge-bb2646f2.md) — 9 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.production_destination_categories](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_categories-afee998c.md) — 5 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.production_destination_category_map](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_category_map-389c0e66.md) — 4 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.production_destination_claim_evidence](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_claim_evidence-c36d86cb.md) — 26 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.production_destination_sources](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_sources-9f650eaa.md) — 11 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.production_destination_tags](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destination_tags-965cf515.md) — 2 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.production_destinations](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_destinations-40eadf41.md) — 27 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.production_retrieval_chunks](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_retrieval_chunks-5c690ae9.md) — 19 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.production_retrieval_documents](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/views/production_retrieval_documents-7946c5ed.md) — 22 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.source_candidate_reviews](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/source_candidate_reviews-447c5344.md) — 9 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.source_candidates](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/source_candidates-96f26cbd.md) — 17 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.source_registry_registration_events](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/source_registry_registration_events-091879f4.md) — 10 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.knowledge.source_verification_reviews](rahgard_pilot_vps_staging-6b3312d4/knowledge-e0f89587/tables/source_verification_reviews-cc624d8f.md) — 11 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.operations.ai_model_calls](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/ai_model_calls-48e13f37.md) — 12 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.operations.audit_events](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/audit_events-14cca081.md) — 9 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.operations.dataset_import_batches](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/dataset_import_batches-df7cf9dc.md) — 8 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.operations.dataset_import_files](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/dataset_import_files-904901ca.md) — 15 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.operations.feedback](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/feedback-59bda3f8.md) — 10 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.operations.private_pilot_geo_approvals](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/private_pilot_geo_approvals-b1ba5af2.md) — 9 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.operations.private_pilot_geo_authorizations](rahgard_pilot_vps_staging-6b3312d4/operations-74de07c4/tables/private_pilot_geo_authorizations-4ca96d93.md) — 17 ستون؛ 0 شرح ناقص
 - [rahgard_pilot_vps_staging.partner.availability_snapshots](rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/availability_snapshots-ba838abd.md) — 14 ستون؛ 0 شرح ناقص
 - [rahgard_pilot_vps_staging.partner.branches](rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/branches-dce19053.md) — 12 ستون؛ 0 شرح ناقص
 - [rahgard_pilot_vps_staging.partner.invitations](rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/invitations-33cd5e40.md) — 10 ستون؛ 0 شرح ناقص
@@ -95,18 +99,18 @@
 - [rahgard_pilot_vps_staging.partner.traveler_request_shares](rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/traveler_request_shares-27951838.md) — 9 ستون؛ 0 شرح ناقص
 - [rahgard_pilot_vps_staging.partner.trip_company_responses](rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/trip_company_responses-f5079928.md) — 18 ستون؛ 0 شرح ناقص
 - [rahgard_pilot_vps_staging.partner.verification_cases](rahgard_pilot_vps_staging-6b3312d4/partner-7f3fa48c/tables/verification_cases-ccd9ee8c.md) — 11 ستون؛ 0 شرح ناقص
-- [rahgard_pilot_vps_staging.public.geography_columns](rahgard_pilot_vps_staging-6b3312d4/public-efa1f375/views/geography_columns-d4370c1b.md) — 7 ستون؛ 7 شرح ناقص
-- [rahgard_pilot_vps_staging.public.geometry_columns](rahgard_pilot_vps_staging-6b3312d4/public-efa1f375/views/geometry_columns-db35ba0f.md) — 7 ستون؛ 7 شرح ناقص
-- [rahgard_pilot_vps_staging.public.rahgard_private_pilot_marker](rahgard_pilot_vps_staging-6b3312d4/public-efa1f375/tables/rahgard_private_pilot_marker-64e06a2e.md) — 1 ستون؛ 1 شرح ناقص
-- [rahgard_pilot_vps_staging.public.spatial_ref_sys](rahgard_pilot_vps_staging-6b3312d4/public-efa1f375/tables/spatial_ref_sys-6b0f8c39.md) — 5 ستون؛ 5 شرح ناقص
-- [rahgard_pilot_vps_staging.recommendation.recommendation_requests](rahgard_pilot_vps_staging-6b3312d4/recommendation-dbfe9375/tables/recommendation_requests-b58aca54.md) — 10 ستون؛ 10 شرح ناقص
-- [rahgard_pilot_vps_staging.recommendation.recommendation_score_components](rahgard_pilot_vps_staging-6b3312d4/recommendation-dbfe9375/tables/recommendation_score_components-e3b855a1.md) — 10 ستون؛ 10 شرح ناقص
-- [rahgard_pilot_vps_staging.recommendation.recommendations](rahgard_pilot_vps_staging-6b3312d4/recommendation-dbfe9375/tables/recommendations-f9b89ad4.md) — 12 ستون؛ 12 شرح ناقص
-- [rahgard_pilot_vps_staging.system.schema_migrations](rahgard_pilot_vps_staging-6b3312d4/system-bbc5e661/tables/schema_migrations-26bec784.md) — 3 ستون؛ 3 شرح ناقص
-- [rahgard_pilot_vps_staging.travel.itineraries](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/itineraries-03a4100d.md) — 12 ستون؛ 12 شرح ناقص
-- [rahgard_pilot_vps_staging.travel.itinerary_stops](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/itinerary_stops-5025eb44.md) — 13 ستون؛ 13 شرح ناقص
-- [rahgard_pilot_vps_staging.travel.provisional_itineraries](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/provisional_itineraries-db7c0fe6.md) — 11 ستون؛ 11 شرح ناقص
-- [rahgard_pilot_vps_staging.travel.trip_constraints](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/trip_constraints-a41e8f02.md) — 11 ستون؛ 11 شرح ناقص
-- [rahgard_pilot_vps_staging.travel.trip_interests](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/trip_interests-7b9a4366.md) — 7 ستون؛ 7 شرح ناقص
-- [rahgard_pilot_vps_staging.travel.trip_requirement_revisions](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/trip_requirement_revisions-8de20de1.md) — 7 ستون؛ 7 شرح ناقص
-- [rahgard_pilot_vps_staging.travel.trips](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/trips-57866688.md) — 26 ستون؛ 26 شرح ناقص
+- [rahgard_pilot_vps_staging.public.geography_columns](rahgard_pilot_vps_staging-6b3312d4/public-efa1f375/views/geography_columns-d4370c1b.md) — 7 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.public.geometry_columns](rahgard_pilot_vps_staging-6b3312d4/public-efa1f375/views/geometry_columns-db35ba0f.md) — 7 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.public.rahgard_private_pilot_marker](rahgard_pilot_vps_staging-6b3312d4/public-efa1f375/tables/rahgard_private_pilot_marker-64e06a2e.md) — 1 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.public.spatial_ref_sys](rahgard_pilot_vps_staging-6b3312d4/public-efa1f375/tables/spatial_ref_sys-6b0f8c39.md) — 5 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.recommendation.recommendation_requests](rahgard_pilot_vps_staging-6b3312d4/recommendation-dbfe9375/tables/recommendation_requests-b58aca54.md) — 10 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.recommendation.recommendation_score_components](rahgard_pilot_vps_staging-6b3312d4/recommendation-dbfe9375/tables/recommendation_score_components-e3b855a1.md) — 10 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.recommendation.recommendations](rahgard_pilot_vps_staging-6b3312d4/recommendation-dbfe9375/tables/recommendations-f9b89ad4.md) — 12 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.system.schema_migrations](rahgard_pilot_vps_staging-6b3312d4/system-bbc5e661/tables/schema_migrations-26bec784.md) — 3 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.travel.itineraries](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/itineraries-03a4100d.md) — 12 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.travel.itinerary_stops](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/itinerary_stops-5025eb44.md) — 13 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.travel.provisional_itineraries](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/provisional_itineraries-db7c0fe6.md) — 11 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.travel.trip_constraints](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/trip_constraints-a41e8f02.md) — 11 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.travel.trip_interests](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/trip_interests-7b9a4366.md) — 7 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.travel.trip_requirement_revisions](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/trip_requirement_revisions-8de20de1.md) — 7 ستون؛ 0 شرح ناقص
+- [rahgard_pilot_vps_staging.travel.trips](rahgard_pilot_vps_staging-6b3312d4/travel-0209442e/tables/trips-57866688.md) — 26 ستون؛ 0 شرح ناقص
