@@ -32,14 +32,13 @@ class DocumenterTests(unittest.TestCase):
     def test_safe_slug_collision_guard(self):
         self.assertNotEqual(doc.safe_part('a/b'), doc.safe_part('a b'))
 
-    def test_jsonb_format(self):
-        self.assertIn('JSON', doc.type_hint('jsonb'))
+    def test_storage_type_does_not_invent_business_contract(self):
+        self.assertIn('storage type `jsonb`', doc.type_hint('jsonb'))
+        self.assertIn('not inferred', doc.type_hint('numeric(18,2)'))
 
-    def test_numeric_format(self):
-        self.assertIn('ده‌دهی', doc.type_hint('numeric(18,2)'))
-
-    def test_timestamp_format(self):
-        self.assertIn('ISO 8601', doc.type_hint('timestamp with time zone'))
+    def test_timestamp_type_is_not_a_business_timezone_contract(self):
+        self.assertIn('timestamp with time zone', doc.type_hint('timestamp with time zone'))
+        self.assertIn('not inferred', doc.type_hint('timestamp with time zone'))
 
     def test_escape_markdown_pipe(self):
         self.assertEqual(doc.escape_cell('a|b'), r'a\|b')
@@ -74,6 +73,21 @@ class DocumenterTests(unittest.TestCase):
             {'alpha.private.events': {'id':'کلید رویداد'}},'now')
         self.assertIn('کلید رویداد',output)
         self.assertEqual(gaps,0)
+
+    def test_postgis_views_are_extension_metadata_not_business_fields(self):
+        relation = {'schema': 'public', 'name': 'geometry_columns', 'kind': 'v',
+                    'rls': False, 'force_rls': False, 'comment': None}
+        columns = [{'name': 'f_table_schema', 'pg_type': 'name', 'notnull': False,
+                    'default': None, 'comment': None, 'identity': '', 'generated': ''}]
+        metadata = {'origin_class': 'extension_managed', 'database_owner': 'postgres',
+                    'decision': 'EXTENSION-MANAGED', 'decision_rationale': 'PostGIS catalog',
+                    'columns': {'f_table_schema': {'source_evidence': 'https://postgis.net/docs/using_postgis_dbmanagement.html'}}}
+        output, gaps = doc.markdown_for_relation('rahgard', relation, columns, [], [], [], {},
+                                                 '2026-11-24T00:00:00Z', architecture_metadata=metadata)
+        self.assertEqual(gaps, 0)
+        self.assertIn('official PostGIS database management documentation', output)
+        self.assertNotIn('**UNDOCUMENTED:**', output)
+        self.assertIn('EXTENSION-MANAGED', output)
 
     def test_snapshot_cli_uses_field_descriptions_without_dsn(self):
         snapshot = {
@@ -116,7 +130,7 @@ class DocumenterTests(unittest.TestCase):
                 self.assertNotIn('\\', manifest['relations'][0]['path'])
                 relation_doc = next(output_path.rglob('safe_table-*.md')).read_text(encoding='utf-8')
                 self.assertIn('A reviewed display label', relation_doc)
-                self.assertIn('**0** از **1**', relation_doc)
+                self.assertIn('**0** of **1**', relation_doc)
             finally:
                 os.environ.clear()
                 os.environ.update(old_env)

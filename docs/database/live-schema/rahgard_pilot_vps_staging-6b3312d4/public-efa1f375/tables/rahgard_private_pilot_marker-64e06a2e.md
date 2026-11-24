@@ -2,21 +2,25 @@
 
 - **دیتابیس:** `rahgard_pilot_vps_staging`
 - **نوع شیء:** جدول معمولی
-- **شرح:** نیازمند توضیح دامنه‌ای تأییدشده از کد و مالک محصول
+- **شرح:** No PostgreSQL comment or baseline glossary table description was recorded.
 - **دسترسی خواندن:** از RLS/GRANT واقعی و مسیر API تطبیق شود؛ این مستند مقدار ردیفی نمی‌خواند.
 - **دسترسی نوشتن:** از RLS/GRANT واقعی و مسیر API تطبیق شود؛ دسترسی مستقیم SQL به کاربر ندهید.
 - **نمایش عمومی:** نامشخص تا تطبیق با View انتشار و API؛ پیش‌فرض خصوصی.
 - **API مدل/مسیر:** مسیر مشخصی در کد پیدا نشده؛ نیازمند بررسی مالک ماژول.
 - **فیلد فرم UI:** فرم مشخصی در فهرست نگاشت پیدا نشده؛ نیازمند بررسی UI.
-- **منبع:** PostgreSQL `pg_catalog`، تراکنش فقط‌خواندنی، استخراج‌شده در `2026-11-24T11:28:13Z`
+- **Static SQL operation hints:** no explicit qualified CRUD clause found; not proof of no read/write path (literal source matches only, not runtime proof)
+- **PostgreSQL relation owner:** `ai_tourism_owner` (technical ownership only; not product approval)
+- **Architecture disposition:** `INVESTIGATE` — No checked-in CREATE statement was found in the scanned SQL; owner/provenance must be confirmed before any change.
+- **DDL provenance:** not found in scanned checked-in SQL
+- **Metadata snapshot:** PostgreSQL `pg_catalog`, read-only, captured `2026-11-24T11:28:13Z`; no application rows
 - **امنیت ردیفی (RLS):** خاموش؛ Forced=خیر
 - **هشدار:** هیچ دادهٔ ردیفی، رمز، کوکی یا مقدار شخصی در این فایل استخراج نشده است.
 
 ## ستون‌ها و قرارداد داده
 
-| ستون | نوع PostgreSQL | Nullable | مقدار پیش‌فرض امن | معنی کسب‌وکاری | قالب/واحد/enum | منبع شواهد | حساسیت/مالک | سطح خواندن/نوشتن |
+| Column occurrence | PostgreSQL type | Nullable | Sanitized default | Existing meaning / classification | Format evidence | Provenance | Sensitivity / owner | Read/write evidence |
 |---|---|---|---|---|---|---|---|---|
-| 'marker_value' | 'text' | خیر | — | Opaque deployment/test guard marker used to bind privileged pilot operations to the intended isolated database; not a user-facing value. | PostgreSQL 'text'; value range and accepted vocabulary follow listed database constraints and API validation. DB CHECK: CHECK ((marker_value ~ '^[a-fA-F0-9]{48}$'::text)) | 'docs/database/live-schema/catalog_snapshot.json', [https://www.postgresql.org/docs/17/datatype.html](https://www.postgresql.org/docs/17/datatype.html), [https://postgis.net/docs/using_postgis_dbmanagement.html](https://postgis.net/docs/using_postgis_dbmanagement.html), 'engineering/pilot/Run-National-Catalogue-Browser-E2E.ps1' | technical_or_administrative_metadata / PostgreSQL/PostGIS extension or platform metadata owner | خواندن: PostgreSQL/PostGIS metadata APIs only when needed; نوشتن: extension/platform managed |
+| 'marker_value' | 'text' | خیر | — | **UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix. | PostgreSQL storage type 'text' only; business units, accepted values, and validation are not inferred from the SQL type. | DDL source not found in scanned SQL; review migrations/extension setup | technical_extension_metadata / PostgreSQL owner 'ai_tourism_owner'; PostGIS object classification; not traveler/company data.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: no literal qualified hit; column write path is not inferred |
 
 ## محدودیت‌ها و ارتباط‌ها
 
@@ -35,8 +39,9 @@
 
 - تریگر غیرسیستمی‌ای ثبت نشده است.
 
-## نیازمندی تکمیل دامنه
+## Glossary coverage (not a requirement count)
 
-- تعداد ستون‌های فاقد شرح صریح: **0** از **1**.
-- مالک دامنه و توسعه‌دهنده باید تعریف تجاری، مقادیر مجاز، واحد پول/اندازه، مثال غیرواقعی، قواعد اعتبارسنجی و سطح دسترسی هر فیلد را از کد و API تأیید کنند.
-- ستون‌ها را با فرم عمومیِ ویرایش SQL در اختیار کاربر قرار ندهید. فرم‌ها باید براساس نقش/قرارداد API باشند.
+- Undocumented first-party base-table occurrences in this object: **0** of **1**. This does not mean the same number of distinct business parameters is needed.
+- Derived-view columns are projections; consult `docs/database/architecture-usage/view_column_lineage.csv` rather than adding duplicate glossary prose.
+- Extension-owned fields refer to PostgreSQL/PostGIS documentation and are not Rahgard user-form fields.
+- Do not expose a generic SQL editor. User forms must follow an authorized API and role contract.

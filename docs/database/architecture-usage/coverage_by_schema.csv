@@ -1,0 +1,12 @@
+﻿schema,column_occurrences,first_party_application_base,first_party_system_or_operations,derived_view_occurrences,extension_managed_occurrences,baseline_glossary_entries,undocumented_column_occurrences,undocumented_base_occurrences,derived_lineage_occurrences,official_extension_reference_occurrences
+conversation,40,40,0,0,0,25,15,15,0,0
+geo,34,34,0,0,0,0,34,34,0,0
+identity,84,84,0,0,0,0,84,84,0,0
+integration,23,0,23,0,0,5,18,18,0,0
+knowledge,503,353,0,150,0,0,503,353,150,0
+operations,80,0,80,0,0,0,80,80,0,0
+partner,200,197,0,3,0,200,0,0,3,0
+public,20,0,1,0,19,0,20,1,0,19
+recommendation,32,32,0,0,0,0,32,32,0,0
+system,3,0,3,0,0,0,3,3,0,0
+travel,87,87,0,0,0,0,87,87,0,0

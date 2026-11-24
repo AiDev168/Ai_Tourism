@@ -1,0 +1,88 @@
+{
+  "scope": "column_occurrences_in_one_authorized_database_snapshot",
+  "source_snapshot_sha256": "10c86d8380faf7b8fb87d696191645c26f3f1296c884f7d83bf85f9cd5ad3254",
+  "baseline_glossary_sha256": "707b2c842003fd60b99fe94e2240364c788b19f9470643562b14641471531b88",
+  "database": "rahgard_pilot_vps_staging",
+  "column_occurrence_count": 1106,
+  "distinct_business_requirement_count": null,
+  "origin_categories": {
+    "first_party_application_base_occurrence": 827,
+    "first_party_system_or_operations_occurrence": 107,
+    "derived_view_occurrence": 153,
+    "extension_managed_occurrence": 19
+  },
+  "baseline_glossary_coverage": {
+    "documented_occurrences": 230,
+    "undocumented_occurrences": 876
+  },
+  "glossary_coverage_by_origin": {
+    "derived_view_occurrence": {
+      "undocumented": 150,
+      "documented": 3
+    },
+    "extension_managed_occurrence": {
+      "undocumented": 19
+    },
+    "first_party_application_base_occurrence": {
+      "documented": 222,
+      "undocumented": 605
+    },
+    "first_party_system_or_operations_occurrence": {
+      "documented": 5,
+      "undocumented": 102
+    }
+  },
+  "by_schema": {
+    "conversation": {
+      "first_party_application_base_occurrence": 40,
+      "glossary_documented": 25,
+      "glossary_undocumented": 15
+    },
+    "geo": {
+      "first_party_application_base_occurrence": 34,
+      "glossary_undocumented": 34
+    },
+    "identity": {
+      "first_party_application_base_occurrence": 84,
+      "glossary_undocumented": 84
+    },
+    "integration": {
+      "first_party_system_or_operations_occurrence": 23,
+      "glossary_documented": 5,
+      "glossary_undocumented": 18
+    },
+    "knowledge": {
+      "derived_view_occurrence": 150,
+      "glossary_undocumented": 503,
+      "first_party_application_base_occurrence": 353
+    },
+    "operations": {
+      "first_party_system_or_operations_occurrence": 80,
+      "glossary_undocumented": 80
+    },
+    "partner": {
+      "first_party_application_base_occurrence": 197,
+      "glossary_documented": 200,
+      "derived_view_occurrence": 3
+    },
+    "public": {
+      "extension_managed_occurrence": 19,
+      "glossary_undocumented": 20,
+      "first_party_system_or_operations_occurrence": 1
+    },
+    "recommendation": {
+      "first_party_application_base_occurrence": 32,
+      "glossary_undocumented": 32
+    },
+    "system": {
+      "first_party_system_or_operations_occurrence": 3,
+      "glossary_undocumented": 3
+    },
+    "travel": {
+      "first_party_application_base_occurrence": 87,
+      "glossary_undocumented": 87
+    }
+  },
+  "glossary_entries_not_matching_snapshot": [],
+  "warning": "Undocumented occurrences are documentation gaps, not validated business requirements. Derived views and extension metadata are classified separately; no meanings are generated."
+}

@@ -6,13 +6,15 @@ The read-only `pg_catalog` scan ran through `ai_tourism_app` against the authori
 
 The catalog covers PostgreSQL 17.11, database `rahgard_pilot_vps_staging`, role `ai_tourism_app`: 11 schemas, 101 relations and 1,106 columns. It is complete for the explicitly authorized Rahgard database only, not a claim of exhaustive inventory for every application on the PostgreSQL instance.
 
-## Field descriptions and drift checks
+## Corrected occurrence and glossary coverage
 
-Every captured column has exact PostgreSQL type, nullability, sanitized default, available CHECK/PK/FK/unique constraints, format or units, business meaning, source evidence, sensitivity classification, owner, and read/write surface. Metadata-only extension relations (`spatial_ref_sys`, `geometry_columns`, `geography_columns`) are identified separately from application relations and refer to official PostGIS documentation. No row values are included.
+There are 1,106 catalogued **column occurrences**, not 1,106 independent business fields. The preserved baseline glossary has 230 matching descriptions and 876 occurrences without a baseline glossary entry. The 876 figure is a documentation gap, not 876 validated business requirements. It includes derived outputs and extension metadata.
 
-Current coverage is 1,106/1,106 field metadata entries, zero unresolved meanings, and 101/101 generated relation documents. `manifest.json` records the source snapshot SHA-256 and database discovery/attempt/skip outcome. `tools/schema/validate_live_schema_docs.py` fails on missing relations or columns, absent evidence/source files, incorrect inventory accounting, stale snapshot hashes, and an unsupported `complete` flag; it is run in the repository CI workflow.
+The architecture/usage matrix classifies all occurrences as first-party application base, first-party system/operations, derived-view, or extension-managed. Derived outputs have a separate source-expression/hash lineage ledger; they must point to their source attributes rather than receive duplicate business prose. PostGIS-managed objects link to the official extension docs. The 230 existing glossary descriptions are preserved; no meanings are generated from names or SQL types. Business necessity remains unapproved and unresolved fields remain explicit.
 
-Descriptions are derived from the checked-in DDL, constraint definitions, application contracts and official type documentation. The completion count means those sources support a concrete documented meaning; it does not mean every business field has been independently reviewed by a domain owner. Where no exact business semantics can be established, the field must remain explicitly unresolved rather than be promoted by naming heuristics.
+The metadata snapshot captures SQL types, nullability, sanitized defaults and catalog constraints. The source matrices separately link DDL touchpoints, relation ownership, foreign keys, static API/UI references and provisional sensitivity. Static references are not proof of runtime behavior, PostgreSQL object owner is not product approval, and no application rows were read; row-level imported/synthetic/legacy origin is not assessed. `manifest.json` therefore keeps `complete=false` and `business_necessity_approved=false`.
+
+The validator checks occurrence counts, matrix identity coverage, lineage, FK totals, extension classification, baseline glossary arithmetic, snapshot hashes and the authorized database inventory boundary. It does not claim architectural sufficiency or field-level domain sign-off.
 
 ## Partner branch fields
 

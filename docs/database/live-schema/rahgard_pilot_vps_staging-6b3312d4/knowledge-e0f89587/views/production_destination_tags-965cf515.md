@@ -2,22 +2,26 @@
 
 - **دیتابیس:** `rahgard_pilot_vps_staging`
 - **نوع شیء:** View
-- **شرح:** نیازمند توضیح دامنه‌ای تأییدشده از کد و مالک محصول
+- **شرح:** No PostgreSQL comment or baseline glossary table description was recorded.
 - **دسترسی خواندن:** از RLS/GRANT واقعی و مسیر API تطبیق شود؛ این مستند مقدار ردیفی نمی‌خواند.
 - **دسترسی نوشتن:** از RLS/GRANT واقعی و مسیر API تطبیق شود؛ دسترسی مستقیم SQL به کاربر ندهید.
 - **نمایش عمومی:** نامشخص تا تطبیق با View انتشار و API؛ پیش‌فرض خصوصی.
 - **API مدل/مسیر:** مسیر مشخصی در کد پیدا نشده؛ نیازمند بررسی مالک ماژول.
 - **فیلد فرم UI:** فرم مشخصی در فهرست نگاشت پیدا نشده؛ نیازمند بررسی UI.
-- **منبع:** PostgreSQL `pg_catalog`، تراکنش فقط‌خواندنی، استخراج‌شده در `2026-11-24T11:28:13Z`
+- **Static SQL operation hints:** backend/app/modules/catalog/repository.py:SELECT@74 (literal source matches only, not runtime proof)
+- **PostgreSQL relation owner:** `ai_tourism_owner` (technical ownership only; not product approval)
+- **Architecture disposition:** `KEEP` — Derived read boundary has an application source reference; retain publication/filter semantics and review changes additively.
+- **DDL provenance:** engineering/database-prep/sql/001_core_schema.sql:695
+- **Metadata snapshot:** PostgreSQL `pg_catalog`, read-only, captured `2026-11-24T11:28:13Z`; no application rows
 - **امنیت ردیفی (RLS):** خاموش؛ Forced=خیر
 - **هشدار:** هیچ دادهٔ ردیفی، رمز، کوکی یا مقدار شخصی در این فایل استخراج نشده است.
 
 ## ستون‌ها و قرارداد داده
 
-| ستون | نوع PostgreSQL | Nullable | مقدار پیش‌فرض امن | معنی کسب‌وکاری | قالب/واحد/enum | منبع شواهد | حساسیت/مالک | سطح خواندن/نوشتن |
+| Column occurrence | PostgreSQL type | Nullable | Sanitized default | Existing meaning / classification | Format evidence | Provenance | Sensitivity / owner | Read/write evidence |
 |---|---|---|---|---|---|---|---|---|
-| 'destination_id' | 'bigint' | بله | — | Canonical destination identity associated with this row. | PostgreSQL 'bigint'; value range and accepted vocabulary follow listed database constraints and API validation. This is a projection/view column; it is not an independent writable field. | 'docs/database/live-schema/catalog_snapshot.json', 'engineering/database-prep/sql/001_core_schema.sql', 'backend/app/api/catalogue_review.py', 'backend/app/modules/retrieval/contracts.py', [https://www.postgresql.org/docs/17/datatype.html](https://www.postgresql.org/docs/17/datatype.html) | internal_catalogue_or_recommendation_metadata / catalogue/source editor or import operator; publication fields require an authorized reviewer | خواندن: published catalogue/retrieval API with source/publication filters; نوشتن: database view only; no direct end-user writes |
-| 'tag' | 'text' | بله | — | Tag value associated with the destination; public filtering depends on the approved catalogue view. | PostgreSQL 'text'; value range and accepted vocabulary follow listed database constraints and API validation. This is a projection/view column; it is not an independent writable field. | 'docs/database/live-schema/catalog_snapshot.json', 'engineering/database-prep/sql/001_core_schema.sql', 'backend/app/api/catalogue_review.py', 'backend/app/modules/retrieval/contracts.py', [https://www.postgresql.org/docs/17/datatype.html](https://www.postgresql.org/docs/17/datatype.html) | internal_catalogue_or_recommendation_metadata / catalogue/source editor or import operator; publication fields require an authorized reviewer | خواندن: published catalogue/retrieval API with source/publication filters; نوشتن: database view only; no direct end-user writes |
+| 'destination_id' | 'bigint' | بله | — | Derived view output; not independently writable. SQL projection: 't.destination_id [inputs: knowledge.destination_tags.destination_id]' (lineage: direct_column_projection). | PostgreSQL storage type 'bigint' only; business units, accepted values, and validation are not inferred from the SQL type. | live read-only pg_get_viewdef sha256=34d3bdba001e812ce3cff3642d50331254f8ece97a0d4e6c34aa6b4cebb7f79a; source expression in view_column_lineage.csv | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/modules/catalog/repository.py; column write path is not inferred |
+| 'tag' | 'text' | بله | — | Derived view output; not independently writable. SQL projection: 't.tag [inputs: knowledge.destination_tags.tag]' (lineage: direct_column_projection). | PostgreSQL storage type 'text' only; business units, accepted values, and validation are not inferred from the SQL type. | live read-only pg_get_viewdef sha256=34d3bdba001e812ce3cff3642d50331254f8ece97a0d4e6c34aa6b4cebb7f79a; source expression in view_column_lineage.csv | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/modules/catalog/repository.py; column write path is not inferred |
 
 ## محدودیت‌ها و ارتباط‌ها
 
@@ -35,8 +39,9 @@
 
 - تریگر غیرسیستمی‌ای ثبت نشده است.
 
-## نیازمندی تکمیل دامنه
+## Glossary coverage (not a requirement count)
 
-- تعداد ستون‌های فاقد شرح صریح: **0** از **2**.
-- مالک دامنه و توسعه‌دهنده باید تعریف تجاری، مقادیر مجاز، واحد پول/اندازه، مثال غیرواقعی، قواعد اعتبارسنجی و سطح دسترسی هر فیلد را از کد و API تأیید کنند.
-- ستون‌ها را با فرم عمومیِ ویرایش SQL در اختیار کاربر قرار ندهید. فرم‌ها باید براساس نقش/قرارداد API باشند.
+- Undocumented first-party base-table occurrences in this object: **0** of **2**. This does not mean the same number of distinct business parameters is needed.
+- Derived-view columns are projections; consult `docs/database/architecture-usage/view_column_lineage.csv` rather than adding duplicate glossary prose.
+- Extension-owned fields refer to PostgreSQL/PostGIS documentation and are not Rahgard user-form fields.
+- Do not expose a generic SQL editor. User forms must follow an authorized API and role contract.

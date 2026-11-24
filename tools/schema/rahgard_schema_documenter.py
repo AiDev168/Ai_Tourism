@@ -8,13 +8,22 @@ read in a READ ONLY transaction with bounded lock and statement timeouts.
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
 import hashlib
 import json
 import os
+from collections import Counter, defaultdict
 from pathlib import Path
 import re
 import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+EXTENSION_DOCUMENTATION = {
+    "spatial_ref_sys": "https://postgis.net/docs/using_postgis_dbmanagement.html",
+    "geometry_columns": "https://postgis.net/docs/using_postgis_dbmanagement.html",
+    "geography_columns": "https://postgis.net/docs/using_postgis_dbmanagement.html",
+}
 
 
 def safe_part(raw: str) -> str:
@@ -36,42 +45,7 @@ def escape_cell(value: object) -> str:
 
 
 def type_hint(pg_type: str) -> str:
-    t = pg_type.lower()
-    if t.endswith("[]"):
-        return "آرایه‌ای از مقادیر؛ قالب عنصر مطابق نوع پایه"
-    if t == "uuid":
-        return "UUID استاندارد با ۳۶ نویسه و خط تیره، مانند xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-    if t in {"json", "jsonb"}:
-        return "ساختار معتبر JSON؛ قرارداد کلیدها باید در مستندات API مشخص شود"
-    if t.startswith("character varying") or t.startswith("varchar"):
-        return "رشته Unicode؛ سقف طول از تعریف نوع PostgreSQL استخراج می‌شود"
-    if t.startswith("character(") or t.startswith("char("):
-        return "رشته با طول ثابت مشخص‌شده در PostgreSQL"
-    if t in {"text", "citext"}:
-        return "رشته Unicode؛ سقف کاربردی باید از اعتبارسنجی API استخراج شود"
-    if t in {"boolean", "bool"}:
-        return "true / false"
-    if t in {"integer", "bigint", "smallint", "int4", "int8", "int2"}:
-        return "عدد صحیح در بازهٔ نوع ثبت‌شده؛ واحد دامنه‌ای باید مشخص شود"
-    if t.startswith("numeric") or t.startswith("decimal"):
-        return "عدد ده‌دهی؛ precision و scale از PostgreSQL؛ واحد/ارز باید مستند شود"
-    if t in {"real", "double precision"}:
-        return "عدد ممیز شناور؛ دقت و واحد کاربردی نیازمند قرارداد دامنه است"
-    if t == "date":
-        return "تاریخ میلادی ISO 8601: YYYY-MM-DD (تبدیل جلالی صرفاً در UI)"
-    if t.startswith("timestamp"):
-        return "زمان ISO 8601؛ وجود/نبود منطقهٔ زمانی مطابق نوع PostgreSQL"
-    if t.startswith("time"):
-        return "زمان روز؛ قالب HH:MM:SS و منطقهٔ زمانی مطابق نوع PostgreSQL"
-    if t == "interval":
-        return "بازهٔ زمانی PostgreSQL (مدت/واحد دقیق وابسته به قرارداد دامنه)"
-    if t in {"inet", "cidr"}:
-        return "نشانی IP یا شبکه در قالب استاندارد IPv4/IPv6"
-    if t in {"bytea"}:
-        return "دادهٔ دودویی؛ مقدار خام نباید در این مستندات نمایش داده شود"
-    if t in {"tsvector", "tsquery"}:
-        return "ساختار جست‌وجوی متنی PostgreSQL"
-    return "نوع سفارشی یا قالب وابسته به دامنه؛ اعتبارسنجی API/enum را بررسی کنید"
+    return f"PostgreSQL storage type `{pg_type}` only; business units, accepted values, and validation are not inferred from the SQL type."
 
 
 def safe_default(value: str | None) -> str:
@@ -88,16 +62,24 @@ def safe_default(value: str | None) -> str:
     return value
 
 
+def read_csv_index(path: Path, key_fields: tuple[str, ...]) -> dict[tuple[str, ...], dict]:
+    if not path.is_file():
+        return {}
+    with path.open(encoding="utf-8-sig", newline="") as stream:
+        return {tuple(row[field] for field in key_fields): row for row in csv.DictReader(stream)}
+
+
 def markdown_for_relation(db: str, rel: dict, cols: list[dict], cons: list[dict],
                           indexes: list[dict], policies: list[dict], descriptions: dict,
-                          recorded_at: str, triggers: list[dict] | None = None) -> tuple[str, int]:
+                          recorded_at: str, triggers: list[dict] | None = None,
+                          architecture_metadata: dict | None = None) -> tuple[str, int]:
     dbkey = f"{db}.{rel['schema']}.{rel['name']}"
     more = descriptions.get(dbkey, descriptions.get(f"{rel['schema']}.{rel['name']}", {}))
     if not isinstance(more, dict):
         more = {}
     obj = more.get("_object", {}) if isinstance(more.get("_object", {}), dict) else {}
-    field_metadata = more.get("_field_metadata", {}) if isinstance(more.get("_field_metadata", {}), dict) else {}
-    table_comment = rel.get("comment") or more.get("_table") or "نیازمند توضیح دامنه‌ای تأییدشده از کد و مالک محصول"
+    architecture_metadata = architecture_metadata or {}
+    table_comment = rel.get("comment") or more.get("_table") or "No PostgreSQL comment or baseline glossary table description was recorded."
     kind = {"r": "جدول معمولی", "p": "جدول پارتیشن‌بندی‌شده", "v": "View", "m": "Materialized view", "f": "Foreign table"}.get(rel["kind"], rel["kind"])
     lines = [
         f"# {rel['schema']}.{rel['name']}", "",
@@ -109,48 +91,60 @@ def markdown_for_relation(db: str, rel: dict, cols: list[dict], cons: list[dict]
         f"- **نمایش عمومی:** {obj.get('public_exposure', 'نامشخص تا تطبیق با View انتشار و API؛ پیش‌فرض خصوصی.')}",
         f"- **API مدل/مسیر:** {obj.get('api', 'مسیر مشخصی در کد پیدا نشده؛ نیازمند بررسی مالک ماژول.')}",
         f"- **فیلد فرم UI:** {obj.get('ui', 'فرم مشخصی در فهرست نگاشت پیدا نشده؛ نیازمند بررسی UI.')}",
-        f"- **منبع:** PostgreSQL `pg_catalog`، تراکنش فقط‌خواندنی، استخراج‌شده در `{recorded_at}`",
+        f"- **Static SQL operation hints:** {architecture_metadata.get('static_sql_operation_hints', 'not identified; static absence does not prove no read/write path')} (literal source matches only, not runtime proof)",
+        f"- **PostgreSQL relation owner:** `{architecture_metadata.get('database_owner', 'not captured')}` (technical ownership only; not product approval)",
+        f"- **Architecture disposition:** `{architecture_metadata.get('decision', 'not assessed')}` — {architecture_metadata.get('decision_rationale', 'see architecture usage audit')}",
+        f"- **DDL provenance:** {architecture_metadata.get('ddl_provenance', 'not linked; see architecture usage audit')}",
+        f"- **Metadata snapshot:** PostgreSQL `pg_catalog`, read-only, captured `{recorded_at}`; no application rows",
         f"- **امنیت ردیفی (RLS):** {'روشن' if rel['rls'] else 'خاموش'}؛ Forced={'بله' if rel['force_rls'] else 'خیر'}",
         "- **هشدار:** هیچ دادهٔ ردیفی، رمز، کوکی یا مقدار شخصی در این فایل استخراج نشده است.",
         "", "## ستون‌ها و قرارداد داده", "",
-        "| ستون | نوع PostgreSQL | Nullable | مقدار پیش‌فرض امن | معنی کسب‌وکاری | قالب/واحد/enum | منبع شواهد | حساسیت/مالک | سطح خواندن/نوشتن |",
+        "| Column occurrence | PostgreSQL type | Nullable | Sanitized default | Existing meaning / classification | Format evidence | Provenance | Sensitivity / owner | Read/write evidence |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
     undocumented = 0
     for c in cols:
-        spec = field_metadata.get(c["name"], {})
-        if not isinstance(spec, dict):
-            spec = {}
-        meaning = c.get("comment") or more.get(c["name"])
-        if isinstance(meaning, dict):
-            meaning = meaning.get("meaning")
-        meaning = meaning or spec.get("meaning")
-        if spec.get("resolution") == "unresolved":
-            meaning = f"**حل‌نشده — بازبینی مالک دامنه لازم است.** {meaning or 'معنی تجاری از شواهد موجود تثبیت نشده است.'}"
-            undocumented += 1
+        col_meta = architecture_metadata.get("columns", {}).get(c["name"], {})
+        meaning = c.get("comment")
+        meaning_source = "PostgreSQL column comment" if meaning else ""
         if not meaning:
-            meaning = "**نیازمند تکمیل از API / منطق دامنه**"
+            meaning = more.get(c["name"])
+            meaning_source = "existing baseline glossary" if meaning else ""
+        is_extension = architecture_metadata.get("origin_class") == "extension_managed"
+        is_view = rel["kind"] in {"v", "m"}
+        if is_extension:
+            meaning = "Extension-managed PostgreSQL/PostGIS metadata; not an independent Rahgard business field. See [official PostGIS database management documentation](https://postgis.net/docs/using_postgis_dbmanagement.html)."
+        elif is_view:
+            expression = col_meta.get("view_source_expression", "")
+            status = col_meta.get("view_lineage_status", "lineage unresolved")
+            meaning = f"Derived view output; not independently writable. SQL projection: `{expression or 'unresolved; inspect live view definition'}` (lineage: {status})."
+        elif not meaning:
+            meaning = "**UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix."
+        is_application_base = architecture_metadata.get("origin_class", "first_party_application_base") == "first_party_application_base"
+        if is_application_base and not is_view and not is_extension and not meaning_source:
             undocumented += 1
         details = type_hint(c["pg_type"])
         if c.get("identity"):
-            details += "; ستون Identity"
+            details += "; identity-generated database key"
         if c.get("generated"):
-            details += "; مقدار تولیدشده در DB"
-        evidence = spec.get("source_evidence", [])
-        evidence_text = ", ".join(
-            f"[{source}]({source})" if str(source).startswith("https://") else f"`{source}`"
-            for source in evidence
-        )
-        if not spec:
-            evidence_text = "**نقشهٔ شواهد فیلد موجود نیست**"
+            details += "; database-generated"
+        if c.get("comment"):
+            details += f"; comment evidence: {c['comment']}"
+        evidence_text = col_meta.get("source_evidence", "")
+        if meaning_source:
+            evidence_text = (evidence_text + "; " if evidence_text else "") + meaning_source
+        sensitivity = col_meta.get("sensitivity_class", "not assessed")
+        sensitivity_basis = col_meta.get("sensitivity_basis", "no column-level assessment")
+        owner = architecture_metadata.get("database_owner", "unknown")
+        access_evidence = architecture_metadata.get("backend_relation_refs", "")
         lines.append("| " + " | ".join(escape_cell(v) for v in (
             f"`{c['name']}`", f"`{c['pg_type']}`", "خیر" if c["notnull"] else "بله",
             f"`{safe_default(c.get('default'))}`" if c.get("default") is not None else "—",
             meaning,
-            spec.get("accepted_format_units_enums", details),
-            evidence_text,
-            f"{spec.get('sensitivity', 'رده‌بندی‌نشده')} / {spec.get('owner', 'مالک نامشخص')}",
-            f"خواندن: {spec.get('read_surface', 'نامشخص')}; نوشتن: {spec.get('write_surface', 'نامشخص')}")) + " |")
+            details,
+            evidence_text or "not separately source-linked",
+            f"{sensitivity} / PostgreSQL owner `{owner}`; {sensitivity_basis}",
+            f"qualified backend relation refs: {access_evidence or 'none found by static scan'}; column write path is not inferred")) + " |")
     lines += ["", "## محدودیت‌ها و ارتباط‌ها", ""]
     if cons:
         for c in cons:
@@ -175,10 +169,11 @@ def markdown_for_relation(db: str, rel: dict, cols: list[dict], cons: list[dict]
             lines.append(f"- `{escape_cell(trigger['name'])}`: `{escape_cell(trigger['definition'])}`")
     else:
         lines.append("- تریگر غیرسیستمی‌ای ثبت نشده است.")
-    lines += ["", "## نیازمندی تکمیل دامنه", "",
-              f"- تعداد ستون‌های فاقد شرح صریح: **{undocumented}** از **{len(cols)}**.",
-              "- مالک دامنه و توسعه‌دهنده باید تعریف تجاری، مقادیر مجاز، واحد پول/اندازه، مثال غیرواقعی، قواعد اعتبارسنجی و سطح دسترسی هر فیلد را از کد و API تأیید کنند.",
-              "- ستون‌ها را با فرم عمومیِ ویرایش SQL در اختیار کاربر قرار ندهید. فرم‌ها باید براساس نقش/قرارداد API باشند.", ""]
+    lines += ["", "## Glossary coverage (not a requirement count)", "",
+              f"- Undocumented first-party base-table occurrences in this object: **{undocumented}** of **{len(cols)}**. This does not mean the same number of distinct business parameters is needed.",
+              "- Derived-view columns are projections; consult `docs/database/architecture-usage/view_column_lineage.csv` rather than adding duplicate glossary prose.",
+              "- Extension-owned fields refer to PostgreSQL/PostGIS documentation and are not Rahgard user-form fields.",
+              "- Do not expose a generic SQL editor. User forms must follow an authorized API and role contract.", ""]
     return "\n".join(lines), undocumented
 
 
@@ -286,12 +281,14 @@ def write_catalog_snapshot(snapshot: dict, output_root: Path, descriptions: dict
         raise ValueError("snapshot collections are invalid")
     root = output_root.resolve()
     created: list[dict] = []
-    field_metadata_total = 0
-    field_metadata_complete = 0
-    required_field_metadata = {
-        "meaning", "resolution", "accepted_format_units_enums", "source_evidence",
-        "sensitivity", "owner", "read_surface", "write_surface",
-    }
+    architecture_root = REPO_ROOT / "docs/database/architecture-usage"
+    object_metadata = read_csv_index(architecture_root / "object_decision_matrix.csv", ("database", "schema", "relation"))
+    column_metadata = read_csv_index(architecture_root / "column_occurrence_matrix.csv", ("database", "schema", "relation", "column_name"))
+    relation_count_by_kind: Counter[str] = Counter()
+    column_occurrences_by_kind: Counter[str] = Counter()
+    baseline_glossary_coverage: Counter[str] = Counter()
+    glossary_by_origin: dict[str, Counter[str]] = defaultdict(Counter)
+    extension_names = {"spatial_ref_sys", "geometry_columns", "geography_columns"}
     for item in relations:
         if not isinstance(item, dict):
             raise ValueError("snapshot relation is invalid")
@@ -310,15 +307,33 @@ def write_catalog_snapshot(snapshot: dict, output_root: Path, descriptions: dict
             f"{db}.{rel.get('schema')}.{rel.get('name')}",
             descriptions.get(f"{rel.get('schema')}.{rel.get('name')}", {}),
         )
-        source_metadata = source_description.get("_field_metadata", {}) if isinstance(source_description, dict) else {}
         for column in cols:
-            field_metadata_total += 1
-            field_spec = source_metadata.get(column.get("name"), {}) if isinstance(source_metadata, dict) else {}
-            if isinstance(field_spec, dict) and required_field_metadata.issubset(field_spec):
-                if field_spec.get("meaning") and field_spec.get("source_evidence") and field_spec.get("resolution") in {"resolved", "unresolved"}:
-                    field_metadata_complete += 1
+            field = column.get("name")
+            baseline_entry = source_description.get(field) if isinstance(source_description, dict) else None
+            has_baseline = isinstance(baseline_entry, str) and bool(baseline_entry.strip())
+            baseline_glossary_coverage["described" if has_baseline else "undocumented"] += 1
+            if rel.get("schema") == "public" and rel.get("name") in extension_names:
+                origin_class = "extension_managed"
+                column_occurrences_by_kind[origin_class] += 1
+            elif rel.get("kind") in {"v", "m"}:
+                origin_class = "derived_view"
+                column_occurrences_by_kind[origin_class] += 1
+            elif rel.get("schema") in {"system", "operations", "integration"} or (rel.get("schema"), rel.get("name")) == ("public", "rahgard_private_pilot_marker"):
+                origin_class = "first_party_system_or_operations"
+                column_occurrences_by_kind[origin_class] += 1
+            else:
+                origin_class = "first_party_application_base"
+                column_occurrences_by_kind[origin_class] += 1
+            glossary_by_origin[origin_class]["described" if has_baseline else "undocumented"] += 1
+        relation_count_by_kind[rel.get("kind", "unknown")] += 1
+        object_key = (db, rel.get("schema"), rel.get("name"))
+        object_meta = object_metadata.get(object_key, {})
+        object_meta = {**object_meta, "columns": {
+            column.get("name"): column_metadata.get((db, rel.get("schema"), rel.get("name"), column.get("name")), {})
+            for column in cols
+        }}
         markdown, gaps = markdown_for_relation(
-            db, rel, cols, cons, indexes, policies, descriptions, created_at, triggers
+            db, rel, cols, cons, indexes, policies, descriptions, created_at, triggers, object_meta
         )
         dbdir_name = safe_part(db)
         subdir = "views" if rel.get("kind") in {"v", "m"} else "tables"
@@ -328,7 +343,9 @@ def write_catalog_snapshot(snapshot: dict, output_root: Path, descriptions: dict
         created.append({"database": db, "schema": rel.get("schema"), "name": rel.get("name"),
                         "kind": rel.get("kind"), "columns": len(cols),
                         "undocumented_columns": gaps,
-                        "object_owner": object_owner(str(rel.get("schema", "")), str(rel.get("name", ""))),
+                        "origin_class": object_meta.get("origin_class", "not assessed"),
+                        "database_owner": object_meta.get("database_owner", "not captured"),
+                        "object_category": object_owner(str(rel.get("schema", "")), str(rel.get("name", ""))),
                         "path": target.relative_to(root).as_posix()})
     for dbname in databases:
         subset = [entry for entry in created if entry["database"] == dbname]
@@ -349,12 +366,15 @@ def write_catalog_snapshot(snapshot: dict, output_root: Path, descriptions: dict
     inventory_complete = set(discovered) == set(databases) | {
         item.get("database") for item in skipped if isinstance(item, dict)
     } | {item.get("database") for item in inaccessible if isinstance(item, dict)}
-    metadata_complete = (
+    technical_catalog_complete = (
         not inaccessible
         and scope == "authorized-rahgard-databases-only"
         and inventory_complete
-        and field_metadata_total == field_metadata_complete
     )
+    total_column_occurrences = sum(column_occurrences_by_kind.values())
+    glossary_total = baseline_glossary_coverage["described"] + baseline_glossary_coverage["undocumented"]
+    architecture_objects = list(object_metadata.values())
+    decision_counts = Counter(item.get("decision", "not assessed") for item in architecture_objects)
     manifest = {
         "schema": "rahgard.schema-catalogue.v1", "created_utc": created_at,
         "source": "PostgreSQL pg_catalog read-only transaction",
@@ -364,6 +384,9 @@ def write_catalog_snapshot(snapshot: dict, output_root: Path, descriptions: dict
         "source_snapshot_sha256": hashlib.sha256(
             json.dumps(snapshot, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         ).hexdigest(),
+        "catalog_metadata_snapshot_sha256": hashlib.sha256(
+            (REPO_ROOT / "docs/database/live-schema/catalog_metadata_snapshot.json").read_bytes()
+        ).hexdigest() if (REPO_ROOT / "docs/database/live-schema/catalog_metadata_snapshot.json").is_file() else None,
         "database_identity": snapshot.get("database_identity", {}),
         "database_role": snapshot.get("database_role"),
         "database_observations": snapshot.get("database_observations", []),
@@ -372,39 +395,69 @@ def write_catalog_snapshot(snapshot: dict, output_root: Path, descriptions: dict
         "databases_skipped_outside_authorized_namespace": skipped,
         "database_inventory_complete": inventory_complete,
         "relations": created, "relation_count": len(created),
-        "missing_field_descriptions": missing,
-        "field_metadata_coverage": {
-            "total": field_metadata_total,
-            "complete": field_metadata_complete,
-            "missing": field_metadata_total - field_metadata_complete,
+        "missing_field_descriptions": baseline_glossary_coverage["undocumented"],
+        "undocumented_first_party_base_occurrences": missing,
+        "undocumented_first_party_system_or_operations_occurrences": glossary_by_origin["first_party_system_or_operations"]["undocumented"],
+        "undocumented_derived_view_occurrences": glossary_by_origin["derived_view"]["undocumented"],
+        "undocumented_extension_occurrences": glossary_by_origin["extension_managed"]["undocumented"],
+        "undocumented_occurrences_by_origin": {
+            origin: counts.get("undocumented", 0) for origin, counts in sorted(glossary_by_origin.items())
         },
-        "metadata_complete": metadata_complete,
-        "business_descriptions_complete": missing == 0,
-        "complete": metadata_complete and missing == 0,
+        "catalog_counts": {
+            "relations": len(created),
+            "tables": relation_count_by_kind.get("r", 0) + relation_count_by_kind.get("p", 0),
+            "views": relation_count_by_kind.get("v", 0) + relation_count_by_kind.get("m", 0),
+            "column_occurrences": total_column_occurrences,
+        },
+        "column_occurrence_classification": dict(column_occurrences_by_kind),
+        "baseline_glossary_coverage": {
+            "described_occurrences": baseline_glossary_coverage["described"],
+            "undocumented_occurrences": baseline_glossary_coverage["undocumented"],
+            "total_occurrences": glossary_total,
+            "distinct_business_requirement_count": None,
+        },
+        "glossary_coverage_by_origin": {origin: dict(counts) for origin, counts in sorted(glossary_by_origin.items())},
+        "architecture_usage_review": {
+            "objects_with_decision": len(architecture_objects),
+            "decision_counts": dict(decision_counts),
+            "business_necessity_approved": False,
+            "static_usage_matrix": "docs/database/architecture-usage/object_decision_matrix.csv",
+            "column_occurrence_matrix": "docs/database/architecture-usage/column_occurrence_matrix.csv",
+            "view_lineage": "docs/database/architecture-usage/view_column_lineage.csv",
+        },
+        "technical_catalog_complete": technical_catalog_complete,
+        "business_glossary_complete": baseline_glossary_coverage["undocumented"] == 0,
+        "complete": False,
         "coverage_scope": scope,
         "database_access_mode": snapshot.get("database_access_mode", "not recorded"),
-        "warning": "Complete requires metadata coverage of every accessible database in the explicitly authorized Rahgard namespace and zero unresolved business descriptions. Other applications' databases are listed but not opened.",
+        "warning": "This catalog describes one authorized database only. Column occurrences are not distinct requirements. Glossary gaps are not validated business requirements. Derived and extension metadata are classified separately; architecture necessity is not approved by catalog extraction.",
     }
     root.mkdir(parents=True, exist_ok=True)
     (root / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     index = ["# کاتالوگ زنده دیتابیس Rahgard", "", f"تهیه: `{created_at}`", "",
              "Scope is limited to the authorized Rahgard database namespace; names outside scope were not opened.",
              f"Discovered non-template names: {len(discovered)}; attempted: {len(databases)}; skipped outside scope: {len(skipped)}; inaccessible: {len(inaccessible)}.",
-             f"Field metadata: {field_metadata_complete}/{field_metadata_total}; unresolved business meanings: {missing}.", "",
+             f"Relations: {len(created)} ({relation_count_by_kind.get('r', 0) + relation_count_by_kind.get('p', 0)} tables, {relation_count_by_kind.get('v', 0) + relation_count_by_kind.get('m', 0)} views); column occurrences: {total_column_occurrences}; baseline glossary entries: {baseline_glossary_coverage['described']}; undocumented glossary occurrences: {baseline_glossary_coverage['undocumented']}. This is not a distinct business parameter count.", "",
+             "## Occurrence classification", "",
+             "| Class | Occurrences | Existing glossary entries | No baseline glossary entry |", "|---|---:|---:|---:|"]
+    for origin in ["first_party_application_base", "first_party_system_or_operations", "derived_view", "extension_managed"]:
+        counts = glossary_by_origin[origin]
+        index.append(f"| {origin} | {counts['described'] + counts['undocumented']} | {counts['described']} | {counts['undocumented']} |")
+    index += ["", "Undocumented counts are glossary gaps, not validated business requirements. View outputs have separate lineage; extension-managed objects use PostgreSQL/PostGIS documentation. Architecture necessity is not approved by this catalog.", "",
              f"- Release source: `{manifest['source_release'] or 'not supplied'}`",
              f"- پایگاه‌های تلاش‌شده: {len(databases)}", f"- اشیا: {len(created)}",
-             f"- فیلدهای نیازمند شرح: {missing}", ""]
+             f"- undocumented glossary column occurrences: {baseline_glossary_coverage['undocumented']} (not distinct requirements)", ""]
     if inaccessible:
         index += ["## پایگاه‌های غیرقابل‌دسترسی", ""] + [
             f"- `{item.get('database', 'unknown')}`: SQLSTATE `{item.get('sqlstate', item.get('error_class', 'unknown'))}`" for item in inaccessible
         ] + [""]
     index += ["## فهرست اشیا", ""] + [
-        f"- [{item['database']}.{item['schema']}.{item['name']}]({item['path']}) — {item['columns']} ستون؛ {item['undocumented_columns']} شرح ناقص"
+        f"- [{item['database']}.{item['schema']}.{item['name']}]({item['path']}) — {item['columns']} column occurrences; {item['undocumented_columns']} undocumented first-party base occurrences"
         for item in created
     ]
     (root / "README.md").write_text("\n".join(index) + "\n", encoding="utf-8")
     return {"databases_attempted": len(databases), "inaccessible": len(inaccessible),
-            "relations_documented": len(created), "missing_field_descriptions": missing,
+            "relations_documented": len(created), "missing_field_descriptions": baseline_glossary_coverage["undocumented"],
             "output_root": str(root)}
 
 
@@ -438,13 +491,20 @@ def main() -> int:
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
     failures: list[dict] = []
     created: list[dict] = []
+    discovered: list[str] = []
+    skipped: list[dict[str, str]] = []
     with connect_ro(dsn) as base:
         if args.all_accessible_databases:
-            dbnames = list_databases(base)
+            discovered = list_databases(base)
+            dbnames = [name for name in discovered if name.startswith("rahgard_")]
+            skipped = [{"database": name, "reason": "outside_rahgard_database_namespace_not_opened"}
+                       for name in discovered if name not in dbnames]
         elif args.database:
             dbnames = sorted(set(args.database))
+            discovered = list(dbnames)
         else:
             dbnames = [run_ro(base, lambda c: c.execute('SELECT current_database()').fetchone()[0])]
+            discovered = list(dbnames)
     for dbname in dbnames:
         try:
             with connect_ro(dsn, dbname) as conn:
@@ -483,24 +543,28 @@ def main() -> int:
         (dbdir / 'README.md').write_text('\n'.join(db_lines)+'\n',encoding='utf-8')
     manifest = {'schema': 'rahgard.schema-catalogue.v1', 'created_utc': now,
                 'source': 'PostgreSQL pg_catalog read-only', 'databases_attempted': dbnames,
+                'databases_discovered_non_template': discovered,
+                'databases_skipped_outside_authorized_namespace': skipped,
                 'databases_inaccessible': failures, 'relations': created,
-                'complete': not failures and args.all_accessible_databases,
-                'coverage_scope': 'all-accessible-databases' if args.all_accessible_databases else 'selected-databases-only',
-                'warning': 'Complete only means metadata of enumerated, accessible DBs; not server-wide role access or domain field-meaning review.'}
+                'technical_catalog_complete': not failures and bool(dbnames),
+                'business_glossary_complete': False, 'architecture_necessity_approved': False,
+                'complete': False,
+                'coverage_scope': 'authorized-rahgard-databases-only' if args.all_accessible_databases else 'explicitly-selected-database-only',
+                'warning': 'Column occurrences are not distinct requirements. Glossary gaps are not validated business requirements. Derived, extension, system, and legacy fields require separate classification and source evidence.'}
     root.mkdir(parents=True, exist_ok=True)
     (root/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n', encoding='utf-8')
     index = ['# کاتالوگ دیتابیس‌های Rahgard', '',f'استخراج: `{now}`','',
              'این کاتالوگ فقط از متادیتای واقعی PostgreSQL تهیه می‌شود؛ هیچ ردیفی یا اطلاعات هویتی صادر نشده است.', '',
              f'- دیتابیس‌های قابل تلاش: **{len(dbnames)}**',f'- اشیای مستندشده: **{len(created)}**',
-             f'- تعداد ستون بدون توضیح تأییدشده: **{sum(x["undocumented_columns"] for x in created)}**','']
+              f'- Undocumented first-party base-column occurrences: **{sum(x["undocumented_columns"] for x in created)}**; this is not a distinct requirement count.','']
     if failures:
         index += ['## دیتابیس‌های دسترس‌ناپذیر',''] + [f'- `{f["database"]}`: {f["error_class"]}' for f in failures]+['']
     index += ['## فهرست جدول‌ها و Viewها', '']
     for r in created:
-        index.append(f'- [{r["database"]}.{r["schema"]}.{r["name"]}]({r["path"]}) — {r["columns"]} ستون؛ {r["undocumented_columns"]} شرح ناقص')
+        index.append(f'- [{r["database"]}.{r["schema"]}.{r["name"]}]({r["path"]}) — {r["columns"]} column occurrences; {r["undocumented_columns"]} undocumented first-party base occurrences')
     (root/'README.md').write_text('\n'.join(index)+'\n',encoding='utf-8')
     print(json.dumps({'databases_attempted':len(dbnames),'inaccessible':len(failures),'relations_documented':len(created),
-                      'missing_field_descriptions':sum(x['undocumented_columns'] for x in created),'output_root':str(root)},ensure_ascii=False))
+                      'undocumented_first_party_base_occurrences':sum(x['undocumented_columns'] for x in created),'output_root':str(root)},ensure_ascii=False))
     return 0 if not failures else 3
 
 
