@@ -88,6 +88,7 @@ def markdown_for_relation(db: str, rel: dict, cols: list[dict], cons: list[dict]
     more = descriptions.get(dbkey, descriptions.get(f"{rel['schema']}.{rel['name']}", {}))
     if not isinstance(more, dict):
         more = {}
+    obj = more.get("_object", {}) if isinstance(more.get("_object", {}), dict) else {}
     table_comment = rel.get("comment") or more.get("_table") or "نیازمند توضیح دامنه‌ای تأییدشده از کد و مالک محصول"
     kind = {"r": "جدول معمولی", "p": "جدول پارتیشن‌بندی‌شده", "v": "View", "m": "Materialized view", "f": "Foreign table"}.get(rel["kind"], rel["kind"])
     lines = [
@@ -95,6 +96,11 @@ def markdown_for_relation(db: str, rel: dict, cols: list[dict], cons: list[dict]
         f"- **دیتابیس:** `{db}`",
         f"- **نوع شیء:** {kind}",
         f"- **شرح:** {table_comment}",
+        f"- **دسترسی خواندن:** {obj.get('read_access', 'از RLS/GRANT واقعی و مسیر API تطبیق شود؛ این مستند مقدار ردیفی نمی‌خواند.')}",
+        f"- **دسترسی نوشتن:** {obj.get('write_access', 'از RLS/GRANT واقعی و مسیر API تطبیق شود؛ دسترسی مستقیم SQL به کاربر ندهید.')}",
+        f"- **نمایش عمومی:** {obj.get('public_exposure', 'نامشخص تا تطبیق با View انتشار و API؛ پیش‌فرض خصوصی.')}",
+        f"- **API مدل/مسیر:** {obj.get('api', 'مسیر مشخصی در کد پیدا نشده؛ نیازمند بررسی مالک ماژول.')}",
+        f"- **فیلد فرم UI:** {obj.get('ui', 'فرم مشخصی در فهرست نگاشت پیدا نشده؛ نیازمند بررسی UI.')}",
         f"- **منبع:** PostgreSQL `pg_catalog`، تراکنش فقط‌خواندنی، استخراج‌شده در `{recorded_at}`",
         f"- **امنیت ردیفی (RLS):** {'روشن' if rel['rls'] else 'خاموش'}؛ Forced={'بله' if rel['force_rls'] else 'خیر'}",
         "- **هشدار:** هیچ دادهٔ ردیفی، رمز، کوکی یا مقدار شخصی در این فایل استخراج نشده است.",
@@ -236,6 +242,93 @@ def list_databases(conn) -> list[str]:
     return run_ro(conn, query)
 
 
+def write_catalog_snapshot(snapshot: dict, output_root: Path, descriptions: dict) -> dict:
+    """Render a sanitized metadata snapshot captured by the read-only live runner."""
+    databases = snapshot.get("databases_attempted", [])
+    if not isinstance(databases, list) or not all(isinstance(item, str) for item in databases):
+        raise ValueError("snapshot databases_attempted is invalid")
+    created_at = snapshot.get("created_utc")
+    if not isinstance(created_at, str) or not created_at.endswith("Z"):
+        raise ValueError("snapshot timestamp must be UTC")
+    inaccessible = snapshot.get("databases_inaccessible", [])
+    relations = snapshot.get("relations", [])
+    if not isinstance(inaccessible, list) or not isinstance(relations, list):
+        raise ValueError("snapshot collections are invalid")
+    root = output_root.resolve()
+    created: list[dict] = []
+    for item in relations:
+        if not isinstance(item, dict):
+            raise ValueError("snapshot relation is invalid")
+        db = item.get("database")
+        rel = item.get("relation")
+        cols = item.get("columns")
+        cons = item.get("constraints", [])
+        indexes = item.get("indexes", [])
+        policies = item.get("policies", [])
+        triggers = item.get("triggers", [])
+        if not isinstance(db, str) or not isinstance(rel, dict) or not all(
+            isinstance(collection, list) for collection in (cols, cons, indexes, policies, triggers)
+        ):
+            raise ValueError("snapshot relation fields are invalid")
+        markdown, gaps = markdown_for_relation(
+            db, rel, cols, cons, indexes, policies, descriptions, created_at, triggers
+        )
+        dbdir_name = safe_part(db)
+        subdir = "views" if rel.get("kind") in {"v", "m"} else "tables"
+        target = root / dbdir_name / safe_part(str(rel.get("schema", ""))) / subdir / f"{safe_part(str(rel.get('name', '')))}.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(markdown, encoding="utf-8")
+        created.append({"database": db, "schema": rel.get("schema"), "name": rel.get("name"),
+                        "kind": rel.get("kind"), "columns": len(cols),
+                        "undocumented_columns": gaps, "path": target.relative_to(root).as_posix()})
+    for dbname in databases:
+        subset = [entry for entry in created if entry["database"] == dbname]
+        if not subset:
+            continue
+        dbdir = root / safe_part(dbname)
+        schemas = sorted({str(entry["schema"]) for entry in subset})
+        lines = [f"# دیتابیس `{dbname}`", "", "این فایل فقط از کاتالوگ PostgreSQL خوانده شده است؛ مقدار ردیفی ندارد.",
+                 "", f"- زمان UTC: `{created_at}`", f"- اشیای مستندشده: {len(subset)}", "", "## Schemaها", ""]
+        for schema in schemas:
+            lines.append(f"- `{schema}`: {sum(entry['schema'] == schema for entry in subset)} شیء")
+        lines.extend(["", "## اشیا", ""])
+        for entry in subset:
+            lines.append(f"- [{entry['schema']}.{entry['name']}]({Path(entry['path']).relative_to(safe_part(dbname)).as_posix()}) — {entry['columns']} ستون")
+        (dbdir / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    missing = sum(item["undocumented_columns"] for item in created)
+    manifest = {
+        "schema": "rahgard.schema-catalogue.v1", "created_utc": created_at,
+        "source": "PostgreSQL pg_catalog read-only transaction",
+        "source_release": snapshot.get("source_release"),
+        "database_identity": snapshot.get("database_identity", {}),
+        "database_role": snapshot.get("database_role"),
+        "databases_attempted": databases, "databases_inaccessible": inaccessible,
+        "relations": created, "relation_count": len(created),
+        "missing_field_descriptions": missing,
+        "complete": not inaccessible and snapshot.get("scope") == "all-accessible-databases",
+        "coverage_scope": snapshot.get("scope", "selected-databases-only"),
+        "warning": "Complete means metadata coverage of databases accessible to the tested role; it does not mean all business meanings are known.",
+    }
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    index = ["# کاتالوگ زنده دیتابیس Rahgard", "", f"تهیه: `{created_at}`", "",
+             f"- Release source: `{manifest['source_release'] or 'not supplied'}`",
+             f"- پایگاه‌های تلاش‌شده: {len(databases)}", f"- اشیا: {len(created)}",
+             f"- فیلدهای نیازمند شرح: {missing}", ""]
+    if inaccessible:
+        index += ["## پایگاه‌های غیرقابل‌دسترسی", ""] + [
+            f"- `{item.get('database', 'unknown')}`: {item.get('error_class', 'unknown error')}" for item in inaccessible
+        ] + [""]
+    index += ["## فهرست اشیا", ""] + [
+        f"- [{item['database']}.{item['schema']}.{item['name']}]({item['path']}) — {item['columns']} ستون؛ {item['undocumented_columns']} شرح ناقص"
+        for item in created
+    ]
+    (root / "README.md").write_text("\n".join(index) + "\n", encoding="utf-8")
+    return {"databases_attempted": len(databases), "inaccessible": len(inaccessible),
+            "relations_documented": len(created), "missing_field_descriptions": missing,
+            "output_root": str(root)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description='Metadata-only docs for PostgreSQL. NEVER reads table rows.')
     parser.add_argument('--dsn-env', default='RAHGARD_SCHEMA_DSN', help='Env var holding private libpq DSN')
@@ -243,16 +336,25 @@ def main() -> int:
     parser.add_argument('--descriptions-json', help='Curated per-db.schema.table field descriptions; no secrets')
     parser.add_argument('--database', action='append', default=[], help='Repeat to restrict documentation to named DBs')
     parser.add_argument('--all-accessible-databases', action='store_true', help='Enumerate every connectable non-template DB')
+    parser.add_argument('--catalog-snapshot-json', help='Sanitized metadata-only JSON produced by the remote read-only runner')
     args = parser.parse_args()
+    descriptions = {}
+    if args.descriptions_json:
+        descriptions = json.loads(Path(args.descriptions_json).read_text(encoding='utf-8'))
     dsn = os.environ.get(args.dsn_env)
     if not dsn:
+        if args.catalog_snapshot_json:
+            # PowerShell's Set-Content -Encoding UTF8 writes a BOM on Windows.
+            # Accept either UTF-8 form so a sanitized live snapshot can be
+            # transferred without platform-specific post-processing.
+            snapshot = json.loads(Path(args.catalog_snapshot_json).read_text(encoding='utf-8-sig'))
+            result = write_catalog_snapshot(snapshot, Path(args.output_root), descriptions)
+            print(json.dumps(result, ensure_ascii=False))
+            return 0 if not snapshot.get('databases_inaccessible') else 3
         print(f'Missing connection value in environment variable {args.dsn_env}', file=sys.stderr)
         return 2
     if args.database and args.all_accessible_databases:
         parser.error('Use --database or --all-accessible-databases, not both')
-    descriptions = {}
-    if args.descriptions_json:
-        descriptions = json.loads(Path(args.descriptions_json).read_text(encoding='utf-8'))
     root = Path(args.output_root).resolve()
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
     failures: list[dict] = []
@@ -281,7 +383,7 @@ def main() -> int:
             target.write_text(markdown, encoding='utf-8')
             created.append({'database': dbname, 'schema': rel['schema'], 'name': rel['name'], 'kind': rel['kind'],
                             'columns': len(cols), 'undocumented_columns': gaps,
-                            'path': str(target.relative_to(root))})
+                            'path': target.relative_to(root).as_posix()})
     for dbname in dbnames:
         this_db = [entry for entry in created if entry['database'] == dbname]
         if not this_db:

@@ -1,0 +1,124 @@
+# دیتابیس `rahgard_pilot_vps_staging`
+
+این فایل فقط از کاتالوگ PostgreSQL خوانده شده است؛ مقدار ردیفی ندارد.
+
+- زمان UTC: `2026-11-24T06:58:13Z`
+- اشیای مستندشده: 101
+
+## Schemaها
+
+- `conversation`: 3 شیء
+- `geo`: 3 شیء
+- `identity`: 11 شیء
+- `integration`: 4 شیء
+- `knowledge`: 39 شیء
+- `operations`: 7 شیء
+- `partner`: 19 شیء
+- `public`: 4 شیء
+- `recommendation`: 3 شیء
+- `system`: 1 شیء
+- `travel`: 7 شیء
+
+## اشیا
+
+- [conversation.assistant_turns](conversation-8b34dbc2/tables/assistant_turns-f6adb88f.md) — 12 ستون
+- [conversation.conversations](conversation-8b34dbc2/tables/conversations-5c0dc939.md) — 13 ستون
+- [conversation.messages](conversation-8b34dbc2/tables/messages-f5cccfb7.md) — 15 ستون
+- [geo.admin_area_aliases](geo-e81935fb/tables/admin_area_aliases-69b365be.md) — 10 ستون
+- [geo.admin_area_releases](geo-e81935fb/tables/admin_area_releases-b7a694e4.md) — 11 ستون
+- [geo.admin_areas](geo-e81935fb/tables/admin_areas-3e2eda73.md) — 13 ستون
+- [identity.auth_rate_limits](identity-689f6a62/tables/auth_rate_limits-ab60a2e5.md) — 4 ستون
+- [identity.catalogue_review_grants](identity-689f6a62/tables/catalogue_review_grants-2d028f1d.md) — 6 ستون
+- [identity.otp_challenges](identity-689f6a62/tables/otp_challenges-1969c61e.md) — 13 ستون
+- [identity.staging_auth_limits](identity-689f6a62/tables/staging_auth_limits-1f09c6f7.md) — 4 ستون
+- [identity.staging_invites](identity-689f6a62/tables/staging_invites-0d54e43c.md) — 6 ستون
+- [identity.staging_password_credentials](identity-689f6a62/tables/staging_password_credentials-617738de.md) — 6 ستون
+- [identity.user_consents](identity-689f6a62/tables/user_consents-7a7aebd6.md) — 10 ستون
+- [identity.user_preferences](identity-689f6a62/tables/user_preferences-7e378789.md) — 11 ستون
+- [identity.users](identity-689f6a62/tables/users-7dfb4cf6.md) — 10 ستون
+- [identity.verified_phones](identity-689f6a62/tables/verified_phones-66f7e274.md) — 4 ستون
+- [identity.web_sessions](identity-689f6a62/tables/web_sessions-a075ea48.md) — 10 ستون
+- [integration.chat_daily_global_budget](integration-eb92cc52/tables/chat_daily_global_budget-27b4bbd7.md) — 2 ستون
+- [integration.chat_daily_user_budget](integration-eb92cc52/tables/chat_daily_user_budget-6c98bd64.md) — 3 ستون
+- [integration.external_links](integration-eb92cc52/tables/external_links-b9ab75bd.md) — 9 ستون
+- [integration.outbound_clicks](integration-eb92cc52/tables/outbound_clicks-19c8afdc.md) — 9 ستون
+- [knowledge.active_embedding_spaces](knowledge-e0f89587/views/active_embedding_spaces-1b30f488.md) — 11 ستون
+- [knowledge.catalogue_publication_events](knowledge-e0f89587/tables/catalogue_publication_events-c4a82f50.md) — 7 ستون
+- [knowledge.chunk_embeddings](knowledge-e0f89587/tables/chunk_embeddings-f9d8072c.md) — 6 ستون
+- [knowledge.culinary_item_sources](knowledge-e0f89587/tables/culinary_item_sources-c8ea7adb.md) — 14 ستون
+- [knowledge.culinary_knowledge_items](knowledge-e0f89587/tables/culinary_knowledge_items-39e2713d.md) — 21 ستون
+- [knowledge.destination_access_points](knowledge-e0f89587/tables/destination_access_points-0c087cc8.md) — 14 ستون
+- [knowledge.destination_aliases](knowledge-e0f89587/tables/destination_aliases-75309a16.md) — 10 ستون
+- [knowledge.destination_candidate_evidence](knowledge-e0f89587/tables/destination_candidate_evidence-92151fb7.md) — 11 ستون
+- [knowledge.destination_candidate_reviews](knowledge-e0f89587/tables/destination_candidate_reviews-4cf36b04.md) — 10 ستون
+- [knowledge.destination_candidates](knowledge-e0f89587/tables/destination_candidates-6a9824e7.md) — 21 ستون
+- [knowledge.destination_categories](knowledge-e0f89587/tables/destination_categories-6ec43aad.md) — 6 ستون
+- [knowledge.destination_category_map](knowledge-e0f89587/tables/destination_category_map-2776bfb3.md) — 5 ستون
+- [knowledge.destination_claim_evidence](knowledge-e0f89587/tables/destination_claim_evidence-c4355517.md) — 23 ستون
+- [knowledge.destination_enrichment_proposal_sources](knowledge-e0f89587/tables/destination_enrichment_proposal_sources-7ce2e624.md) — 14 ستون
+- [knowledge.destination_enrichment_proposals](knowledge-e0f89587/tables/destination_enrichment_proposals-253b2149.md) — 16 ستون
+- [knowledge.destination_localizations](knowledge-e0f89587/tables/destination_localizations-0eb8da97.md) — 11 ستون
+- [knowledge.destination_operational_assertions](knowledge-e0f89587/tables/destination_operational_assertions-5805af5e.md) — 17 ستون
+- [knowledge.destination_sources](knowledge-e0f89587/tables/destination_sources-52eec045.md) — 7 ستون
+- [knowledge.destination_tags](knowledge-e0f89587/tables/destination_tags-fe7b7ef7.md) — 2 ستون
+- [knowledge.destination_visit_duration_evidence](knowledge-e0f89587/tables/destination_visit_duration_evidence-5579d9f3.md) — 13 ستون
+- [knowledge.destinations](knowledge-e0f89587/tables/destinations-1af0500e.md) — 28 ستون
+- [knowledge.embedding_spaces](knowledge-e0f89587/tables/embedding_spaces-f7a9b58b.md) — 12 ستون
+- [knowledge.knowledge_chunks](knowledge-e0f89587/tables/knowledge_chunks-c1de8a43.md) — 10 ستون
+- [knowledge.knowledge_documents](knowledge-e0f89587/tables/knowledge_documents-c8a3d0bd.md) — 18 ستون
+- [knowledge.knowledge_sources](knowledge-e0f89587/tables/knowledge_sources-059f8744.md) — 10 ستون
+- [knowledge.production_chunk_embeddings](knowledge-e0f89587/views/production_chunk_embeddings-c270ebe9.md) — 14 ستون
+- [knowledge.production_culinary_knowledge](knowledge-e0f89587/views/production_culinary_knowledge-bb2646f2.md) — 9 ستون
+- [knowledge.production_destination_categories](knowledge-e0f89587/views/production_destination_categories-afee998c.md) — 5 ستون
+- [knowledge.production_destination_category_map](knowledge-e0f89587/views/production_destination_category_map-389c0e66.md) — 4 ستون
+- [knowledge.production_destination_claim_evidence](knowledge-e0f89587/views/production_destination_claim_evidence-c36d86cb.md) — 26 ستون
+- [knowledge.production_destination_sources](knowledge-e0f89587/views/production_destination_sources-9f650eaa.md) — 11 ستون
+- [knowledge.production_destination_tags](knowledge-e0f89587/views/production_destination_tags-965cf515.md) — 2 ستون
+- [knowledge.production_destinations](knowledge-e0f89587/views/production_destinations-40eadf41.md) — 27 ستون
+- [knowledge.production_retrieval_chunks](knowledge-e0f89587/views/production_retrieval_chunks-5c690ae9.md) — 19 ستون
+- [knowledge.production_retrieval_documents](knowledge-e0f89587/views/production_retrieval_documents-7946c5ed.md) — 22 ستون
+- [knowledge.source_candidate_reviews](knowledge-e0f89587/tables/source_candidate_reviews-447c5344.md) — 9 ستون
+- [knowledge.source_candidates](knowledge-e0f89587/tables/source_candidates-96f26cbd.md) — 17 ستون
+- [knowledge.source_registry_registration_events](knowledge-e0f89587/tables/source_registry_registration_events-091879f4.md) — 10 ستون
+- [knowledge.source_verification_reviews](knowledge-e0f89587/tables/source_verification_reviews-cc624d8f.md) — 11 ستون
+- [operations.ai_model_calls](operations-74de07c4/tables/ai_model_calls-48e13f37.md) — 12 ستون
+- [operations.audit_events](operations-74de07c4/tables/audit_events-14cca081.md) — 9 ستون
+- [operations.dataset_import_batches](operations-74de07c4/tables/dataset_import_batches-df7cf9dc.md) — 8 ستون
+- [operations.dataset_import_files](operations-74de07c4/tables/dataset_import_files-904901ca.md) — 15 ستون
+- [operations.feedback](operations-74de07c4/tables/feedback-59bda3f8.md) — 10 ستون
+- [operations.private_pilot_geo_approvals](operations-74de07c4/tables/private_pilot_geo_approvals-b1ba5af2.md) — 9 ستون
+- [operations.private_pilot_geo_authorizations](operations-74de07c4/tables/private_pilot_geo_authorizations-4ca96d93.md) — 17 ستون
+- [partner.availability_snapshots](partner-7f3fa48c/tables/availability_snapshots-ba838abd.md) — 14 ستون
+- [partner.branches](partner-7f3fa48c/tables/branches-dce19053.md) — 12 ستون
+- [partner.invitations](partner-7f3fa48c/tables/invitations-33cd5e40.md) — 10 ستون
+- [partner.memberships](partner-7f3fa48c/tables/memberships-5050625e.md) — 9 ستون
+- [partner.offers](partner-7f3fa48c/tables/offers-92ab364e.md) — 13 ستون
+- [partner.organizations](partner-7f3fa48c/tables/organizations-f8a665a9.md) — 15 ستون
+- [partner.platform_grants](partner-7f3fa48c/tables/platform_grants-a4a5df9a.md) — 6 ستون
+- [partner.prices](partner-7f3fa48c/tables/prices-fe81f939.md) — 14 ستون
+- [partner.review_events](partner-7f3fa48c/tables/review_events-3b16bd9c.md) — 9 ستون
+- [partner.schedules](partner-7f3fa48c/tables/schedules-6e9a1ab2.md) — 12 ستون
+- [partner.service_destinations](partner-7f3fa48c/tables/service_destinations-210419ff.md) — 7 ستون
+- [partner.service_localizations](partner-7f3fa48c/tables/service_localizations-51c8d7f8.md) — 9 ستون
+- [partner.services](partner-7f3fa48c/tables/services-ef1c4b45.md) — 12 ستون
+- [partner.share_eligible_organizations](partner-7f3fa48c/views/share_eligible_organizations-ce33f94c.md) — 3 ستون
+- [partner.traveler_request_inbox](partner-7f3fa48c/tables/traveler_request_inbox-e77d4232.md) — 6 ستون
+- [partner.traveler_request_revisions](partner-7f3fa48c/tables/traveler_request_revisions-e7bb178d.md) — 11 ستون
+- [partner.traveler_request_shares](partner-7f3fa48c/tables/traveler_request_shares-27951838.md) — 9 ستون
+- [partner.trip_company_responses](partner-7f3fa48c/tables/trip_company_responses-f5079928.md) — 18 ستون
+- [partner.verification_cases](partner-7f3fa48c/tables/verification_cases-ccd9ee8c.md) — 11 ستون
+- [public.geography_columns](public-efa1f375/views/geography_columns-d4370c1b.md) — 7 ستون
+- [public.geometry_columns](public-efa1f375/views/geometry_columns-db35ba0f.md) — 7 ستون
+- [public.rahgard_private_pilot_marker](public-efa1f375/tables/rahgard_private_pilot_marker-64e06a2e.md) — 1 ستون
+- [public.spatial_ref_sys](public-efa1f375/tables/spatial_ref_sys-6b0f8c39.md) — 5 ستون
+- [recommendation.recommendation_requests](recommendation-dbfe9375/tables/recommendation_requests-b58aca54.md) — 10 ستون
+- [recommendation.recommendation_score_components](recommendation-dbfe9375/tables/recommendation_score_components-e3b855a1.md) — 10 ستون
+- [recommendation.recommendations](recommendation-dbfe9375/tables/recommendations-f9b89ad4.md) — 12 ستون
+- [system.schema_migrations](system-bbc5e661/tables/schema_migrations-26bec784.md) — 3 ستون
+- [travel.itineraries](travel-0209442e/tables/itineraries-03a4100d.md) — 12 ستون
+- [travel.itinerary_stops](travel-0209442e/tables/itinerary_stops-5025eb44.md) — 13 ستون
+- [travel.provisional_itineraries](travel-0209442e/tables/provisional_itineraries-db7c0fe6.md) — 11 ستون
+- [travel.trip_constraints](travel-0209442e/tables/trip_constraints-a41e8f02.md) — 11 ستون
+- [travel.trip_interests](travel-0209442e/tables/trip_interests-7b9a4366.md) — 7 ستون
+- [travel.trip_requirement_revisions](travel-0209442e/tables/trip_requirement_revisions-8de20de1.md) — 7 ستون
+- [travel.trips](travel-0209442e/tables/trips-57866688.md) — 26 ستون

@@ -1,7 +1,13 @@
 """Zero-network unit tests for the schema dictionary exporter."""
 import importlib.util
+import contextlib
+import io
+import json
+import os
 from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 MODULE = Path(__file__).with_name('rahgard_schema_documenter.py')
 spec = importlib.util.spec_from_file_location('rahgard_schema_documenter', MODULE)
@@ -59,6 +65,52 @@ class DocumenterTests(unittest.TestCase):
             {'alpha.private.events': {'id':'کلید رویداد'}},'now')
         self.assertIn('کلید رویداد',output)
         self.assertEqual(gaps,0)
+
+    def test_snapshot_cli_uses_field_descriptions_without_dsn(self):
+        snapshot = {
+            'created_utc': '2026-11-24T10:00:00Z',
+            'scope': 'selected-databases-only',
+            'source_release': 'test-release',
+            'database_identity': {'database': 'fixture_db', 'server_version': '17'},
+            'database_role': 'read_only_fixture',
+            'databases_attempted': ['fixture_db'],
+            'databases_inaccessible': [],
+            'relations': [{
+                'database': 'fixture_db',
+                'relation': {'schema': 'public', 'name': 'safe_table', 'kind': 'r',
+                             'rls': True, 'force_rls': False, 'comment': None},
+                'columns': [{'name': 'safe_name', 'pg_type': 'text', 'notnull': True,
+                             'default': None, 'comment': None, 'identity': '', 'generated': ''}],
+                'constraints': [], 'indexes': [], 'policies': [], 'triggers': [],
+            }],
+        }
+        descriptions = {'fixture_db.public.safe_table': {'safe_name': 'A reviewed display label'}}
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            snapshot_path = root / 'snapshot.json'
+            descriptions_path = root / 'descriptions.json'
+            output_path = root / 'output'
+            snapshot_path.write_text(json.dumps(snapshot), encoding='utf-8')
+            descriptions_path.write_text(json.dumps(descriptions), encoding='utf-8')
+            old_env = dict(os.environ)
+            try:
+                os.environ.pop('RAHGARD_SCHEMA_DSN', None)
+                argv = ['rahgard_schema_documenter.py', '--catalog-snapshot-json', str(snapshot_path),
+                        '--descriptions-json', str(descriptions_path), '--output-root', str(output_path)]
+                with patch('sys.argv', argv), contextlib.redirect_stdout(io.StringIO()) as stdout:
+                    self.assertEqual(doc.main(), 0)
+                result = json.loads(stdout.getvalue())
+                self.assertEqual(result['relations_documented'], 1)
+                manifest = json.loads((output_path / 'manifest.json').read_text(encoding='utf-8'))
+                self.assertFalse(manifest['complete'])
+                self.assertEqual(manifest['coverage_scope'], 'selected-databases-only')
+                self.assertNotIn('\\', manifest['relations'][0]['path'])
+                relation_doc = next(output_path.rglob('safe_table-*.md')).read_text(encoding='utf-8')
+                self.assertIn('A reviewed display label', relation_doc)
+                self.assertIn('**0** از **1**', relation_doc)
+            finally:
+                os.environ.clear()
+                os.environ.update(old_env)
 
 
 if __name__ == '__main__':

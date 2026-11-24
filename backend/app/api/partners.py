@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -30,14 +30,109 @@ class OrganizationInput(BaseModel):
     registration_country: str = Field(default="IR", pattern=r"^[A-Z]{2}$")
 
 
+class OrganizationUpdateInput(OrganizationInput):
+    """Editable business profile fields; lifecycle state is never client-set."""
+
+
+class OrganizationReviewSubmission(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    evidence_refs: list[str] = Field(min_length=1, max_length=20)
+    policy_version: str = Field(default="partner-verification-v1", min_length=1, max_length=80)
+
+    @field_validator("evidence_refs")
+    @classmethod
+    def nonempty_refs(cls, values: list[str]) -> list[str]:
+        refs = [value.strip() for value in values]
+        if any(not value or len(value) > 1000 for value in refs) or len(refs) != len(set(refs)):
+            raise ValueError("verification_evidence_refs_invalid")
+        return refs
+
+
+class OrganizationReviewDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["verified", "needs_information", "rejected"]
+    reason: str = Field(min_length=10, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def nonblank_review_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("review_reason_required")
+        return value.strip()
+
+
+class OrganizationApplicationDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["approve", "reject"]
+    reason: str = Field(min_length=10, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def nonblank_application_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("review_reason_required")
+        return value.strip()
+
+
+class OrganizationParticipationDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["activate", "deactivate", "suspend"]
+    reason: str = Field(min_length=10, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def nonblank_participation_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("review_reason_required")
+        return value.strip()
+
+
+def _require_platform_capability(cur, user: AuthenticatedUser, capability: str) -> None:
+    allowed = cur.execute(
+        "SELECT partner.has_platform_capability(%s,%s) AS allowed",
+        (user.user_id, capability),
+    ).fetchone()
+    if not allowed or not allowed["allowed"]:
+        raise HTTPException(status_code=403, detail="partner_review_not_granted")
+
+
 class ServiceInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     service_type: str = Field(min_length=1, max_length=80)
-    service_key: str = Field(min_length=1, max_length=160, pattern=r"^[a-z0-9][a-z0-9_-]*$")
     locale: Literal["fa-IR", "en-US", "ar"] = "fa-IR"
     display_name: str = Field(min_length=1, max_length=240)
     description: str | None = Field(default=None, max_length=4000)
     branch_id: UUID | None = None
+
+
+class ServiceUpdateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    service_type: str = Field(min_length=1, max_length=80)
+    locale: Literal["fa-IR", "en-US", "ar"] = "fa-IR"
+    display_name: str = Field(min_length=1, max_length=240)
+    description: str | None = Field(default=None, max_length=4000)
+
+
+class ScheduleUpdateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    service_id: UUID
+    schedule_type: Literal["opening_window", "departure", "appointment", "event", "other"]
+    timezone: str | None = Field(default=None, max_length=80)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    recurrence: dict[str, object] | None = None
+    observed_at: datetime | None = None
+    valid_until: datetime | None = None
+
+
+class OfferUpdateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    service_id: UUID
+    schedule_id: UUID | None = None
+    offer_type: str = Field(min_length=1, max_length=80)
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
+    capacity_limit: int | None = Field(default=None, ge=0)
 
 
 class ServiceDestinationInput(BaseModel):
@@ -177,6 +272,23 @@ def _connection(settings: Settings):
 
 def _db_error(error: psycopg.Error) -> None:
     if isinstance(error, psycopg.errors.InsufficientPrivilege):
+        # In the guarded disposable acceptance only, include non-sensitive
+        # PostgreSQL privilege diagnostics so RLS/GRANT regressions can be
+        # distinguished without logging SQL, parameters, or traveler data.
+        if __import__("os").environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") == "1":
+            diag = getattr(error, "diag", None)
+            object_name = ".".join(filter(None, (
+                getattr(diag, "schema_name", None), getattr(diag, "table_name", None),
+            )))
+            primary = getattr(diag, "message_primary", "") or ""
+            match = __import__("re").search(
+                r'(?:table|relation|schema|sequence|function) "([A-Za-z0-9_.]+)"', primary,
+            )
+            if not object_name and match:
+                object_name = match.group(1)
+            if not __import__("re").fullmatch(r"[A-Za-z0-9_.]{1,128}", object_name or ""):
+                object_name = "unknown_object"
+            raise HTTPException(403, f"db_privilege_denied_{error.sqlstate or 'unknown'}_{object_name}") from None
         raise HTTPException(403, "organization_access_denied") from None
     if isinstance(
         error,
@@ -426,7 +538,7 @@ def organizations(
         with _connection(settings) as conn, conn.cursor() as cur:
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
             cur.execute(
-                "SELECT organization_id,display_name,organization_type,verification_status,participation_status,application_status FROM partner.organizations ORDER BY created_at DESC LIMIT 100"
+                "SELECT organization_id,legal_name,display_name,organization_type,registration_country,verification_status,participation_status,application_status,created_at,updated_at FROM partner.organizations ORDER BY created_at DESC LIMIT 100"
             )
             return {"items": cur.fetchall()}
     except psycopg.Error as exc:
@@ -464,6 +576,278 @@ def create_organization(
         _db_error(exc)
 
 
+@router.put("/organizations/{organization_id}")
+def update_organization(
+    organization_id: UUID,
+    body: OrganizationUpdateInput,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Edit only profile fields; lifecycle and verification remain reviewer-owned."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """UPDATE partner.organizations SET legal_name=%s,display_name=%s,
+                          organization_type=%s,registration_country=%s,updated_at=now()
+                   WHERE organization_id=%s RETURNING organization_id,legal_name,display_name,
+                         organization_type,registration_country,application_status,
+                         verification_status,participation_status,updated_at""",
+                (body.legal_name.strip(), body.display_name.strip(), body.organization_type,
+                 body.registration_country, organization_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="organization_not_found")
+            return row
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.post("/organizations/{organization_id}/verification-cases", status_code=201)
+def submit_organization_for_review(
+    organization_id: UUID,
+    body: OrganizationReviewSubmission,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Company owner submits evidence; this does not verify or activate it."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            org = cur.execute(
+                """SELECT organization_id,created_by,application_status,verification_status
+                   FROM partner.organizations WHERE organization_id=%s FOR UPDATE""",
+                (organization_id,),
+            ).fetchone()
+            if org is None:
+                raise HTTPException(status_code=404, detail="organization_not_found")
+            if org["created_by"] != user.user_id:
+                raise HTTPException(status_code=403, detail="organization_owner_required")
+            if org["verification_status"] == "verified":
+                raise HTTPException(status_code=409, detail="organization_already_verified")
+            if org["application_status"] not in {"draft", "needs_information", "withdrawn", "rejected"}:
+                raise HTTPException(status_code=409, detail="organization_review_already_pending")
+            cur.execute(
+                """INSERT INTO partner.verification_cases
+                     (organization_id,status,evidence_refs,submitted_by,policy_version,submitted_at)
+                   VALUES (%s,'submitted',%s,%s,%s,now())
+                   RETURNING case_id,organization_id,status,submitted_at""",
+                (organization_id, Jsonb(body.evidence_refs), user.user_id, body.policy_version),
+            )
+            case = cur.fetchone()
+            cur.execute(
+                """UPDATE partner.organizations SET application_status='submitted',updated_at=now()
+                   WHERE organization_id=%s""",
+                (organization_id,),
+            )
+            return {**case, "verification_status": org["verification_status"],
+                    "participation_status": "inactive"}
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.get("/platform/organization-review")
+def organization_review_queue(
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Private reviewer queue; capability comes only from operator grant state."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            _require_platform_capability(cur, user, "organization_review")
+            cur.execute(
+                """WITH latest_case AS (
+                       SELECT DISTINCT ON (organization_id)
+                              case_id,organization_id,status,evidence_refs,submitted_at,
+                              policy_version,submitted_by,created_at
+                       FROM partner.verification_cases
+                       ORDER BY organization_id, submitted_at DESC NULLS LAST,
+                                created_at DESC, case_id DESC
+                   )
+                   SELECT c.case_id,c.organization_id,c.status AS case_status,
+                          c.evidence_refs,c.submitted_at,c.policy_version,
+                          o.legal_name,o.display_name,o.organization_type,
+                          o.registration_country,o.created_by,o.application_status,
+                          o.verification_status,o.participation_status
+                   FROM latest_case c
+                   JOIN partner.organizations o USING (organization_id)
+                   WHERE c.status IN ('submitted','needs_information','verified')
+                     AND o.application_status IN ('submitted','approved')
+                   ORDER BY c.submitted_at,c.case_id LIMIT 100"""
+            )
+            return {"items": cur.fetchall()}
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.post("/platform/verification-cases/{case_id}/decision")
+def decide_organization_verification(
+    case_id: UUID,
+    body: OrganizationReviewDecision,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Record evidence review separately from application approval/activation."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            _require_platform_capability(cur, user, "organization_review")
+            case = cur.execute(
+                """SELECT c.case_id,c.organization_id,c.submitted_by,c.status,
+                          o.created_by,o.application_status,o.verification_status
+                   FROM partner.verification_cases c JOIN partner.organizations o USING(organization_id)
+                   WHERE c.case_id=%s FOR UPDATE OF c,o""",
+                (case_id,),
+            ).fetchone()
+            if case is None:
+                raise HTTPException(status_code=404, detail="verification_case_not_found")
+            if case["submitted_by"] == user.user_id or case["created_by"] == user.user_id:
+                raise HTTPException(status_code=403, detail="self_review_forbidden")
+            if case["status"] not in {"submitted", "needs_information"}:
+                raise HTTPException(status_code=409, detail="verification_case_not_reviewable")
+            next_status = body.decision
+            cur.execute(
+                """UPDATE partner.verification_cases
+                   SET status=%s,reviewer_user_id=%s,decision_reason=%s,decided_at=now()
+                   WHERE case_id=%s RETURNING case_id,organization_id,status,reviewer_user_id,decided_at""",
+                (next_status, user.user_id, body.reason, case_id),
+            )
+            result = cur.fetchone()
+            if body.decision == "verified":
+                cur.execute(
+                    """UPDATE partner.organizations SET verification_status='verified',updated_at=now()
+                       WHERE organization_id=%s""", (case["organization_id"],),
+                )
+            elif body.decision == "needs_information":
+                cur.execute(
+                    """UPDATE partner.organizations SET application_status='needs_information',updated_at=now()
+                       WHERE organization_id=%s""", (case["organization_id"],),
+                )
+            else:
+                cur.execute(
+                    """UPDATE partner.organizations SET verification_status='rejected',
+                              application_status='rejected',participation_status='inactive',updated_at=now()
+                       WHERE organization_id=%s""", (case["organization_id"],),
+                )
+            audit_decision = {"verified": "approve", "needs_information": "request_changes", "rejected": "reject"}[body.decision]
+            cur.execute(
+                """INSERT INTO partner.review_events
+                     (organization_id,entity_type,entity_id,decision,reviewer_user_id,reason,policy_version)
+                   VALUES (%s,'verification_case',%s,%s,%s,%s,'partner-verification-v1')""",
+                (case["organization_id"], case_id, audit_decision, user.user_id, body.reason),
+            )
+            return result
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.post("/platform/organizations/{organization_id}/application-decision")
+def decide_organization_application(
+    organization_id: UUID,
+    body: OrganizationApplicationDecision,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Application approval is a distinct transition after verification."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            _require_platform_capability(cur, user, "organization_review")
+            org = cur.execute(
+                """SELECT organization_id,created_by,verification_status,application_status
+                   FROM partner.organizations WHERE organization_id=%s FOR UPDATE""",
+                (organization_id,),
+            ).fetchone()
+            if org is None:
+                raise HTTPException(status_code=404, detail="organization_not_found")
+            if org["created_by"] == user.user_id:
+                raise HTTPException(status_code=403, detail="self_review_forbidden")
+            if org["application_status"] != "submitted":
+                raise HTTPException(status_code=409, detail="organization_application_not_submitted")
+            if body.decision == "approve" and org["verification_status"] != "verified":
+                raise HTTPException(status_code=409, detail="organization_not_verified")
+            next_state = "approved" if body.decision == "approve" else "rejected"
+            cur.execute(
+                """UPDATE partner.organizations SET application_status=%s,
+                          participation_status=CASE WHEN %s='rejected' THEN 'inactive' ELSE participation_status END,
+                          updated_at=now() WHERE organization_id=%s
+                   RETURNING organization_id,application_status,verification_status,participation_status""",
+                (next_state, next_state, organization_id),
+            )
+            result = cur.fetchone()
+            cur.execute(
+                """INSERT INTO partner.review_events
+                     (organization_id,entity_type,entity_id,decision,reviewer_user_id,reason,policy_version)
+                   VALUES (%s,'organization',%s,%s,%s,%s,'partner-application-v1')""",
+                (organization_id, organization_id, body.decision, user.user_id, body.reason),
+            )
+            return result
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.post("/platform/organizations/{organization_id}/participation-decision")
+def decide_organization_participation(
+    organization_id: UUID,
+    body: OrganizationParticipationDecision,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Activate/deactivate/suspend sharing eligibility with a separate audit."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            _require_platform_capability(cur, user, "organization_review")
+            org = cur.execute(
+                """SELECT organization_id,created_by,verification_status,application_status,participation_status
+                   FROM partner.organizations WHERE organization_id=%s FOR UPDATE""",
+                (organization_id,),
+            ).fetchone()
+            if org is None:
+                raise HTTPException(status_code=404, detail="organization_not_found")
+            if org["created_by"] == user.user_id:
+                raise HTTPException(status_code=403, detail="self_review_forbidden")
+            if body.decision == "activate" and not (
+                org["verification_status"] == "verified" and org["application_status"] == "approved"
+            ):
+                raise HTTPException(status_code=409, detail="organization_must_be_verified_and_approved")
+            next_state = {"activate": "active", "deactivate": "inactive", "suspend": "suspended"}[body.decision]
+            cur.execute(
+                """UPDATE partner.organizations SET participation_status=%s,updated_at=now()
+                   WHERE organization_id=%s RETURNING organization_id,application_status,verification_status,participation_status""",
+                (next_state, organization_id),
+            )
+            result = cur.fetchone()
+            cur.execute(
+                """INSERT INTO partner.review_events
+                     (organization_id,entity_type,entity_id,decision,reviewer_user_id,reason,policy_version)
+                   VALUES (%s,'organization',%s,%s,%s,%s,'partner-participation-v1')""",
+                (organization_id, organization_id, body.decision, user.user_id, body.reason),
+            )
+            return result
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
 @router.post("/organizations/{organization_id}/services", status_code=201)
 def create_service(
     organization_id: UUID,
@@ -482,7 +866,7 @@ def create_service(
                     organization_id,
                     body.branch_id,
                     body.service_type.strip(),
-                    body.service_key,
+                    f"service-{uuid4().hex}",
                     user.user_id,
                 ),
             )
@@ -498,6 +882,43 @@ def create_service(
                 ),
             )
             return row
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.put("/organizations/{organization_id}/services/{service_id}")
+def update_service(
+    organization_id: UUID,
+    service_id: UUID,
+    body: ServiceUpdateInput,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    """Update a private, unapproved service and its current locale content."""
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """UPDATE partner.services SET service_type=%s,updated_at=now()
+                   WHERE organization_id=%s AND service_id=%s
+                   RETURNING service_id,status""",
+                (body.service_type.strip(), organization_id, service_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="service_not_found")
+            cur.execute(
+                """INSERT INTO partner.service_localizations
+                     (organization_id,service_id,locale,display_name,description)
+                   VALUES (%s,%s,%s,%s,%s)
+                   ON CONFLICT (service_id,locale) DO UPDATE SET
+                     display_name=EXCLUDED.display_name,description=EXCLUDED.description,updated_at=now()""",
+                (organization_id, service_id, body.locale, body.display_name.strip(), body.description),
+            )
+            return row
+    except HTTPException:
+        raise
     except psycopg.Error as exc:
         _db_error(exc)
 
@@ -533,18 +954,51 @@ def create_schedule(
         _db_error(exc)
 
 
+@router.put("/organizations/{organization_id}/schedules/{schedule_id}")
+def update_schedule(
+    organization_id: UUID,
+    schedule_id: UUID,
+    body: ScheduleUpdateInput,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """UPDATE partner.schedules SET service_id=%s,schedule_type=%s,timezone=%s,
+                          starts_at=%s,ends_at=%s,recurrence=%s::jsonb,observed_at=%s,
+                          valid_until=%s
+                   WHERE organization_id=%s AND schedule_id=%s
+                   RETURNING schedule_id,service_id,status""",
+                (body.service_id, body.schedule_type, body.timezone, body.starts_at, body.ends_at,
+                 Jsonb(body.recurrence) if body.recurrence is not None else None,
+                 body.observed_at, body.valid_until, organization_id, schedule_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="schedule_not_found")
+            return row
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
 @router.get("/organizations/{organization_id}/workspace")
 def workspace(
     organization_id: UUID,
     user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
     settings: Annotated[Settings, Depends(get_settings)],
+    locale: Literal["fa-IR", "en-US", "ar"] = Query(default="fa-IR"),
 ):
     try:
         with _connection(settings) as conn, conn.cursor() as cur:
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
             result = {}
             for name, sql in {
-                "services": "SELECT service_id,service_key,service_type,status,public_fields FROM partner.services WHERE organization_id=%s ORDER BY created_at DESC LIMIT 100",
+                "services": "SELECT s.service_id,s.service_type,s.status,l.display_name,l.description FROM partner.services s LEFT JOIN partner.service_localizations l ON l.organization_id=s.organization_id AND l.service_id=s.service_id AND l.locale=%s WHERE s.organization_id=%s ORDER BY s.created_at DESC LIMIT 100",
                 "schedules": "SELECT schedule_id,service_id,schedule_type,timezone,starts_at,ends_at,status,observed_at,valid_until FROM partner.schedules WHERE organization_id=%s ORDER BY created_at DESC LIMIT 200",
                 "offers": "SELECT offer_id,service_id,schedule_id,offer_type,status,valid_from,valid_until,capacity_limit FROM partner.offers WHERE organization_id=%s ORDER BY created_at DESC LIMIT 200",
                 "prices": "SELECT price_id,offer_id,price_state,amount,currency,denomination,unit,observed_at,valid_until FROM partner.prices WHERE organization_id=%s ORDER BY created_at DESC LIMIT 200",
@@ -554,7 +1008,7 @@ def workspace(
                 # source for destination details in the private workspace too.
                 "destinations": "SELECT sd.service_id,sd.destination_id,sd.relation_type,sd.status,d.canonical_name,d.province_name,d.city_name FROM partner.service_destinations sd JOIN knowledge.production_destinations d USING(destination_id) WHERE sd.organization_id=%s ORDER BY sd.created_at DESC LIMIT 200",
             }.items():
-                cur.execute(sql, (organization_id,))
+                cur.execute(sql, (locale, organization_id) if name == "services" else (organization_id,))
                 result[name] = cur.fetchall()
             return result
     except psycopg.Error as exc:
@@ -625,6 +1079,36 @@ def create_offer(
                 ),
             )
             return cur.fetchone()
+    except psycopg.Error as exc:
+        _db_error(exc)
+
+
+@router.put("/organizations/{organization_id}/offers/{offer_id}")
+def update_offer(
+    organization_id: UUID,
+    offer_id: UUID,
+    body: OfferUpdateInput,
+    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
+    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    try:
+        with _connection(settings) as conn, conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+            cur.execute(
+                """UPDATE partner.offers SET service_id=%s,schedule_id=%s,offer_type=%s,
+                          valid_from=%s,valid_until=%s,capacity_limit=%s,updated_at=now()
+                   WHERE organization_id=%s AND offer_id=%s
+                   RETURNING offer_id,service_id,schedule_id,status""",
+                (body.service_id, body.schedule_id, body.offer_type.strip(), body.valid_from,
+                 body.valid_until, body.capacity_limit, organization_id, offer_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="offer_not_found")
+            return row
+    except HTTPException:
+        raise
     except psycopg.Error as exc:
         _db_error(exc)
 

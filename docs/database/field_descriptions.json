@@ -11,7 +11,18 @@
     "participation_status": "وضعیت فعال‌بودن مشارکت سازمان در سامانه.",
     "application_status": "وضعیت درخواست عضویت/پذیرش سازمان.",
     "created_at": "زمان ایجاد رکورد در دیتابیس.",
-    "updated_at": "زمان آخرین به‌روزرسانی رکورد."
+    "updated_at": "زمان آخرین به‌روزرسانی رکورد.",
+    "_object": {
+      "read_access": "Member or explicitly granted organization reviewer, constrained by RLS.",
+      "write_access": "Owners/managers edit profile fields only; lifecycle transitions require the independent reviewer API.",
+      "public_exposure": "Private by default; only verified, approved, active, non-test organizations enter the eligibility view.",
+      "api": "GET/POST /api/v1/partners/organizations; PUT /api/v1/partners/organizations/{organization_id}; verification and separate reviewer decision routes.",
+      "ui": "PartnerWorkspace: company registration/profile and reviewer queue."
+    },
+    "registration_number": "Optional legal registration identifier supplied by the organization; sensitive business identity data.",
+    "primary_admin_area_id": "Optional resolved reference to the organization?s primary administrative area.",
+    "closed_at": "Timestamp that the organization was closed; a closed organization is not share-eligible.",
+    "is_test": "Operator-controlled test-data marker; test organizations are excluded from share eligibility."
   },
   "partner.memberships": {
     "_table": "عضویت کاربران در یک سازمان و نقش/فعال‌بودن آن‌ها.",
@@ -19,7 +30,18 @@
     "user_id": "ارجاع به حساب شخص عضو سازمان.",
     "role": "نقش عضو در سازمان؛ محدوده دسترسی از سیاست‌های مجوز استخراج شود.",
     "status": "وضعیت عضویت.",
-    "accepted_at": "زمان پذیرش عضویت یا دعوت."
+    "accepted_at": "زمان پذیرش عضویت یا دعوت.",
+    "_object": {
+      "read_access": "Organization members and reviewer capabilities only where policies allow.",
+      "write_access": "Created with company registration or invitation flow; no generic membership editor.",
+      "public_exposure": "Never public.",
+      "api": "Created internally by POST /organizations; no general membership CRUD route.",
+      "ui": "No ordinary user form; owner/member management is not exposed in this workspace."
+    },
+    "membership_id": "Unique identifier for the organization membership.",
+    "invited_by": "Inviting user when membership originated from an invitation; nullable for owner registration.",
+    "revoked_at": "Timestamp that an active membership was revoked; must match revoked status.",
+    "created_at": "Database creation timestamp."
   },
   "partner.services": {
     "_table": "خدمات قابل ارائه توسط سازمان؛ اطلاعات عمومی خدمت از قرارداد انتشار جداست.",
@@ -31,7 +53,17 @@
     "created_by": "کاربر ثبت‌کننده خدمت.",
     "public_fields": "فراداده/فیلدهای عمومی‌شدنی خدمت؛ کلیدهای JSON باید جداگانه مستند شوند.",
     "status": "وضعیت چرخه عمر خدمت.",
-    "created_at": "زمان ایجاد خدمت."
+    "created_at": "زمان ایجاد خدمت.",
+    "_object": {
+      "read_access": "Active organization owner/manager/editor through membership RLS.",
+      "write_access": "Create/update private draft or submitted values; service key is generated server-side.",
+      "public_exposure": "Private until separately reviewed and published.",
+      "api": "POST/PUT /organizations/{organization_id}/services[/{service_id}]; GET /organizations/{organization_id}/workspace.",
+      "ui": "PartnerWorkspace first-service form and editable service list."
+    },
+    "internal_notes": "Private organization-side notes; never part of public service output.",
+    "updated_at": "Timestamp of the latest service change.",
+    "published_at": "Publication timestamp; required only for published state and set by an authorized review path."
   },
   "partner.service_localizations": {
     "_table": "نام و توضیح ترجمه‌شده خدمت در زبان‌های قابل پشتیبانی.",
@@ -39,7 +71,18 @@
     "service_id": "ارجاع به خدمت.",
     "locale": "زبان/محل نمایشی، مانند fa-IR یا en-US بر اساس قرارداد API.",
     "display_name": "نام نمایشی خدمت در آن زبان.",
-    "description": "توضیحات خدمت در همان زبان."
+    "description": "توضیحات خدمت در همان زبان.",
+    "_object": {
+      "read_access": "Same organization membership and service-review policy.",
+      "write_access": "Written as part of service create/update API; no independent SQL form.",
+      "public_exposure": "Only approved published content can be public.",
+      "api": "POST/PUT service routes accept locale, display_name and description.",
+      "ui": "PartnerWorkspace service name/description fields."
+    },
+    "content_status": "Locale content lifecycle: draft, submitted, approved, rejected, or withdrawn.",
+    "reviewed_at": "Timestamp of editorial review when present.",
+    "created_at": "Database creation timestamp.",
+    "updated_at": "Timestamp of the latest localization update."
   },
   "partner.schedules": {
     "_table": "زمان‌بندی خدمت و بازه اعتبار اطلاعات زمانی.",
@@ -53,7 +96,15 @@
     "recurrence": "قاعده تکرار؛ فرمت دقیق از API/SQL.",
     "observed_at": "زمان آخرین مشاهده/تأیید این داده زمانی.",
     "valid_until": "انقضای اعتبار اطلاع زمان‌بندی.",
-    "status": "وضعیت زمان‌بندی."
+    "status": "وضعیت زمان‌بندی.",
+    "_object": {
+      "read_access": "Organization owner/manager/editor/availability operator under RLS.",
+      "write_access": "Create/edit draft schedule; all instants use ISO timestamp and explicit time zone when times exist.",
+      "public_exposure": "Private unless independently reviewed. Freshness is controlled by observed_at/valid_until.",
+      "api": "POST/PUT /organizations/{organization_id}/schedules[/{schedule_id}]; workspace GET.",
+      "ui": "PartnerWorkspace optional schedule form and edit list."
+    },
+    "created_at": "Database creation timestamp."
   },
   "partner.offers": {
     "_table": "پیشنهاد تجاری/بسته خدمت که ممکن است زمان‌بندی و ظرفیت داشته باشد.",
@@ -65,7 +116,18 @@
     "status": "وضعیت پیشنهاد.",
     "valid_from": "آغاز دوره اعتبار پیشنهاد.",
     "valid_until": "پایان دوره اعتبار پیشنهاد.",
-    "capacity_limit": "حداکثر ظرفیت قابل ارائه؛ واحد از قرارداد API."
+    "capacity_limit": "حداکثر ظرفیت قابل ارائه؛ واحد از قرارداد API.",
+    "_object": {
+      "read_access": "Organization owner/manager/editor under RLS.",
+      "write_access": "Create/edit unpublished offer; capacity is non-negative and published state is reviewer-controlled.",
+      "public_exposure": "Private until separate publication.",
+      "api": "POST/PUT /organizations/{organization_id}/offers[/{offer_id}]; workspace GET.",
+      "ui": "PartnerWorkspace optional offer form and edit list."
+    },
+    "created_by": "User account that created the offer.",
+    "created_at": "Database creation timestamp.",
+    "updated_at": "Timestamp of the latest editable offer change.",
+    "published_at": "Publication timestamp; a published offer must have this value and publication is reviewer-controlled."
   },
   "partner.prices": {
     "_table": "اقلام قیمت پیشنهادی همراه واحد و کیفیت/اعتبار ثبت مبلغ.",
@@ -78,13 +140,31 @@
     "denomination": "مقیاس نمایشی مبلغ مانند میلیون؛ واحدهای واقعی باید از قرارداد استخراج شوند.",
     "unit": "مبنای قیمت مثل نفر/شب/خدمت (بسته به enum/قرارداد).",
     "observed_at": "زمان مشاهده/دریافت قیمت.",
-    "valid_until": "پایان اعتبار قیمت."
+    "valid_until": "پایان اعتبار قیمت.",
+    "_object": {
+      "read_access": "Organization member according to price RLS.",
+      "write_access": "POST observation only; previous observations are preserved.",
+      "public_exposure": "Not a guaranteed current price; validity and source provenance must be shown.",
+      "api": "POST /organizations/{organization_id}/prices; workspace GET.",
+      "ui": "PartnerWorkspace optional price observation form/history."
+    },
+    "tax_included": "Whether the asserted amount includes tax; nullable when not known or not applicable.",
+    "valid_from": "Start of the stated price validity interval, when provided.",
+    "source_kind": "Price provenance: partner_asserted, approved_feed, or platform_observation.",
+    "created_at": "Database creation timestamp."
   },
   "partner.share_eligible_organizations": {
     "_table": "نمای فقط‌خواندنی سازمان‌های فعال و تأییدشده که می‌توانند درخواست مسافر دریافت کنند.",
     "organization_id": "شناسه سازمان گیرنده.",
     "display_name": "نام نمایشی گیرنده.",
-    "organization_type": "نوع سازمان گیرنده."
+    "organization_type": "نوع سازمان گیرنده.",
+    "_object": {
+      "read_access": "Application can read the view; rows are not directly writable.",
+      "write_access": "Read-only view.",
+      "public_exposure": "Visible as recipient choices only through traveler share-options endpoint after authentication.",
+      "api": "GET /trips/{trip_id}/company-share-options reads this projection.",
+      "ui": "TravelerWorkspace company-sharing selector; absent when there are no eligible organizations."
+    }
   },
   "partner.traveler_request_shares": {
     "_table": "اشتراک‌گذاری موردی و رضایت‌مندانه درخواست یک سفر با یک سازمان.",
@@ -95,7 +175,15 @@
     "consent_policy_version": "نسخه قرارداد رضایت معتبر هنگام اشتراک‌گذاری.",
     "include_original_request": "مشخص می‌کند متن اولیه خام درخواست نیز با رضایت صریح ضمیمه شده یا خیر.",
     "consented_at": "زمان اخذ رضایت و ایجاد دسترسی.",
-    "revoked_at": "زمان لغو دسترسی، در صورت وقوع."
+    "revoked_at": "زمان لغو دسترسی، در صورت وقوع.",
+    "_object": {
+      "read_access": "Trip owner or active organization members while share is not revoked.",
+      "write_access": "Created only after explicit traveler consent; traveler may revoke.",
+      "public_exposure": "Private, authenticated, tenant-scoped.",
+      "api": "POST/GET/DELETE /trips/{trip_id}/company-shares.",
+      "ui": "Traveler journey company-sharing consent flow."
+    },
+    "created_at": "Timestamp the explicit traveler-authorized share was created."
   },
   "partner.traveler_request_revisions": {
     "_table": "نسخه‌های تغییرناپذیر/بازنگری‌شده درخواست و برنامه اشتراک‌گذاری‌شده با سازمان.",
@@ -108,7 +196,15 @@
     "request_snapshot": "نمای ثابت و محدودشده شرایط سفر در لحظه ارسال؛ اطلاعات شخصی باید کنترل دسترسی داشته باشد.",
     "itinerary_snapshot": "نمای ثابت برنامه سفر در لحظه ارسال.",
     "is_synthetic": "علامت داده آزمایشی؛ نباید در صندوق تولیدی به کاربر واقعی نشان داده شود.",
-    "created_at": "زمان ایجاد نسخه."
+    "created_at": "زمان ایجاد نسخه.",
+    "_object": {
+      "read_access": "Only active recipient members and traveler while share remains active.",
+      "write_access": "Created by the revision-capture function; no direct client write grant.",
+      "public_exposure": "Private; snapshots can contain sensitive trip requirements.",
+      "api": "Read through protected organization request/revision routes.",
+      "ui": "PartnerWorkspace protected inbox and request/itinerary views."
+    },
+    "created_by": "Traveler account whose authorized change generated this immutable revision."
   },
   "conversation.conversations": {
     "_table": "ظرف مکالمه مسافر با دستیار پیرامون سفرهای ثبت‌شده.",
@@ -155,5 +251,188 @@
     "_table": "سقف کلی استفاده روزانه دستیار در سامانه.",
     "budget_day": "روز محاسبه سهمیه بر مبنای UTC.",
     "hit_count": "تعداد کل نوبت‌های مصرف‌شده در روز."
+  },
+  "partner.platform_grants": {
+    "_object": {
+      "read_access": "Capability-check function is used by the server; table is operator-only.",
+      "write_access": "No application-role INSERT/UPDATE after migration 0024; no self-service grant route.",
+      "public_exposure": "Never public.",
+      "api": "No user-facing route; operator provisioning only.",
+      "ui": "No UI. Do not expose generic admin CRUD."
+    },
+    "_table": "Operator-controlled platform capability grants.",
+    "user_id": "User receiving the platform capability.",
+    "capability": "Granted platform permission: organization_review, service_review, or offer_review.",
+    "granted_by": "Operator user that issued the grant.",
+    "reason": "Required audit rationale, 10?1000 characters.",
+    "granted_at": "Grant timestamp.",
+    "revoked_at": "Revocation timestamp; a non-NULL value disables the grant."
+  },
+  "partner.invitations": {
+    "_object": {
+      "read_access": "Organization owner/manager only under RLS.",
+      "write_access": "No user-facing invitation route currently registered.",
+      "public_exposure": "Never public; token/email digest are sensitive.",
+      "api": "No application endpoint found in current partner router.",
+      "ui": "No UI in this milestone."
+    },
+    "_table": "Hashed, expiring organization membership invitations.",
+    "invitation_id": "Unique identifier for a membership invitation.",
+    "organization_id": "Organization the invite targets.",
+    "email_digest": "One-way digest of the target email; raw email is not stored in this field.",
+    "token_hash": "Unique one-way invitation token hash; never return the token hash to users.",
+    "proposed_role": "Role offered: manager, editor, availability_operator, or viewer.",
+    "invited_by": "User account that issued the invitation.",
+    "expires_at": "Timestamp after which the invitation cannot be accepted.",
+    "accepted_at": "Timestamp of acceptance, if accepted.",
+    "revoked_at": "Timestamp of revocation, if revoked.",
+    "created_at": "Database creation timestamp."
+  },
+  "partner.verification_cases": {
+    "_object": {
+      "read_access": "Submitting organization owner/manager; separate reviewer capability for decisions.",
+      "write_access": "POST submission; verification decision only through reviewer capability; self-review is forbidden.",
+      "public_exposure": "Private. Evidence references must be reviewed independently.",
+      "api": "POST /organizations/{organization_id}/verification-cases; GET /platform/organization-review; POST /platform/verification-cases/{case_id}/decision.",
+      "ui": "PartnerWorkspace evidence submission and reviewer queue."
+    },
+    "_table": "Organization evidence submission and reviewer decision lifecycle.",
+    "case_id": "Unique identifier for one organization verification submission.",
+    "organization_id": "Organization under review.",
+    "status": "Verification case lifecycle: draft, submitted, needs_information, verified, rejected, or withdrawn.",
+    "evidence_refs": "JSON array of evidence references submitted for independent review; values are untrusted until checked.",
+    "submitted_by": "User account that submitted the evidence.",
+    "reviewer_user_id": "Independent reviewer account; must differ from submitter for a final decision.",
+    "policy_version": "Identifier of the review policy used.",
+    "decision_reason": "Reviewer rationale, if a decision has been made.",
+    "submitted_at": "Submission timestamp.",
+    "decided_at": "Final decision timestamp.",
+    "created_at": "Database creation timestamp."
+  },
+  "partner.branches": {
+    "_object": {
+      "read_access": "RLS is present; no branch endpoint is implemented in the current API router.",
+      "write_access": "No user-facing write API currently found.",
+      "public_exposure": "Not public absent later review/publication. Coordinates are not presumed to be entrances.",
+      "api": "No endpoint in backend/app/api/partners.py.",
+      "ui": "No form in this workspace; location entry is intentionally absent."
+    },
+    "_table": "Optional service-location record with explicit coordinate role.",
+    "branch_id": "Unique identifier for an organization branch/service location.",
+    "organization_id": "Owning organization and tenant boundary.",
+    "display_name": "Human-readable name of the branch.",
+    "address_text": "Partner-provided address text; not independently geocoded.",
+    "admin_area_id": "Reference to a canonical administrative-area record when resolved.",
+    "location": "PostGIS Point in SRID 4326; the role column determines whether it is an approximate reference, service location, or entrance.",
+    "location_role": "Coordinate role: service_location, entrance, approximate_reference, or unknown; entrance requires a coordinate source.",
+    "coordinate_source": "Provenance for coordinates; required for an entrance role.",
+    "contact_public": "Partner-provided contact detail intended for public display only after applicable review.",
+    "status": "Lifecycle state: draft, submitted, approved, suspended, or withdrawn.",
+    "created_at": "Database creation timestamp.",
+    "updated_at": "Timestamp of the latest profile update."
+  },
+  "partner.service_destinations": {
+    "_object": {
+      "read_access": "Organization membership RLS; destination must resolve through production catalogue view.",
+      "write_access": "POST only in current API; relationship is not a publication decision.",
+      "public_exposure": "Private draft link; destination identity remains canonical.",
+      "api": "POST /organizations/{organization_id}/services/{service_id}/destinations.",
+      "ui": "PartnerWorkspace optional destination-link form; only API-returned published choices."
+    },
+    "_table": "Relationship from a company service to a canonical published destination.",
+    "organization_id": "Owning organization and tenant boundary.",
+    "service_id": "Organization-owned service related to the canonical destination.",
+    "destination_id": "Canonical destination identifier; API accepts only currently published destinations.",
+    "relation_type": "Relationship: at, serves, near, or route_endpoint.",
+    "evidence_note": "Optional partner-supplied context for this association; not verification evidence by itself.",
+    "status": "Review lifecycle: draft, submitted, approved, rejected, or withdrawn.",
+    "created_at": "Database creation timestamp."
+  },
+  "partner.availability_snapshots": {
+    "_object": {
+      "read_access": "Organization member according to availability RLS.",
+      "write_access": "POST observation only; do not overwrite history.",
+      "public_exposure": "Freshness limited by observed_at/valid_until; unknown remains unknown.",
+      "api": "POST /organizations/{organization_id}/availability; workspace GET.",
+      "ui": "PartnerWorkspace optional availability observation form/history."
+    },
+    "_table": "Time-bounded availability observation, not a future guarantee.",
+    "snapshot_id": "Unique identifier for one time-bounded availability observation.",
+    "organization_id": "Owning partner organization; tenant boundary used by foreign keys and RLS.",
+    "offer_id": "Offer whose availability was observed.",
+    "schedule_id": "Related schedule occurrence source; nullable when the observation is not schedule-specific.",
+    "occurrence_starts_at": "Start instant of the observed service occurrence, stored as timestamptz.",
+    "occurrence_ends_at": "End instant of that occurrence when known; must not precede its start.",
+    "availability_state": "Observed state: available, unavailable, limited, unknown, or conflicting.",
+    "available_count": "Non-negative observed count when applicable; NULL is required for unknown state.",
+    "source_kind": "Provenance class: partner_asserted, approved_feed, or platform_observation.",
+    "observed_at": "Instant when availability was observed; required for available state.",
+    "valid_from": "Start of the interval for which this observation is represented as valid.",
+    "valid_until": "End of the validity interval; do not treat stale data as current.",
+    "created_by": "User account that submitted the observation, if recorded.",
+    "created_at": "Database creation timestamp."
+  },
+  "partner.review_events": {
+    "_object": {
+      "read_access": "Reviewer/authorized backend paths; no general table access.",
+      "write_access": "Written within audited decision routes only; no generic CRUD.",
+      "public_exposure": "Never public.",
+      "api": "Inserted by organization verification/application/participation decision endpoints.",
+      "ui": "Reviewer decision controls; no audit editor."
+    },
+    "_table": "Append-only audit of reviewer decisions.",
+    "review_event_id": "Unique identifier for an immutable review audit event.",
+    "organization_id": "Organization whose record was reviewed.",
+    "entity_type": "Reviewed object type: organization, verification_case, branch, service, offer, price, schedule, or availability.",
+    "entity_id": "Identifier of the reviewed object within the declared entity type.",
+    "decision": "Audited action: approve, reject, request_changes, suspend, reinstate, activate, or deactivate.",
+    "reviewer_user_id": "User account that performed the review action.",
+    "reason": "Required decision rationale, 10?2000 characters.",
+    "policy_version": "Version of the decision policy applied.",
+    "occurred_at": "Timestamp when the review action occurred."
+  },
+  "partner.traveler_request_inbox": {
+    "_object": {
+      "read_access": "Active members of that organization.",
+      "write_access": "System-created on each revision; client can mark viewed only.",
+      "public_exposure": "Private and tenant-scoped.",
+      "api": "GET organization requests; POST /organizations/{organization_id}/requests/{inbox_event_id}/viewed.",
+      "ui": "PartnerWorkspace eligible request inbox."
+    },
+    "_table": "Organization-scoped notification for a request revision.",
+    "inbox_event_id": "Unique identifier of the organization inbox event.",
+    "organization_id": "Recipient organization and tenant boundary.",
+    "revision_id": "Private request revision represented by the inbox event.",
+    "event_kind": "Event type: request_shared or request_revised.",
+    "created_at": "Timestamp when the inbox event was created.",
+    "viewed_at": "Timestamp the authorized member marked the event viewed."
+  },
+  "partner.trip_company_responses": {
+    "_object": {
+      "read_access": "Authorized recipient members and the traveler owning the trip.",
+      "write_access": "Company submits response; traveler alone updates decision state.",
+      "public_exposure": "Private; amounts are proposal fields, not booking/payment transactions.",
+      "api": "POST/GET organization request responses; traveler response and decision routes.",
+      "ui": "CompanyResponseActions and traveler response panel."
+    },
+    "_table": "Company response to an authorized traveler request revision and traveler decision.",
+    "response_id": "Unique identifier for the company response.",
+    "client_request_id": "Client-provided idempotency identifier, unique within a share.",
+    "share_id": "Traveler-authorized share being answered.",
+    "organization_id": "Recipient organization and tenant boundary.",
+    "revision_id": "Exact shared request revision the response addresses.",
+    "trip_id": "Traveler trip referenced by the share.",
+    "traveler_id": "Trip owner who receives and decides the response.",
+    "submitted_by": "Authorized company member who submitted the response.",
+    "response_kind": "accepted_as_requested or counter_offer.",
+    "message": "Company response text, maximum 2000 characters.",
+    "proposed_price_toman": "Optional proposed price in Iranian toman; this is not a payment or booking transaction.",
+    "proposed_start_date": "Optional proposed Gregorian ISO date; set together with proposed_end_date.",
+    "proposed_end_date": "Optional proposed Gregorian ISO date; must be on or after proposed_start_date.",
+    "proposed_schedule_notes": "Optional counter-offer schedule notes, maximum 1500 characters.",
+    "traveler_decision": "Traveler-only decision: pending, accepted, or declined.",
+    "decided_at": "Timestamp of traveler decision; NULL exactly while decision is pending.",
+    "created_at": "Database creation timestamp.",
+    "is_synthetic": "Test marker constrained to false for persisted company responses."
   }
 }

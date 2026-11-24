@@ -1,4 +1,4 @@
-// Guarded, real-browser traveler journey. OTP codes cross only an authenticated
+﻿// Guarded, real-browser traveler journey. OTP codes cross only an authenticated
 // loopback test-control socket; the application has no OTP debug API.
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
@@ -18,9 +18,9 @@ const apiPort = Number(process.env.E2E_API_PORT || 8811);
 const webOrigin = `http://127.0.0.1:${webPort}`;
 const apiTarget = `http://127.0.0.1:${apiPort}`;
 
-const containsFortyFive = value => /(?:45|۴۵|٤٥)/u.test(String(value ?? ''));
-const containsToman = value => /(?:تومان|toman)/iu.test(String(value ?? ''));
-const containsMillion = value => /(?:million|میلیون|مليون)/iu.test(String(value ?? ''));
+const containsFortyFive = value => /(?:45|Û´Ûµ|Ù¤Ù¥)/u.test(String(value ?? ''));
+const containsToman = value => /(?:ØªÙˆÙ…Ø§Ù†|toman)/iu.test(String(value ?? ''));
+const containsMillion = value => /(?:million|Ù…ÛŒÙ„ÛŒÙˆÙ†|Ù…Ù„ÙŠÙˆÙ†)/iu.test(String(value ?? ''));
 
 function requireEnv(name) {
   const value = process.env[name]?.trim();
@@ -338,15 +338,15 @@ function reportResponseWaitCallsite(page) {
 
 const localeCopy = {
   'fa-IR': {
-    workspace: 'برنامه‌های سفر من',
-    confirm: 'ذخیرهٔ تغییرات برداشت سفر',
-    find: 'بررسی پیشنهادهای تأییدشده',
-    createPlan: 'ساخت پیش‌نویس برنامه',
-    deleteTrip: 'حذف سفر',
-    deleteConversation: 'حذف گفت‌وگو و همهٔ سفرهای آن',
-    prompt: 'سفر ۱۵ روزه به شیراز با بودجهٔ ۲۰ میلیون تومان؛ به طبیعت و جاهای تاریخی علاقه دارم؛ ترجیح می‌دهم مسیرها سنگ‌فرش باشند؛ دسترسی ویلچر ضروری است؛ باید از مسیرهای ناهموار پرهیز شود.',
-    accessLabel: 'دسترس‌پذیری',
-    softPreference: 'مسیرهای سنگ‌فرش باشد',
+    workspace: 'Ø¨Ø±Ù†Ø§Ù…Ù‡â€ŒÙ‡Ø§ÛŒ Ø³ÙØ± Ù…Ù†',
+    confirm: 'Ø°Ø®ÛŒØ±Ù‡Ù” ØªØºÛŒÛŒØ±Ø§Øª Ø¨Ø±Ø¯Ø§Ø´Øª Ø³ÙØ±',
+    find: 'Ø¨Ø±Ø±Ø³ÛŒ Ù¾ÛŒØ´Ù†Ù‡Ø§Ø¯Ù‡Ø§ÛŒ ØªØ£ÛŒÛŒØ¯Ø´Ø¯Ù‡',
+    createPlan: 'Ø³Ø§Ø®Øª Ù¾ÛŒØ´â€ŒÙ†ÙˆÛŒØ³ Ø¨Ø±Ù†Ø§Ù…Ù‡',
+    deleteTrip: 'Ø­Ø°Ù Ø³ÙØ±',
+    deleteConversation: 'Ø­Ø°Ù Ú¯ÙØªâ€ŒÙˆÚ¯Ùˆ Ùˆ Ù‡Ù…Ù‡Ù” Ø³ÙØ±Ù‡Ø§ÛŒ Ø¢Ù†',
+    prompt: 'Ø³ÙØ± Û±Ûµ Ø±ÙˆØ²Ù‡ Ø¨Ù‡ Ø´ÛŒØ±Ø§Ø² Ø¨Ø§ Ø¨ÙˆØ¯Ø¬Ù‡Ù” Û²Û° Ù…ÛŒÙ„ÛŒÙˆÙ† ØªÙˆÙ…Ø§Ù†Ø› Ø¨Ù‡ Ø·Ø¨ÛŒØ¹Øª Ùˆ Ø¬Ø§Ù‡Ø§ÛŒ ØªØ§Ø±ÛŒØ®ÛŒ Ø¹Ù„Ø§Ù‚Ù‡ Ø¯Ø§Ø±Ù…Ø› ØªØ±Ø¬ÛŒØ­ Ù…ÛŒâ€ŒØ¯Ù‡Ù… Ù…Ø³ÛŒØ±Ù‡Ø§ Ø³Ù†Ú¯â€ŒÙØ±Ø´ Ø¨Ø§Ø´Ù†Ø¯Ø› Ø¯Ø³ØªØ±Ø³ÛŒ ÙˆÛŒÙ„Ú†Ø± Ø¶Ø±ÙˆØ±ÛŒ Ø§Ø³ØªØ› Ø¨Ø§ÛŒØ¯ Ø§Ø² Ù…Ø³ÛŒØ±Ù‡Ø§ÛŒ Ù†Ø§Ù‡Ù…ÙˆØ§Ø± Ù¾Ø±Ù‡ÛŒØ² Ø´ÙˆØ¯.',
+    accessLabel: 'Ø¯Ø³ØªØ±Ø³â€ŒÙ¾Ø°ÛŒØ±ÛŒ',
+    softPreference: 'Ù…Ø³ÛŒØ±Ù‡Ø§ÛŒ Ø³Ù†Ú¯â€ŒÙØ±Ø´ Ø¨Ø§Ø´Ø¯',
   },
   'en-US': {
     workspace: 'My travel plans',
@@ -360,15 +360,15 @@ const localeCopy = {
     softPreference: 'paved paths',
   },
   ar: {
-    workspace: 'خطط رحلاتي',
-    confirm: 'احفظ تفاصيل الرحلة',
-    find: 'تحقق من الاقتراحات الموثقة',
-    createPlan: 'أنشئ مسودة خطة',
-    deleteTrip: 'احذف الرحلة',
-    deleteConversation: 'احذف المحادثة وكل رحلاتها',
-    prompt: '\u0631\u062d\u0644\u0629 \u0644\u0645\u062f\u0629 10 \u0623\u064a\u0627\u0645 \u0625\u0644\u0649 Shiraz \u0628\u0645\u064a\u0632\u0627\u0646\u064a\u0629 20 \u0645\u0644\u064a\u0648\u0646 \u062f\u0631\u0647\u0645؛ \u0623\u0641\u0636\u0644 \u0627\u0644\u0645\u0633\u0627\u0631\u0627\u062a \u0627\u0644\u0645\u0639\u0628\u062f\u0629؛ \u0627\u062d\u062a\u064a\u0627\u062c\u0627\u062a \u062d\u0631\u0643\u064a\u0629 \u0636\u0631\u0648\u0631\u064a\u0629؛ \u064a\u062c\u0628 \u062a\u062c\u0646\u0628 \u0627\u0644\u0637\u0631\u0642 \u0627\u0644\u0648\u0639\u0631\u0629.' ,
-    accessLabel: 'إمكانية الوصول',
-    softPreference: 'المسارات المعبدة',
+    workspace: 'Ø®Ø·Ø· Ø±Ø­Ù„Ø§ØªÙŠ',
+    confirm: 'Ø§Ø­ÙØ¸ ØªÙØ§ØµÙŠÙ„ Ø§Ù„Ø±Ø­Ù„Ø©',
+    find: 'ØªØ­Ù‚Ù‚ Ù…Ù† Ø§Ù„Ø§Ù‚ØªØ±Ø§Ø­Ø§Øª Ø§Ù„Ù…ÙˆØ«Ù‚Ø©',
+    createPlan: 'Ø£Ù†Ø´Ø¦ Ù…Ø³ÙˆØ¯Ø© Ø®Ø·Ø©',
+    deleteTrip: 'Ø§Ø­Ø°Ù Ø§Ù„Ø±Ø­Ù„Ø©',
+    deleteConversation: 'Ø§Ø­Ø°Ù Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© ÙˆÙƒÙ„ Ø±Ø­Ù„Ø§ØªÙ‡Ø§',
+    prompt: '\u0631\u062d\u0644\u0629 \u0644\u0645\u062f\u0629 10 \u0623\u064a\u0627\u0645 \u0625\u0644\u0649 Shiraz \u0628\u0645\u064a\u0632\u0627\u0646\u064a\u0629 20 \u0645\u0644\u064a\u0648\u0646 \u062f\u0631\u0647\u0645Ø› \u0623\u0641\u0636\u0644 \u0627\u0644\u0645\u0633\u0627\u0631\u0627\u062a \u0627\u0644\u0645\u0639\u0628\u062f\u0629Ø› \u0627\u062d\u062a\u064a\u0627\u062c\u0627\u062a \u062d\u0631\u0643\u064a\u0629 \u0636\u0631\u0648\u0631\u064a\u0629Ø› \u064a\u062c\u0628 \u062a\u062c\u0646\u0628 \u0627\u0644\u0637\u0631\u0642 \u0627\u0644\u0648\u0639\u0631\u0629.' ,
+    accessLabel: 'Ø¥Ù…ÙƒØ§Ù†ÙŠØ© Ø§Ù„ÙˆØµÙˆÙ„',
+    softPreference: 'Ø§Ù„Ù…Ø³Ø§Ø±Ø§Øª Ø§Ù„Ù…Ø¹Ø¨Ø¯Ø©',
   },
 };
 
@@ -456,6 +456,20 @@ async function sanitizeAndCapture(page, path, locale, width, height) {
       else node.setAttribute('style', previous);
     });
   }, hiddenSensitiveStyles);
+}
+
+async function captureWithoutAccountIdentifier(page, path, options = {}) {
+  const savedStyles = await page.locator('.auth-signed-in span').evaluateAll(nodes => nodes.map(node => node.getAttribute('style')));
+  await page.locator('.auth-signed-in span').evaluateAll(nodes => nodes.forEach(node => { node.style.setProperty('visibility', 'hidden', 'important'); }));
+  try {
+    await page.screenshot({ path, animations: 'disabled', ...options });
+  } finally {
+    await page.locator('.auth-signed-in span').evaluateAll((nodes, styles) => nodes.forEach((node, index) => {
+      const previous = styles[index];
+      if (previous === null) node.removeAttribute('style');
+      else node.setAttribute('style', previous);
+    }), savedStyles);
+  }
 }
 
 async function requestBrowserJson(page, path, method, csrf, body, requestAudit = null) {
@@ -565,6 +579,8 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
   const page = await context.newPage();
   const trace = [];
   const networkTrace = [];
+  let partnerUiMatrix = [];
+  let currentMilestone = 'browser_setup';
   let resolveArchiveUploadResponse;
   const archiveUploadResponse = new Promise(resolvePromise => { resolveArchiveUploadResponse = resolvePromise; });
   page.on('request', request => {
@@ -604,13 +620,17 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
   const travelerPhone = syntheticPhone();
   let currentPhone = null;
   let currentIdentity = null;
+  let reviewerUserId = null;
   let stagedSummary = null;
   let publishedPlace = null;
   let organization = null;
   let partnerSummary = null;
   let travelerSummary = null;
   reportResponseWaitCallsite(page);
-  const milestone = name => console.log(`[national-e2e] ${name}`);
+  const milestone = name => {
+    currentMilestone = name;
+    console.log(`[national-e2e] ${name}`);
+  };
   await attachBrowserGuards(page, audit);
   try {
     const baselineCounts = await checkedControl(api.controlPort, api.controlToken, { action: 'national_catalogue_counts' });
@@ -619,6 +639,7 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
     await selectAndVerifyLocale(page, 'en-US');
     currentPhone = operatorPhone;
     currentIdentity = await signIn(page, api.controlPort, api.controlToken, operatorPhone);
+    reviewerUserId = currentIdentity.userId;
     const grant = await checkedControl(api.controlPort, api.controlToken, {
       action: 'grant_catalogue_capabilities', user_id: currentIdentity.userId,
       capabilities: ['candidate_review', 'source_review', 'catalogue_publish'],
@@ -647,7 +668,7 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
     const noticesBeforeUpload = await page.locator('[role="alert"],[role="status"]').allTextContents();
     const operatorDir = resolve(artifactRoot, 'national-catalogue');
     mkdirSync(operatorDir, { recursive: true });
-    await page.screenshot({ path: resolve(operatorDir, 'operator-before-staging.png'), fullPage: true, animations: 'disabled' });
+    await captureWithoutAccountIdentifier(page, resolve(operatorDir, 'operator-before-staging.png'), { fullPage: true });
     await page.evaluate(() => {
       window.__rahgardNationalUploadClicked = false;
       window.__rahgardNationalUploadFetches = [];
@@ -680,7 +701,7 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
         selectedFileCount: document.querySelector('input[type="file"]')?.files?.length ?? 0,
         visibleNotices: Array.from(document.querySelectorAll('[role="alert"],[role="status"]')).map(item => item.textContent?.trim()).filter(Boolean),
       }));
-      await page.screenshot({ path: resolve(operatorDir, 'operator-upload-after-click.png'), fullPage: true, animations: 'disabled' });
+      await captureWithoutAccountIdentifier(page, resolve(operatorDir, 'operator-upload-after-click.png'), { fullPage: true });
       writeFileSync(resolve(operatorDir, 'archive-upload-failure.json'), `${JSON.stringify({ fileName: uploadState.name, noticesBeforeUpload, reviewBootstrapCounts: reviewBootstrap.map(result => Array.isArray(result.items) ? result.items.length : 'no_items_array'), uiState, networkTrace }, null, 2)}\n`, 'utf8');
       throw new Error(`national_archive_upload_click_did_not_send_request_${JSON.stringify(networkTrace.slice(-20))}`);
     }
@@ -750,7 +771,7 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
     const card = page.locator(`.candidate-review-card[data-candidate-id="${candidate.candidate_id}"]`);
     await card.waitFor({ state: 'visible', timeout: 30_000 });
     if (!(await card.textContent())?.includes('destination_identity')) throw new Error('operator_candidate_inspection_missing');
-    await page.screenshot({ path: resolve(operatorDir, 'operator-candidate-review.png'), fullPage: true, animations: 'disabled' });
+    await captureWithoutAccountIdentifier(page, resolve(operatorDir, 'operator-candidate-review.png'), { fullPage: true });
 
     const inspectedAt = new Date().toISOString();
     const sources = [
@@ -879,27 +900,118 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
     currentIdentity = await signIn(page, api.controlPort, api.controlToken, companyPhone);
     await page.goto(`${webOrigin}/partners`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Partner workspace' }).waitFor({ state: 'visible' });
-    const partnerSubmit = async (button, pathPattern, expectedStatus = 201) => {
+    const partnerSubmit = async (button, pathPattern, expectedStatus = 201, method = 'POST') => {
+      // Attach a rejection handler immediately: otherwise a timed-out response
+      // waiter can become an unhandled rejection while Playwright is still
+      // waiting for native form validation or the button action.
       const pending = page.waitForResponse(response => pathPattern.test(new URL(response.url()).pathname)
-        && response.request().method() === 'POST');
+        && response.request().method() === method, { timeout: 12_000 }).catch(() => null);
       await button.click();
       const response = await pending;
-      if (response.status() !== expectedStatus) throw new Error(`partner_ui_submit_failed_${response.status()}`);
-      trace.push({ method: 'POST', path: new URL(response.url()).pathname, status: response.status() });
+      if (!response) {
+        const state = await button.evaluate(element => {
+          const form = element.closest('form');
+          const invalid = form ? Array.from(form.elements).filter(control =>
+            control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)
+            .filter(control => !control.checkValidity()).length : 0;
+          return { disabled: element.disabled, formValid: form?.checkValidity() ?? null, invalidControlCount: invalid };
+        });
+        const dir = resolve(artifactRoot, 'national-catalogue');
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(resolve(dir, 'partner-submit-no-response.json'), `${JSON.stringify({
+          milestone: currentMilestone,
+          expectedMethod: method,
+          expectedPath: String(pathPattern),
+          pagePath: new URL(page.url()).pathname,
+          buttonState: state,
+          recentNetwork: networkTrace.slice(-30),
+        }, null, 2)}\n`, 'utf8');
+        throw new Error(`partner_ui_request_not_sent_${method}_${String(pathPattern).replace(/[^A-Za-z0-9:_-]/g, '_')}_invalid_${state.invalidControlCount}`);
+      }
+      if (response.status() !== expectedStatus) {
+        let detailCode = 'no_detail';
+        try {
+          const payload = await response.json();
+          const candidate = typeof payload?.detail === 'string' ? payload.detail : payload?.error?.code;
+          if (typeof candidate === 'string' && /^[a-z0-9_:-]{1,100}$/i.test(candidate)) detailCode = candidate;
+        } catch { /* keep status-only diagnostics */ }
+        throw new Error(`partner_ui_submit_failed_${response.status()}_${detailCode}`);
+      }
+      trace.push({ method, path: new URL(response.url()).pathname, status: response.status() });
     };
-    const orgForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Organization', exact: true }) });
+    const orgForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Company', exact: true }) });
+    const companyUserId = currentIdentity.userId;
     await orgForm.getByLabel('Legal name').fill('Rahgard Acceptance Travel Co');
     await orgForm.getByLabel('Display name').fill('Acceptance Travel Co');
-    await partnerSubmit(orgForm.getByRole('button', { name: 'Create organization', exact: true }), /^\/api\/v1\/partners\/organizations$/);
+    await partnerSubmit(orgForm.getByRole('button', { name: 'Register company', exact: true }), /^\/api\/v1\/partners\/organizations$/);
     const organizationRows = await requestBrowserJson(page, '/api/v1/partners/organizations', 'GET', undefined, undefined, trace);
     const organizationRow = organizationRows.items.find(item => item.display_name === 'Acceptance Travel Co');
     organization = organizationRow?.organization_id;
     if (!organization) throw new Error('partner_organization_not_created_from_browser_form');
-    const approvedTestOrganization = await controlRequest(api.controlPort, api.controlToken, {
-      action: 'approve_isolated_test_organization', organization_id: organization,
-      created_by: currentIdentity.userId, display_name: 'Acceptance Travel Co',
+    if (organizationRow.verification_status !== 'pending' || organizationRow.participation_status !== 'inactive'
+        || organizationRow.application_status !== 'draft') {
+      throw new Error('self_registration_changed_review_lifecycle_state');
+    }
+    const orgEdit = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Edit', exact: true }) }).first();
+    await orgEdit.getByLabel('Display name').fill('Acceptance Travel Company');
+    await partnerSubmit(orgEdit.getByRole('button', { name: 'Save changes', exact: true }),
+      /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+$/i, 200, 'PUT');
+    let organizationRowsAfterEdit = await requestBrowserJson(page, '/api/v1/partners/organizations', 'GET', undefined, undefined, trace);
+    if (!organizationRowsAfterEdit.items.some(item => item.organization_id === organization
+        && item.display_name === 'Acceptance Travel Company' && item.verification_status === 'pending'
+        && item.participation_status === 'inactive')) throw new Error('partner_profile_edit_not_persisted_or_self_approved');
+    const evidenceForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Submit for review', exact: true }) });
+    await evidenceForm.getByLabel('Evidence references (one per line)').fill('QA-only evidence fixture: registration reviewed in disposable PG17 acceptance.');
+    await partnerSubmit(evidenceForm.getByRole('button', { name: 'Submit for review', exact: true }),
+      /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/verification-cases$/i);
+    let countsBeforeReview = await checkedControl(api.controlPort, api.controlToken, { action: 'isolated_partner_counts' });
+    if (!countsBeforeReview.ok || countsBeforeReview.eligible_organizations !== 0 || countsBeforeReview.verification_cases !== 1) {
+      throw new Error('company_became_eligible_without_independent_review');
+    }
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = operatorPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, operatorPhone);
+    if (currentIdentity.userId !== reviewerUserId || currentIdentity.userId === companyUserId) {
+      throw new Error('partner_reviewer_must_be_independent_of_company_owner');
+    }
+    const partnerReviewerGrant = await controlRequest(api.controlPort, api.controlToken, {
+      action: 'grant_isolated_partner_reviewer', user_id: currentIdentity.userId,
     });
-    if (!approvedTestOrganization.ok) throw new Error(`isolated_test_company_approval_failed_${approvedTestOrganization.reason || 'unknown'}`);
+    if (!partnerReviewerGrant.ok) {
+      const reason = partnerReviewerGrant.sqlstate || partnerReviewerGrant.reason || partnerReviewerGrant.error_class || 'unknown';
+      throw new Error(`isolated_partner_reviewer_grant_failed_${String(reason).replace(/[^A-Za-z0-9_-]/g, '_')}`);
+    }
+    await page.goto(`${webOrigin}/partners`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Partner workspace' }).waitFor({ state: 'visible' });
+    const reviewItem = page.locator('.partner-review-item').filter({ hasText: 'Acceptance Travel Company' });
+    await reviewItem.waitFor({ state: 'visible', timeout: 15_000 });
+    await reviewItem.getByLabel('Decision reason').fill('Reviewed the isolated acceptance evidence and registration fixture.');
+    await partnerSubmit(reviewItem.getByRole('button', { name: 'Review evidence', exact: true }),
+      /^\/api\/v1\/partners\/platform\/verification-cases\/[0-9a-f-]+\/decision$/i, 200);
+    await reviewItem.getByRole('button', { name: 'Approve application', exact: true }).waitFor({ state: 'visible' });
+    await partnerSubmit(reviewItem.getByRole('button', { name: 'Approve application', exact: true }),
+      /^\/api\/v1\/partners\/platform\/organizations\/[0-9a-f-]+\/application-decision$/i, 200);
+    await reviewItem.getByRole('button', { name: 'Activate request intake', exact: true }).waitFor({ state: 'visible' });
+    await partnerSubmit(reviewItem.getByRole('button', { name: 'Activate request intake', exact: true }),
+      /^\/api\/v1\/partners\/platform\/organizations\/[0-9a-f-]+\/participation-decision$/i, 200);
+    const reviewedCounts = await checkedControl(api.controlPort, api.controlToken, { action: 'isolated_partner_counts' });
+    if (!reviewedCounts.ok || reviewedCounts.organizations !== 1 || reviewedCounts.eligible_organizations !== 1
+        || reviewedCounts.verification_cases !== 1 || reviewedCounts.review_events !== 3) {
+      throw new Error('review_decisions_or_audit_events_not_persisted');
+    }
+    milestone('independent operator reviewed evidence, approved company and activated intake with audit events');
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = companyPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, companyPhone);
+    await page.goto(`${webOrigin}/partners`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Partner workspace' }).waitFor({ state: 'visible' });
+    const companyState = await requestBrowserJson(page, '/api/v1/partners/organizations', 'GET', undefined, undefined, trace);
+    if (!companyState.items.some(item => item.organization_id === organization && item.verification_status === 'verified'
+        && item.application_status === 'approved' && item.participation_status === 'active')) {
+      throw new Error('company_owner_did_not_restore_reviewed_status');
+    }
     const partnerManagement = page.locator('.partner-management-advanced');
     if (!await partnerManagement.evaluate(element => element.open)) {
       await partnerManagement.locator('summary').click();
@@ -908,17 +1020,26 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
 
     const serviceForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Service', exact: true }) });
     await serviceForm.getByLabel('Service name').fill('Saint Thaddeus guided visit');
-    await serviceForm.getByLabel('Service description').fill('Private draft service for acceptance.');
-    await serviceForm.getByLabel('Service key').fill('st-thaddeus-guided-visit');
+    await serviceForm.getByLabel('Short service description').fill('Private draft service for acceptance.');
     await serviceForm.getByLabel('Service type').fill('guided_visit');
-    await partnerSubmit(serviceForm.getByRole('button', { name: 'Create service', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/services$/i);
-    let workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET', undefined, undefined, trace);
-    const service = workspace.services.find(item => item.service_key === 'st-thaddeus-guided-visit');
+    await partnerSubmit(serviceForm.getByRole('button', { name: 'Save service', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/services$/i);
+    let workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace?locale=en-US`, 'GET', undefined, undefined, trace);
+    const service = workspace.services.find(item => item.display_name === 'Saint Thaddeus guided visit');
     if (!service) throw new Error('partner_service_not_created_from_browser_form');
+    const serviceEditButton = page.locator('.partner-first-service .partner-record-list button').first();
+    await serviceEditButton.click();
+    const serviceEditForm = page.locator('.partner-first-service form.partner-card');
+    await serviceEditForm.getByLabel('Short service description').fill('Edited and reopened private draft service for acceptance.');
+    await partnerSubmit(serviceEditForm.getByRole('button', { name: 'Save changes', exact: true }),
+      /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/services\/[0-9a-f-]+$/i, 200, 'PUT');
+    workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace?locale=en-US`, 'GET', undefined, undefined, trace);
+    if (workspace.services[0]?.description !== 'Edited and reopened private draft service for acceptance.') {
+      throw new Error('partner_service_edit_not_persisted');
+    }
     await page.getByTestId('partner-service-select').selectOption(String(service.service_id));
 
     const linkForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Link service to a published destination', exact: true }) });
-    await linkForm.getByLabel('Canonical destination').selectOption(String(publishedPlace.destination_id));
+    await linkForm.getByLabel('Published destination').selectOption(String(publishedPlace.destination_id));
     await linkForm.getByLabel('Relationship').selectOption('at');
     await linkForm.getByLabel('Evidence note (optional)').fill('Acceptance relation to published canonical place.');
     await partnerSubmit(linkForm.getByRole('button', { name: 'Add destination link', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/services\/[0-9a-f-]+\/destinations$/i);
@@ -930,40 +1051,47 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
     await scheduleForm.getByLabel('Time zone').fill('Asia/Tehran');
     await scheduleForm.getByLabel('Starts (optional)').fill(scheduleStart);
     await scheduleForm.getByLabel('Ends (optional)').fill(scheduleEnd);
-    await partnerSubmit(scheduleForm.getByRole('button', { name: 'Create schedule', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/schedules$/i);
-    workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET', undefined, undefined, trace);
+    await partnerSubmit(scheduleForm.getByRole('button', { name: 'Save schedule', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/schedules$/i);
+    workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace?locale=en-US`, 'GET', undefined, undefined, trace);
     const schedule = workspace.schedules.find(item => item.schedule_type === 'appointment');
     if (!schedule) throw new Error('partner_schedule_not_created_from_browser_form');
     await page.getByTestId('partner-schedule-select').selectOption(String(schedule.schedule_id));
 
     const offerForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Offer', exact: true }) });
-    await offerForm.getByLabel('Offer type').fill('guided_visit');
-    await partnerSubmit(offerForm.getByRole('button', { name: 'Create offer', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/offers$/i);
-    workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET', undefined, undefined, trace);
+    await offerForm.getByLabel('Offer title').fill('guided_visit');
+    await partnerSubmit(offerForm.getByRole('button', { name: 'Save offer', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/offers$/i);
+    workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace?locale=en-US`, 'GET', undefined, undefined, trace);
     const offer = workspace.offers.find(item => item.offer_type === 'guided_visit');
     if (!offer) throw new Error('partner_offer_not_created_from_browser_form');
     await page.getByTestId('partner-offer-select').selectOption(String(offer.offer_id));
 
     const priceForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Price', exact: true }) });
-    await priceForm.getByLabel('Amount').fill('1200000');
-    await priceForm.getByLabel('Currency code').fill('IRR');
-    await priceForm.getByLabel('Denomination').fill('Rial');
-    await priceForm.getByLabel('Price unit').fill('per_person');
-    await partnerSubmit(priceForm.getByRole('button', { name: 'Add price', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/prices$/i);
+    await priceForm.getByLabel('Amount', { exact: true }).fill('1200000');
+    await priceForm.getByLabel('Currency code', { exact: true }).fill('IRR');
+    await priceForm.getByLabel('Amount denomination', { exact: true }).fill('Rial');
+    await priceForm.getByLabel('Price basis').fill('per_person');
+    await partnerSubmit(priceForm.getByRole('button', { name: 'Add a new observation', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/prices$/i);
 
     const availabilityForm = page.locator('form.partner-card').filter({ has: page.getByRole('heading', { name: 'Availability', exact: true }) });
-    await availabilityForm.getByLabel('Occurrence time').fill(scheduleStart);
-    await availabilityForm.getByLabel('State').selectOption('unknown');
-    await partnerSubmit(availabilityForm.getByRole('button', { name: 'Add availability', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/availability$/i);
+    await availabilityForm.getByLabel('Service time').fill(scheduleStart);
+    await availabilityForm.getByLabel('Status').selectOption('unknown');
+    await partnerSubmit(availabilityForm.getByRole('button', { name: 'Add a new observation', exact: true }), /^\/api\/v1\/partners\/organizations\/[0-9a-f-]+\/availability$/i);
     await page.reload({ waitUntil: 'domcontentloaded' });
     workspace = await requestBrowserJson(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET', undefined, undefined, trace);
     if (workspace.services.length !== 1 || workspace.destinations.length !== 1 || workspace.schedules.length !== 1
         || workspace.offers.length !== 1 || workspace.prices.length !== 1 || workspace.availability.length !== 1) {
       throw new Error('partner_workspace_data_not_persisted');
     }
-    await page.screenshot({ path: resolve(operatorDir, 'partner-workspace-persisted.png'), fullPage: true, animations: 'disabled' });
+    await captureWithoutAccountIdentifier(page, resolve(operatorDir, 'partner-workspace-persisted.png'), { fullPage: true });
     partnerSummary = { organizations: 1, services: workspace.services.length, linkedDestinations: workspace.destinations.length,
       schedules: workspace.schedules.length, offers: workspace.offers.length, prices: workspace.prices.length, availability: workspace.availability.length };
+    partnerSummary.review = {
+      eligibleOrganizations: reviewedCounts.eligible_organizations,
+      verificationCases: reviewedCounts.verification_cases,
+      auditedReviewEvents: reviewedCounts.review_events,
+      lifecycleWasPrivateBeforeReview: true,
+      independentReviewer: true,
+    };
     milestone('partner workspace records persisted and reopened');
 
     // Tenant two cannot read or mutate tenant one's service data.
@@ -975,9 +1103,9 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
       { legal_name: 'Isolation Test Tenant', display_name: 'Isolation Tenant', organization_type: 'company', registration_country: 'IR' }, trace);
     const deniedRead = await browserApi(page, `/api/v1/partners/organizations/${organization}/workspace`, 'GET');
     const deniedWrite = await browserApi(page, `/api/v1/partners/organizations/${organization}/services`, 'POST', currentIdentity.csrfToken,
-      { service_type: 'tour', service_key: 'forged-cross-tenant-write', locale: 'en-US', display_name: 'forged' });
+      { service_type: 'tour', locale: 'en-US', display_name: 'forged' });
     if (deniedRead.status !== 200 || deniedRead.payload?.services?.length !== 0
-        || ![403, 422].includes(deniedWrite.status)) {
+        || deniedWrite.status !== 403) {
       throw new Error(`partner_cross_tenant_access_not_denied_${deniedRead.status}_${deniedWrite.status}`);
     }
     partnerSummary.crossTenantReadRows = deniedRead.payload.services.length;
@@ -1103,8 +1231,9 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
       throw new Error('partner_request_inbox_revision_or_privacy_mismatch');
     }
     await page.locator('.partner-request-item').first().waitFor({ state: 'visible' });
-    await page.getByText('Traveler request inbox', { exact: true }).waitFor({ state: 'visible' });
+    await page.getByRole('heading', { name: 'Eligible requests', exact: true }).waitFor({ state: 'visible' });
     if (await page.locator('.partner-request-item').count() !== 4) throw new Error('partner_request_inbox_ui_missing_revisions');
+    partnerUiMatrix = await captureReleaseThemeMatrix(page, artifactRoot, 'company');
     milestone('selected-company consent, private request inbox, and same-trip revision verified');
 
     await page.locator('.auth-signed-in button').first().click();
@@ -1149,7 +1278,7 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
         || reopenedTrip.confirmed_requirements?.field_provenance?.duration_days !== 'llm'
         || reopenedTrip.confirmed_requirements?.weather_preferences?.[0] !== 'mild'
         || reopenedItinerary.stops[0].destination_id !== String(selected.destination_id)) throw new Error('traveler_itinerary_not_reopened_after_auth');
-    await page.screenshot({ path: resolve(operatorDir, 'traveler-archive-itinerary-reopened.png'), fullPage: true, animations: 'disabled' });
+    await captureWithoutAccountIdentifier(page, resolve(operatorDir, 'traveler-archive-itinerary-reopened.png'), { fullPage: true });
     travelerSummary = { searchResults: foundPlace.length, destinationKey, tripId: trip.trip_id,
       conversationId: started.conversation.conversation_id, durationDays: reopenedTrip.duration_days,
       recommendationOutcome: recommendation.status, itineraryId: revisedItinerary.itinerary_id,
@@ -1174,8 +1303,29 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
     return { archiveStaging: stagedSummary, baselineCounts, operator: { candidate: key, fieldEvidence: evidenceRows.length,
       reviewedSources: sourceSummaries,
       sourcePagesReviewed: sources.length, publishedKey: destinationKey, unpublishedDiscoveryLeads: counts.unpublished_leads },
-      partner: partnerSummary, traveler: travelerSummary, databaseCounts: counts,
+      partner: partnerSummary, partnerUiMatrix, traveler: travelerSummary, databaseCounts: counts,
       apiTrace: trace, simulatedComponents: { otp: 'fake test adapter', chat: 'simulated in-process Gateway', liveProviderCalls: 0 } };
+  } catch (error) {
+    // Keep failure evidence useful without persisting request bodies, page text,
+    // cookies, CSRF values, credentials, or arbitrary exception stacks.
+    const dir = resolve(artifactRoot, 'national-catalogue');
+    mkdirSync(dir, { recursive: true });
+    const safePath = value => String(value).replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':uuid')
+      .replace(/\/(\d+)(?=\/|$)/g, '/:id');
+    const rawMessage = String(error?.message ?? 'unknown_failure').split('\n', 1)[0];
+    const failureCode = rawMessage.replace(/[^A-Za-z0-9:_-]/g, '_').slice(0, 120) || 'unknown_failure';
+    const safeNetworkTrace = networkTrace.slice(-250).map(item => ({
+      ...item,
+      ...(item.path ? { path: safePath(item.path) } : {}),
+      ...(item.error ? { error: String(item.error).replace(/[^A-Za-z0-9:_-]/g, '_').slice(0, 120) } : {}),
+    }));
+    writeFileSync(resolve(dir, 'failure-trace.json'), `${JSON.stringify({
+      failureCode,
+      lastCompletedMilestone: currentMilestone,
+      apiTrace: trace.slice(-250).map(item => ({ ...item, ...(item.path ? { path: safePath(item.path) } : {}) })),
+      networkTrace: safeNetworkTrace,
+    }, null, 2)}\n`, 'utf8');
+    throw error;
   } finally {
     await context.close();
   }
@@ -1476,9 +1626,9 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
   const roles = ['representative_point', 'representative_point',
     'representative_point', 'property_reference'];
   const prompts = {
-    'fa-IR': 'برای ۱۵ روز سفر به شیراز، حافظیه، باغ ارم، بازار وکیل و تخت جمشید',
+    'fa-IR': 'Ø¨Ø±Ø§ÛŒ Û±Ûµ Ø±ÙˆØ² Ø³ÙØ± Ø¨Ù‡ Ø´ÛŒØ±Ø§Ø²ØŒ Ø­Ø§ÙØ¸ÛŒÙ‡ØŒ Ø¨Ø§Øº Ø§Ø±Ù…ØŒ Ø¨Ø§Ø²Ø§Ø± ÙˆÚ©ÛŒÙ„ Ùˆ ØªØ®Øª Ø¬Ù…Ø´ÛŒØ¯',
     'en-US': '15-day trip to Hafezieh, Eram Garden, Vakil Bazaar, and Persepolis in Fars',
-    ar: 'رحلة تجريبية لمدة ١٥ يوماً إلى حافظية وحديقة إرم وسوق وكيل وبرسبوليس',
+    ar: 'Ø±Ø­Ù„Ø© ØªØ¬Ø±ÙŠØ¨ÙŠØ© Ù„Ù…Ø¯Ø© Ù¡Ù¥ ÙŠÙˆÙ…Ø§Ù‹ Ø¥Ù„Ù‰ Ø­Ø§ÙØ¸ÙŠØ© ÙˆØ­Ø¯ÙŠÙ‚Ø© Ø¥Ø±Ù… ÙˆØ³ÙˆÙ‚ ÙˆÙƒÙŠÙ„ ÙˆØ¨Ø±Ø³Ø¨ÙˆÙ„ÙŠØ³',
   };
   const context = await browser.newContext({ locale });
   const page = await context.newPage();
@@ -1511,7 +1661,7 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
     const selectedIds = selected.map(item => item.destination_id);
     const names = selected.map(item => item.canonical_name);
     const requestText = browseScenario
-      ? 'برای ۱۵ روز سفر با مقصدی که هنوز انتخاب نشده است'
+      ? 'Ø¨Ø±Ø§ÛŒ Û±Ûµ Ø±ÙˆØ² Ø³ÙØ± Ø¨Ø§ Ù…Ù‚ØµØ¯ÛŒ Ú©Ù‡ Ù‡Ù†ÙˆØ² Ø§Ù†ØªØ®Ø§Ø¨ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª'
       : prompts[locale];
     const interpretation = await requestBrowserJson(
       page, '/api/v1/requirements/interpret', 'POST', csrf,
@@ -1567,11 +1717,11 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
       if (await page.locator('.recommendation-controls').count()) {
         throw new Error('geo_browse_recommendations_visible_before_explicit_review');
       }
-      await page.getByRole('button', { name: 'دیدن مقصدهای تأییدشده', exact: true }).click();
+      await page.getByRole('button', { name: 'Ø¯ÛŒØ¯Ù† Ù…Ù‚ØµØ¯Ù‡Ø§ÛŒ ØªØ£ÛŒÛŒØ¯Ø´Ø¯Ù‡', exact: true }).click();
       await page.locator('#approved-destination-search').waitFor({ state: 'visible' });
       const browser = page.locator('#approved-destination-browser');
       if (await browser.locator('.location-reference').count() !== 4
-          || !(await browser.textContent())?.includes('نقطهٔ تقریبی برای نمایش موقعیت؛ ورودی بازدیدکنندگان یا مسیر نیست.')) {
+          || !(await browser.textContent())?.includes('Ù†Ù‚Ø·Ù‡Ù” ØªÙ‚Ø±ÛŒØ¨ÛŒ Ø¨Ø±Ø§ÛŒ Ù†Ù…Ø§ÛŒØ´ Ù…ÙˆÙ‚Ø¹ÛŒØªØ› ÙˆØ±ÙˆØ¯ÛŒ Ø¨Ø§Ø²Ø¯ÛŒØ¯Ú©Ù†Ù†Ø¯Ú¯Ø§Ù† ÛŒØ§ Ù…Ø³ÛŒØ± Ù†ÛŒØ³Øª.')) {
         throw new Error('geo_browse_approximate_reference_warning_missing');
       }
       const firstName = selected[0].localized_names?.[locale] ?? selected[0].canonical_name;
@@ -1581,14 +1731,14 @@ async function runGeoCatalogueLocale(browser, api, locale, audit, artifactRoot) 
       for (const destination of selected) {
         const name = destination.localized_names?.[locale] ?? destination.canonical_name;
         const locality = destination.city_name ?? destination.province_name ?? '';
-        const button = page.getByRole('button', { name: `افزودن به سفر: ${name} · ${locality}`, exact: true });
+        const button = page.getByRole('button', { name: `Ø§ÙØ²ÙˆØ¯Ù† Ø¨Ù‡ Ø³ÙØ±: ${name} Â· ${locality}`, exact: true });
         await button.click();
         await button.waitFor({ state: 'visible' });
         await page.waitForFunction(label => {
           const match = [...document.querySelectorAll('#approved-destination-browser button')]
             .find(item => item.getAttribute('aria-label') === label);
           return match?.disabled === true;
-        }, `افزودن به سفر: ${name} · ${locality}`);
+        }, `Ø§ÙØ²ÙˆØ¯Ù† Ø¨Ù‡ Ø³ÙØ±: ${name} Â· ${locality}`);
       }
       if (await page.locator('.recommendation-controls').count()) {
         throw new Error('geo_browse_add_silently_confirmed_profile');
@@ -1739,11 +1889,11 @@ async function appendPersianFollowUp(page, conversationId, tripId, content) {
       || body.message?.content !== content) {
     throw new Error('persian_follow_up_not_persisted_or_original_request_changed');
   }
-  if (/(?:45|۴۵)\s*میلیون/u.test(content)
+  if (/(?:45|Û´Ûµ)\s*Ù…ÛŒÙ„ÛŒÙˆÙ†/u.test(content)
       && Number(submitted?.budget?.value?.amount) !== 45) {
     throw new Error(`persian_budget_correction_not_extracted_amount=${submitted?.budget?.value?.amount ?? 'missing'}`);
   }
-  if (/(?:45|۴۵)\s*میلیون/u.test(content)
+  if (/(?:45|Û´Ûµ)\s*Ù…ÛŒÙ„ÛŒÙˆÙ†/u.test(content)
       && Number(body.trip?.extracted_requirements?.budget?.value?.amount) !== 45) {
     throw new Error(`persian_budget_correction_not_persisted_amount=${body.trip?.extracted_requirements?.budget?.value?.amount ?? 'missing'}`);
   }
@@ -1859,7 +2009,7 @@ async function verifySimulatedAssistant(page, api, locale, conversationId, tripI
 }
 
 function normalizedPersianText(value) {
-  return String(value ?? '').normalize('NFKC').replace(/\u200c/g, '').replace(/[يى]/g, '\u06cc');
+  return String(value ?? '').normalize('NFKC').replace(/\u200c/g, '').replace(/[ÙŠÙ‰]/g, '\u06cc');
 }
 
 function providerFieldSnapshot(candidate) {
@@ -1874,37 +2024,99 @@ async function captureReleaseThemeMatrix(page, artifactRoot, surface) {
   const originalSize = page.viewportSize();
   const toggle = page.locator('.rahgard-theme-toggle');
   const originalTheme = await page.locator('html').getAttribute('data-rahgard-theme');
+  const localePicker = page.locator('#locale');
+  const originalLocale = await localePicker.inputValue();
   const results = [];
-  for (const theme of ['light', 'dark']) {
-    if (await page.locator('html').getAttribute('data-rahgard-theme') !== theme) {
-      await toggle.focus();
-      await toggle.press('Enter');
-    }
-    await page.waitForFunction(value => document.documentElement.dataset.rahgardTheme === value, theme);
-    for (const width of [390, 1440]) {
-      await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
-      const metrics = await toggle.evaluate(element => {
-        const box = element.getBoundingClientRect();
-        return {
-          overflow: document.documentElement.scrollWidth > window.innerWidth,
-          buttonWidth: Math.round(box.width), buttonHeight: Math.round(box.height),
-          labeled: Boolean(element.getAttribute('aria-label')),
-          foreground: getComputedStyle(element).color,
-          background: getComputedStyle(element).backgroundColor,
-        };
-      });
-      if (metrics.overflow || !metrics.labeled || metrics.buttonWidth < 24 || metrics.buttonHeight < 24) {
-        throw new Error(`release_theme_layout_${surface}_${theme}_${width}`);
+  for (const locale of ['fa-IR', 'en-US', 'ar']) {
+    if (await localePicker.inputValue() !== locale) await localePicker.selectOption(locale);
+    await page.waitForFunction(value => document.querySelector('.partner-workspace')?.getAttribute('dir') === (value === 'en-US' ? 'ltr' : 'rtl'), locale);
+    for (const theme of ['light', 'dark']) {
+      if (await page.locator('html').getAttribute('data-rahgard-theme') !== theme) {
+        await toggle.focus();
+        await toggle.press('Enter');
       }
-      const screenshot = `release-${surface}-${theme}-${width}.png`;
-      await page.locator(surface === 'company' ? '.partner-request-inbox' : '.traveler-workspace-heading')
-        .first().scrollIntoViewIfNeeded();
-      await page.screenshot({ path: resolve(artifactRoot, screenshot), animations: 'disabled' });
-      results.push({ surface, theme, width, screenshot, ...metrics });
+      await page.waitForFunction(value => document.documentElement.dataset.rahgardTheme === value, theme);
+      for (const width of [390, 1440]) {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+        const metrics = await page.evaluate(() => {
+          const rgb = value => {
+            const nums = String(value).match(/[\d.]+/g)?.map(Number) ?? [];
+            if (nums.length < 3) return null;
+            return nums.slice(0, 3).map(channel => channel / 255);
+          };
+          const luminance = color => {
+            const linear = rgb(color);
+            if (!linear) return null;
+            const channels = linear.map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+            return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+          };
+          const ratio = (foreground, background) => {
+            const a = luminance(foreground); const b = luminance(background);
+            if (a === null || b === null) return null;
+            return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+          };
+          const visible = element => {
+            const style = getComputedStyle(element); const box = element.getBoundingClientRect();
+            return box.width > 0 && box.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+          };
+          const backgrounds = element => {
+            for (let node = element; node; node = node.parentElement) {
+              const style = getComputedStyle(node);
+              const gradientColors = [...style.backgroundImage.matchAll(/rgba?\(([^)]+)\)/g)].map(match => `rgb(${match[1].split(',').slice(0,3).join(',')})`);
+              if (gradientColors.length) return gradientColors;
+              const color = style.backgroundColor;
+              const nums = color.match(/[\d.]+/g)?.map(Number) ?? [];
+              if (nums.length === 3 || (nums.length >= 4 && nums[3] >= 0.98)) return [color];
+            }
+            return [getComputedStyle(document.body).backgroundColor];
+          };
+          const textNodes = [...document.querySelectorAll('.partner-workspace :is(h1,h2,h3,h4,p,label,small,button,a,summary,dt,dd,li,legend)')]
+            .filter(el => visible(el) && el.textContent.trim() && !el.matches(':disabled'));
+          const textRatios = textNodes.map(el => {
+            const style = getComputedStyle(el); const size = parseFloat(style.fontSize);
+            const large = size >= 24 || (size >= 18.66 && Number(style.fontWeight) >= 700);
+            return { value: Math.min(...backgrounds(el).map(color => ratio(style.color, color))), minimum: large ? 3 : 4.5,
+              tag: el.tagName.toLowerCase(), className: String(el.className?.baseVal ?? el.className ?? '').split(/\s+/).filter(Boolean).slice(0,2).join('.') };
+          }).filter(item => item.value !== null);
+          const violations = textRatios.filter(item => item.value + 0.01 < item.minimum).length;
+          const textIssues = textRatios.filter(item => item.value + 0.01 < item.minimum)
+            .slice(0, 8).map(item => `${item.tag}.${item.className || 'plain'}=${item.value.toFixed(2)}/${item.minimum}`);
+          const placeholders = [...document.querySelectorAll('.partner-workspace input[placeholder],.partner-workspace textarea[placeholder]')]
+            .filter(visible).map(el => ({ value: Math.min(...backgrounds(el).map(color => ratio(getComputedStyle(el, '::placeholder').color, color))), minimum: 4.5 }));
+          const placeholderViolations = placeholders.filter(item => item.value !== null && item.value + 0.01 < item.minimum).length;
+          const disabledCount = document.querySelectorAll('.partner-workspace :disabled').length;
+          const disabledStateDistinct = [...document.querySelectorAll('.partner-workspace :disabled')]
+            .every(el => Number.parseFloat(getComputedStyle(el).opacity) < 1 || getComputedStyle(el).cursor === 'not-allowed');
+          const toggle = document.querySelector('.rahgard-theme-toggle'); const toggleBox = toggle?.getBoundingClientRect();
+          const firstControl = document.querySelector('.partner-onboarding input:not(:disabled),.partner-onboarding select:not(:disabled),.partner-onboarding textarea:not(:disabled),.partner-onboarding button:not(:disabled)');
+          firstControl?.focus();
+          const focusStyle = firstControl ? getComputedStyle(firstControl) : null;
+          const focusVisible = Boolean(focusStyle && ((focusStyle.outlineStyle !== 'none' && parseFloat(focusStyle.outlineWidth) >= 2) || focusStyle.boxShadow !== 'none'));
+          return {
+            overflow: document.documentElement.scrollWidth > window.innerWidth || document.body.scrollWidth > window.innerWidth,
+            buttonWidth: toggleBox ? Math.round(toggleBox.width) : 0, buttonHeight: toggleBox ? Math.round(toggleBox.height) : 0,
+            labeled: Boolean(toggle?.getAttribute('aria-label')),
+            visibleTextCount: textRatios.length, minTextContrast: textRatios.length ? Math.min(...textRatios.map(item => item.value)) : null,
+            textContrastViolations: violations, textIssues, placeholderCount: placeholders.length, placeholderViolations,
+            disabledCount, disabledStateDistinct, focusVisible,
+          };
+        });
+        if (metrics.overflow || !metrics.labeled || metrics.buttonWidth < 24 || metrics.buttonHeight < 24
+            || metrics.textContrastViolations || metrics.placeholderViolations || !metrics.disabledStateDistinct || !metrics.focusVisible) {
+          throw new Error(`release_theme_accessibility_${surface}_${locale}_${theme}_${width}_text=${metrics.textContrastViolations}_placeholder=${metrics.placeholderViolations}_focus=${metrics.focusVisible}_overflow=${metrics.overflow}_elements=${metrics.textIssues.join(',')}`);
+        }
+        const screenshot = `release-${surface}-${locale}-${theme}-${width}.png`;
+        await page.locator(surface === 'company' ? '.partner-onboarding' : '.traveler-workspace-heading')
+          .first().scrollIntoViewIfNeeded();
+        await captureWithoutAccountIdentifier(page, resolve(artifactRoot, screenshot));
+        results.push({ surface, locale, theme, width, screenshot, ...metrics });
+      }
     }
   }
   if (originalSize) await page.setViewportSize(originalSize);
+  if (await localePicker.inputValue() !== originalLocale) await localePicker.selectOption(originalLocale);
   if (await page.locator('html').getAttribute('data-rahgard-theme') !== originalTheme) await toggle.click();
+  writeFileSync(resolve(artifactRoot, `release-${surface}-ui-matrix.json`), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
   return results;
 }
 
@@ -1953,7 +2165,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       || before.route?.host !== new URL(provider.endpoint).hostname) {
       throw new Error('real_chat_provider_route_identity_mismatch');
     }
-    const requestText = 'برای سه نفر از مشهد به شیراز، چهار روز، با بودجه ۲۰ میلیون تومان؛ علاقه‌مند به باغ‌ها، آثار تاریخی و غذای محلی، مسیرهای سبک و هوای معتدل هستیم.';
+    const requestText = 'Ø¨Ø±Ø§ÛŒ Ø³Ù‡ Ù†ÙØ± Ø§Ø² Ù…Ø´Ù‡Ø¯ Ø¨Ù‡ Ø´ÛŒØ±Ø§Ø²ØŒ Ú†Ù‡Ø§Ø± Ø±ÙˆØ²ØŒ Ø¨Ø§ Ø¨ÙˆØ¯Ø¬Ù‡ Û²Û° Ù…ÛŒÙ„ÛŒÙˆÙ† ØªÙˆÙ…Ø§Ù†Ø› Ø¹Ù„Ø§Ù‚Ù‡â€ŒÙ…Ù†Ø¯ Ø¨Ù‡ Ø¨Ø§Øºâ€ŒÙ‡Ø§ØŒ Ø¢Ø«Ø§Ø± ØªØ§Ø±ÛŒØ®ÛŒ Ùˆ ØºØ°Ø§ÛŒ Ù…Ø­Ù„ÛŒØŒ Ù…Ø³ÛŒØ±Ù‡Ø§ÛŒ Ø³Ø¨Ú© Ùˆ Ù‡ÙˆØ§ÛŒ Ù…Ø¹ØªØ¯Ù„ Ù‡Ø³ØªÛŒÙ….';
     const firstTurn = page.waitForResponse(response =>
       new URL(response.url()).pathname.endsWith('/assistant-turns') && response.request().method() === 'POST');
     await page.locator('#trip-prompt').fill(requestText);
@@ -2034,9 +2246,9 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       throw new Error('real_chat_fields_not_synchronized_to_profile_form');
     }
 
-    await page.locator('#profile-origin').fill('مشهد');
-    await page.locator('#profile-budget').fill('۲۵ میلیون تومان');
-    await page.locator('#trip-follow-up').fill('تاریخ شروع سفر 2026-12-05 و تاریخ پایان 2026-12-08 است. بودجهٔ اصلاح‌شده ۲۵ میلیون تومان است.');
+    await page.locator('#profile-origin').fill('Ù…Ø´Ù‡Ø¯');
+    await page.locator('#profile-budget').fill('Û²Ûµ Ù…ÛŒÙ„ÛŒÙˆÙ† ØªÙˆÙ…Ø§Ù†');
+    await page.locator('#trip-follow-up').fill('ØªØ§Ø±ÛŒØ® Ø´Ø±ÙˆØ¹ Ø³ÙØ± 2026-12-05 Ùˆ ØªØ§Ø±ÛŒØ® Ù¾Ø§ÛŒØ§Ù† 2026-12-08 Ø§Ø³Øª. Ø¨ÙˆØ¯Ø¬Ù‡Ù” Ø§ØµÙ„Ø§Ø­â€ŒØ´Ø¯Ù‡ Û²Ûµ Ù…ÛŒÙ„ÛŒÙˆÙ† ØªÙˆÙ…Ø§Ù† Ø§Ø³Øª.');
     const correctionResponsePromise = page.waitForResponse(response =>
       new URL(response.url()).pathname.endsWith('/assistant-turns') && response.request().method() === 'POST');
     await page.locator('.assistant-controls > button').click();
@@ -2059,8 +2271,8 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     await page.locator('.assistant-candidate').waitFor({ state: 'visible' });
     await page.locator('.assistant-candidate button').first().click();
     const manualOrigin = normalizedPersianText(await page.locator('#profile-origin').inputValue());
-    safeResult.manualEditPreserved = manualOrigin.includes('مشهد')
-      && await page.locator('#profile-budget').inputValue() === '۲۵ میلیون تومان';
+    safeResult.manualEditPreserved = manualOrigin.includes('Ù…Ø´Ù‡Ø¯')
+      && await page.locator('#profile-budget').inputValue() === 'Û²Ûµ Ù…ÛŒÙ„ÛŒÙˆÙ† ØªÙˆÙ…Ø§Ù†';
     if (!safeResult.manualEditPreserved) throw new Error('real_chat_candidate_overwrote_manual_origin');
     const dateUpdates = [['start', '2026-12-05'], ['end', '2026-12-08']];
     safeResult.followUpDatesFromModel = true;
@@ -2076,13 +2288,13 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       if (await page.locator(id).inputValue() !== iso) throw new Error('issue23_calendar_iso_mismatch');
     }
     if (!await page.locator('#profile-travel-difficulty').inputValue()) {
-      await page.locator('#profile-travel-difficulty').fill('مسیرهای سبک');
+      await page.locator('#profile-travel-difficulty').fill('Ù…Ø³ÛŒØ±Ù‡Ø§ÛŒ Ø³Ø¨Ú©');
     }
     if (!await page.locator('#profile-weather-preferences').inputValue()) {
-      await page.locator('#profile-weather-preferences').fill('هوای معتدل');
+      await page.locator('#profile-weather-preferences').fill('Ù‡ÙˆØ§ÛŒ Ù…Ø¹ØªØ¯Ù„');
     }
     if (!await page.locator('#profile-local-cuisine').inputValue()) {
-      await page.locator('#profile-local-cuisine').fill('غذای محلی');
+      await page.locator('#profile-local-cuisine').fill('ØºØ°Ø§ÛŒ Ù…Ø­Ù„ÛŒ');
     }
     safeResult.invocationAttempts = (await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' })).attempts;
     safeResult.successfulInvocations = (await checkedControl(api.controlPort, api.controlToken, { action: 'assistant_call_status' })).successes;
@@ -2094,7 +2306,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     await confirmation.click();
     if ((await profileSaved).status() !== 200) throw new Error('real_chat_profile_save_failed');
     const confirmed = await (await page.request.get(`${webOrigin}/api/v1/trips/${tripId}`)).json();
-    if (confirmed.confirmed_requirements?.origin !== 'مشهد'
+    if (confirmed.confirmed_requirements?.origin !== 'Ù…Ø´Ù‡Ø¯'
       || Number(confirmed.confirmed_requirements?.budget?.amount) !== 25
       || confirmed.confirmed_requirements?.confirmation_source !== 'traveler_reviewed') {
       throw new Error('real_chat_confirmed_snapshot_did_not_preserve_manual_edit');
@@ -2166,7 +2378,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       if (restoredDraftResponse.status() !== 200 || restoredDraft.provisional_itinerary_id !== savedDraft.provisional_itinerary_id) {
         throw new Error('real_chat_provisional_itinerary_not_persisted');
       }
-      const note = 'یادداشت آزمایشی مسافر';
+      const note = 'ÛŒØ§Ø¯Ø¯Ø§Ø´Øª Ø¢Ø²Ù…Ø§ÛŒØ´ÛŒ Ù…Ø³Ø§ÙØ±';
       await page.locator('.provisional-itinerary .provisional-stop textarea').first().fill(note);
       const editResponse = page.waitForResponse(response =>
         new URL(response.url()).pathname === `/api/v1/provisional-itineraries/${savedDraft.provisional_itinerary_id}`
@@ -2238,7 +2450,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     if (!fixtureTripId) throw new Error('real_provider_test_trip_not_persisted');
     const fixtureTripProfile = structuredClone(confirmed.confirmed_requirements);
     delete fixtureTripProfile.requirement_consent;
-    fixtureTripProfile.destinations = ['SYNTHETIC E2E TEST DESTINATION — NOT A REAL PLACE'];
+    fixtureTripProfile.destinations = ['SYNTHETIC E2E TEST DESTINATION â€” NOT A REAL PLACE'];
     fixtureTripProfile.destination_ids = [fixture.destination_ids[0]];
     const consentReceipt = structuredClone(confirmed.confirmed_requirements.requirement_consent);
     delete consentReceipt.profile_version;
@@ -2296,7 +2508,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
       const createPromise = page.waitForResponse(response =>
         new URL(response.url()).pathname === '/api/v1/partners/organizations'
         && response.request().method() === 'POST');
-      await orgForm.getByRole('button', { name: 'Create organization', exact: true }).click();
+      await orgForm.getByRole('button', { name: 'Register company', exact: true }).click();
       if ((await createPromise).status() !== 201) throw new Error('real_provider_company_create_failed');
       const rows = await requestBrowserJson(page, '/api/v1/partners/organizations', 'GET', undefined, undefined);
       const row = rows.items.find(item => item.display_name === displayName);
@@ -2371,7 +2583,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     // accepts the profile without that field and the explicit top-level
     // consent request below.
     delete revisedRequirements.requirement_consent;
-    revisedRequirements.soft_preferences = [...new Set([...(revisedRequirements.soft_preferences ?? []), 'اولویت بازدید آرام از باغ‌های شیراز'])];
+    revisedRequirements.soft_preferences = [...new Set([...(revisedRequirements.soft_preferences ?? []), 'Ø§ÙˆÙ„ÙˆÛŒØª Ø¨Ø§Ø²Ø¯ÛŒØ¯ Ø¢Ø±Ø§Ù… Ø§Ø² Ø¨Ø§Øºâ€ŒÙ‡Ø§ÛŒ Ø´ÛŒØ±Ø§Ø²'])];
     const revisedTrip = await requestBrowserJson(page, `/api/v1/trips/${tripId}`, 'PATCH', identity.csrfToken, {
       expected_version: latestTrip.version,
       confirmed_requirements: revisedRequirements,
@@ -2586,7 +2798,7 @@ async function runRealProviderJourney(browser, api, audit, artifactRoot, provide
     await page.locator('.provisional-itinerary').waitFor({ state: 'visible' });
     await selectAndVerifyLocale(page, 'fa-IR');
     if (safeResult.provisionalEdited
-      && await page.locator('.provisional-itinerary .provisional-stop textarea').first().inputValue() !== 'یادداشت آزمایشی مسافر') {
+      && await page.locator('.provisional-itinerary .provisional-stop textarea').first().inputValue() !== 'ÛŒØ§Ø¯Ø¯Ø§Ø´Øª Ø¢Ø²Ù…Ø§ÛŒØ´ÛŒ Ù…Ø³Ø§ÙØ±') {
       throw new Error('issue23_provisional_edit_missing_after_reopen');
     }
     await page.locator('#profile-travel-start-picker').click();
@@ -2885,10 +3097,10 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     }
     if (locale === 'fa-IR') {
       const corrections = [
-        'مدت سفر را دوازده روز کنید؛ چهار نفر هستیم و بودجه ۳۰ میلیون تومان است.',
-        'اصلاح نهایی: مدت سفر پانزده روز است و بودجه ۴۵ میلیون تومان؛ ما چهار نفر هستیم.',
+        'Ù…Ø¯Øª Ø³ÙØ± Ø±Ø§ Ø¯ÙˆØ§Ø²Ø¯Ù‡ Ø±ÙˆØ² Ú©Ù†ÛŒØ¯Ø› Ú†Ù‡Ø§Ø± Ù†ÙØ± Ù‡Ø³ØªÛŒÙ… Ùˆ Ø¨ÙˆØ¯Ø¬Ù‡ Û³Û° Ù…ÛŒÙ„ÛŒÙˆÙ† ØªÙˆÙ…Ø§Ù† Ø§Ø³Øª.',
+        'Ø§ØµÙ„Ø§Ø­ Ù†Ù‡Ø§ÛŒÛŒ: Ù…Ø¯Øª Ø³ÙØ± Ù¾Ø§Ù†Ø²Ø¯Ù‡ Ø±ÙˆØ² Ø§Ø³Øª Ùˆ Ø¨ÙˆØ¯Ø¬Ù‡ Û´Ûµ Ù…ÛŒÙ„ÛŒÙˆÙ† ØªÙˆÙ…Ø§Ù†Ø› Ù…Ø§ Ú†Ù‡Ø§Ø± Ù†ÙØ± Ù‡Ø³ØªÛŒÙ….',
         ...Array.from({ length: 10 }, (_, index) =>
-          `برای همان سفر پانزده‌روزه به شیراز، اطلاعات پیشین را نگه دارید؛ ادامهٔ گفت‌وگو ${index + 1}.`),
+          `Ø¨Ø±Ø§ÛŒ Ù‡Ù…Ø§Ù† Ø³ÙØ± Ù¾Ø§Ù†Ø²Ø¯Ù‡â€ŒØ±ÙˆØ²Ù‡ Ø¨Ù‡ Ø´ÛŒØ±Ø§Ø²ØŒ Ø§Ø·Ù„Ø§Ø¹Ø§Øª Ù¾ÛŒØ´ÛŒÙ† Ø±Ø§ Ù†Ú¯Ù‡ Ø¯Ø§Ø±ÛŒØ¯Ø› Ø§Ø¯Ø§Ù…Ù‡Ù” Ú¯ÙØªâ€ŒÙˆÚ¯Ùˆ ${index + 1}.`),
       ];
       let latest;
       for (const turn of corrections) {
@@ -2907,7 +3119,7 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
           || Number(budget?.amount) !== 45 || !containsToman(budget?.raw)
           || !containsMillion(budget?.unit) || budget.currency !== 'TOMAN'
           || !accessibility.includes('wheelchair_access')
-          || !constraints.some(value => /rough|terrain|ناهموار/iu.test(value))
+          || !constraints.some(value => /rough|terrain|Ù†Ø§Ù‡Ù…ÙˆØ§Ø±/iu.test(value))
           || persistedConversation.status() !== 200
           || persistedMessages.messages?.filter(message => message.role === 'user').length < 13
           || latest?.trip?.extracted_requirements?.durationDays?.value !== 15) {
@@ -3136,7 +3348,7 @@ async function runLocaleJourney(browser, api, locale, audit, artifactRoot) {
     // Add a second trip to the same conversation so trip deletion and
     // conversation deletion are independently exercised in the browser.
     await pageA.locator('.journey-new-actions button').first().click();
-    const secondPrompt = `${copy.prompt} — ${locale === 'en-US' ? 'second draft' : locale === 'ar' ? 'مسودة ثانية' : 'پیش‌نویس دوم'}`;
+    const secondPrompt = `${copy.prompt} â€” ${locale === 'en-US' ? 'second draft' : locale === 'ar' ? 'Ù…Ø³ÙˆØ¯Ø© Ø«Ø§Ù†ÙŠØ©' : 'Ù¾ÛŒØ´â€ŒÙ†ÙˆÛŒØ³ Ø¯ÙˆÙ…'}`;
     await pageA.locator('#trip-prompt').fill(secondPrompt);
     const secondPersist = pageA.waitForResponse(response => {
       const path = new URL(response.url()).pathname;
@@ -3299,9 +3511,15 @@ async function main() {
         archive: { sha256: journeys.archiveStaging.archive_sha256, staging: journeys.archiveStaging,
           noLiveDatabaseOrVps: true },
         journeys: { operator: journeys.operator, partner: journeys.partner, traveler: journeys.traveler },
+        partnerUiMatrix: journeys.partnerUiMatrix,
         databaseCounts: journeys.databaseCounts,
         trace: journeys.apiTrace,
-        screenshots: ['national-catalogue/operator-candidate-review.png','national-catalogue/partner-workspace-persisted.png','national-catalogue/traveler-archive-itinerary-reopened.png'],
+        screenshots: [
+          'national-catalogue/operator-candidate-review.png',
+          'national-catalogue/partner-workspace-persisted.png',
+          'national-catalogue/traveler-archive-itinerary-reopened.png',
+          ...journeys.partnerUiMatrix.map(item => item.screenshot),
+        ],
         audit: { externalRequestsBlocked: audit.externalRequests, successfulExternalResponses: 0, browserPageErrors: 0 },
         note: 'Fake OTP and an in-process simulated Chat Gateway were used. All archive staging, source review, candidate evidence, identity decision, publication, partner records, recommendation and itinerary requests used the actual authenticated FastAPI and isolated PostgreSQL 17. No live provider or production data was used.',
       };

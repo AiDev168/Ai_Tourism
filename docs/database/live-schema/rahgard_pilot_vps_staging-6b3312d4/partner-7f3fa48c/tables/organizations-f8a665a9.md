@@ -1,0 +1,69 @@
+# partner.organizations
+
+- **دیتابیس:** `rahgard_pilot_vps_staging`
+- **نوع شیء:** جدول معمولی
+- **شرح:** هویت حقوقی/عملیاتی سازمان گردشگری و وضعیت درخواست، احراز صلاحیت و مشارکت آن.
+- **دسترسی خواندن:** Member or explicitly granted organization reviewer, constrained by RLS.
+- **دسترسی نوشتن:** Owners/managers edit profile fields only; lifecycle transitions require the independent reviewer API.
+- **نمایش عمومی:** Private by default; only verified, approved, active, non-test organizations enter the eligibility view.
+- **API مدل/مسیر:** GET/POST /api/v1/partners/organizations; PUT /api/v1/partners/organizations/{organization_id}; verification and separate reviewer decision routes.
+- **فیلد فرم UI:** PartnerWorkspace: company registration/profile and reviewer queue.
+- **منبع:** PostgreSQL `pg_catalog`، تراکنش فقط‌خواندنی، استخراج‌شده در `2026-11-24T06:58:13Z`
+- **امنیت ردیفی (RLS):** روشن؛ Forced=خیر
+- **هشدار:** هیچ دادهٔ ردیفی، رمز، کوکی یا مقدار شخصی در این فایل استخراج نشده است.
+
+## ستون‌ها و قرارداد داده
+
+| ستون | نوع PostgreSQL | Nullable | مقدار پیش‌فرض امن | پارامتر/معنی | قالب و اعتبارسنجی پایه |
+|---|---|---|---|---|---|
+| 'organization_id' | 'uuid' | خیر | 'gen_random_uuid()' | شناسه یکتای سازمان برای ارتباط با اعضا، خدمات و صندوق درخواست‌ها. | UUID استاندارد با ۳۶ نویسه و خط تیره، مانند xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx |
+| 'legal_name' | 'text' | خیر | — | نام حقوقی سازمان طبق مدارک رسمی (داده هویتی؛ دسترسی محدود). | رشته Unicode؛ سقف کاربردی باید از اعتبارسنجی API استخراج شود |
+| 'display_name' | 'text' | خیر | — | عنوان نمایشی شرکت در محیط شریک و فهرست گیرندگان. | رشته Unicode؛ سقف کاربردی باید از اعتبارسنجی API استخراج شود |
+| 'organization_type' | 'text' | خیر | — | دسته سازمان مانند آژانس یا ارائه‌دهنده خدمت؛ مقادیر مجاز از enum/اعتبارسنجی API. | رشته Unicode؛ سقف کاربردی باید از اعتبارسنجی API استخراج شود |
+| 'registration_country' | 'character(2)' | خیر | — | کشور ثبت حقوقی سازمان؛ کد/فرمت باید با اعتبارسنجی API تطبیق شود. | رشته با طول ثابت مشخص‌شده در PostgreSQL |
+| 'registration_number' | 'text' | بله | — | Optional legal registration identifier supplied by the organization; sensitive business identity data. | رشته Unicode؛ سقف کاربردی باید از اعتبارسنجی API استخراج شود |
+| 'primary_admin_area_id' | 'bigint' | بله | — | Optional resolved reference to the organization?s primary administrative area. | عدد صحیح در بازهٔ نوع ثبت‌شده؛ واحد دامنه‌ای باید مشخص شود |
+| 'verification_status' | 'text' | خیر | '[redacted string default]' | وضعیت احراز/تأیید سازمان توسط فرایند صاحب‌اختیار. | رشته Unicode؛ سقف کاربردی باید از اعتبارسنجی API استخراج شود |
+| 'participation_status' | 'text' | خیر | '[redacted string default]' | وضعیت فعال‌بودن مشارکت سازمان در سامانه. | رشته Unicode؛ سقف کاربردی باید از اعتبارسنجی API استخراج شود |
+| 'application_status' | 'text' | خیر | '[redacted string default]' | وضعیت درخواست عضویت/پذیرش سازمان. | رشته Unicode؛ سقف کاربردی باید از اعتبارسنجی API استخراج شود |
+| 'created_by' | 'uuid' | خیر | — | شناسه کاربری که سازمان را ایجاد کرده است. | UUID استاندارد با ۳۶ نویسه و خط تیره، مانند xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx |
+| 'created_at' | 'timestamp with time zone' | خیر | 'now()' | زمان ایجاد رکورد در دیتابیس. | زمان ISO 8601؛ وجود/نبود منطقهٔ زمانی مطابق نوع PostgreSQL |
+| 'updated_at' | 'timestamp with time zone' | خیر | 'now()' | زمان آخرین به‌روزرسانی رکورد. | زمان ISO 8601؛ وجود/نبود منطقهٔ زمانی مطابق نوع PostgreSQL |
+| 'closed_at' | 'timestamp with time zone' | بله | — | Timestamp that the organization was closed; a closed organization is not share-eligible. | زمان ISO 8601؛ وجود/نبود منطقهٔ زمانی مطابق نوع PostgreSQL |
+| 'is_test' | 'boolean' | خیر | 'false' | Operator-controlled test-data marker; test organizations are excluded from share eligibility. | true / false |
+
+## محدودیت‌ها و ارتباط‌ها
+
+- **organizations_application_status_check** (`c`): `CHECK ((application_status = ANY (ARRAY['draft'::text, 'submitted'::text, 'needs_information'::text, 'approved'::text, 'rejected'::text, 'withdrawn'::text])))`
+- **organizations_display_name_check** (`c`): `CHECK (((length(btrim(display_name)) >= 1) AND (length(btrim(display_name)) <= 240)))`
+- **organizations_legal_name_check** (`c`): `CHECK (((length(btrim(legal_name)) >= 1) AND (length(btrim(legal_name)) <= 240)))`
+- **organizations_organization_type_check** (`c`): `CHECK ((organization_type = ANY (ARRAY['company'::text, 'individual_business'::text, 'nonprofit'::text, 'public_body'::text, 'other'::text])))`
+- **organizations_participation_status_check** (`c`): `CHECK ((participation_status = ANY (ARRAY['inactive'::text, 'active'::text, 'suspended'::text, 'closed'::text])))`
+- **organizations_registration_country_check** (`c`): `CHECK ((registration_country ~ '^[A-Z]{2}$'::text))`
+- **organizations_verification_status_check** (`c`): `CHECK ((verification_status = ANY (ARRAY['pending'::text, 'verified'::text, 'rejected'::text, 'suspended'::text])))`
+- **organizations_created_by_fkey** (`f`): `FOREIGN KEY (created_by) REFERENCES identity.users(user_id) ON DELETE RESTRICT`
+- **organizations_primary_admin_area_id_fkey** (`f`): `FOREIGN KEY (primary_admin_area_id) REFERENCES geo.admin_areas(admin_area_id) ON DELETE RESTRICT`
+- **organizations_pkey** (`p`): `PRIMARY KEY (organization_id)`
+
+## ایندکس‌ها
+
+- `ix_partner_org_creator`: `CREATE INDEX ix_partner_org_creator ON partner.organizations USING btree (created_by, created_at DESC)`
+- `ix_partner_org_lifecycle`: `CREATE INDEX ix_partner_org_lifecycle ON partner.organizations USING btree (verification_status, participation_status, application_status)`
+- `organizations_pkey`: `CREATE UNIQUE INDEX organizations_pkey ON partner.organizations USING btree (organization_id)`
+
+## سیاست‌های RLS
+
+- `organizations_insert_self`: command=a, roles=[], using=`—`, with_check=`((created_by = partner.current_actor_id()) AND (verification_status = 'pending'::text) AND (participation_status = 'inactive'::text))`
+- `organizations_platform_review`: command=w, roles=[], using=`partner.has_platform_capability(partner.current_actor_id(), 'organization_review'::text)`, with_check=`partner.has_platform_capability(partner.current_actor_id(), 'organization_review'::text)`
+- `organizations_read_member`: command=r, roles=[], using=`((created_by = partner.current_actor_id()) OR partner.has_active_membership(organization_id, partner.current_actor_id()) OR partner.has_platform_capability(partner.current_actor_id(), 'organization_review'::text))`, with_check=`—`
+- `organizations_update_member`: command=w, roles=[], using=`partner.has_active_role(organization_id, partner.current_actor_id(), ARRAY['owner'::text, 'manager'::text])`, with_check=`(partner.has_active_role(organization_id, partner.current_actor_id(), ARRAY['owner'::text, 'manager'::text]) AND (verification_status = ANY (ARRAY['pending'::text, 'rejected'::text])) AND (participation_status = 'inactive'::text) AND (application_status = ANY (ARRAY['draft'::text, 'submitted'::text, 'needs_information'::text, 'withdrawn'::text])))`
+
+## تریگرهای غیرسیستمی
+
+- تریگر غیرسیستمی‌ای ثبت نشده است.
+
+## نیازمندی تکمیل دامنه
+
+- تعداد ستون‌های فاقد شرح صریح: **0** از **15**.
+- مالک دامنه و توسعه‌دهنده باید تعریف تجاری، مقادیر مجاز، واحد پول/اندازه، مثال غیرواقعی، قواعد اعتبارسنجی و سطح دسترسی هر فیلد را از کد و API تأیید کنند.
+- ستون‌ها را با فرم عمومیِ ویرایش SQL در اختیار کاربر قرار ندهید. فرم‌ها باید براساس نقش/قرارداد API باشند.

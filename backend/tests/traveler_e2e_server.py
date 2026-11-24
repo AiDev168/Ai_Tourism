@@ -223,6 +223,85 @@ def _national_catalogue_counts(database: dict[str, Any]) -> dict[str, int] | Non
         return None
 
 
+def _grant_isolated_partner_reviewer(database: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Provision only the reviewer used by this disposable browser acceptance."""
+    if os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") != "1":
+        return {"ok": False, "reason": "acceptance_mode_disabled"}
+    if not re.fullmatch(r"[0-9a-fA-F-]{36}", user_id):
+        return {"ok": False, "reason": "invalid_test_identity"}
+    owner_password = os.environ.get("AUTH_TEST_DATABASE_OWNER_PASSWORD", "")
+    marker = os.environ.get("AUTH_TEST_DATABASE_MARKER", "")
+    if not owner_password or not marker:
+        return {"ok": False, "reason": "isolated_owner_guard_unavailable"}
+    try:
+        with psycopg.connect(
+            **{**database, "user": "ai_tourism_owner", "password": owner_password},
+            connect_timeout=2, row_factory=dict_row,
+        ) as connection, connection.transaction():
+            identity = connection.execute(
+                """SELECT current_database() AS db,
+                          (SELECT count(*) FROM public.ai_tourism_auth_test_marker) AS marker_count,
+                          (SELECT min(marker_value) FROM public.ai_tourism_auth_test_marker) AS marker"""
+            ).fetchone()
+            if (identity["db"] != database["dbname"] or identity["marker_count"] != 1
+                    or not __import__("hmac").compare_digest(identity["marker"] or "", marker)):
+                return {"ok": False, "reason": "database_marker_mismatch"}
+            if not connection.execute(
+                "SELECT 1 FROM identity.users WHERE user_id=%s", (user_id,),
+            ).fetchone():
+                return {"ok": False, "reason": "test_user_not_found"}
+            connection.execute(
+                """INSERT INTO partner.platform_grants(user_id,capability,granted_by,reason)
+                   VALUES (%s,'organization_review',%s,
+                           'Disposable partner workspace browser acceptance only')""",
+                (user_id, user_id),
+            )
+        return {"ok": True}
+    except psycopg.Error as exc:
+        return {"ok": False, "sqlstate": exc.sqlstate or "unknown_sqlstate",
+                "error_class": type(exc).__name__}
+    except Exception as exc:
+        return {"ok": False, "error_class": type(exc).__name__}
+
+
+def _isolated_partner_counts(database: dict[str, Any]) -> dict[str, int] | None:
+    """Return aggregate QA counts only; refuse to query outside marked disposable PG."""
+    if os.environ.get("RAHGARD_NATIONAL_CATALOGUE_E2E") != "1":
+        return None
+    owner_password = os.environ.get("AUTH_TEST_DATABASE_OWNER_PASSWORD", "")
+    marker = os.environ.get("AUTH_TEST_DATABASE_MARKER", "")
+    if not owner_password or not marker:
+        return None
+    try:
+        with psycopg.connect(
+            **{**database, "user": "ai_tourism_owner", "password": owner_password},
+            connect_timeout=2, row_factory=dict_row,
+        ) as connection:
+            identity = connection.execute(
+                """SELECT current_database() AS db,
+                          (SELECT count(*) FROM public.ai_tourism_auth_test_marker) AS marker_count,
+                          (SELECT min(marker_value) FROM public.ai_tourism_auth_test_marker) AS marker"""
+            ).fetchone()
+            if (identity["db"] != database["dbname"] or identity["marker_count"] != 1
+                    or not __import__("hmac").compare_digest(identity["marker"] or "", marker)):
+                return None
+            row = connection.execute(
+                """SELECT
+                     (SELECT count(*) FROM partner.organizations) organizations,
+                     (SELECT count(*) FROM partner.share_eligible_organizations) eligible_organizations,
+                     (SELECT count(*) FROM partner.verification_cases) verification_cases,
+                     (SELECT count(*) FROM partner.review_events) review_events,
+                     (SELECT count(*) FROM partner.services) services,
+                     (SELECT count(*) FROM partner.schedules) schedules,
+                     (SELECT count(*) FROM partner.offers) offers,
+                     (SELECT count(*) FROM partner.prices) prices,
+                     (SELECT count(*) FROM partner.availability_snapshots) availability"""
+            ).fetchone()
+        return {key: int(value) for key, value in row.items()}
+    except Exception:
+        return None
+
+
 def _account_state(database: dict[str, Any], user_id: str, phone: str) -> dict[str, Any]:
     with psycopg.connect(**database, connect_timeout=2, row_factory=dict_row) as connection:
         row = connection.execute(
@@ -356,6 +435,13 @@ class _ControlHandler(socketserver.StreamRequestHandler):
                 result = {"ok": isinstance(caps, list) and _grant_catalogue_capabilities(
                     self.server.database, str(command.get("user_id", "")), caps
                 )}
+            elif action == "grant_isolated_partner_reviewer":
+                result = _grant_isolated_partner_reviewer(
+                    self.server.database, str(command.get("user_id", "")),
+                )
+            elif action == "isolated_partner_counts":
+                counts = _isolated_partner_counts(self.server.database)
+                result = {"ok": counts is not None, **(counts or {})}
             elif action == "approve_isolated_test_organization":
                 approved, reason = _approve_isolated_test_organization(
                     self.server.database,
@@ -497,7 +583,9 @@ def main() -> None:
     )
     config.get_settings = lambda: settings
     _SAFE_PHASE = "application_import"
-    from app.main import app
+    from app.main import app, safe_http_exception
+    from fastapi import HTTPException as FastAPIHTTPException
+    from fastapi.responses import JSONResponse
     from app.modules.identity.sms import FakeSmsAdapter
     from app.api.assistant import get_chat_gateway
     from app.modules.integrations.chat_adapter import ChatReply
@@ -730,6 +818,24 @@ def main() -> None:
         traveler_api.production_catalogue_bundle = guarded_catalogue_bundle
     adapter = FakeSmsAdapter()
     app.state.sms_adapter = adapter
+    if national_catalogue_mode:
+        async def safe_isolated_forbidden_code(request, error):
+            # Isolated-only diagnostics expose a strict allowlist of generic
+            # authorization reason codes. Production keeps the normal
+            # privacy-preserving `request_rejected` response.
+            safe_codes = {
+                "csrf_rejected", "self_review_forbidden", "partner_review_not_granted",
+                "organization_access_denied", "organization_owner_required",
+            }
+            if isinstance(error, FastAPIHTTPException) and error.status_code == 403 \
+                    and isinstance(error.detail, str) and (
+                        error.detail in safe_codes
+                        or re.fullmatch(r"db_privilege_denied_[A-Za-z0-9_]+_[A-Za-z0-9_.]+", error.detail)
+                    ):
+                return JSONResponse(status_code=403, content={"error": {"code": error.detail}})
+            return await safe_http_exception(request, error)
+
+        app.add_exception_handler(FastAPIHTTPException, safe_isolated_forbidden_code)
     # Routers imported the original cached dependency function by reference.
     # Override that exact callable; patching config.get_settings alone replaces
     # only the module attribute and leaves route dependencies on defaults.
