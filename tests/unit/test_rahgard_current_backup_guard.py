@@ -98,7 +98,7 @@ def test_backup_dirs_must_be_private_separate_and_outside_checkout(tmp_path):
     keys.chmod(0o700)
     result = _private_paths(backup, keys)
     assert result == (backup.resolve(), keys.resolve())
-    with pytest.raises(ValueError, match="outside the Git checkout"):
+    with pytest.raises(ValueError, match="outside the repository"):
         _private_paths(ROOT, keys)
 
 

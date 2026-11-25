@@ -9,7 +9,7 @@
     "web": "sha256:a390a42fa43675e6b37add2ae135ca6623b785ff7a13d5fc8bb25f3852f73d02"
   },
   "source_snapshot_sha256": "98001be962cdb8459df9f9a84f24706ae5601221be87423b0051c562f3f92fb5",
-  "catalog_metadata_snapshot_sha256": "b285acaa6bf20987ad46ca57a262044e01edfe12b317e79d3f67baae68677959",
+  "catalog_metadata_snapshot_sha256": "77b5c8533460780232fb6a1420f76a71e0c30387467a7741291709b0f6d46ea6",
   "database_identity": {
     "database": "rahgard_pilot_vps_staging",
     "server_version": "17.11 (Debian 17.11-1.pgdg13+2)",

@@ -8,7 +8,7 @@
   "database_role": "ai_tourism_app",
   "collection": "read-only pg_catalog metadata; application rows not read by schema collector",
   "snapshot_file": "catalog_metadata_snapshot.json",
-  "snapshot_sha256": "d997a26c9754146a4bdb5fd7658957bc37ae0c848949583798f2ba170f9451f4",
+  "snapshot_sha256": "b181b9b4838e699d8628e9b52fe0b509c85d69f5459805d7f2c322ae3cb4c2bb",
   "database_inventory": {
     "non_template_names_discovered": 2,
     "authorized_databases_attempted": 1,
