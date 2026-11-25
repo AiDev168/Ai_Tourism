@@ -1,5 +1,9 @@
 # Rahgard database documentation
 
+## Isolated migration-0026 rehearsal
+
+For the local Windows owner demo and schema generated from its isolated PostgreSQL 17 database, start with the [Persian owner index](rehearsed-schema-0026/OWNER_INDEX_FA.md), [rehearsed catalogue](rehearsed-schema-0026/README.md), [snapshot evidence](rehearsed-schema-0026/SNAPSHOT_EVIDENCE.json) and [role-to-form/API map](rehearsed-schema-0026/FORM_API_COVERAGE.md). This is not the live VPS snapshot and does not establish architectural approval. The live historical snapshot below remains separately scoped.
+
 ## Current evidence boundary
 
 The checked-in live schema snapshot describes one authorized database, `rahgard_pilot_vps_staging`, observed read-only on PostgreSQL 17. It records 101 relations (87 tables and 14 views) and 1,106 **column occurrences**. The baseline glossary contains 230 matching descriptions and has 876 unmatched occurrences.

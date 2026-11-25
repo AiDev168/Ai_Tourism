@@ -22,7 +22,28 @@ import psycopg
 
 BASE_DATABASE = "rahgard_pilot_vps_staging"
 DATABASE_USER = "ai_tourism_app"
-PASSWORD_FILE = Path("/run/secrets/app_db_password")
+TARGET = os.environ.get("RAHGARD_SCHEMA_TARGET", "staging_container")
+if TARGET not in {"staging_container", "local_demo"}:
+    raise SystemExit("schema_target_invalid")
+if TARGET == "local_demo":
+    DB_HOST = os.environ.get("RAHGARD_SCHEMA_HOST", "")
+    DB_PORT = int(os.environ.get("RAHGARD_SCHEMA_PORT", "0"))
+    PASSWORD_FILE = Path(os.environ.get("RAHGARD_SCHEMA_PASSWORD_FILE", ""))
+    local_app_data = Path(os.environ.get("LOCALAPPDATA", ""))
+    expected_password_file = local_app_data / "Rahgard" / "Issue27OwnerDemo" / "secrets" / "app_db_password"
+    try:
+        password_isolated = (local_app_data.is_absolute()
+                             and PASSWORD_FILE.resolve(strict=True) == expected_password_file.resolve(strict=False)
+                             and not PASSWORD_FILE.is_symlink())
+    except OSError:
+        password_isolated = False
+    if DB_HOST != "127.0.0.1" or DB_PORT != 18543 or not password_isolated:
+        raise SystemExit("local_demo_target_invalid")
+else:
+    if any(name in os.environ for name in ("RAHGARD_SCHEMA_HOST", "RAHGARD_SCHEMA_PORT", "RAHGARD_SCHEMA_PASSWORD_FILE")):
+        raise SystemExit("staging_target_override_forbidden")
+    DB_HOST, DB_PORT = "db", 5432
+    PASSWORD_FILE = Path("/run/secrets/app_db_password")
 RAHGARD_DATABASE_PREFIX = "rahgard_"
 
 
@@ -152,7 +173,7 @@ def collect_instance(password: str) -> dict:
     catalog inspection on a shared PostgreSQL server.
     """
     with psycopg.connect(
-        host="db", port=5432, dbname=BASE_DATABASE, user=DATABASE_USER,
+        host=DB_HOST, port=DB_PORT, dbname=BASE_DATABASE, user=DATABASE_USER,
         password=password, connect_timeout=6,
         application_name="rahgard_schema_documenter_ro_inventory",
     ) as inventory_conn:
@@ -171,7 +192,7 @@ def collect_instance(password: str) -> dict:
         attempted.append(database)
         try:
             with psycopg.connect(
-                host="db", port=5432, dbname=database, user=DATABASE_USER,
+                host=DB_HOST, port=DB_PORT, dbname=database, user=DATABASE_USER,
                 password=password, connect_timeout=6,
                 application_name="rahgard_schema_documenter_ro",
             ) as conn:
@@ -199,6 +220,7 @@ def collect_instance(password: str) -> dict:
     return {
         "created_utc": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "scope": "authorized-rahgard-databases-only",
+        "environment_scope": "isolated_local_demo" if TARGET == "local_demo" else "staging_container",
         "source_release": os.environ.get("RELEASE_COMMIT", "not exposed by container"),
         "source_release_images": image_ids,
         "instance_database_inventory": "read-only pg_database scan via ai_tourism_app",

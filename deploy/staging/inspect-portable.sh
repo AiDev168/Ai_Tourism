@@ -64,6 +64,7 @@ allowed_secrets = {
     "pg_owner_password", "app_db_password", "geo_authorizer_password",
     "geo_publisher_password", "auth_otp_hmac_secret", "auth_csrf_secret",
     "auth_rate_limit_secret", "internal_chat_token", "sms_ir_production_api_key",
+    "platform_admin_mfa_encryption_key_hex", "platform_admin_recovery_pepper",
 }
 
 def safe_name(name):
@@ -76,7 +77,7 @@ def allowed(name, is_dir):
     n = name.rstrip("/")
     if n in {"private", "private/secrets", "private/state", "release"}:
         return is_dir
-    if n in {"MANIFEST.sha256", "database.dump", "database.migration-ledger.tsv", "database.critical-counts.tsv", "private/host.env", "private/state/WRITE_FREEZE", "release/RELEASE_COMMIT"}:
+    if n in {"MANIFEST.sha256", "database.dump", "database.migration-ledger.tsv", "database.critical-counts.tsv", "runtime-images.tar", "runtime-image-identities.tsv", "private/host.env", "private/state/WRITE_FREEZE", "release/RELEASE_COMMIT"}:
         return not is_dir
     if n.startswith("private/secrets/"):
         return not is_dir and n.removeprefix("private/secrets/") in allowed_secrets
@@ -111,7 +112,7 @@ with tarfile.open(archive_path, mode="r:") as tf:
             dirs.add(name.rstrip("/"))
         else:
             regular[name] = m
-    required = {"MANIFEST.sha256", "database.dump", "database.migration-ledger.tsv", "database.critical-counts.tsv", "private/host.env", "private/state/WRITE_FREEZE", "release/RELEASE_COMMIT"}
+    required = {"MANIFEST.sha256", "database.dump", "database.migration-ledger.tsv", "database.critical-counts.tsv", "runtime-images.tar", "runtime-image-identities.tsv", "private/host.env", "private/state/WRITE_FREEZE", "release/RELEASE_COMMIT"}
     required_secrets = {
         "pg_owner_password", "app_db_password", "geo_authorizer_password",
         "geo_publisher_password", "auth_otp_hmac_secret", "auth_csrf_secret",
@@ -120,8 +121,15 @@ with tarfile.open(archive_path, mode="r:") as tf:
     if not required.issubset(regular):
         raise SystemExit("Archive is missing required portability files.")
     bundled_secrets = {n.removeprefix("private/secrets/") for n in regular if n.startswith("private/secrets/")}
-    if bundled_secrets != required_secrets:
+    mfa_secrets = {"platform_admin_mfa_encryption_key_hex", "platform_admin_recovery_pepper"}
+    if bundled_secrets not in (required_secrets, required_secrets | mfa_secrets):
         raise SystemExit("Runtime secret allowlist mismatch.")
+    if "private/state/platform-mfa-status" not in regular:
+        raise SystemExit("Portable MFA configuration state is missing.")
+    with open(os.path.join(root, "private/state/platform-mfa-status"), encoding="ascii") as f:
+        mfa_status = f.read().strip()
+    if mfa_status not in {"mfa_enabled", "mfa_disabled"} or (mfa_status == "mfa_enabled") != (bundled_secrets == (required_secrets | mfa_secrets)):
+        raise SystemExit("Portable MFA state and protected file allowlist disagree.")
     for name in regular:
         parts = name.split("/")
         for i in range(1, len(parts)):
@@ -199,6 +207,9 @@ else
     --cap-drop ALL --security-opt no-new-privileges:true --entrypoint pg_restore "$restore_image" \
     --list < "$work/extracted/database.dump" >/dev/null
 fi
+python3 "$work/extracted/release/deploy/staging/verify-portable-images.py" \
+  "$work/extracted/runtime-images.tar" "$work/extracted/runtime-image-identities.tsv" \
+  "$(cat "$work/extracted/release/RELEASE_COMMIT")"
 [[ ! -e "$destination" ]] || { echo 'Destination appeared during inspection; refusing to overwrite.' >&2; exit 2; }
 mv -T -n -- "$work/extracted" "$destination"
 [[ ! -e "$work/extracted" ]] || { echo 'Destination appeared during inspection; refusing to overwrite.' >&2; exit 2; }

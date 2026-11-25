@@ -1,0 +1,66 @@
+# knowledge.source_verification_reviews
+
+- **دیتابیس:** `rahgard_pilot_vps_staging`
+- **نوع شیء:** جدول معمولی
+- **شرح:** No PostgreSQL comment or baseline glossary table description was recorded.
+- **دسترسی خواندن:** از RLS/GRANT واقعی و مسیر API تطبیق شود؛ این مستند مقدار ردیفی نمی‌خواند.
+- **دسترسی نوشتن:** از RLS/GRANT واقعی و مسیر API تطبیق شود؛ دسترسی مستقیم SQL به کاربر ندهید.
+- **نمایش عمومی:** نامشخص تا تطبیق با View انتشار و API؛ پیش‌فرض خصوصی.
+- **API مدل/مسیر:** مسیر مشخصی در کد پیدا نشده؛ نیازمند بررسی مالک ماژول.
+- **فیلد فرم UI:** فرم مشخصی در فهرست نگاشت پیدا نشده؛ نیازمند بررسی UI.
+- **Static SQL operation hints:** backend/app/api/catalogue_review.py:SELECT@664 (literal source matches only, not runtime proof)
+- **PostgreSQL relation owner:** `ai_tourism_owner` (technical ownership only; not product approval)
+- **Architecture disposition:** `KEEP` — Runtime source contains a qualified relation reference; this proves a code dependency, not that every column is necessary.
+- **DDL provenance:** engineering/pilot/sql/020_archive_candidate_publication.sql:23
+- **Metadata snapshot:** PostgreSQL `pg_catalog`, read-only, captured `2026-11-25T13:08:55Z`; no application rows
+- **امنیت ردیفی (RLS):** روشن؛ Forced=خیر
+- **هشدار:** هیچ دادهٔ ردیفی، رمز، کوکی یا مقدار شخصی در این فایل استخراج نشده است.
+
+## ستون‌ها و قرارداد داده
+
+| Column occurrence | PostgreSQL type | Nullable | Sanitized default | Existing meaning / classification | Format evidence | Provenance | Sensitivity / owner | Read/write evidence |
+|---|---|---|---|---|---|---|---|---|
+| 'verification_id' | 'uuid' | خیر | 'gen_random_uuid()' | **UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix. | PostgreSQL storage type 'uuid' only; business units, accepted values, and validation are not inferred from the SQL type. | engineering/pilot/sql/020_archive_candidate_publication.sql:23 | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/api/catalogue_review.py; column write path is not inferred |
+| 'source_id' | 'bigint' | خیر | — | **UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix. | PostgreSQL storage type 'bigint' only; business units, accepted values, and validation are not inferred from the SQL type. | engineering/pilot/sql/020_archive_candidate_publication.sql:23 | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/api/catalogue_review.py; column write path is not inferred |
+| 'decision' | 'text' | خیر | — | **UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix. | PostgreSQL storage type 'text' only; business units, accepted values, and validation are not inferred from the SQL type. | engineering/pilot/sql/020_archive_candidate_publication.sql:23 | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/api/catalogue_review.py; column write path is not inferred |
+| 'source_url' | 'text' | خیر | — | **UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix. | PostgreSQL storage type 'text' only; business units, accepted values, and validation are not inferred from the SQL type. | engineering/pilot/sql/020_archive_candidate_publication.sql:23 | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/api/catalogue_review.py; column write path is not inferred |
+| 'publisher' | 'text' | خیر | — | **UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix. | PostgreSQL storage type 'text' only; business units, accepted values, and validation are not inferred from the SQL type. | engineering/pilot/sql/020_archive_candidate_publication.sql:23 | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/api/catalogue_review.py; column write path is not inferred |
+| 'page_title' | 'text' | خیر | — | **UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix. | PostgreSQL storage type 'text' only; business units, accepted values, and validation are not inferred from the SQL type. | engineering/pilot/sql/020_archive_candidate_publication.sql:23 | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/api/catalogue_review.py; column write path is not inferred |
+| 'evidence_excerpt' | 'text' | خیر | — | **UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix. | PostgreSQL storage type 'text' only; business units, accepted values, and validation are not inferred from the SQL type. | engineering/pilot/sql/020_archive_candidate_publication.sql:23 | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/api/catalogue_review.py; column write path is not inferred |
+| 'inspected_at' | 'timestamp with time zone' | خیر | — | **UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix. | PostgreSQL storage type 'timestamp with time zone' only; business units, accepted values, and validation are not inferred from the SQL type. | engineering/pilot/sql/020_archive_candidate_publication.sql:23 | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/api/catalogue_review.py; column write path is not inferred |
+| 'reviewer_user_id' | 'uuid' | خیر | — | **UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix. | PostgreSQL storage type 'uuid' only; business units, accepted values, and validation are not inferred from the SQL type. | engineering/pilot/sql/020_archive_candidate_publication.sql:23 | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/api/catalogue_review.py; column write path is not inferred |
+| 'policy_version' | 'text' | خیر | — | **UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix. | PostgreSQL storage type 'text' only; business units, accepted values, and validation are not inferred from the SQL type. | engineering/pilot/sql/020_archive_candidate_publication.sql:23 | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/api/catalogue_review.py; column write path is not inferred |
+| 'decided_at' | 'timestamp with time zone' | خیر | 'now()' | **UNDOCUMENTED:** no baseline glossary/comment evidence. Business meaning, necessity, and write owner have not been established; see the architecture/usage matrix. | PostgreSQL storage type 'timestamp with time zone' only; business units, accepted values, and validation are not inferred from the SQL type. | engineering/pilot/sql/020_archive_candidate_publication.sql:23 | editorial_private_or_public_after_publication / PostgreSQL owner 'ai_tourism_owner'; Knowledge/catalogue provenance and publication view govern exposure.; provisional domain classification, not privacy-owner sign-off | qualified backend relation refs: backend/app/api/catalogue_review.py; column write path is not inferred |
+
+## محدودیت‌ها و ارتباط‌ها
+
+- **source_verification_reviews_decision_check** (`c`): `CHECK ((decision = ANY (ARRAY['verified'::text, 'rejected'::text])))`
+- **source_verification_reviews_evidence_excerpt_check** (`c`): `CHECK (((length(btrim(evidence_excerpt)) >= 1) AND (length(btrim(evidence_excerpt)) <= 600)))`
+- **source_verification_reviews_page_title_check** (`c`): `CHECK (((length(btrim(page_title)) >= 1) AND (length(btrim(page_title)) <= 500)))`
+- **source_verification_reviews_policy_version_check** (`c`): `CHECK (((length(btrim(policy_version)) >= 1) AND (length(btrim(policy_version)) <= 80)))`
+- **source_verification_reviews_publisher_check** (`c`): `CHECK (((length(btrim(publisher)) >= 1) AND (length(btrim(publisher)) <= 240)))`
+- **source_verification_reviews_source_url_check** (`c`): `CHECK ((source_url ~ '^https://'::text))`
+- **source_verification_reviews_reviewer_user_id_fkey** (`f`): `FOREIGN KEY (reviewer_user_id) REFERENCES identity.users(user_id) ON DELETE RESTRICT`
+- **source_verification_reviews_source_id_fkey** (`f`): `FOREIGN KEY (source_id) REFERENCES knowledge.knowledge_sources(source_id) ON DELETE RESTRICT`
+- **source_verification_reviews_pkey** (`p`): `PRIMARY KEY (verification_id)`
+
+## ایندکس‌ها
+
+- `ix_source_verification_latest`: `CREATE INDEX ix_source_verification_latest ON knowledge.source_verification_reviews USING btree (source_id, decided_at DESC)`
+- `source_verification_reviews_pkey`: `CREATE UNIQUE INDEX source_verification_reviews_pkey ON knowledge.source_verification_reviews USING btree (verification_id)`
+
+## سیاست‌های RLS
+
+- `source_verification_review_insert`: command=a, roles=[], using=`—`, with_check=`((reviewer_user_id = identity.current_app_actor_id()) AND identity.has_catalogue_review_capability(identity.current_app_actor_id(), 'source_review'::text))`
+- `source_verification_reviewers`: command=r, roles=[], using=`identity.has_catalogue_review_capability(identity.current_app_actor_id(), 'source_review'::text)`, with_check=`—`
+
+## تریگرهای غیرسیستمی
+
+- تریگر غیرسیستمی‌ای ثبت نشده است.
+
+## Glossary coverage (not a requirement count)
+
+- Undocumented first-party base-table occurrences in this object: **11** of **11**. This does not mean the same number of distinct business parameters is needed.
+- Derived-view columns are projections; consult `docs/database/architecture-usage/view_column_lineage.csv` rather than adding duplicate glossary prose.
+- Extension-owned fields refer to PostgreSQL/PostGIS documentation and are not Rahgard user-form fields.
+- Do not expose a generic SQL editor. User forms must follow an authorized API and role contract.

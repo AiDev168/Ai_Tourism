@@ -19,6 +19,8 @@ bundle_dir=$(realpath -e -- "$bundle_dir")
 release_sha=$(cat "$bundle_dir/release/RELEASE_COMMIT")
 [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid archived release SHA.' >&2; exit 2; }
 test -s "$bundle_dir/private/secrets/app_db_password"
+python3 "$bundle_dir/release/deploy/staging/verify-portable-images.py" \
+  "$bundle_dir/runtime-images.tar" "$bundle_dir/runtime-image-identities.tsv" "$release_sha"
 
 docker inspect "$target_container" | python3 -c '
 import json,sys
@@ -29,6 +31,7 @@ if labels.get("rahgard.restore.target")!="isolated" or labels.get("rahgard.envir
     raise SystemExit("Target lacks isolated restore labels.")
 if c.get("State",{}).get("Running") is not True: raise SystemExit("Target database is not running.")
 host=c.get("HostConfig") or {}
+if host.get("NetworkMode")!="none": raise SystemExit("Target database must have Docker network mode none.")
 tmpfs=host.get("Tmpfs") or {}
 if "/var/lib/postgresql/data" not in tmpfs:
     raise SystemExit("Target database does not use tmpfs.")
@@ -44,8 +47,8 @@ source_count=$(docker exec "$target_container" psql -X -q -A -t -U ai_tourism_ow
 [[ "$source_count" =~ ^[0-9]+$ ]] || { echo 'Cannot read restored catalogue through owner role.' >&2; exit 2; }
 
 run_suffix="${release_sha:0:8}-$$"
-image="rahgard-restore-check:${run_suffix}"
 source_image="rahgard-api:${release_sha}"
+source_web_image="rahgard-web:${release_sha}"
 app_name="rahgard-restore-api-${run_suffix}"
 secret_volume="rahgard-restore-secrets-${run_suffix}"
 [[ "$app_name" =~ ^rahgard-restore-api-[0-9a-f]{8}-[0-9]+$ \
@@ -54,23 +57,33 @@ running=$(docker ps -aq --filter "name=^/${app_name}$")
 [[ -z "$running" ]] || { echo 'Restore-check container name already exists; refusing reuse.' >&2; exit 2; }
 volume_exists=$(docker volume ls -q --filter "name=^${secret_volume}$")
 [[ -z "$volume_exists" ]] || { echo 'Restore-check secret volume already exists; refusing reuse.' >&2; exit 2; }
-image_exists=$(docker image ls -q --filter "reference=$image")
-[[ -z "$image_exists" ]] || { echo 'Restore-check image tag already exists; refusing reuse.' >&2; exit 2; }
-image_created=false
 cleanup() {
   docker rm -f "$app_name" >/dev/null 2>&1 || true
   docker volume rm "$secret_volume" >/dev/null 2>&1 || true
-  if [[ "$image_created" == true ]]; then docker image rm "$image" >/dev/null 2>&1 || true; fi
 }
 trap cleanup EXIT
-if docker image inspect "$source_image" >/dev/null 2>&1; then
-  image="$source_image"
-  printf 'Using locally cached exact release API image %s.\n' "$image"
-else
-  docker build --pull=false -f "$bundle_dir/release/deploy/staging/Dockerfile.api" -t "$image" "$bundle_dir/release" >/dev/null
-  image_created=true
-  printf 'Built API image from archived source release %s.\n' "$release_sha"
+expected_api_id=$(awk -F'|' -v tag="$source_image" '$1==tag {print $2}' "$bundle_dir/runtime-image-identities.tsv")
+expected_web_id=$(awk -F'|' -v tag="$source_web_image" '$1==tag {print $2}' "$bundle_dir/runtime-image-identities.tsv")
+[[ "$expected_api_id" =~ ^sha256:[0-9a-f]{64}$ && "$expected_web_id" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Portable API/Web image identity record is incomplete.' >&2; exit 2; }
+for pair in "$source_image|$expected_api_id" "$source_web_image|$expected_web_id"; do
+  image_name=${pair%%|*}; expected_id=${pair#*|}
+  if docker image inspect "$image_name" >/dev/null 2>&1; then
+    actual_id=$(docker image inspect --format '{{.Id}}' "$image_name")
+    [[ "$actual_id" == "$expected_id" ]] || { echo "Cached immutable image conflicts with portable bundle: $image_name" >&2; exit 2; }
+  else
+    needs_load=true
+  fi
+done
+if [[ "${needs_load:-false}" == true ]]; then
+  docker load --input "$bundle_dir/runtime-images.tar" >/dev/null
 fi
+for pair in "$source_image|$expected_api_id" "$source_web_image|$expected_web_id"; do
+  image_name=${pair%%|*}; expected_id=${pair#*|}
+  actual_id=$(docker image inspect --format '{{.Id}}' "$image_name")
+  [[ "$actual_id" == "$expected_id" ]] || { echo "Loaded immutable image identity mismatch: $image_name" >&2; exit 2; }
+done
+image="$source_image"
+printf 'Using verified portable API/Web image IDs for immutable release %s.\n' "$release_sha"
 docker volume create "$secret_volume" >/dev/null
 app_uid=$(docker run --rm --entrypoint sh "$image" -c 'id -u rahgard')
 app_gid=$(docker run --rm --entrypoint sh "$image" -c 'id -g rahgard')
@@ -116,3 +129,4 @@ print(payload["count"])
 [[ "$api_count" == "$source_count" ]] || { echo 'Restored API catalogue count differs from restored DB view.' >&2; exit 3; }
 printf 'PASS: archived API release=%s starts and passes /health/ready against isolated PostgreSQL 17.\n' "$release_sha"
 printf 'PASS: authenticated catalogue endpoint returns %s approved destinations; no host ports were published.\n' "$api_count"
+printf 'Imported immutable image tags remain cached; verify the outer bundle checksum before any later use.\n'

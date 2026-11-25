@@ -71,6 +71,7 @@ if not (image.startswith("postgres:17") or "rahgard-postgres:17" in image):
     raise SystemExit("Target image is not PostgreSQL 17.")
 mounts=c.get("Mounts") or []
 host=c.get("HostConfig") or {}
+if host.get("NetworkMode")!="none": raise SystemExit("Restore target must have Docker network mode none.")
 tmpfs=host.get("Tmpfs") or {}
 if "/var/lib/postgresql/data" not in tmpfs:
     raise SystemExit("PostgreSQL data directory is not mounted on tmpfs.")
@@ -98,26 +99,40 @@ exists=$(docker exec "$target_container" psql -X -q -A -t -U "$db_owner" -d post
 # application roles from the authenticated secret payload before preserving
 # the database ACLs from the dump. The existing target owner is not changed.
 app_password_file="$bundle_dir/private/secrets/app_db_password"
-[[ -f "$app_password_file" && ! -L "$app_password_file" && -s "$app_password_file" ]] || {
-  echo 'Authenticated bundle has no app DB password; refusing a runtime-incomplete restore.' >&2; exit 2;
-}
-docker cp "$app_password_file" "$target_container:/root/.rahgard-restore-app-db-password"
+for name in app_db_password geo_authorizer_password geo_publisher_password; do
+  file="$bundle_dir/private/secrets/$name"
+  [[ -f "$file" && ! -L "$file" && -s "$file" ]] || {
+    echo "Authenticated bundle has no $name; refusing a runtime-incomplete restore." >&2; exit 2;
+  }
+  docker cp "$file" "$target_container:/root/.rahgard-restore-$name"
+done
+existing_roles=$(docker exec "$target_container" psql -X -q -A -t -U "$db_owner" -d postgres \
+  -c "SELECT count(*) FROM pg_roles WHERE rolname IN ('ai_tourism_app','rahgard_pilot_geo_authorizer','rahgard_pilot_geo_publisher','rahgard_pilot_geo_executor','rahgard_pilot_geo_migrator')")
+[[ "$existing_roles" == 0 ]] || { echo 'Isolated target already contains Rahgard runtime roles; refusing ambiguous role reuse.' >&2; exit 2; }
 cat > "$work/create-runtime-roles.sh" <<'SH'
 set -eu
-cleanup_secret() { unset RAHGARD_RESTORE_APP_DB_PASSWORD; rm -f -- /root/.rahgard-restore-app-db-password; }
+cleanup_secret() {
+  unset RAHGARD_RESTORE_APP_DB_PASSWORD RAHGARD_RESTORE_GEO_AUTHORIZER_PASSWORD RAHGARD_RESTORE_GEO_PUBLISHER_PASSWORD
+  rm -f -- /root/.rahgard-restore-app_db_password /root/.rahgard-restore-geo_authorizer_password /root/.rahgard-restore-geo_publisher_password
+}
 trap cleanup_secret EXIT HUP INT TERM
-chmod 0600 /root/.rahgard-restore-app-db-password
-export RAHGARD_RESTORE_APP_DB_PASSWORD="$(cat /root/.rahgard-restore-app-db-password)"
+chmod 0600 /root/.rahgard-restore-app_db_password /root/.rahgard-restore-geo_authorizer_password /root/.rahgard-restore-geo_publisher_password
+export RAHGARD_RESTORE_APP_DB_PASSWORD="$(cat /root/.rahgard-restore-app_db_password)"
+export RAHGARD_RESTORE_GEO_AUTHORIZER_PASSWORD="$(cat /root/.rahgard-restore-geo_authorizer_password)"
+export RAHGARD_RESTORE_GEO_PUBLISHER_PASSWORD="$(cat /root/.rahgard-restore-geo_publisher_password)"
 psql -X -v ON_ERROR_STOP=1 -U "$1" -d postgres <<'SQL'
 \getenv app_password RAHGARD_RESTORE_APP_DB_PASSWORD
+\getenv geo_authorizer_password RAHGARD_RESTORE_GEO_AUTHORIZER_PASSWORD
+\getenv geo_publisher_password RAHGARD_RESTORE_GEO_PUBLISHER_PASSWORD
 SELECT format('CREATE ROLE ai_tourism_app LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', :'app_password')
-WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ai_tourism_app')
+\gexec
+SELECT format('CREATE ROLE rahgard_pilot_geo_authorizer LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', :'geo_authorizer_password')
+\gexec
+SELECT format('CREATE ROLE rahgard_pilot_geo_publisher LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', :'geo_publisher_password')
 \gexec
 SELECT 'CREATE ROLE rahgard_pilot_geo_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS'
-WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='rahgard_pilot_geo_executor')
 \gexec
 SELECT 'CREATE ROLE rahgard_pilot_geo_migrator NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS'
-WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='rahgard_pilot_geo_migrator')
 \gexec
 GRANT rahgard_pilot_geo_executor TO rahgard_pilot_geo_migrator;
 SQL

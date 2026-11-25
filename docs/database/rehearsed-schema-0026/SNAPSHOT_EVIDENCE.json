@@ -1,0 +1,64 @@
+{
+  "evidence_kind": "sanitized_local_isolated_schema_catalogue",
+  "observed_at_utc": "2026-11-25T13:08:55Z",
+  "source_release": "9680a2011815f82387400815fb6c10be26f20169",
+  "environment_scope": "isolated_local_owner_demo",
+  "database": "rahgard_pilot_vps_staging",
+  "postgresql": "17.11",
+  "database_role": "ai_tourism_app",
+  "collection": "read-only pg_catalog metadata; application rows not read by schema collector",
+  "snapshot_file": "catalog_metadata_snapshot.json",
+  "snapshot_sha256": "d997a26c9754146a4bdb5fd7658957bc37ae0c848949583798f2ba170f9451f4",
+  "database_inventory": {
+    "non_template_names_discovered": 2,
+    "authorized_databases_attempted": 1,
+    "inaccessible_authorized_databases": 0,
+    "outside_namespace_skipped": 1,
+    "complete_for_authorized_rahgard_namespace": true
+  },
+  "catalogue": {
+    "relations": 105,
+    "tables": 91,
+    "views": 14,
+    "column_occurrences": 1132,
+    "baseline_described_occurrences": 230,
+    "undocumented_occurrences": 902,
+    "undocumented_occurrence_classes": {
+      "first_party_application_base": 631,
+      "first_party_system_or_operations": 102,
+      "derived_view": 150,
+      "extension_managed": 19
+    },
+    "distinct_business_requirement_count": null,
+    "business_necessity_approved": false
+  },
+  "local_demo_database_check": {
+    "migration_ledger_rows": 25,
+    "latest_migration": "0026_platform_reviewer_mfa",
+    "latest_migration_sha256": "050eb7bca3ddc84194a9f5c93dcd56276084aa185f4e15c0e77f2b65a51baf3f",
+    "prior_migrations": {
+      "0024_partner_review_audit_actions": "d2181d7efc52a13ffd3463b637b84aa84a3e7e52c0d81fdc9fb6c1d1a0e7adb7",
+      "0025_owner_control_center": "6b2602bf3ec970fcfcbc776993726bead450f99d178c8c51e3abedbe4f8fcf89"
+    },
+    "aggregate_demo_rows": {
+      "users_total": 1,
+      "users_synthetic": 1,
+      "trips": 1,
+      "conversations": 1,
+      "organizations": 0,
+      "published_destinations": 0,
+      "platform_grants": 0
+    },
+    "manual_owner_partner_traveler_acceptance": "not performed"
+  },
+  "live_vps": {
+    "read_or_modified_by_this_capture": false,
+    "live_schema_or_data_changed": false
+  },
+  "limitations": [
+    "This is not a production VPS schema snapshot.",
+    "Column occurrences and glossary gaps are not distinct product requirements.",
+    "The local source API is not an immutable container release; no image parity is claimed.",
+    "No separate Ubuntu server relocation rehearsal was performed."
+  ]
+}
