@@ -43,4 +43,40 @@ describe('admin control center capability navigation', () => {
     expect(host.textContent).toContain('Reviewer decisions are disabled');
     expect([...host.querySelectorAll('button')].some(button => button.textContent === 'Verify evidence')).toBe(false);
   });
+
+  it('enrolls an authorized public reviewer and exposes recovery codes only after verification', async () => {
+    let enrolled = false;
+    let stepUp = false;
+    const fetcher = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const path = String(url);
+      if (path.endsWith('/capabilities')) return Promise.resolve(response({
+        sections: { companies: false, destinations: true, users: false, system: false },
+        company_capabilities: { organization_review: false, service_review: false, offer_review: false },
+        catalogue_capabilities: { candidate_review: true, source_review: false, catalogue_publish: true },
+        ai_admin: { available: false, scope: 'local_pilot_only' }, privileged_writes_available: stepUp,
+        privileged_step_up: { available: true, required: true, enrolled, step_up_expires_at: stepUp ? '2026-11-25T10:05:00Z' : null },
+      }));
+      if (path.endsWith('/overview')) return Promise.resolve(response({ destinations: { published_count: 0 } }));
+      if (path.endsWith('/mfa/enroll')) return Promise.resolve(response({ secret: 'ONLY-ONCE-SECRET', otpauth_uri: 'otpauth://totp/Rahgard' }));
+      if (path.endsWith('/mfa/verify')) { enrolled = true; stepUp = true; return Promise.resolve(response({ mfa_enrolled: true, recovery_codes: ['ONCE-CODE-ONE', 'ONCE-CODE-TWO'], step_up_expires_at: '2026-11-25T10:05:00Z' })); }
+      throw new Error(`unexpected test request ${path} ${init?.method ?? 'GET'}`);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    await act(async () => { root.render(<AdminControlCenter locale="en-US" csrfToken="csrf-step-up" />); }); await settle();
+    expect(host.textContent).toContain('Set up an authenticator app');
+    await act(async () => { [...host.querySelectorAll('button')].find(button => button.textContent === 'Set up authenticator app')!.click(); }); await settle();
+    expect(host.textContent).toContain('ONLY-ONCE-SECRET');
+    const secretRequest = fetcher.mock.calls.find(([url]) => String(url).endsWith('/mfa/enroll'))![1] as RequestInit;
+    expect((secretRequest.headers as Record<string, string>)['X-CSRF-Token']).toBe('csrf-step-up');
+    const codeInput = host.querySelector<HTMLInputElement>('.admin-mfa-secret input')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(codeInput, '123456');
+      codeInput.dispatchEvent(new Event('input', { bubbles: true }));
+      codeInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await act(async () => { [...host.querySelectorAll('button')].find(button => button.textContent === 'Verify and enable')!.click(); }); await settle();
+    expect(host.textContent).toContain('ONCE-CODE-ONE');
+    expect(host.textContent).toContain('active for this session');
+    expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/mfa/verify'))).toBe(true);
+  });
 });

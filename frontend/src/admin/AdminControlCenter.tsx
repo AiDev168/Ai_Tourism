@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Locale } from '../i18n/messages';
 import { CatalogueReviewPanel } from './catalogue/CatalogueReviewPanel';
 import { CompanyReviewQueue } from '../partners/CompanyReviewQueue';
+import { PlatformAdminMfaPanel } from './PlatformAdminMfaPanel';
 import './adminControlCenter.css';
 
 type CapabilityReply = {
@@ -10,6 +11,7 @@ type CapabilityReply = {
   catalogue_capabilities: Record<string, boolean>;
   ai_admin: { available: boolean; scope: string };
   privileged_writes_available?: boolean;
+  privileged_step_up?: { available: boolean; required: boolean; enrolled: boolean; step_up_expires_at: string | null };
 };
 type Overview = {
   release?: { commit?: string };
@@ -75,6 +77,10 @@ export function AdminControlCenter({ locale, csrfToken }: { locale: Locale; csrf
 
   return <main className="admin-control" dir={locale === 'en-US' ? 'ltr' : 'rtl'}>
     <header className="admin-control-header"><div><p className="eyebrow">Rahgard · Admin</p><h1>{t.title}</h1><p>{t.intro}</p></div><a className="admin-back" href="/">{t.back}</a></header>
+    {capabilities.privileged_step_up?.required && <PlatformAdminMfaPanel
+      locale={locale} csrfToken={csrfToken} status={capabilities.privileged_step_up}
+      onChanged={() => setRefresh(value => value + 1)}
+    />}
     <nav className="admin-control-nav" aria-label={t.title}>{nav.filter(([, , visible]) => visible).map(([key, label]) => <button key={key} type="button" className={section === key ? 'active' : ''} aria-current={section === key ? 'page' : undefined} onClick={() => setSection(key)}>{label}</button>)}</nav>
     {section === 'home' && <>
       <section className="admin-control-cards" aria-label={t.home}>

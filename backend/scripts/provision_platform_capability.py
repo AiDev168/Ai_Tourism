@@ -20,6 +20,7 @@ from psycopg.rows import dict_row
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_024 = ROOT / "engineering/pilot/sql/024_partner_review_audit_actions.sql"
 MIGRATION_025 = ROOT / "engineering/pilot/sql/025_owner_control_center.sql"
+MIGRATION_026 = ROOT / "engineering/pilot/sql/026_platform_reviewer_mfa.sql"
 CAPABILITIES = {
     "organization_review": "partner",
     "service_review": "partner",
@@ -61,11 +62,13 @@ def _verify(conn, marker: str) -> tuple[str, str]:
                       (SELECT min(marker_value) FROM public.rahgard_private_pilot_marker) AS marker_value,
                       (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0024_partner_review_audit_actions') AS m24,
                       (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0025_owner_control_center') AS m25,
+                      (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0026_platform_reviewer_mfa') AS m26,
                       (SELECT count(*) FROM system.schema_migrations) AS migration_count,
                       (SELECT max(migration_id) FROM system.schema_migrations) AS latest_migration"""
         ).fetchone()
     expected_024 = hashlib.sha256(MIGRATION_024.read_bytes()).hexdigest()
     expected_025 = hashlib.sha256(MIGRATION_025.read_bytes()).hexdigest()
+    expected_026 = hashlib.sha256(MIGRATION_026.read_bytes()).hexdigest()
     if state["database_name"] != DATABASE_NAME:
         raise ProvisioningError("database_name_mismatch")
     if not 170000 <= state["version_num"] < 180000 or state["server_port"] == 55433:
@@ -74,9 +77,11 @@ def _verify(conn, marker: str) -> tuple[str, str]:
         raise ProvisioningError("operator_database_role_is_not_privileged")
     if state["marker_count"] != 1 or state["marker_value"] != marker:
         raise ProvisioningError("pilot_marker_mismatch")
-    if (state["m24"] or "").strip() != expected_024 or (state["m25"] or "").strip() != expected_025:
+    if ((state["m24"] or "").strip() != expected_024
+            or (state["m25"] or "").strip() != expected_025
+            or (state["m26"] or "").strip() != expected_026):
         raise ProvisioningError("migration_checksum_mismatch")
-    if state["migration_count"] not in (24, 26) or state["latest_migration"] != "0025_owner_control_center":
+    if state["migration_count"] not in (25, 27) or state["latest_migration"] != "0026_platform_reviewer_mfa":
         raise ProvisioningError("migration_ledger_mismatch")
     return str(state["database_name"]), str(state["database_role"])
 
@@ -145,6 +150,19 @@ def run(args: argparse.Namespace, *, environ: dict[str, str] | None = None) -> s
                     (args.target_user, args.capability),
                 )
                 event = "revoked"
+                remaining_partner = cur.execute(
+                    "SELECT EXISTS(SELECT 1 FROM partner.platform_grants WHERE user_id=%s AND revoked_at IS NULL) AS ok",
+                    (args.target_user,),
+                ).fetchone()["ok"]
+                remaining_catalogue = cur.execute(
+                    "SELECT EXISTS(SELECT 1 FROM identity.catalogue_review_grants WHERE user_id=%s AND revoked_at IS NULL) AS ok",
+                    (args.target_user,),
+                ).fetchone()["ok"]
+                if not remaining_partner and not remaining_catalogue:
+                    # Revoke encrypted MFA material and all dependent
+                    # session-bound step-ups when the final platform grant is
+                    # removed. The grant event remains in the audit ledger.
+                    cur.execute("DELETE FROM identity.platform_admin_mfa WHERE user_id=%s", (args.target_user,))
             cur.execute(
                 """INSERT INTO partner.platform_grant_events
                    (grant_domain,target_user_id,capability,action,actor_user_id,reason)

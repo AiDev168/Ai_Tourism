@@ -17,6 +17,7 @@ from psycopg.rows import dict_row
 
 from app.api.auth import authenticated_user
 from app.api.admin_guards import privileged_admin_writes_available
+from app.api.platform_admin_mfa import platform_mfa_status
 from app.core.config import Settings, get_settings
 from app.modules.identity.auth_service import AuthenticatedUser
 
@@ -88,6 +89,14 @@ def admin_capabilities(
     }
     if not any(sections.values()):
         raise HTTPException(status_code=403, detail="admin_capability_required")
+    if privileged_admin_writes_available(settings.app_env):
+        mfa = {"available": True, "required": False, "enrolled": False, "step_up_expires_at": None}
+    else:
+        mfa = platform_mfa_status(settings, user)
+    privileged_writes = bool(
+        privileged_admin_writes_available(settings.app_env)
+        or (mfa["available"] and mfa["step_up_expires_at"] is not None)
+    )
     return {
         "sections": sections,
         "company_capabilities": {
@@ -98,7 +107,8 @@ def admin_capabilities(
         "catalogue_capabilities": {
             key: capabilities[key] for key in CATALOGUE_CAPABILITIES
         },
-        "privileged_writes_available": privileged_admin_writes_available(settings.app_env),
+        "privileged_writes_available": privileged_writes,
+        "privileged_step_up": mfa,
         # Provider administration is intentionally never enabled by this
         # public control-center route. Its existing endpoint enforces the
         # local-pilot/owner/grant/TOTP boundary independently.

@@ -24,6 +24,16 @@
 .admin-grant-counts li { display:flex; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--paper); }
 .admin-review-queue { margin-block:20px 0; }
 .admin-inline-notice { padding:14px; border:1px solid var(--line); border-radius:12px; background:var(--surface); color:var(--ink); }
+.admin-mfa-panel { border-color:color-mix(in srgb,var(--forest) 38%,var(--line)); }
+.admin-mfa-panel > p[role="status"] { padding:12px 14px; border-radius:12px; background:var(--paper); color:var(--ink); }
+.admin-mfa-panel label { display:grid; gap:6px; max-width:320px; margin-block:10px; color:var(--ink); font-weight:700; }
+.admin-mfa-panel input { min-height:44px; padding:9px 12px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); font:inherit; }
+.admin-mfa-panel button { min-height:42px; margin:5px; padding:9px 14px; border-radius:11px; font:inherit; font-weight:700; }
+.admin-mfa-panel button:disabled { opacity:.6; cursor:not-allowed; }
+.admin-mfa-secret,.admin-mfa-recovery { display:grid; gap:10px; margin-block:14px; padding:16px; border:1px solid var(--line); border-radius:14px; background:var(--paper); color:var(--ink); }
+.admin-mfa-secret code,.admin-mfa-recovery code { display:inline-block; width:max-content; max-width:100%; overflow-wrap:anywhere; padding:8px 10px; border-radius:8px; background:var(--surface); font-size:1rem; }
+.admin-mfa-recovery { border-color:#b78a34; }
+.admin-mfa-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); align-items:end; gap:8px; }
 @media (max-width:600px) { .admin-control-header { align-items:flex-start; flex-direction:column; } .admin-control-nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); } .admin-control-nav button { min-width:0; padding-inline:8px; } }
 [data-theme="dark"] .admin-control-card,[data-theme="dark"] .admin-control-header,[data-theme="dark"] .admin-control-nav,[data-theme="dark"] .admin-capability-summary,[data-theme="dark"] .admin-control-section,[data-theme="dark"] .admin-ai-restriction { background:var(--surface); color:var(--ink); }
 [data-theme="dark"] .admin-capability-summary li[data-enabled="true"] { background:#214337; color:#e4f4e9; }

@@ -243,7 +243,7 @@ def decide_candidate(
             )
             if not cur.fetchone()["allowed"]:
                 raise HTTPException(403, "catalogue_review_not_granted")
-            require_privileged_admin_step_up(settings.app_env)
+            require_privileged_admin_step_up(settings, user)
             decision_phase = "lock_candidate"
             cur.execute(
                 "SELECT candidate_status FROM knowledge.destination_candidates WHERE candidate_id=%s FOR UPDATE",
@@ -581,7 +581,7 @@ def verify_source(
             )
             if not cur.fetchone()["allowed"]:
                 raise HTTPException(403, "source_review_not_granted")
-            require_privileged_admin_step_up(settings.app_env)
+            require_privileged_admin_step_up(settings, user)
             cur.execute(
                 """SELECT knowledge.verify_archive_source(%s,%s,%s,%s,%s,%s,%s) AS verification_id""",
                 (source_id, body.publisher, body.page_title, body.evidence_excerpt,
@@ -752,7 +752,7 @@ def publish_candidate(
             )
             if not cur.fetchone()["allowed"]:
                 raise HTTPException(403, "catalogue_publish_not_granted")
-            require_privileged_admin_step_up(settings.app_env)
+            require_privileged_admin_step_up(settings, user)
             publication_phase = "publish_function"
             cur.execute(
                 "SELECT knowledge.publish_archive_destination(%s,%s,%s,%s,%s) AS destination_id",

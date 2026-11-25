@@ -307,10 +307,10 @@ def _grant_isolated_admin_overview(database: dict[str, Any], user_id: str, actor
                           COALESCE(inet_server_port(),0) AS port,
                           (SELECT count(*) FROM public.ai_tourism_auth_test_marker) AS marker_count,
                           (SELECT min(marker_value) FROM public.ai_tourism_auth_test_marker) AS marker,
-                          (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0025_owner_control_center') AS migration_hash"""
+                          (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0026_platform_reviewer_mfa') AS migration_hash"""
             ).fetchone()
             expected_hash = hashlib.sha256(
-                (Path(__file__).resolve().parents[2] / "engineering/pilot/sql/025_owner_control_center.sql").read_bytes()
+                (Path(__file__).resolve().parents[2] / "engineering/pilot/sql/026_platform_reviewer_mfa.sql").read_bytes()
             ).hexdigest()
             if (identity["db"] != database["dbname"]
                     or not 170000 <= identity["version_num"] < 180000

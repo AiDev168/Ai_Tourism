@@ -26,8 +26,8 @@ class Cursor:
             self.row = {"candidate_review": self.catalogue, "source_review": False,
                         "catalogue_publish": False}
         elif "current_setting('server_version_num')" in sql:
-            self.row = {"api": "responding", "server_version_num": 170004, "migration_count": 25,
-                        "latest_migration": "0025_owner_control_center"}
+            self.row = {"api": "responding", "server_version_num": 170004, "migration_count": 27,
+                        "latest_migration": "0026_platform_reviewer_mfa"}
         elif "FROM identity.users" in sql:
             self.row = {"count": 14}
         elif "FROM partner.organizations" in sql and "share_eligible_organizations" not in sql:
@@ -112,6 +112,9 @@ def test_public_staging_reports_privileged_writes_unavailable(monkeypatch):
         response = http.get("/api/v1/admin/capabilities")
         assert response.status_code == 200
         assert response.json()["privileged_writes_available"] is False
+        assert response.json()["privileged_step_up"] == {
+            "available": False, "required": True, "enrolled": False, "step_up_expires_at": None,
+        }
     finally:
         app.dependency_overrides.clear()
 
@@ -153,7 +156,7 @@ def test_owner_overview_is_aggregate_only_and_reports_unknown_backup_evidence(mo
         assert body["system"]["database"] == "connected"
         assert body["system"]["api"] == "responding"
         assert body["system"]["postgres_major"] == 17
-        assert body["system"]["latest_migration"] == "0025_owner_control_center"
+        assert body["system"]["latest_migration"] == "0026_platform_reviewer_mfa"
         assert body["system"]["backup_evidence"] == "not_available_from_application"
         assert body["companies"]["share_eligible_count"] == 0
         assert "email" not in str(body).lower()

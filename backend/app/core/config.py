@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     ai_provider_admin_enabled: bool = False
     ai_provider_vault_dir: Path | None = None
     ai_provider_admin_recovery_pepper: SecretStr | None = None
+    # Separate server-side key material for platform-reviewer MFA. This is
+    # independent of local-only provider administration and is never returned
+    # to the client.
+    platform_admin_mfa_encryption_key_hex: SecretStr | None = None
+    platform_admin_recovery_pepper: SecretStr | None = None
     tourism_rag_enabled: bool = False
     tourism_rag_api_url: str = "http://127.0.0.1:8765"
     tourism_rag_api_token: SecretStr | None = None
@@ -110,6 +115,16 @@ class Settings(BaseSettings):
                 raise ValueError("Provider vault and recovery pepper are required when admin is enabled")
             if len(self.ai_provider_admin_recovery_pepper.get_secret_value().encode("utf-8")) < 32:
                 raise ValueError("Provider recovery pepper must contain at least 32 bytes")
+        if self.platform_admin_mfa_encryption_key_hex is not None or self.platform_admin_recovery_pepper is not None:
+            key = (self.platform_admin_mfa_encryption_key_hex.get_secret_value()
+                   if self.platform_admin_mfa_encryption_key_hex else "")
+            pepper = (self.platform_admin_recovery_pepper.get_secret_value()
+                      if self.platform_admin_recovery_pepper else "")
+            if (environment not in {"staging", "production"} or not self.auth_enabled
+                    or not self.auth_cookie_secure or self.auth_rate_limit_secret is None
+                    or len(key) != 64 or any(char not in "0123456789abcdefABCDEF" for char in key)
+                    or len(pepper.encode("utf-8")) < 32):
+                raise ValueError("Platform reviewer MFA requires secure authenticated staging/production and two valid server keys")
         if self.auth_local_owner_enabled:
             origin = urlsplit(self.auth_allowed_origins.strip())
             if (

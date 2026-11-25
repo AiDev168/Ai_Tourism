@@ -76,7 +76,27 @@ function Stop-RemoveOwnedContainer([string]$ContainerName) {
             throw 'Refusing explicit removal after the container identity changed.'
         }
         & docker rm $ContainerName | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw 'Could not remove the verified task-created container.' }
+        if ($LASTEXITCODE -ne 0) {
+            # With --rm, the daemon can remove the stopped container between
+            # inspect and rm. Treat that race as success only after proving
+            # the original full container ID is absent; never mask a still
+            # present container or an identity change.
+            $afterRm = & docker inspect $ContainerName 2>$null
+            $afterRmCode = $LASTEXITCODE
+            if ($afterRmCode -eq 0) {
+                $afterRmMetadata = ($afterRm | Out-String) | ConvertFrom-Json
+                if ($afterRmMetadata[0].Name -ne "/$ContainerName" -or
+                    $afterRmMetadata[0].Id -ne $containerId -or
+                    $afterRmMetadata[0].Config.Labels.'ai-tourism.disposable-mvp-e2e' -ne 'true') {
+                    throw 'Refusing cleanup because the container identity changed during removal.'
+                }
+                throw 'Could not remove the verified task-created container.'
+            }
+            $stillPresentAfterRm = & docker ps -a --filter "id=$containerId" --format '{{.ID}}'
+            if ($LASTEXITCODE -ne 0 -or ($stillPresentAfterRm | Out-String).Trim()) {
+                throw 'Task-created disposable container cleanup could not be verified after the remove race.'
+            }
+        }
     }
     else {
         # This runner creates with --rm, so docker stop normally removes the

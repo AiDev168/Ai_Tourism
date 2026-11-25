@@ -32,8 +32,9 @@ class Cursor:
                 "marker_value": MARKER,
                 "m24": __import__("hashlib").sha256(provisioning.MIGRATION_024.read_bytes()).hexdigest(),
                 "m25": __import__("hashlib").sha256(provisioning.MIGRATION_025.read_bytes()).hexdigest(),
-                "migration_count": 24,
-                "latest_migration": "0025_owner_control_center",
+                "m26": __import__("hashlib").sha256(provisioning.MIGRATION_026.read_bytes()).hexdigest(),
+                "migration_count": 25,
+                "latest_migration": "0026_platform_reviewer_mfa",
             }
         elif "capability='admin_overview_read'" in sql and "user_id=%s" in sql:
             self.row = {"active": self.operator_admin}

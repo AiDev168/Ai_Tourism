@@ -730,7 +730,7 @@ def decide_organization_verification(
         with _connection(settings) as conn, conn.cursor() as cur:
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
             _require_platform_capability(cur, user, "organization_review")
-            require_privileged_admin_step_up(settings.app_env)
+            require_privileged_admin_step_up(settings, user)
             case = cur.execute(
                 """SELECT c.case_id,c.organization_id,c.submitted_by,c.status,
                           o.created_by,o.application_status,o.verification_status
@@ -795,7 +795,7 @@ def decide_organization_application(
         with _connection(settings) as conn, conn.cursor() as cur:
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
             _require_platform_capability(cur, user, "organization_review")
-            require_privileged_admin_step_up(settings.app_env)
+            require_privileged_admin_step_up(settings, user)
             org = cur.execute(
                 """SELECT organization_id,created_by,verification_status,application_status
                    FROM partner.organizations WHERE organization_id=%s FOR UPDATE""",
@@ -844,7 +844,7 @@ def decide_organization_participation(
         with _connection(settings) as conn, conn.cursor() as cur:
             cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
             _require_platform_capability(cur, user, "organization_review")
-            require_privileged_admin_step_up(settings.app_env)
+            require_privileged_admin_step_up(settings, user)
             org = cur.execute(
                 """SELECT organization_id,created_by,verification_status,application_status,participation_status
                    FROM partner.organizations WHERE organization_id=%s FOR UPDATE""",

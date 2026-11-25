@@ -16,6 +16,7 @@ from app.api.traveler import router as traveler_router
 from app.api.assistant import router as assistant_router
 from app.api.provider_admin import router as provider_admin_router
 from app.api.admin import router as admin_router
+from app.api.platform_admin_mfa import router as platform_admin_mfa_router
 from app.api.catalogue_review import router as catalogue_review_router
 from app.api.partners import router as partner_router
 from app.modules.identity.auth_service import AuthenticationUnavailable
@@ -38,6 +39,7 @@ app.include_router(traveler_router)
 app.include_router(assistant_router)
 app.include_router(provider_admin_router)
 app.include_router(admin_router)
+app.include_router(platform_admin_mfa_router)
 app.include_router(catalogue_review_router)
 app.include_router(partner_router)
 if settings.auth_sms_adapter == "fake":

@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Runner = Join-Path $ProjectRoot 'engineering\database-prep\scripts\Start-Disposable-Mvp-E2E.ps1'
 $container = $null
-$keys = @('AUTH_INTEGRATION_TESTS','AUTH_TEST_DATABASE_HOST','AUTH_TEST_DATABASE_PORT','AUTH_TEST_DATABASE_NAME','AUTH_TEST_DATABASE_USER','AUTH_TEST_DATABASE_PASSWORD','AUTH_TEST_DATABASE_OWNER_PASSWORD','AUTH_TEST_DATABASE_MARKER','AI_TOURISM_MVP_E2E_CONTAINER','RAHGARD_NATIONAL_CATALOGUE_E2E','RAHGARD_OWNER_ARCHIVE_PATH','RAHGARD_REAL_CHAT_PROVIDER','RAHGARD_REAL_CHAT_ENDPOINT','RAHGARD_REAL_CHAT_MODEL','RAHGARD_REAL_CHAT_TOKEN','RAHGARD_REAL_CHAT_LOOPBACK_HTTP_PORT','ASSISTANT_INTEGRATION_TESTS','TOURISM_RAG_ENABLED')
+$keys = @('DATABASE_PASSWORD','AUTH_INTEGRATION_TESTS','AUTH_TEST_DATABASE_HOST','AUTH_TEST_DATABASE_PORT','AUTH_TEST_DATABASE_NAME','AUTH_TEST_DATABASE_USER','AUTH_TEST_DATABASE_PASSWORD','AUTH_TEST_DATABASE_OWNER_PASSWORD','AUTH_TEST_DATABASE_MARKER','AI_TOURISM_MVP_E2E_CONTAINER','RAHGARD_NATIONAL_CATALOGUE_E2E','RAHGARD_OWNER_ARCHIVE_PATH','RAHGARD_REAL_CHAT_PROVIDER','RAHGARD_REAL_CHAT_ENDPOINT','RAHGARD_REAL_CHAT_MODEL','RAHGARD_REAL_CHAT_TOKEN','RAHGARD_REAL_CHAT_LOOPBACK_HTTP_PORT','ASSISTANT_INTEGRATION_TESTS','TOURISM_RAG_ENABLED','RAHGARD_PLATFORM_MFA_POSTGRES_TESTS')
 $before = @{}; foreach ($key in $keys) { $before[$key] = [Environment]::GetEnvironmentVariable($key,'Process') }
 if ($ChatProvider -eq 'simulated') {
   if (-not $ArchivePath) { throw 'Simulated national-catalogue mode requires the audited archive path.' }
@@ -209,10 +209,20 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
   $h25 = Apply '025_owner_control_center' 'engineering/pilot/sql/025_owner_control_center.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0024_SHA256=$h24Expected; RAHGARD_PILOT_MIGRATION_0025_SHA256=$h25Expected }
   $migration25Assertions = (Psql $migrationTarget "SELECT (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0025_owner_control_center')='$h25Expected', (SELECT count(*) IN (24,26) FROM system.schema_migrations), (SELECT max(migration_id)='0025_owner_control_center' FROM system.schema_migrations), (SELECT pg_get_constraintdef(oid) ILIKE '%admin_overview_read%' FROM pg_constraint WHERE conrelid='partner.platform_grants'::regclass AND conname='platform_grants_capability_check'), NOT has_table_privilege('ai_tourism_app','partner.platform_grant_events','SELECT'), NOT has_table_privilege('ai_tourism_app','partner.platform_grant_events','INSERT'), NOT has_table_privilege('ai_tourism_app','partner.platform_grants','INSERT'), NOT has_table_privilege('ai_tourism_app','partner.platform_grants','UPDATE'), has_function_privilege('ai_tourism_app','partner.admin_grant_counts()','EXECUTE'), (SELECT prosecdef FROM pg_proc WHERE oid='partner.admin_grant_counts()'::regprocedure)") | Out-String
   if (($migration25Assertions -join '').Trim() -ne 't|t|t|t|t|t|t|t|t|t') { throw "Migration 0025 assertions failed (ledger, capability vocabulary, operator-only grant audit, guarded aggregate function): $migration25Assertions" }
+  $h26File = Join-Path $ProjectRoot 'engineering/pilot/sql/026_platform_reviewer_mfa.sql'
+  $h26Expected = (Get-FileHash -LiteralPath $h26File -Algorithm SHA256).Hash.ToLowerInvariant()
+  $h26 = Apply '026_platform_reviewer_mfa' 'engineering/pilot/sql/026_platform_reviewer_mfa.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0024_SHA256=$h24Expected; RAHGARD_PILOT_MIGRATION_0025_SHA256=$h25Expected; RAHGARD_PILOT_MIGRATION_0026_SHA256=$h26Expected }
+  $migration26Assertions = (Psql $migrationTarget "SELECT (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0026_platform_reviewer_mfa')='$h26Expected', (SELECT count(*) IN (25,27) FROM system.schema_migrations), (SELECT max(migration_id)='0026_platform_reviewer_mfa' FROM system.schema_migrations), (SELECT bool_and(relrowsecurity) FROM pg_class WHERE oid IN ('identity.platform_admin_mfa'::regclass,'identity.platform_admin_step_up'::regclass,'identity.platform_admin_mfa_events'::regclass)), has_table_privilege('ai_tourism_app','identity.platform_admin_mfa','SELECT'), has_table_privilege('ai_tourism_app','identity.platform_admin_mfa','INSERT'), has_table_privilege('ai_tourism_app','identity.platform_admin_step_up','UPDATE'), NOT has_table_privilege('ai_tourism_app','identity.platform_admin_mfa_events','SELECT'), NOT has_table_privilege('ai_tourism_app','partner.platform_grants','UPDATE'), has_function_privilege('ai_tourism_app','identity.record_platform_admin_mfa_event(text,uuid)','EXECUTE'), (SELECT prosecdef FROM pg_proc WHERE oid='identity.has_platform_admin_capability(uuid)'::regprocedure)") | Out-String
+  if (($migration26Assertions -join '').Trim() -ne 't|t|t|t|t|t|t|t|t|t|t') { throw "Migration 0026 assertions failed (ledger, RLS, least privilege, operator-only grant audit, capability function): $migration26Assertions" }
   $migrationCount = (Psql $migrationTarget 'SELECT count(*) FROM system.schema_migrations').Trim()
   $testDb = $env:AUTH_TEST_DATABASE_NAME
   Psql 'postgres' "ALTER DATABASE $migrationTarget RENAME TO $testDb;" | Out-Null
   $env:AUTH_TEST_DATABASE_NAME = $testDb
+  $env:DATABASE_PASSWORD = 'isolated-mfa-test-only'
+  $env:RAHGARD_PLATFORM_MFA_POSTGRES_TESTS = '1'
+  & uv run pytest -p no:cacheprovider backend/tests/test_platform_admin_mfa_postgres.py -q
+  if ($LASTEXITCODE -ne 0) { throw 'Real-app MFA security test failed against disposable PostgreSQL 17.' }
+  [Environment]::SetEnvironmentVariable('RAHGARD_PLATFORM_MFA_POSTGRES_TESTS',$null,'Process')
   $env:ASSISTANT_INTEGRATION_TESTS = '1'
   $env:TOURISM_RAG_ENABLED = 'false'
   if ($ChatProvider -eq 'simulated') {
@@ -226,10 +236,10 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
   try { node scripts/traveler-e2e.mjs; if ($LASTEXITCODE -ne 0) { throw 'National-catalogue browser acceptance failed.' } }
   finally { Pop-Location }
   if ($ChatProvider -eq 'simulated') {
-    Write-Host "PASS: full app migrations 0013-0025 (ledger rows=$migrationCount) and authenticated national-catalogue Chromium journey completed in isolated PG17." -ForegroundColor Green
+    Write-Host "PASS: full app migrations 0013-0026 (ledger rows=$migrationCount) and authenticated national-catalogue Chromium journey completed in isolated PG17." -ForegroundColor Green
   }
   elseif ($ChatProvider -eq 'forced_outage') {
-    Write-Host "PASS: production Chat adapter failure and deterministic fallback were exercised through authenticated Chromium/FastAPI on disposable PG17 with migrations through 0025 (ledger rows=$migrationCount)." -ForegroundColor Green
+    Write-Host "PASS: production Chat adapter failure and deterministic fallback were exercised through authenticated Chromium/FastAPI on disposable PG17 with migrations through 0026 (ledger rows=$migrationCount)." -ForegroundColor Green
   }
   else {
     Write-Host "PASS: authenticated real-provider Chromium journey via $ChatProvider completed on disposable PG17 (ledger rows=$migrationCount); no persistent database or VPS was used." -ForegroundColor Green

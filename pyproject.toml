@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "AI Tourism modular monolith API"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "cryptography>=44,<47",
     "fastapi==0.121.0",
     "httpx==0.28.1",
     "psycopg[binary]==3.2.12",
