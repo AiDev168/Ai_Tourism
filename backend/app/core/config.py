@@ -1,4 +1,5 @@
 from functools import lru_cache
+import os
 from urllib.parse import urlsplit
 
 from pathlib import Path
@@ -37,6 +38,8 @@ class Settings(BaseSettings):
     # to the client.
     platform_admin_mfa_encryption_key_hex: SecretStr | None = None
     platform_admin_recovery_pepper: SecretStr | None = None
+    platform_admin_mfa_encryption_key_file: Path | None = None
+    platform_admin_recovery_pepper_file: Path | None = None
     tourism_rag_enabled: bool = False
     tourism_rag_api_url: str = "http://127.0.0.1:8765"
     tourism_rag_api_token: SecretStr | None = None
@@ -88,6 +91,30 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_auth_configuration(self):
         environment = self.app_env.lower()
+        for secret_attr, file_attr in (
+            ("platform_admin_mfa_encryption_key_hex", "platform_admin_mfa_encryption_key_file"),
+            ("platform_admin_recovery_pepper", "platform_admin_recovery_pepper_file"),
+        ):
+            secret_path = getattr(self, file_attr)
+            if secret_path is None:
+                continue
+            if getattr(self, secret_attr) is not None:
+                raise ValueError("Platform MFA secret must use either direct injection or a secret file, not both")
+            try:
+                if secret_path.is_symlink() or not secret_path.is_file():
+                    raise OSError
+                metadata = secret_path.stat()
+                if os.name != "nt" and metadata.st_mode & 0o027:
+                    raise OSError
+                raw = secret_path.read_bytes()
+                if not raw or len(raw) > 4096 or b"\x00" in raw:
+                    raise OSError
+                value = raw.rstrip(b"\r\n").decode("utf-8", errors="strict")
+                if not value or "\n" in value or "\r" in value:
+                    raise OSError
+            except (OSError, UnicodeDecodeError):
+                raise ValueError("Platform MFA secret file is unavailable or unsafe") from None
+            object.__setattr__(self, secret_attr, SecretStr(value))
         if environment not in {"development", "test", "local_pilot", "staging", "production"}:
             raise ValueError("APP_ENV is not supported")
         if self.staging_auth_enabled:

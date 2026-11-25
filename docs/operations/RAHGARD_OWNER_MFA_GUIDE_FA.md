@@ -35,6 +35,19 @@ Remove-Item Env:RAHGARD_OPERATOR_GRANT_CONFIRM
 
 کلید `PLATFORM_ADMIN_MFA_ENCRYPTION_KEY_HEX` باید ۶۴ رقم هگزادسیمال (۳۲ بایت) و `PLATFORM_ADMIN_RECOVERY_PEPPER` حداقل ۳۲ بایت باشد. هر دو باید از مدیر رازهای سرور و مستقل از PostgreSQL به برنامه تزریق شوند. مهاجرت یا راه‌اندازی برنامه نباید این مقادیر را بسازد، چاپ کند یا در Git ثبت کند. اگر کلید گم شود، رازهای ذخیره‌شده قابل رمزگشایی نیستند؛ پیش از تغییر یا چرخش کلید، فرایند نگهداری و بازیابی مصوب لازم است.
 
+## تزریق فایل‌محور برای سرور (آماده است؛ هنوز روی VPS فعال نشده)
+
+نسخهٔ فعلی برنامه می‌تواند این دو مقدار را از فایل محافظت‌شده بخواند:
+
+- `PLATFORM_ADMIN_MFA_ENCRYPTION_KEY_FILE`
+- `PLATFORM_ADMIN_RECOVERY_PEPPER_FILE`
+
+در Compose، overlay اختیاری `deploy/staging/compose.platform-admin-mfa.yaml` آن‌ها را به `/run/secrets/platform_admin_mfa_encryption_key_hex` و `/run/secrets/platform_admin_recovery_pepper` متصل می‌کند. مسیر منبع روی میزبان از `RAHGARD_SECRET_DIR` می‌آید. فایل‌ها باید از secrets manager تأییدشده render شوند، regular و غیر symlink باشند، دیگری نتواند بخواند یا بنویسد، و گروه فقط‌خواندنیِ همان user برنامه دسترسی داشته باشد. در گروه Compose محلی، uid/gid/mode bind mount ممکن است از فایل میزبان پیروی کند؛ عدد gid را از خود image با `id -g rahgard` بگیرید و فرض نکنید.
+
+هر دو فایل را **فقط از مسیر secret manager** بسازید؛ مقدارها را در shell argv، خروجی ترمینال، history، فایل `.env`، log، CI یا issue ننویسید. پس از بررسی file ownership/mode و `docker compose ... config --quiet`، restart فقط در پنجرهٔ تغییر مجاز انجام شود. سپس health check غیرحساس فقط وضعیت `configured/disabled` را از `Settings` نشان دهد؛ مقدار یا طول secret چاپ نشود. در این task فایل‌های live ساخته/چرخانده نشدند و overlay روی VPS اجرا نشد.
+
+مراحل کامل backup/restore، rehearsal ۰۰۲۴–۰۰۲۶، مرزبندی clone زنده/ایزوله و محدودیت portability در [راهنمای بازیابی Issue 27](RAHGARD_ISSUE27_RECOVERY_GUIDE_FA.md) آمده است. Grant مالک و reviewer همچنان از ابزار operator جدا provision می‌شود؛ MFA enrollment از UI فقط بعد از grant انجام می‌شود.
+
 ## بازیابی و لغو
 
 - کد بازیابی فقط یک‌بار قابل استفاده است و یک تأیید پنج‌دقیقه‌ای برای همان نشست ایجاد می‌کند. سپس گزینهٔ «بازنشانی کدساز با نشست تأییدشده» را انتخاب و TOTP را دوباره ثبت کنید.

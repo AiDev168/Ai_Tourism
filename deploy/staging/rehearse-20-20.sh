@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Restore a fresh post-0021 backup into an isolated PG17 clone and prove the
-# candidate runtime against the already-migrated schema without applying DDL.
+# HISTORICAL ONLY: restore a post-0021 backup (exactly 20 production ledger rows)
+# into an isolated PG17 clone. It is not the current 0023->0026 rehearsal.
+# Current-ledger checks and additive MFA migrations use
+# scripts/ops/rehearse_rahgard_v2_migrations.py instead.
 set -Eeuo pipefail
 umask 077
 

@@ -251,3 +251,25 @@ available as the staging fallback.
   files are `0640` with group 999 for the non-root container service accounts;
   the host directory prevents other host users from traversing them. The DB and
   API have no `ports:` mapping. `staging_private` is an internal network.
+
+## Current verified 0023 backup and 0024–0026 rehearsal (Issue 27)
+
+`preflight-018-021.sh`, `rehearse-20-20.sh`, `upgrade-018-021.sh`, and
+`scripts/ops/capture_rahgard_v2_backup.py` are historical: they target a
+20-row production ledger through 0021. They fail closed against the present
+22-row live 0023 ledger; do not alter their expected baseline to make them
+accept a later database. For current-state evidence use
+`docs/operations/RAHGARD_ISSUE27_RECOVERY_GUIDE_FA.md` and:
+
+- `scripts/ops/capture_rahgard_0023_backup.py` — exact read-only PG17/0023
+  identity, ledger and count check, then encrypted custom-format database dump.
+- `scripts/ops/check_rahgard_v2_ledger.py` — exact migration IDs and SQL SHA-256
+  comparison against the observed 0023 snapshot and immutable source revision.
+- `scripts/ops/rehearse_rahgard_v2_migrations.py` — checksum/HMAC verification,
+  isolated restore, 0024→0026 transaction rehearsal and security/data checks.
+
+The tested archive is database-only. It does not include cluster globals,
+runtime secrets, TLS or host assets, and it does not certify a full server
+relocation. It creates no live DDL and leaves existing containers/volume
+untouched. No live 0024–0026 upgrade or MFA secret provisioning is authorized by
+this runbook.

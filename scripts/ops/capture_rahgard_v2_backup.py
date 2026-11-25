@@ -1,4 +1,10 @@
-"""Stream an encrypted, read-only snapshot to protected off-host storage."""
+"""Historical capture for the exact post-0021 / 20-row ledger only.
+
+Do not use this helper for the current 0023 live schema. Use
+capture_rahgard_0023_backup.py, which checks the current image/volume/marker,
+complete 22-row ledger and aggregate counts before streaming a database-only
+archive. Neither helper captures PostgreSQL cluster globals or host assets.
+"""
 
 import argparse
 import base64

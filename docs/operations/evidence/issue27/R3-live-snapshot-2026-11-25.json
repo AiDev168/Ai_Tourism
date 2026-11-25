@@ -1,0 +1,50 @@
+{
+  "observed_at_utc": "2026-11-25T09:34:51Z",
+  "observation_method": "read-only SSH; Docker inspect; PostgreSQL SELECT statements",
+  "privacy": "aggregate counts and migration checksums only; no row payloads or credentials",
+  "vps": {
+    "legacy_release_marker": "5e2664fb51e18f52549aa37a8b5793e12ace09b2",
+    "api_image": "rahgard-api:9b5b07d0786578abdfac56848baf3c6d1260832e",
+    "web_image": "rahgard-web:9b5b07d0786578abdfac56848baf3c6d1260832e",
+    "database": {
+      "name": "rahgard_pilot_vps_staging",
+      "postgresql": "17.11",
+      "volume": "rahgard_staging_pgdata",
+      "marker_matches_protected_host_state": true,
+      "aggregate_counts": {
+        "users": 22,
+        "sessions": 36,
+        "trips": 16,
+        "conversations": 16,
+        "itineraries": 1,
+        "organizations": 1,
+        "published_destinations": 0
+      },
+      "migration_ledger": [
+        {"migration_id":"0000_legacy_tourism_points_baseline","sha256":"0f09e1a1b003e76b67134cc5e1f74b37fa5a0a89f62e4b4ecd534c14c823314f"},
+        {"migration_id":"0001_core_schema","sha256":"00b4d8616f4e1622191e982c4a388feb20c41a6e46778ce0770c40339a48063e"},
+        {"migration_id":"0002_synthetic_knowledge_seed","sha256":"ec6ea33a5f3c9e8b902050015bd24672e25e112f7852bc7d936d48cc6d944ec7"},
+        {"migration_id":"0003_synthetic_e2e_seed","sha256":"9ef84f906ba33988ac3cfaa176856c1dbc1f9003060c60dd90c60359e2066383"},
+        {"migration_id":"0004_app_role_grants","sha256":"b3b9903dcfed60417aeb8fcd690c34fbc933477491f908a3b02fc80c2fc8b6a7"},
+        {"migration_id":"0005_verified_unesco_destination_seed","sha256":"9ad5523af9733da845df8c8c090862e29d877b72ac3951053cb0c3580e9a3218"},
+        {"migration_id":"0006_verified_unesco_destination_seed_batch2","sha256":"c0a935c7c7b17f085107643a9ea0911cac4378adb945cdf3348146efc56ada63"},
+        {"migration_id":"0007_shiraz_dalahoo_wikipedia_dataset_v1","sha256":"b95891fe6de229ea51a2cc446fc0e5f0cb03dbe3e7c34914a4becf67ee78a7c2"},
+        {"migration_id":"0008_authentication_foundation","sha256":"bba9a0bb08e7c86429ebb67bda443aeca268f47d41d10d8ee09bd188127a23e3"},
+        {"migration_id":"0009_traveler_core","sha256":"8e77827f318e2acd3ccc5be020e5229f989cb4bbfadc73de75ed109a7750a91b"},
+        {"migration_id":"0010_task31_content_privacy_full_itinerary","sha256":"f9c83fefbbc8f48b362ebf42f8ea4e2558192657d4f6f1dd804a69aa39529db5"},
+        {"migration_id":"0011_internal_chat_turns","sha256":"0d325f3968932fa06a6aef38c92b980b41e72dffd62711933f205ca4b8dce927"},
+        {"migration_id":"0012_task5_published_claim_evidence","sha256":"cfce395ed1f2bf3dc01f7b42e47d64434a32bb2638e4e30ff27da5b4f22dfa9a"},
+        {"migration_id":"0013_private_pilot_geo_audit","sha256":"c5db92c206faad0af63b0789d5445894b8872d511306c11c387d1c9cdd978591"},
+        {"migration_id":"0016_staging_invitation_auth","sha256":"702b113f2a26856836d1eb64320cb13c97626e61f588244faa3923ae23b03016"},
+        {"migration_id":"0017_provisional_itineraries","sha256":"4576f4e1390de68345866e0d99815d1644833f577266539d47075da26776de6d"},
+        {"migration_id":"0018_national_catalogue_ingestion","sha256":"f5fc0cb3e3fcf61b36a5d21f9c98c3d75e04581cb19d4e22ad1754d53480dd36"},
+        {"migration_id":"0019_partner_workspace","sha256":"8f7c745e128faf0d9d91bf808159367a7a2636ac31b4544147619a9af751dd56"},
+        {"migration_id":"0020_archive_candidate_publication","sha256":"b6822a3401cef3f7ac8c85ce0577eb71d0373bc34bf4ec2d8c65b0a812f13326"},
+        {"migration_id":"0021_postgis_security_definer_publication","sha256":"bc0b6abb335549ddff91a811aeeca30bc5ba75d3e3f5f3fe81f7ded4b3bee650"},
+        {"migration_id":"0022_traveler_company_requests","sha256":"e6b7db49abc0ff76c2620b2cc8d5dded0f4255f8533efd20bd5b402a0ba57eda"},
+        {"migration_id":"0023_partner_trip_responses","sha256":"deef8c5016f26aa646b9ff22346fad4ade3c6780ff447f701aa9e8a8e28571ac"
+        }
+      ]
+    }
+  }
+}

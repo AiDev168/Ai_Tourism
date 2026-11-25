@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 umask 077
+# HISTORICAL BASELINE ONLY: this wrapper invokes the post-0021, 20-ledger-row
+# rehearsal. Do not use it for the current PG17/0023 database; use
+# scripts/ops/rehearse_rahgard_v2_migrations.py for 0023->0026.
 
 readonly root=/opt/rahgard-staging
 source_sha="${1:-}"
