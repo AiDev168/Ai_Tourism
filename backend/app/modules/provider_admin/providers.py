@@ -6,6 +6,7 @@ import asyncio
 import base64
 import ipaddress
 import json
+import logging
 import math
 import socket
 import time
@@ -23,6 +24,7 @@ from app.modules.integrations.chat_adapter import ChatReply, ChatRequest, _parse
 CAPABILITIES = frozenset({"chat", "vision", "embedding", "reranking"})
 TEST_MAX_OUTPUT_TOKENS = 64
 _MAX_RESPONSE_BYTES = 65_536
+logger = logging.getLogger("ai_tourism.provider_admin.transport")
 _TEST_PNG = base64.b64encode(
     bytes.fromhex(
         "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
@@ -54,9 +56,108 @@ class ChatProviderConfig:
     base_url: str
     model_id: str
     api_key: SecretStr | None = None
-    timeout_seconds: int = 20
+    timeout_seconds: int = 30
     max_tokens: int = 800
     capability: str = "chat"
+
+
+_CHAT_REQUIREMENT_FIELDS = {
+    "destination": "string",
+    "origin": "string",
+    "duration_days": "integer",
+    "traveler_count": "integer",
+    "budget_text": "string",
+    "interest": "string",
+    "soft_preference": "string",
+    "relative_start_date": "integer",
+    "travel_start": "string",
+    "travel_end": "string",
+    "hard_constraint": "string",
+    "accessibility": "string",
+    "travel_difficulty": "string",
+    "weather_preference": "string",
+    "local_cuisine": "string",
+}
+
+
+def _lm_studio_chat_response_format() -> dict[str, object]:
+    """Return an explicit LM Studio JSON Schema for the traveler contract.
+
+    The schema names each accepted requirement. A generic object schema caused
+    small local models to invent keys, while the adapter correctly discarded
+    those keys and ultimately turned an otherwise successful inference into a
+    503. Values remain untrusted suggestions and pass the existing evidence
+    and domain validation after parsing.
+    """
+    requirement_properties = {
+        name: {"type": kind} for name, kind in _CHAT_REQUIREMENT_FIELDS.items()
+    }
+    evidence_properties = {name: {"type": "string"} for name in _CHAT_REQUIREMENT_FIELDS}
+    nullable_itinerary = {
+        "type": "object",
+        "properties": {
+            "status": {"type": "string", "enum": ["provisional_unverified"]},
+            "days": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "day_number": {"type": "integer"},
+                        "stops": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "role": {"type": "string", "enum": ["model_proposed"]},
+                                },
+                                "required": ["name", "role"],
+                                "additionalProperties": False,
+                            },
+                        },
+                    },
+                    "required": ["day_number", "stops"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["status", "days"],
+        "additionalProperties": False,
+    }
+    schema = {
+        "type": "object",
+        "properties": {
+            "reply": {"type": "string"},
+            "requirements": {
+                "type": "object",
+                "properties": requirement_properties,
+                "additionalProperties": False,
+            },
+            "requirement_evidence": {
+                "type": "object",
+                "properties": evidence_properties,
+                "additionalProperties": False,
+            },
+            "ambiguous_requirements": {
+                "type": "object",
+                "properties": {
+                    "origin": {"type": "array", "items": {"type": "string"}},
+                    "destination": {"type": "array", "items": {"type": "string"}},
+                },
+                "additionalProperties": False,
+            },
+            "clarification": {"type": ["string", "null"]},
+            "provisional_itinerary": {
+                "anyOf": [nullable_itinerary, {"type": "null"}],
+            },
+        },
+        "required": ["reply", "requirements", "requirement_evidence"],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "json_schema",
+        "json_schema": {"name": "rahgard_traveler_turn", "schema": schema},
+    }
 
 
 class EmbeddingRequest(BaseModel):
@@ -349,41 +450,49 @@ class OpenAiCompatibleProviderAdapter:
         raise AiCapabilityUnavailable()
 
     async def _invoke_chat(self, request: ChatRequest) -> ChatReply:
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Return a JSON object with reply, requirements, requirement_evidence, clarification. "
-                    "Only extract facts explicitly stated in the current user message. Preserve exact wording "
-                    "in evidence. Use the reviewed profile as context for replies only. "
-                    "Requirements are untrusted suggestions requiring traveler review. Do not "
-                    "invent or confirm travel facts. Reply in the requested locale."
-                ),
-            }
-        ]
-        messages.extend({"role": item.role, "content": item.content} for item in request.history)
-        messages.append(
-            {
-                "role": "user",
-                "content": json.dumps(
-                    {"locale": request.locale, "text": request.text,
-                     "reviewed_profile": request.reviewed_profile}, ensure_ascii=False
-                ),
-            }
+        system_prompt = (
+            "Extract the traveler facts stated in the latest message and answer briefly. "
+            f"Use locale {request.locale}. Return a concise reply, requirements, and exact supporting quotes. "
+            "Field meanings: origin=departure place; destination=visited place; duration_days=length of stay; "
+            "traveler_count=people traveling; budget_text=exact amount with only the currency stated; "
+            "relative_start_date=departure offset from the traveler-local reference date (tomorrow is 1, "
+            "day after tomorrow is 2, and this is not trip duration); interest and other preference fields "
+            "are explicit traveler preferences. Include only supported fields and quote the exact substring. "
+            "Do not infer missing facts. Profile context is not evidence and never overrides this message. "
+            "Requirements are untrusted suggestions for review. Any proposed itinerary contains stop names "
+            "only and must be marked provisional_unverified/model_proposed."
         )
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend({"role": item.role, "content": item.content} for item in request.history)
+        context = {
+            "traveler_timezone": request.traveler_timezone,
+            "traveler_reference_date": (
+                request.traveler_reference_date.isoformat() if request.traveler_reference_date else None
+            ),
+            "reviewed_profile": request.reviewed_profile,
+        }
+        messages.append({"role": "system", "content": "Context only: " + json.dumps(context, ensure_ascii=False)})
+        messages.append({"role": "user", "content": request.text})
+        body: dict[str, object] = {
+            "model": self.config.model_id,
+            "max_tokens": self.config.max_tokens,
+            "messages": messages,
+            "stream": False,
+        }
+        if self.config.provider_kind == "lm_studio":
+            body["response_format"] = _lm_studio_chat_response_format()
+        stage = "request"
         try:
-            body = await self._post_json(
-                "/chat/completions",
-                {
-                    "model": self.config.model_id,
-                    "max_tokens": self.config.max_tokens,
-                    "messages": messages,
-                    "stream": False,
-                },
-            )
-            content = self._chat_text(body)
+            response_body = await self._post_json("/chat/completions", body)
+            stage = "provider_response_validation"
+            content = self._chat_text(response_body)
+            stage = "traveler_reply_validation"
             return _parse_provider_content(content)
-        except Exception:
+        except Exception as error:
+            logger.warning(
+                "provider.chat_unavailable provider_kind=%s stage=%s error_type=%s",
+                self.config.provider_kind, stage, type(error).__name__,
+            )
             raise AiCapabilityUnavailable() from None
 
     async def _invoke_vision(self, request: VisionRequest) -> VisionResponse:
@@ -532,6 +641,10 @@ class OpenAiCompatibleProviderAdapter:
         if capability_probe and status == 400:
             raise ProviderCapabilityUnsupported("Selected model rejected this capability")
         if status != 200:
+            logger.warning(
+                "provider.http_error provider_kind=%s status=%s capability_probe=%s",
+                self.config.provider_kind, status, capability_probe,
+            )
             raise ProviderTransportError("Provider is unavailable")
         try:
             value = json.loads(raw)
@@ -562,7 +675,11 @@ class OpenAiCompatibleProviderAdapter:
                         return response.status_code, await _read_bounded(response)
         except ProviderTransportError:
             raise
-        except Exception:
+        except Exception as error:
+            logger.warning(
+                "provider.request_failed provider_kind=%s error_type=%s",
+                self.config.provider_kind, type(error).__name__,
+            )
             raise ProviderTransportError("Provider is unavailable") from None
 
     @staticmethod

@@ -82,7 +82,7 @@ type PanelState = { profiles: ProviderProfile[]; routes: ActiveRoute[]; revision
 type FormState = { id?: string; version?: number; name: string; provider_kind: ProviderProfile['provider_kind']; base_url: string; auth_mode: ProviderProfile['auth_mode']; enabled: boolean; timeout_seconds: number; concurrency_limit: number; capabilities: Partial<Record<ProviderCapability, { model_id: string; max_tokens: number }>>; api_key: string };
 const emptyFallback = (capability: ProviderCapability): FallbackPolicy => ({ capability, enabled: false, ordered_revision_ids: [] });
 const emptyFallbacks = (): Record<ProviderCapability, FallbackPolicy> => Object.fromEntries(capabilities.map(capability => [capability, emptyFallback(capability)])) as Record<ProviderCapability, FallbackPolicy>;
-const freshForm = (): FormState => ({ name: '', provider_kind: 'lm_studio', base_url: 'http://127.0.0.1:1234/v1', auth_mode: 'none', enabled: true, timeout_seconds: 15, concurrency_limit: 2, capabilities: { chat: { model_id: '', max_tokens: 800 } }, api_key: '' });
+const freshForm = (): FormState => ({ name: '', provider_kind: 'lm_studio', base_url: 'http://127.0.0.1:1234/v1', auth_mode: 'none', enabled: true, timeout_seconds: 30, concurrency_limit: 2, capabilities: { chat: { model_id: '', max_tokens: 800 } }, api_key: '' });
 const emptyPanel: PanelState = { profiles: [], routes: [], revisions: [], audit: [], usage: [], fallbacks: emptyFallbacks() };
 
 export function AiProviderAdminPanel({ locale, csrfToken }: Props) {

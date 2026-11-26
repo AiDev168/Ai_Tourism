@@ -100,11 +100,63 @@ def test_chat_turn_uses_selected_model_and_maps_untrusted_output():
         )
 
     adapter = OpenAiCompatibleChatAdapter(config(), transport=httpx.MockTransport(respond))
-    result = asyncio.run(adapter.invoke(ChatRequest(locale="fa-IR", text="چهار روز")))
+    request_text = "\u0686\u0647\u0627\u0631 \u0631\u0648\u0632"
+    result = asyncio.run(adapter.invoke(ChatRequest(locale="fa-IR", text=request_text)))
     assert result.reply == "Ø³Ù„Ø§Ù…"
     assert result.requirements == {"duration_days": 4}
     assert seen["auth"] is None
     assert '"model":"local-chat"' in seen["body"]
+    body = json.loads(seen["body"])
+    assert body["messages"][-1] == {"role": "user", "content": request_text}
+    assert body["response_format"]["type"] == "json_schema"
+    requirement_schema = body["response_format"]["json_schema"]["schema"]["properties"]["requirements"]
+    assert {"origin", "destination", "duration_days", "traveler_count"}.issubset(
+        requirement_schema["properties"]
+    )
+    assert "exact supporting quotes" in body["messages"][0]["content"]
+
+
+def test_lm_studio_structured_contract_accepts_only_named_traveler_fields():
+    seen = {}
+
+    async def respond(request):
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop",
+            "message": {"content": json.dumps({
+                "reply": "\u0628\u0631\u0646\u0627\u0645\u0647 \u0631\u0627 \u0622\u0645\u0627\u062f\u0647 \u0645\u06cc \u06a9\u0646\u0645.",
+                "requirements": {"origin": "\u0645\u0634\u0647\u062f", "destination": "\u0634\u06cc\u0631\u0627\u0632"},
+                "requirement_evidence": {"origin": "\u0627\u0632 \u0645\u0634\u0647\u062f", "destination": "\u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632"},
+                "ambiguous_requirements": {"origin": [], "destination": []},
+                "clarification": None,
+                "provisional_itinerary": None,
+            }, ensure_ascii=False)},
+        }]})
+
+    provider = OpenAiCompatibleProviderAdapter(config(), transport=httpx.MockTransport(respond))
+    request_text = "\u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc \u062e\u0648\u0627\u0645 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632"
+    result = asyncio.run(provider.invoke(ChatRequest(locale="fa-IR", text=request_text)))
+    assert result.requirements == {"origin": "\u0645\u0634\u0647\u062f", "destination": "\u0634\u06cc\u0631\u0627\u0632"}
+    assert "strict" not in seen["body"]["response_format"]["json_schema"]
+    assert seen["body"]["messages"][-1]["content"] == request_text
+
+
+def test_non_lm_studio_openai_compatible_provider_does_not_receive_local_schema_mode():
+    seen = {}
+
+    async def respond(request):
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop",
+            "message": {"content": '{"reply":"ok","requirements":{}}'},
+        }]})
+
+    provider = OpenAiCompatibleProviderAdapter(
+        config("openai_compatible", "https://api.gapgpt.app/v1", "test-model", "test-key"),
+        transport=httpx.MockTransport(respond),
+    )
+    asyncio.run(provider.invoke(ChatRequest(locale="en-US", text="Plan a trip")))
+    assert "response_format" not in seen["body"]
 
 
 def test_provider_failure_is_safe_and_not_a_successful_connection():

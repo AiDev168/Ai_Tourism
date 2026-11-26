@@ -50,7 +50,7 @@ class ProfileWrite(BaseModel):
     auth_mode: Literal["none", "bearer"]
     enabled: StrictBool = True
     capabilities: dict[str, CapabilityBinding] = Field(min_length=1, max_length=4)
-    timeout_seconds: StrictInt = Field(default=20, ge=1, le=60)
+    timeout_seconds: StrictInt = Field(default=30, ge=1, le=60)
     concurrency_limit: StrictInt = Field(default=1, ge=1, le=10)
     api_key: SecretStr | None = Field(default=None, max_length=2048)
 
@@ -73,6 +73,25 @@ class ProfileWrite(BaseModel):
         if self.provider_kind == "openai_compatible" and set(self.capabilities) - {"chat"}:
             raise ValueError("Remote provider capabilities require verified account support")
         return self
+
+    def to_config(self, normalized_base_url: str) -> dict[str, Any]:
+        """Build the secret-free, versioned runtime configuration snapshot.
+
+        API credentials are deliberately excluded: callers persist them only in
+        the server-side vault and store its opaque reference on the revision.
+        """
+        return {
+            "provider_kind": self.provider_kind,
+            "base_url": normalized_base_url,
+            "auth_mode": self.auth_mode,
+            "enabled": self.enabled,
+            "capabilities": {
+                capability: binding.model_dump(mode="json")
+                for capability, binding in self.capabilities.items()
+            },
+            "timeout_seconds": self.timeout_seconds,
+            "concurrency_limit": self.concurrency_limit,
+        }
 
 
 class ProfileUpdate(ProfileWrite):
@@ -168,7 +187,7 @@ def _public_profile(profile: dict[str, Any], revision: dict[str, Any] | None) ->
         "auth_mode": config.get("auth_mode", "none"),
         "enabled": profile["enabled"],
         "capabilities": config.get("capabilities", {}),
-        "timeout_seconds": config.get("timeout_seconds", 20),
+        "timeout_seconds": config.get("timeout_seconds", 30),
         "concurrency_limit": config.get("concurrency_limit", 1),
         "version": profile["version"],
         "secret_configured": bool(revision and revision.get("secret_ref")),
@@ -212,7 +231,7 @@ def _provider_adapter(
             base_url=config["base_url"],
             model_id=binding["model_id"],
             api_key=key,
-            timeout_seconds=config.get("timeout_seconds", 20),
+            timeout_seconds=config.get("timeout_seconds", 30),
             max_tokens=binding.get("max_tokens", 800),
             capability=selected_capability,
         )

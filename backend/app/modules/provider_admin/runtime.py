@@ -181,7 +181,7 @@ class AdminManagedCapabilityAdapter:
             base_url=config["base_url"],
             model_id=binding["model_id"],
             api_key=api_key,
-            timeout_seconds=config.get("timeout_seconds", 20),
+            timeout_seconds=config.get("timeout_seconds", 30),
             max_tokens=binding.get("max_tokens", 800),
             capability=capability,
         )

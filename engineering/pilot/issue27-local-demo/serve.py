@@ -8,6 +8,8 @@ from pathlib import Path
 import ssl
 import sys
 
+from proxy_origin import expected_host, normalize_trusted_origin
+
 
 DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"
 API_HOST = "127.0.0.1"
@@ -32,6 +34,10 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
 
     def _proxy(self):
+        original_host = self.headers.get("Host", "")
+        if original_host.strip().lower() != expected_host(WEB_PORT):
+            self.send_error(421)
+            return
         length = int(self.headers.get("Content-Length", "0"))
         if length > 2_000_000:
             self.send_error(413)
@@ -40,6 +46,13 @@ class Handler(SimpleHTTPRequestHandler):
         headers = {k: v for k, v in self.headers.items()
                    if k.lower() not in {"host", "connection", "content-length", "forwarded",
                                         "x-forwarded-host", "x-forwarded-proto"}}
+        incoming_origin = self.headers.get("Origin")
+        if incoming_origin is not None:
+            trusted_origin = normalize_trusted_origin(original_host, incoming_origin, WEB_PORT)
+            if trusted_origin is None:
+                self.send_error(403)
+                return
+            headers["Origin"] = trusted_origin
         headers.update({"Host": "localhost", "X-Forwarded-Proto": "https", "Connection": "close"})
         connection = HTTPConnection(API_HOST, API_PORT, timeout=90)
         try:

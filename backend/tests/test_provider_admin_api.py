@@ -64,6 +64,12 @@ class FakeRegistry:
         self.fallback = (enabled, ordered_revision_ids, actor_id)
         return {"enabled": enabled, "ordered_revision_ids": ordered_revision_ids}
 
+    def create_profile_with_revision(self, name, provider_kind, *, config, secret_ref, actor_id):
+        self.profile = {**self.profile, "name": name, "provider_kind": provider_kind}
+        self.revision["config"] = config
+        self.revision["secret_ref"] = secret_ref
+        return self.profile, self.revision
+
 
 def _settings():
     return Settings(
@@ -110,6 +116,36 @@ def test_sensitive_profile_mutation_requires_fresh_totp_step_up(monkeypatch):
         "auth_mode": "none", "capabilities": {"chat": {"model_id": "local-model"}},
     })
     assert response.status_code == 403
+
+
+def test_profile_creation_builds_secret_free_runtime_config(monkeypatch):
+    client, registry = _client(monkeypatch)
+
+    class Vault:
+        def put(self, _secret):
+            pytest.fail("keyless LM Studio profile must not write a secret")
+
+    monkeypatch.setattr(provider_admin, "_vault", lambda _settings: Vault())
+    response = client.post("/api/v1/admin/ai-providers/profiles", headers={"X-CSRF-Token": "ok"}, json={
+        "name": "Local LM Studio",
+        "provider_kind": "lm_studio",
+        "base_url": "http://127.0.0.1:1234/v1",
+        "auth_mode": "none",
+        "capabilities": {"chat": {"model_id": "meta-llama-3.1-8b-instruct", "max_tokens": 32}},
+    })
+
+    assert response.status_code == 200
+    assert response.json()["base_url"] == "http://127.0.0.1:1234/v1"
+    assert registry.revision["config"] == {
+        "provider_kind": "lm_studio",
+        "base_url": "http://127.0.0.1:1234/v1",
+        "auth_mode": "none",
+        "enabled": True,
+        "capabilities": {"chat": {"model_id": "meta-llama-3.1-8b-instruct", "max_tokens": 32}},
+        "timeout_seconds": 30,
+        "concurrency_limit": 1,
+    }
+    assert "api_key" not in registry.revision["config"]
 
 
 def test_provider_admin_reuses_shared_platform_mfa_routes(monkeypatch):
