@@ -224,7 +224,7 @@ print(payload["count"])
 restore_web_config="$runtime_dir/nginx-web-restore.conf"
 python3 "$bundle_dir/release/scripts/ops/prepare_rahgard_restore_web_config.py" \
   "$bundle_dir/release/deploy/staging/nginx-web.conf" "$restore_web_config" >/dev/null
-chmod 0600 "$restore_web_config"
+chmod 0644 "$restore_web_config"
 start_and_check_web() {
   [[ -z "$(docker ps -aq --filter "name=^/${web_app_name}$")" ]] || {
     echo 'Restore-check Web container name already exists; refusing reuse.' >&2; exit 2;
@@ -237,6 +237,7 @@ start_and_check_web() {
     --tmpfs /var/run:rw,noexec,nosuid,size=16m \
     --mount "type=bind,src=$restore_web_config,dst=/etc/nginx/conf.d/default.conf,readonly" \
     --security-opt no-new-privileges:true --cap-drop ALL \
+    --cap-add CHOWN --cap-add SETUID --cap-add SETGID \
     "$source_web_image" >/dev/null
   created_web_container=true
   web_labels=$(docker inspect --format '{{index .Config.Labels "rahgard.restore.target"}}|{{index .Config.Labels "rahgard.environment"}}' "$web_app_name")

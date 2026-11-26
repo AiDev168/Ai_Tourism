@@ -1,0 +1,18 @@
+{
+  "verified_at": "2026-11-26",
+  "scope": "isolated_docker_web_runtime_smoke",
+  "api_web_image_source_sha": "9b5b07d0786578abdfac56848baf3c6d1260832e",
+  "image_is_current_release": false,
+  "web_shell_http": 200,
+  "hashed_assets_http": 200,
+  "hashed_asset_count": 2,
+  "manifest_http": 200,
+  "service_worker_http": 200,
+  "web_to_api_proxy_http": 200,
+  "api_adapter": "synthetic_test_only",
+  "network_mode": "none_shared_container_namespace",
+  "published_host_ports": 0,
+  "browser_login_or_database_acceptance": false,
+  "provider_inference": false,
+  "note": "Observed Nginx startup requiring CHOWN, SETUID, and SETGID capabilities for the pinned image entrypoint; restore check now grants only those capabilities and keeps the service port unpublished. This is a component smoke, not a portable bundle restore."
+}
