@@ -6,11 +6,15 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import os
 from pathlib import Path
 import ssl
+import sys
 
 
 DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"
 API_HOST = "127.0.0.1"
-API_PORT = 8801
+API_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8801
+WEB_PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 443
+if not 1024 <= API_PORT <= 65535 or not 1024 <= WEB_PORT <= 65535:
+    raise SystemExit("Local demo ports must be in the unprivileged TCP range")
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -87,7 +91,7 @@ class Handler(SimpleHTTPRequestHandler):
 if not DIST.is_dir() or not (DIST / "index.html").is_file():
     raise SystemExit("Frontend production build is missing")
 root = Path(os.environ["RAHGARD_DEMO_ROOT"])
-server = ThreadingHTTPServer(("127.0.0.1", 443), Handler)
+server = ThreadingHTTPServer(("127.0.0.1", WEB_PORT), Handler)
 context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.minimum_version = ssl.TLSVersion.TLSv1_2
 context.load_cert_chain(root / "tls" / "localhost.crt", root / "tls" / "localhost.key")

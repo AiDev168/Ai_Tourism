@@ -29,7 +29,11 @@ export class ProviderAdminApiError extends Error {
 }
 
 async function request<T>(csrfToken: string, path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`/api/v1/admin/ai-providers${path}`, {
+  return requestFrom<T>('/api/v1/admin/ai-providers', csrfToken, path, init);
+}
+
+async function requestFrom<T>(base: string, csrfToken: string, path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${base}${path}`, {
     ...init, credentials: 'same-origin', cache: 'no-store',
     headers: {
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
@@ -50,10 +54,10 @@ const json = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.strin
 
 export const providerAdminApi = {
   me: (csrf = '') => request<AdminMe>(csrf, '/me'),
-  enrollMfa: (csrf: string) => request<{ secret: string; otpauth_uri: string }>(csrf, '/mfa/enroll', json({})),
-  verifyMfa: (csrf: string, code: string) => request<{ mfa_enrolled: boolean; recovery_codes: string[] }>(csrf, '/mfa/verify', json({ code })),
-  stepUp: (csrf: string, code: string) => request<{ step_up_expires_at: string }>(csrf, '/mfa/step-up', json({ code })),
-  recoveryStepUp: (csrf: string, code: string) => request<{ step_up_expires_at: string }>(csrf, '/mfa/recovery', json({ code })),
+  enrollMfa: (csrf: string) => requestFrom<{ secret: string; otpauth_uri: string }>('/api/v1/admin/mfa', csrf, '/enroll', json({})),
+  verifyMfa: (csrf: string, code: string) => requestFrom<{ mfa_enrolled: boolean; recovery_codes: string[] }>('/api/v1/admin/mfa', csrf, '/verify', json({ code })),
+  stepUp: (csrf: string, code: string) => requestFrom<{ step_up_expires_at: string }>('/api/v1/admin/mfa', csrf, '/step-up', json({ code })),
+  recoveryStepUp: (csrf: string, code: string) => requestFrom<{ step_up_expires_at: string }>('/api/v1/admin/mfa', csrf, '/recovery', json({ code })),
   profiles: (csrf: string) => request<{ profiles: ProviderProfile[] }>(csrf, '/profiles'),
   createProfile: (csrf: string, input: ProfileInput) => request<ProviderProfile>(csrf, '/profiles', json(input)),
   updateProfile: (csrf: string, id: string, input: Partial<ProfileInput> & { expected_version: number }) => request<ProviderProfile>(csrf, `/profiles/${encodeURIComponent(id)}`, { ...json(input), method: 'PATCH' }),

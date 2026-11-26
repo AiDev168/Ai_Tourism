@@ -8,7 +8,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 FROM python:3.13.9-slim-bookworm
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
-RUN groupadd --system rahgard && useradd --system --gid rahgard --home-dir /app rahgard
+RUN groupadd --system --gid 10001 rahgard && useradd --system --uid 10001 --gid 10001 --home-dir /app rahgard \
+    && install -d -o rahgard -g rahgard -m 0700 /var/lib/rahgard/provider-vault
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 COPY backend/app /app/backend/app

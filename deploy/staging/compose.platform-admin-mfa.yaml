@@ -1,18 +1,18 @@
 name: ${RAHGARD_COMPOSE_PROJECT:-rahgard-staging}
 
-# Opt-in overlay. Do not pass this file until an operator provisions the two
-# protected files under RAHGARD_SECRET_DIR and verifies their permissions.
+# Opt-in overlay. Mount only the dedicated owner-only admin-secret directory;
+# do not expose the broader app-secret directory to the API container.
 services:
   api:
     environment:
-      PLATFORM_ADMIN_MFA_ENCRYPTION_KEY_FILE: /run/secrets/platform_admin_mfa_encryption_key_hex
-      PLATFORM_ADMIN_RECOVERY_PEPPER_FILE: /run/secrets/platform_admin_recovery_pepper
-    secrets:
-      - platform_admin_mfa_encryption_key_hex
-      - platform_admin_recovery_pepper
-
-secrets:
-  platform_admin_mfa_encryption_key_hex:
-    file: ${RAHGARD_SECRET_DIR:?Set RAHGARD_SECRET_DIR in the private deployment config}/platform_admin_mfa_encryption_key_hex
-  platform_admin_recovery_pepper:
-    file: ${RAHGARD_SECRET_DIR:?Set RAHGARD_SECRET_DIR in the private deployment config}/platform_admin_recovery_pepper
+      PLATFORM_ADMIN_MFA_ENCRYPTION_KEY_FILE: /run/rahgard-admin-secrets/platform_admin_mfa_encryption_key_hex
+      PLATFORM_ADMIN_RECOVERY_PEPPER_FILE: /run/rahgard-admin-secrets/platform_admin_recovery_pepper
+    volumes:
+      # A private directory bind preserves owner-only directory mode; individual
+      # file binds would create a generic /run/secrets parent rejected by config.
+      - type: bind
+        source: ${RAHGARD_ADMIN_SECRET_DIR:?Set the dedicated admin secret directory}
+        target: /run/rahgard-admin-secrets
+        read_only: true
+        bind:
+          create_host_path: false

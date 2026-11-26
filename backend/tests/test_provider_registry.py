@@ -207,15 +207,12 @@ def test_fallback_requires_explicit_valid_order_or_disabled_empty(args):
         registry.set_fallback(capability, enabled, order, actor_id=uuid4())
 
 
-def test_step_up_window_is_bounded_and_future_verification_rejected():
-    registry = ProviderRegistry(lambda: pytest.fail("invalid step-up must fail before DB"))
-    now = datetime.now(UTC)
-    with pytest.raises(RegistryRejected, match="expiry"):
-        registry.record_step_up(uuid4(), uuid4(), totp_counter=10, verified_at=now,
-                                expires_at=now + timedelta(minutes=16))
-    with pytest.raises(RegistryRejected, match="expiry"):
-        registry.record_step_up(uuid4(), uuid4(), totp_counter=10, verified_at=now + timedelta(minutes=1),
-                                expires_at=now + timedelta(minutes=2))
+def test_provider_registry_uses_shared_platform_mfa_without_a_second_store():
+    assert not hasattr(ProviderRegistry, "record_step_up")
+    migration = (Path(__file__).resolve().parents[2] / "engineering/pilot/sql/027_server_ai_provider_admin.sql").read_text(encoding="utf-8")
+    assert "identity.platform_admin_step_up" in migration
+    assert "identity.platform_admin_mfa" in migration
+    assert "identity.ai_provider_admin_mfa" not in migration
 
 
 def test_secret_material_cannot_be_embedded_in_revision_config_or_validation_details():
@@ -360,7 +357,7 @@ def test_step_up_expiry_reads_dict_row_by_column_name(has_current_step_up):
             assert "SELECT s.expires_at" in normalized
             assert "s.revoked_at IS NULL" in normalized
             assert "s.expires_at>%s" in normalized
-            assert "g.revoked_at IS NULL" in normalized
+            assert "identity.has_ai_provider_admin_capability(%s)" in normalized
             assert "m.enabled_at IS NOT NULL" in normalized
             assert params[:2] == (user_id, session_id)
             return _Cursor(row)

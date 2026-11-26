@@ -1,4 +1,5 @@
 *.sh text eol=lf
 *.bash text eol=lf
+engineering/pilot/sql/*.sql text eol=lf
 docs/database/live-schema/catalog_metadata_snapshot.json text eol=lf
 docs/database/rehearsed-schema-0026/catalog_metadata_snapshot.json text eol=lf

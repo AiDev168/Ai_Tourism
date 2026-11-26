@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 from backend.scripts.provision_platform_capability import CAPABILITIES, run  # noqa: E402
 
-DATA = Path(os.environ.get("LOCALAPPDATA", "")) / "Rahgard" / "Issue27OwnerDemo"
+DATA = Path(os.environ.get("RAHGARD_DEMO_ROOT") or Path(os.environ.get("LOCALAPPDATA", "")) / "Rahgard" / "Issue27OwnerDemo")
+DATABASE_PORT = int(os.environ.get("RAHGARD_DEMO_DATABASE_PORT", "18543"))
 SECRET = DATA / "secrets" / "pg_owner_password"
 MARKER_FILE = DATA / "state" / "database-marker"
 if not SECRET.is_file() or not MARKER_FILE.is_file():
@@ -43,7 +44,7 @@ if confirmation != "APPLY_LOCAL_CAPABILITY":
     raise SystemExit("CANCELLED")
 
 password = SECRET.read_text(encoding="utf-8").strip()
-dsn = make_conninfo(host="127.0.0.1", port=18543, dbname="rahgard_pilot_vps_staging",
+dsn = make_conninfo(host="127.0.0.1", port=DATABASE_PORT, dbname="rahgard_pilot_vps_staging",
                     user="ai_tourism_owner", password=password, connect_timeout=5,
                     application_name="rahgard_issue27_local_operator")
 with psycopg.connect(dsn) as conn:

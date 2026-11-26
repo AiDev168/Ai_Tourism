@@ -15,13 +15,10 @@ afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks()
 describe('AI provider admin panel', () => {
   it('distinguishes an unauthenticated request from an unavailable admin service', async () => {
     const fetchMock = vi.fn().mockResolvedValue(json({ error: { code: 'unauthenticated' } }, 401));
-    const signIn = vi.fn(); vi.stubGlobal('fetch', fetchMock);
-    await act(async () => { root.render(<AiProviderAdminPanel locale="en-US" csrfToken="csrf" onRequireLocalOwnerLogin={signIn} />); }); await settle();
-    expect(host.textContent).toContain('Sign in with the local owner account to manage AI providers.');
-    expect(host.textContent).toContain('Sign in as local owner');
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => { root.render(<AiProviderAdminPanel locale="en-US" csrfToken="csrf" />); }); await settle();
+    expect(host.textContent).toContain('Sign in with your approved Rahgard account to continue.');
     expect(host.textContent).not.toContain('The administration service could not be reached.');
-    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Sign in as local owner')?.click(); });
-    expect(signIn).toHaveBeenCalledTimes(1);
   });
 
   it('shows a real localized authorization denial and does not load profile data', async () => {

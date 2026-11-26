@@ -20,7 +20,7 @@
 
 ### قرارداد secretهای Step-up (از validator برنامه)
 
-- متغیرهای مسیر دقیق: `PLATFORM_ADMIN_MFA_ENCRYPTION_KEY_FILE=/run/secrets/platform_admin_mfa_encryption_key_hex` و `PLATFORM_ADMIN_RECOVERY_PEPPER_FILE=/run/secrets/platform_admin_recovery_pepper`؛ هر دو باید با هم تنظیم شوند و با تزریق مستقیم env هم‌زمان نباشند.
+- متغیرهای مسیر دقیق: `PLATFORM_ADMIN_MFA_ENCRYPTION_KEY_FILE=/run/rahgard-admin-secrets/platform_admin_mfa_encryption_key_hex` و `PLATFORM_ADMIN_RECOVERY_PEPPER_FILE=/run/rahgard-admin-secrets/platform_admin_recovery_pepper`؛ هر دو باید با هم تنظیم شوند و با تزریق مستقیم env هم‌زمان نباشند.
 - فایل کلید رمزگذاری باید دقیقاً 64 رقم hexadecimal (32 بایت) باشد. فایل pepper باید دست‌کم 32 بایت UTF-8 داشته باشد؛ newline انتهایی مجاز است، اما مقدار خالی، NUL، newline داخلی، symlink یا فایل غیرعادی رد می‌شود. validator سطح دسترسی فایل را نیز بررسی می‌کند.
 - مقدارها فقط اپراتور مجاز از secret manager میزبان در فایل‌های root-controlled با دسترسی محدود قرار می‌دهد. این runbook مقدار، تولید خودکار، گردش/چرخش یا تحویل secret را انجام نمی‌دهد. چرخش کلید رمزگذاری ممکن است دادهٔ MFA موجود را غیرقابل‌خواندن کند؛ پیش از آن باید سازگاری و بازیابی جداگانه تصویب و آزموده شود. Pepper تغییر‌یافته می‌تواند recovery codeهای قبلی را نامعتبر کند.
 - Health check فقط باید موجود/ناموجود بودن و اعتبار قالب را گزارش کند؛ مقدار secret، seed، recovery code یا fingerprint قابل‌بازگشت را نباید چاپ یا log کرد.
@@ -69,3 +69,7 @@ Workflowهای image build و quality باید روی SHA نهایی اجرا و
 - Backup قابل‌حمل همراه imageهای exact پس از کد جدید: tooling پیاده‌سازی/بازبینی شده، ولی هنوز با artifact واقعی production اجرا نشده است.
 - Independent server relocation، off-host copy، CI run روی SHA نهایی و سه‌محیط parity: اثبات‌نشده.
 - Live DDL، MFA secret provisioning، Owner/reviewer grant، Nginx/DNS یا deploy: مجوز اجرای این عملیات در این task داده نشده؛ دست‌نخورده باقی می‌مانند.
+
+### Migration 0027 provider-admin portability scope (isolated rehearsal only)
+
+Migration `0027_server_ai_provider_admin` adds server-side capability and registry support. It has not been applied on the VPS; the last observed live ledger ended at 0023. The opt-in overlays are `deploy/staging/compose.platform-admin-mfa.yaml` and `deploy/staging/compose.server-provider-admin.yaml`. MFA files are read from the dedicated `RAHGARD_ADMIN_SECRET_DIR` at `/run/rahgard-admin-secrets/...`. The separate provider keyring is mounted from `RAHGARD_PROVIDER_KEYRING_DIR` at `/run/rahgard-provider-keyring/ai_provider_vault_keyring.json`; ciphertext is held in `RAHGARD_PROVIDER_VAULT_VOLUME`. These mounts are not yet integrated into `export-portable.sh` or the live backup manifest. Therefore the portability package does not yet include this feature, and these overlays must not be activated on a server until export, restore, deploy, and rollback cover these paths with the same release.

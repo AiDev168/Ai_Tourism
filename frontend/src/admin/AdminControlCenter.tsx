@@ -3,13 +3,14 @@ import type { Locale } from '../i18n/messages';
 import { CatalogueReviewPanel } from './catalogue/CatalogueReviewPanel';
 import { CompanyReviewQueue } from '../partners/CompanyReviewQueue';
 import { PlatformAdminMfaPanel } from './PlatformAdminMfaPanel';
+import { AiProviderAdminPanel } from './aiProviders/AiProviderAdminPanel';
 import './adminControlCenter.css';
 
 type CapabilityReply = {
-  sections: { companies: boolean; destinations: boolean; users: boolean; system: boolean };
+  sections: { companies: boolean; destinations: boolean; users: boolean; system: boolean; ai_providers?: boolean };
   company_capabilities: Record<string, boolean>;
   catalogue_capabilities: Record<string, boolean>;
-  ai_admin: { available: boolean; scope: string };
+  ai_admin: { authorized?: boolean; available: boolean; scope: string };
   privileged_writes_available?: boolean;
   privileged_step_up?: { available: boolean; required: boolean; enrolled: boolean; step_up_expires_at: string | null };
 };
@@ -22,7 +23,7 @@ type Overview = {
   destinations?: { published_count: number };
   ai_admin?: { available: boolean; scope: string };
 };
-type Section = 'home' | 'companies' | 'destinations' | 'users' | 'system';
+type Section = 'home' | 'companies' | 'destinations' | 'users' | 'system' | 'providers';
 
 const words: Record<Locale, Record<string, string>> = {
   'fa-IR': {
@@ -68,6 +69,7 @@ export function AdminControlCenter({ locale, csrfToken }: { locale: Locale; csrf
     ['home', t.home, true], ['companies', t.companies, !!capabilities?.sections.companies],
     ['destinations', t.destinations, !!capabilities?.sections.destinations], ['users', t.users, !!capabilities?.sections.users],
     ['system', t.system, !!capabilities?.sections.system],
+    ['providers', t.provider, !!capabilities?.sections.ai_providers],
   ];
   const metric = (label: string, value: string | number | undefined) => <article className="admin-metric" key={label}><span>{label}</span><strong>{value ?? '—'}</strong></article>;
 
@@ -88,10 +90,11 @@ export function AdminControlCenter({ locale, csrfToken }: { locale: Locale; csrf
         {capabilities.sections.destinations && <button type="button" className="admin-control-card" onClick={() => setSection('destinations')}><span>{t.destinations}</span><strong>{overview.destinations?.published_count ?? '—'}</strong><small>{t.destinationsCount}</small></button>}
         {capabilities.sections.users && <button type="button" className="admin-control-card" onClick={() => setSection('users')}><span>{t.users}</span><strong>{overview.users?.account_count ?? '—'}</strong><small>{t.publicOnly}</small></button>}
         {capabilities.sections.system && <button type="button" className="admin-control-card" onClick={() => setSection('system')}><span>{t.system}</span><strong>{overview.system?.database ?? '—'}</strong><small>{t.release}: {overview.release?.commit ?? '—'}</small></button>}
+        {capabilities.sections.ai_providers && <button type="button" className="admin-control-card" onClick={() => setSection('providers')}><span>{t.provider}</span><strong>{overview.ai_admin?.available ? t.api : t.unavailable}</strong><small>{overview.ai_admin?.scope ?? capabilities.ai_admin.scope}</small></button>}
       </section>
       <section className="admin-capability-summary"><h2>{t.capabilities}</h2><ul>
         {Object.entries({ ...capabilities.company_capabilities, ...capabilities.catalogue_capabilities }).map(([key, allowed]) => <li key={key} data-enabled={allowed}>{key.replaceAll('_', ' ')} · {allowed ? '✓' : '—'}</li>)}
-        <li data-enabled="false">AI provider administration · {t.aiLocal}</li>
+        <li data-enabled={capabilities.ai_admin.available}>AI provider administration · {capabilities.ai_admin.available ? capabilities.ai_admin.scope : t.aiLocal}</li>
       </ul><p>{t.noCapability}</p></section>
     </>}
     {section === 'companies' && capabilities.sections.companies && <section className="admin-control-section"><h2>{t.companies}</h2><p>{t.companyHint}</p>
@@ -103,6 +106,8 @@ export function AdminControlCenter({ locale, csrfToken }: { locale: Locale; csrf
     {section === 'system' && capabilities.sections.system && <section className="admin-control-section"><h2>{t.system}</h2><div className="admin-metrics">
       {metric(t.api, overview.system?.api)}{metric(t.database, overview.system?.database)}{metric(t.pg, overview.system?.postgres_major)}{metric(t.migrations, overview.system?.migration_count)}{metric(t.latest, overview.system?.latest_migration ?? undefined)}{metric(t.backup, t.unavailable)}{metric(t.release, overview.release?.commit)}
     </div><p>{t.aiLocal}</p></section>}
-    <section className="admin-ai-restriction"><h2>{t.provider}</h2><p>{t.aiLocal}</p></section>
+    {section === 'providers' && capabilities.sections.ai_providers && (capabilities.ai_admin.available
+      ? <AiProviderAdminPanel locale={locale} csrfToken={csrfToken} />
+      : <section className="admin-control-section"><h2>{t.provider}</h2><p role="status">{t.aiLocal} ({capabilities.ai_admin.scope})</p></section>)}
   </main>;
 }

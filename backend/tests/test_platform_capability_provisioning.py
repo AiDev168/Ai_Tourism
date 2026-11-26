@@ -12,10 +12,11 @@ MARKER = "b" * 64
 
 
 class Cursor:
-    def __init__(self, *, active=False, admin_exists=True, operator_admin=True):
+    def __init__(self, *, active=False, admin_exists=True, operator_admin=True, target_platform_admin=True):
         self.active = active
         self.admin_exists = admin_exists
         self.operator_admin = operator_admin
+        self.target_platform_admin = target_platform_admin
         self.row = None
         self.queries = []
 
@@ -33,8 +34,9 @@ class Cursor:
                 "m24": __import__("hashlib").sha256(provisioning.MIGRATION_024.read_bytes()).hexdigest(),
                 "m25": __import__("hashlib").sha256(provisioning.MIGRATION_025.read_bytes()).hexdigest(),
                 "m26": __import__("hashlib").sha256(provisioning.MIGRATION_026.read_bytes()).hexdigest(),
-                "migration_count": 25,
-                "latest_migration": "0026_platform_reviewer_mfa",
+                "m27": __import__("hashlib").sha256(provisioning.MIGRATION_027.read_bytes()).hexdigest(),
+                "migration_count": 26,
+                "latest_migration": "0027_server_ai_provider_admin",
             }
         elif "capability='admin_overview_read'" in sql and "user_id=%s" in sql:
             self.row = {"active": self.operator_admin}
@@ -42,7 +44,9 @@ class Cursor:
             self.row = {"active": self.admin_exists}
         elif "EXISTS(SELECT 1 FROM identity.users" in sql:
             self.row = {"ok": True}
-        elif "EXISTS(SELECT 1 FROM partner.platform_grants WHERE user_id=%s" in sql or "EXISTS(SELECT 1 FROM identity.catalogue_review_grants" in sql:
+        elif "identity.has_platform_admin_capability" in sql:
+            self.row = {"ok": self.target_platform_admin}
+        elif "EXISTS(SELECT 1 FROM identity.ai_provider_admin_grants" in sql or "EXISTS(SELECT 1 FROM partner.platform_grants WHERE user_id=%s" in sql or "EXISTS(SELECT 1 FROM identity.catalogue_review_grants" in sql:
             self.row = {"active": self.active}
         else:
             self.row = None
@@ -139,3 +143,24 @@ def test_database_marker_ledger_and_role_mismatches_fail_closed(monkeypatch):
             "RAHGARD_OPERATOR_DATABASE_URL": "postgresql://private-dsn-not-printed",
             "RAHGARD_PILOT_DATABASE_MARKER": "c" * 64,
         })
+
+
+def test_provider_admin_grant_requires_target_to_already_be_a_platform_admin(monkeypatch):
+    cursor = Cursor(target_platform_admin=False)
+    monkeypatch.setattr(provisioning.psycopg, "connect", lambda *a, **k: Connection(cursor))
+    with pytest.raises(provisioning.ProvisioningError, match="provider_admin_requires_platform_capability"):
+        provisioning.run(args(capability="ai_provider_admin"), environ={
+            "RAHGARD_OPERATOR_DATABASE_URL": "postgresql://private-dsn-not-printed",
+            "RAHGARD_PILOT_DATABASE_MARKER": MARKER,
+        })
+
+
+def test_platform_admin_can_receive_separate_provider_scope(monkeypatch):
+    cursor = Cursor(target_platform_admin=True)
+    connection = Connection(cursor)
+    monkeypatch.setattr(provisioning.psycopg, "connect", lambda *a, **k: connection)
+    result = provisioning.run(args(capability="ai_provider_admin"), environ={
+        "RAHGARD_OPERATOR_DATABASE_URL": "postgresql://private-dsn-not-printed",
+        "RAHGARD_PILOT_DATABASE_MARKER": MARKER,
+    })
+    assert result.startswith("DRY_RUN action=grant capability=ai_provider_admin")

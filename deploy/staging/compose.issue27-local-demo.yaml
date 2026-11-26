@@ -3,7 +3,7 @@
 services:
   db:
     ports:
-      - "127.0.0.1:18543:5432"
+      - "127.0.0.1:${RAHGARD_DB_BIND_PORT:-18543}:5432"
     networks:
       - staging_private
       - issue27_db_host
@@ -18,7 +18,7 @@ services:
       TOURISM_RAG_ENABLED: "false"
   web:
     ports:
-      - "127.0.0.1:443:8443"
+      - "127.0.0.1:${RAHGARD_WEB_BIND_PORT:-443}:8443"
     volumes:
       - ./nginx-issue27-local-demo.conf:/etc/nginx/conf.d/default.conf:ro
     secrets:

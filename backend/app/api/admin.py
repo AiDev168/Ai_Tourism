@@ -63,7 +63,11 @@ def _capabilities(cur, actor_id) -> dict[str, bool]:
             (actor_id, actor_id, actor_id),
         ).fetchone().items()
     }
-    return {**partner, **catalogue}
+    provider = cur.execute(
+        "SELECT identity.has_ai_provider_admin_capability(%s) AS ai_provider_admin",
+        (actor_id,),
+    ).fetchone()
+    return {**partner, **catalogue, "ai_provider_admin": bool(provider["ai_provider_admin"])}
 
 
 def _load_capabilities(settings: Settings, actor_id) -> dict[str, bool]:
@@ -86,6 +90,7 @@ def admin_capabilities(
         "destinations": any(capabilities[key] for key in CATALOGUE_CAPABILITIES),
         "users": capabilities["admin_overview"],
         "system": capabilities["admin_overview"],
+        "ai_providers": capabilities["ai_provider_admin"],
     }
     if not any(sections.values()):
         raise HTTPException(status_code=403, detail="admin_capability_required")
@@ -109,10 +114,14 @@ def admin_capabilities(
         },
         "privileged_writes_available": privileged_writes,
         "privileged_step_up": mfa,
-        # Provider administration is intentionally never enabled by this
-        # public control-center route. Its existing endpoint enforces the
-        # local-pilot/owner/grant/TOTP boundary independently.
-        "ai_admin": {"available": False, "scope": "local_pilot_only"},
+        # Provider administration is visible only with its independent grant.
+        # Its own API still enforces server configuration, HTTPS session,
+        # shared platform MFA step-up and provider-specific capability checks.
+        "ai_admin": {
+            "authorized": capabilities["ai_provider_admin"],
+            "available": capabilities["ai_provider_admin"] and settings.ai_provider_admin_enabled,
+            "scope": "server" if settings.ai_provider_admin_enabled else "server_not_configured",
+        },
     }
 
 
@@ -129,13 +138,17 @@ def admin_overview(
                 capabilities["company_review"], capabilities["service_review"],
                 capabilities["offer_review"], capabilities["candidate_review"],
                 capabilities["source_review"], capabilities["catalogue_publish"],
-                capabilities["admin_overview"],
+                capabilities["admin_overview"], capabilities["ai_provider_admin"],
             )):
                 raise HTTPException(status_code=403, detail="admin_capability_required")
 
             result: dict[str, object] = {
                 "release": {"commit": "unavailable"},
-                "ai_admin": {"available": False, "scope": "local_pilot_only"},
+                "ai_admin": {
+                    "authorized": capabilities["ai_provider_admin"],
+                    "available": capabilities["ai_provider_admin"] and settings.ai_provider_admin_enabled,
+                    "scope": "server" if settings.ai_provider_admin_enabled else "server_not_configured",
+                },
             }
             commit = os.environ.get("RAHGARD_RELEASE_COMMIT", "").strip().lower()
             if _SHA.fullmatch(commit):

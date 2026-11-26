@@ -304,8 +304,7 @@ export function App() {
         ? <AdminControlCenter locale={locale} csrfToken={authSession.csrf_token} />
       : window.location.pathname === '/admin/catalogue-review'
         ? <CatalogueReviewPanel locale={locale} csrfToken={authSession?.csrf_token ?? ''} readOnly={!adminWritesAvailable} />
-        : <AiProviderAdminPanel locale={locale} csrfToken={authSession?.csrf_token ?? ''}
-        authMethod={authSession?.user.auth_method === 'staging_invite' ? undefined : authSession?.user.auth_method} />
+        : <AiProviderAdminPanel locale={locale} csrfToken={authSession?.csrf_token ?? ''} />
       }
     </>;
   }

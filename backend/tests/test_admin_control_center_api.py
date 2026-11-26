@@ -25,6 +25,8 @@ class Cursor:
         elif "identity.has_catalogue_review_capability" in sql:
             self.row = {"candidate_review": self.catalogue, "source_review": False,
                         "catalogue_publish": False}
+        elif "identity.has_ai_provider_admin_capability" in sql:
+            self.row = {"ai_provider_admin": False}
         elif "current_setting('server_version_num')" in sql:
             self.row = {"api": "responding", "server_version_num": 170004, "migration_count": 27,
                         "latest_migration": "0026_platform_reviewer_mfa"}
@@ -93,8 +95,8 @@ def test_company_reviewer_sees_only_company_governance(monkeypatch):
         response = http.get("/api/v1/admin/capabilities")
         assert response.status_code == 200
         body = response.json()
-        assert body["sections"] == {"companies": True, "destinations": False, "users": False, "system": False}
-        assert body["ai_admin"] == {"available": False, "scope": "local_pilot_only"}
+        assert body["sections"] == {"companies": True, "destinations": False, "users": False, "system": False, "ai_providers": False}
+        assert body["ai_admin"] == {"authorized": False, "available": False, "scope": "server_not_configured"}
         assert body["privileged_writes_available"] is True
         assert all("identity.users" not in query for query in cursor.queries)
     finally:

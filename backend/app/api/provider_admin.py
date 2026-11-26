@@ -1,24 +1,18 @@
-"""Protected local-pilot AI Provider administration control plane."""
+"""Protected server-side AI Provider administration control plane."""
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import time
-from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
-from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi import Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from psycopg.rows import dict_row
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, StrictBool, StrictInt, field_validator, model_validator
 
 from app.api.auth import authenticated_user, require_authenticated_csrf
 from app.core.config import Settings, get_settings
-from app.modules.identity.auth_repository import AuthRepository
 from app.modules.identity.auth_service import AuthenticatedUser
 from app.modules.provider_admin.providers import (
     ChatProviderConfig,
@@ -35,40 +29,11 @@ from app.modules.provider_admin.registry import (
     RegistryNotFound,
     RegistryRejected,
 )
-from app.modules.provider_admin.security import (
-    generate_recovery_codes,
-    hash_recovery_code,
-    new_totp_secret,
-    totp_provisioning_uri,
-    verify_totp,
-)
 from app.modules.provider_admin.vault import DpapiSecretVault, VaultUnavailable
+from app.modules.provider_admin.server_vault import AesGcmSecretVault
 
 router = APIRouter(prefix="/api/v1/admin/ai-providers", tags=["ai-provider-admin"])
 _CAPABILITIES = {"chat", "vision", "embedding", "reranking"}
-_MFA_FAILURE_LIMIT = 5
-
-
-def _consume_admin_mfa_attempt(settings: Settings, user: AuthenticatedUser, now: datetime) -> None:
-    """Apply a privacy-preserving, per-admin rolling-window limit to MFA proofs."""
-    secret = settings.auth_rate_limit_secret
-    if secret is None:
-        raise HTTPException(status_code=503, detail="provider_admin_unavailable") from None
-    digest = hmac.new(
-        secret.get_secret_value().encode("utf-8"),
-        b"rahgard:provider-admin-mfa:v1\0" + user.user_id.bytes,
-        hashlib.sha256,
-    ).digest()
-    try:
-        allowed = AuthRepository(settings).allow_verification_attempt(
-            [("verify_challenge", digest, _MFA_FAILURE_LIMIT)],
-            now,
-            settings.auth_rate_window_seconds,
-        )
-    except Exception:
-        raise HTTPException(status_code=503, detail="provider_admin_unavailable") from None
-    if not allowed:
-        raise HTTPException(status_code=429, detail="mfa_rate_limited")
 
 
 class CapabilityBinding(BaseModel):
@@ -105,44 +70,13 @@ class ProfileWrite(BaseModel):
 
     @model_validator(mode="after")
     def provider_capability_contract(self):
-        # GapGPT's account-specific API capability list has not yet been
-        # verified. Keep it Chat-only until the operator has tested and
-        # approved its actual account contract. Local LM Studio capabilities
-        # are independently tested before activation.
         if self.provider_kind == "openai_compatible" and set(self.capabilities) - {"chat"}:
             raise ValueError("Remote provider capabilities require verified account support")
         return self
 
-    @field_validator("enabled")
-    @classmethod
-    def disable_only_by_archive(cls, value: bool) -> bool:
-        if not value:
-            raise ValueError("Use the archive operation to disable a profile")
-        return value
-
-    def to_config(self, normalized_url: str) -> dict[str, Any]:
-        return {
-            "provider_kind": self.provider_kind,
-            "base_url": normalized_url,
-            "auth_mode": self.auth_mode,
-            "timeout_seconds": self.timeout_seconds,
-            "concurrency_limit": self.concurrency_limit,
-            "capabilities": {key: value.model_dump() for key, value in self.capabilities.items()},
-        }
-
 
 class ProfileUpdate(ProfileWrite):
     expected_version: StrictInt = Field(ge=1)
-
-
-class StepUpBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    code: str = Field(min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
-
-
-class RecoveryBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    code: str = Field(min_length=12, max_length=64)
 
 
 class RouteChange(BaseModel):
@@ -162,9 +96,11 @@ class FallbackPolicyWrite(BaseModel):
     ordered_revision_ids: list[UUID] = Field(max_length=3)
 
 
-def _registry(settings: Settings) -> ProviderRegistry:
+def _registry(
+    settings: Settings, actor_id: UUID | None = None, session_id: UUID | None = None
+) -> ProviderRegistry:
     def connect():
-        return psycopg.connect(
+        connection = psycopg.connect(
             host=settings.database_host,
             port=settings.database_port,
             dbname=settings.database_name,
@@ -174,21 +110,31 @@ def _registry(settings: Settings) -> ProviderRegistry:
             application_name="rahgard-ai-provider-admin",
             row_factory=dict_row,
         )
+        if actor_id is not None:
+            connection.execute("SELECT set_config('app.actor_id',%s,true)", (str(actor_id),))
+            if session_id is not None:
+                connection.execute("SELECT set_config('app.session_id',%s,true)", (str(session_id),))
+        return connection
 
     return ProviderRegistry(connect)
 
 
-def _vault(settings: Settings) -> DpapiSecretVault:
+def _vault(settings: Settings):
     if settings.ai_provider_vault_dir is None:
         raise VaultUnavailable
+    if settings.app_env.lower() in {"staging", "production"}:
+        if settings.ai_provider_vault_key_file is None:
+            raise VaultUnavailable
+        return AesGcmSecretVault(settings.ai_provider_vault_dir, settings.ai_provider_vault_key_file)
     return DpapiSecretVault(settings.ai_provider_vault_dir)
 
 
 def _admin(settings: Settings, registry: ProviderRegistry, user: AuthenticatedUser) -> None:
     if (
         not settings.ai_provider_admin_enabled
-        or settings.app_env.lower() != "local_pilot"
-        or user.auth_method != "local_owner"
+        or settings.app_env.lower() not in {"local_pilot", "staging", "production"}
+        or (settings.app_env.lower() in {"staging", "production"}
+            and (not settings.auth_enabled or not settings.auth_cookie_secure))
         or not registry.has_admin_grant(user.user_id)
     ):
         raise HTTPException(status_code=403, detail="admin_required")
@@ -197,15 +143,6 @@ def _admin(settings: Settings, registry: ProviderRegistry, user: AuthenticatedUs
 def _step_up(registry: ProviderRegistry, user: AuthenticatedUser) -> None:
     if not registry.has_fresh_step_up(user.user_id, user.session_id):
         raise HTTPException(status_code=403, detail="step_up_required")
-
-
-def _totp_counter(secret: bytes, code: str, now: datetime) -> int | None:
-    timestamp = now.timestamp()
-    center = int(timestamp // 30)
-    for counter in range(max(0, center - 1), center + 2):
-        if verify_totp(secret, code, now=counter * 30, window=0):
-            return counter
-    return None
 
 
 def _translate_registry_errors(call):
@@ -302,7 +239,7 @@ def admin_me(
     user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     mfa = registry.get_admin_mfa(user.user_id) or {}
     expires = registry.step_up_expires_at(user.user_id, user.session_id)
@@ -314,118 +251,15 @@ def admin_me(
     }
 
 
-@router.post("/mfa/enroll")
-def enroll_mfa(
-    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
-    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
-    settings: Annotated[Settings, Depends(get_settings)],
-):
-    registry = _registry(settings)
-    _admin(settings, registry, user)
-    mfa = registry.get_admin_mfa(user.user_id) or {}
-    if mfa.get("enabled_at") is not None:
-        raise HTTPException(status_code=409, detail="mfa_already_enrolled")
-    secret = new_totp_secret()
-    reference = _vault(settings).put(secret)
-    registry.begin_mfa_enrollment(user.user_id, pending_secret_ref=reference)
-    uri = totp_provisioning_uri(secret, str(user.user_id))
-    encoded = parse_qs(urlsplit(uri).query).get("secret", [""])[0]
-    return {"secret": encoded, "otpauth_uri": uri}
-
-
-@router.post("/mfa/verify")
-def verify_mfa_enrollment(
-    body: StepUpBody,
-    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
-    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
-    settings: Annotated[Settings, Depends(get_settings)],
-):
-    registry = _registry(settings)
-    _admin(settings, registry, user)
-    now = datetime.now(UTC)
-    _consume_admin_mfa_attempt(settings, user, now)
-    mfa = registry.get_admin_mfa(user.user_id) or {}
-    reference = mfa.get("pending_secret_ref")
-    if not reference:
-        raise HTTPException(status_code=409, detail="mfa_enrollment_missing")
-    secret = _vault(settings).get(reference)
-    counter = _totp_counter(secret, body.code, now)
-    if counter is None:
-        raise HTTPException(status_code=401, detail="mfa_code_invalid")
-    codes = generate_recovery_codes(10)
-    pepper = settings.ai_provider_admin_recovery_pepper.get_secret_value().encode("utf-8")
-    registry.activate_mfa(
-        user.user_id, recovery_hashes=[hash_recovery_code(code, pepper) for code in codes]
-    )
-    registry.record_step_up(
-        user.user_id,
-        user.session_id,
-        totp_counter=counter,
-        verified_at=now,
-        expires_at=now + timedelta(minutes=5),
-    )
-    return {"mfa_enrolled": True, "recovery_codes": list(codes)}
-
-
-@router.post("/mfa/step-up")
-def step_up(
-    body: StepUpBody,
-    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
-    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
-    settings: Annotated[Settings, Depends(get_settings)],
-):
-    registry = _registry(settings)
-    _admin(settings, registry, user)
-    now = datetime.now(UTC)
-    _consume_admin_mfa_attempt(settings, user, now)
-    mfa = registry.get_admin_mfa(user.user_id) or {}
-    if mfa.get("enabled_at") is None or not mfa.get("secret_ref"):
-        raise HTTPException(status_code=403, detail="mfa_required")
-    secret = _vault(settings).get(mfa["secret_ref"])
-    counter = _totp_counter(secret, body.code, now)
-    if counter is None:
-        raise HTTPException(status_code=401, detail="mfa_code_invalid")
-    registry.record_step_up(
-        user.user_id,
-        user.session_id,
-        totp_counter=counter,
-        verified_at=now,
-        expires_at=now + timedelta(minutes=5),
-    )
-    expiry = now + timedelta(minutes=5)
-    return {"step_up_expires_at": expiry.isoformat()}
-
-
-@router.post("/mfa/recovery")
-def recovery_step_up(
-    body: RecoveryBody,
-    user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
-    _csrf: Annotated[None, Depends(require_authenticated_csrf)],
-    settings: Annotated[Settings, Depends(get_settings)],
-):
-    registry = _registry(settings)
-    _admin(settings, registry, user)
-    now = datetime.now(UTC)
-    _consume_admin_mfa_attempt(settings, user, now)
-    pepper = settings.ai_provider_admin_recovery_pepper.get_secret_value().encode("utf-8")
-    verifier = hash_recovery_code(body.code, pepper)
-    if not registry.consume_recovery_and_step_up(
-        user.user_id,
-        user.session_id,
-        verifier,
-        verified_at=now,
-        expires_at=now + timedelta(minutes=5),
-    ):
-        raise HTTPException(status_code=401, detail="recovery_code_invalid")
-    return {"step_up_expires_at": (now + timedelta(minutes=5)).isoformat()}
-
+# Provider administration reuses /api/v1/admin/mfa. This router intentionally
+# exposes no second MFA enrollment, recovery, or step-up store.
 
 @router.get("/profiles")
 def profiles(
     user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     output = []
     for profile in registry.list_profiles():
@@ -492,7 +326,7 @@ def create_profile(
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     _step_up(registry, user)
     try:
@@ -512,7 +346,7 @@ def update_profile(
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     _step_up(registry, user)
     # expected_version is supplied separately by the frontend contract.
@@ -541,7 +375,7 @@ def archive_profile(
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     _step_up(registry, user)
     profile = registry.get_profile(profile_id)
@@ -563,7 +397,7 @@ async def discover_models(
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     _step_up(registry, user)
     try:
@@ -598,7 +432,7 @@ async def test_profile(
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     _step_up(registry, user)
     capability = _check_capability(body.capability)
@@ -722,7 +556,7 @@ def routes(
     user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     revisions = [
         item
@@ -755,7 +589,7 @@ def get_fallback_policies(
     user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     return {
         "policies": [
@@ -778,7 +612,7 @@ def put_fallback_policy(
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     _step_up(registry, user)
     capability = _check_capability(capability)
@@ -803,7 +637,7 @@ def revisions(
     user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     routes_by_cap = {item["capability"]: item for item in routes(user, settings)["routes"]}
     output = []
@@ -841,7 +675,7 @@ def activate_route(
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     _step_up(registry, user)
     _check_capability(capability)
@@ -866,7 +700,7 @@ def deactivate_route(
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     _step_up(registry, user)
     _check_capability(capability)
@@ -888,7 +722,7 @@ def rollback_route(
     _csrf: Annotated[None, Depends(require_authenticated_csrf)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     _step_up(registry, user)
     _check_capability(capability)
@@ -910,7 +744,7 @@ def audit(
     user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     return {
         "events": [
@@ -931,7 +765,7 @@ def usage(
     user: Annotated[AuthenticatedUser, Depends(authenticated_user)],
     settings: Annotated[Settings, Depends(get_settings)],
 ):
-    registry = _registry(settings)
+    registry = _registry(settings, user.user_id, user.session_id)
     _admin(settings, registry, user)
     events = registry.list_usage()
     grouped = {}

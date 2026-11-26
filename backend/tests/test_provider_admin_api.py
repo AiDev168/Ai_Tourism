@@ -69,12 +69,13 @@ def _settings():
     return Settings(
         app_env="local_pilot", database_password=SecretStr("test-only-not-a-secret"),
         auth_enabled=True, auth_local_owner_enabled=True, auth_cookie_secure=True,
-        auth_allowed_origins="https://localhost:8443", auth_sms_adapter="disabled",
+        auth_allowed_origins="https://localhost", auth_sms_adapter="disabled",
         auth_otp_hmac_secret=SecretStr("a" * 32), auth_csrf_secret=SecretStr("b" * 32),
         auth_rate_limit_secret=SecretStr("c" * 32), auth_session_idle_seconds=1800,
         auth_session_absolute_seconds=28800, ai_provider_admin_enabled=True,
         ai_provider_vault_dir="C:/local-pilot-secret-vault",
-        ai_provider_admin_recovery_pepper=SecretStr("d" * 32),
+        platform_admin_mfa_encryption_key_hex=SecretStr("a" * 64),
+        platform_admin_recovery_pepper=SecretStr("d" * 32),
     )
 
 
@@ -86,12 +87,12 @@ def _client(monkeypatch, *, auth_method="local_owner", granted=True, fresh=True)
     app.dependency_overrides[auth.authenticated_user] = lambda: user
     app.dependency_overrides[auth.require_authenticated_csrf] = lambda: None
     app.dependency_overrides[get_settings] = _settings
-    monkeypatch.setattr(provider_admin, "_registry", lambda _settings: registry)
+    monkeypatch.setattr(provider_admin, "_registry", lambda _settings, *_context: registry)
     return TestClient(app), registry
 
 
 def test_traveler_otp_does_not_grant_provider_admin(monkeypatch):
-    client, _ = _client(monkeypatch, auth_method="otp", granted=True)
+    client, _ = _client(monkeypatch, auth_method="otp", granted=False)
     response = client.get("/api/v1/admin/ai-providers/me")
     assert response.status_code == 403
 
@@ -111,36 +112,10 @@ def test_sensitive_profile_mutation_requires_fresh_totp_step_up(monkeypatch):
     assert response.status_code == 403
 
 
-def test_totp_step_up_has_persisted_per_admin_attempt_limit(monkeypatch):
+def test_provider_admin_reuses_shared_platform_mfa_routes(monkeypatch):
     client, _ = _client(monkeypatch)
-
-    class RateLimitedRepository:
-        attempts = 0
-
-        def __init__(self, _settings):
-            pass
-
-        def allow_verification_attempt(self, limits, _now, window_seconds):
-            type(self).attempts += 1
-            assert limits[0][0] == "verify_challenge"
-            assert len(limits[0][1]) == 32
-            assert limits[0][2] == 5
-            assert window_seconds == 600
-            return type(self).attempts <= 5
-
-    class FakeVault:
-        def get(self, _reference):
-            return b"test-only-totp-secret"
-
-    monkeypatch.setattr(provider_admin, "AuthRepository", RateLimitedRepository)
-    monkeypatch.setattr(provider_admin, "_vault", lambda _settings: FakeVault())
-    monkeypatch.setattr(provider_admin, "_totp_counter", lambda *_args: None)
-
-    statuses = [
-        client.post("/api/v1/admin/ai-providers/mfa/step-up", json={"code": "000000"}).status_code
-        for _ in range(6)
-    ]
-    assert statuses == [401, 401, 401, 401, 401, 429]
+    response = client.post("/api/v1/admin/ai-providers/mfa/step-up", json={"code": "000000"})
+    assert response.status_code == 404
 
 
 def test_profile_read_contains_no_vault_reference_or_secret(monkeypatch):

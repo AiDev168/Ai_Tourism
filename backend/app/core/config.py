@@ -1,4 +1,5 @@
 from functools import lru_cache
+import json
 import os
 from urllib.parse import urlsplit
 
@@ -32,6 +33,8 @@ class Settings(BaseSettings):
     internal_chat_daily_global_limit: int = Field(default=100, ge=1, le=100000)
     ai_provider_admin_enabled: bool = False
     ai_provider_vault_dir: Path | None = None
+    ai_provider_vault_key_file: Path | None = None
+    ai_provider_vault_key_hex: SecretStr | None = None
     ai_provider_admin_recovery_pepper: SecretStr | None = None
     # Separate server-side key material for platform-reviewer MFA. This is
     # independent of local-only provider administration and is never returned
@@ -103,8 +106,13 @@ class Settings(BaseSettings):
             try:
                 if secret_path.is_symlink() or not secret_path.is_file():
                     raise OSError
+                parent = secret_path.parent
+                if parent.is_symlink() or not parent.is_dir():
+                    raise OSError
                 metadata = secret_path.stat()
-                if os.name != "nt" and metadata.st_mode & 0o027:
+                parent_metadata = parent.stat()
+                if (os.name != "nt" and
+                        (metadata.st_mode & 0o077 or parent_metadata.st_mode & 0o077)):
                     raise OSError
                 raw = secret_path.read_bytes()
                 if not raw or len(raw) > 4096 or b"\x00" in raw:
@@ -136,18 +144,55 @@ class Settings(BaseSettings):
         ):
             raise ValueError("Staging email registration is restricted to authenticated staging")
         if self.ai_provider_admin_enabled:
-            if self.app_env.lower() != "local_pilot" or not self.auth_enabled or not self.auth_cookie_secure:
-                raise ValueError("AI provider administration is restricted to authenticated local pilot")
-            if self.ai_provider_vault_dir is None or self.ai_provider_admin_recovery_pepper is None:
-                raise ValueError("Provider vault and recovery pepper are required when admin is enabled")
-            if len(self.ai_provider_admin_recovery_pepper.get_secret_value().encode("utf-8")) < 32:
-                raise ValueError("Provider recovery pepper must contain at least 32 bytes")
+            provider_env = self.app_env.lower()
+            if provider_env not in {"local_pilot", "staging", "production"} or not self.auth_enabled or not self.auth_cookie_secure:
+                raise ValueError("AI provider administration requires authenticated HTTPS-capable runtime")
+            if self.ai_provider_vault_dir is None:
+                raise ValueError("Provider vault directory is required when admin is enabled")
+            if provider_env == "local_pilot" and self.ai_provider_vault_key_file is not None:
+                raise ValueError("Local pilot provider vault must continue using the Windows user vault")
+            if provider_env in {"staging", "production"}:
+                if (self.ai_provider_vault_key_file is None or self.auth_local_owner_enabled
+                        or self.platform_admin_mfa_encryption_key_hex is None
+                        or self.platform_admin_recovery_pepper is None):
+                    raise ValueError("Server provider administration requires the server vault key and platform MFA secrets")
+                if self.ai_provider_vault_key_hex is not None:
+                    raise ValueError("Provider vault key must be injected through a protected secret file")
+                try:
+                    key_path = self.ai_provider_vault_key_file
+                    if key_path.is_symlink() or not key_path.is_file():
+                        raise OSError
+                    key_meta = key_path.stat()
+                    if os.name != "nt" and key_meta.st_mode & 0o077:
+                        raise OSError
+                    key_material = json.loads(key_path.read_text(encoding="utf-8"))
+                    if (not isinstance(key_material, dict) or key_material.get("format_version") != 1
+                            or not isinstance(key_material.get("active_key_id"), str)
+                            or not isinstance(key_material.get("keys"), dict)
+                            or key_material["active_key_id"] not in key_material["keys"]
+                            or not 1 <= len(key_material["keys"]) <= 8
+                            or any(not isinstance(k, str) or not 1 <= len(k) <= 32 or not k.isascii()
+                                   or any(not (c.isalnum() or c in "_-") for c in k)
+                                   or not isinstance(v, str) or len(v) != 64
+                                   or any(c not in "0123456789abcdefABCDEF" for c in v)
+                                   for k, v in key_material["keys"].items())):
+                        raise OSError
+                except OSError:
+                    raise ValueError("Provider vault key file is unavailable or unsafe") from None
+            if (self.platform_admin_mfa_encryption_key_hex is None
+                    or self.platform_admin_recovery_pepper is None):
+                raise ValueError("Provider administration requires the shared platform MFA secrets")
         if self.platform_admin_mfa_encryption_key_hex is not None or self.platform_admin_recovery_pepper is not None:
             key = (self.platform_admin_mfa_encryption_key_hex.get_secret_value()
                    if self.platform_admin_mfa_encryption_key_hex else "")
             pepper = (self.platform_admin_recovery_pepper.get_secret_value()
                       if self.platform_admin_recovery_pepper else "")
-            if (environment not in {"staging", "production"} or not self.auth_enabled
+            local_mfa_allowed = (
+                environment == "local_pilot" and self.auth_local_owner_enabled
+                and self.app_host in {"127.0.0.1", "::1", "localhost"}
+                and self.auth_allowed_origins.strip() in {"https://localhost", "https://127.0.0.1"}
+            )
+            if (environment not in {"staging", "production"} and not local_mfa_allowed or not self.auth_enabled
                     or not self.auth_cookie_secure or self.auth_rate_limit_secret is None
                     or len(key) != 64 or any(char not in "0123456789abcdefABCDEF" for char in key)
                     or len(pepper.encode("utf-8")) < 32):

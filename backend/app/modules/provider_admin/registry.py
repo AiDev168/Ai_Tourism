@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 import json
 from typing import Any
 from uuid import UUID
@@ -522,179 +522,62 @@ class ProviderRegistry:
 
     def has_admin_grant(self, user_id: UUID) -> bool:
         with self._connect() as conn:
-            return conn.execute(
-                "SELECT 1 FROM identity.ai_provider_admin_grants WHERE user_id=%s AND revoked_at IS NULL",
+            return bool(conn.execute(
+                "SELECT identity.has_ai_provider_admin_capability(%s) AS allowed",
                 (user_id,),
-            ).fetchone() is not None
+            ).fetchone()["allowed"])
 
     def get_admin_mfa(self, user_id: UUID) -> dict[str, Any] | None:
-        """Trusted-backend-only MFA metadata; never serialize vault refs to HTTP."""
+        """Return shared platform-MFA status, never ciphertext or recovery data."""
         with self._connect() as conn:
             return _row(conn.execute(
-                """SELECT user_id,secret_ref,pending_secret_ref,enabled_at,last_totp_counter,
-                          recovery_hashes,version,updated_at
-                   FROM identity.ai_provider_admin_mfa WHERE user_id=%s""", (user_id,)
+                """SELECT user_id,enabled_at,version,updated_at
+                   FROM identity.platform_admin_mfa WHERE user_id=%s""", (user_id,)
             ))
 
     def grant_admin(self, user_id: UUID, *, granted_by: UUID | None) -> None:
+        if granted_by is None or granted_by == user_id:
+            raise RegistryRejected("Provider administration requires an independent operator")
         with self._provisioner() as conn:
             conn.execute(
-                """INSERT INTO identity.ai_provider_admin_grants(user_id,granted_by)
-                   VALUES (%s,%s) ON CONFLICT(user_id) DO UPDATE SET granted_at=pg_catalog.now(),
-                     granted_by=EXCLUDED.granted_by,revoked_at=NULL""", (user_id, granted_by)
+                """INSERT INTO identity.ai_provider_admin_grants(user_id,granted_by,grant_reason)
+                   VALUES (%s,%s,'Operator-approved provider administration grant')
+                   ON CONFLICT(user_id) DO UPDATE SET granted_at=pg_catalog.now(),
+                     granted_by=EXCLUDED.granted_by,grant_reason=EXCLUDED.grant_reason,
+                     revoked_at=NULL,revoked_by=NULL,revoke_reason=NULL""", (user_id, granted_by)
             )
-            conn.execute(
-                "INSERT INTO identity.ai_provider_admin_mfa(user_id) VALUES (%s) ON CONFLICT DO NOTHING",
-                (user_id,),
-            )
-            conn.execute(
-                """UPDATE identity.ai_provider_admin_mfa SET secret_ref=NULL,pending_secret_ref=NULL,
-                     enabled_at=NULL,last_totp_counter=-1,recovery_hashes=ARRAY[]::BYTEA[],
-                     version=version+1,updated_at=pg_catalog.now() WHERE user_id=%s""", (user_id,)
-            )
+            conn.execute("INSERT INTO identity.ai_provider_admin_grant_events(actor_user_id,target_user_id,action,reason) VALUES(%s,%s,'granted','Operator-approved provider administration grant')", (granted_by, user_id))
             self._audit(conn, granted_by, "admin_granted", "admin", str(user_id), "success", {})
 
     def revoke_admin(self, user_id: UUID, *, actor_id: UUID) -> None:
         with self._provisioner() as conn:
             cur = conn.execute(
-                "UPDATE identity.ai_provider_admin_grants SET revoked_at=pg_catalog.now() WHERE user_id=%s AND revoked_at IS NULL RETURNING user_id",
-                (user_id,),
+                "UPDATE identity.ai_provider_admin_grants SET revoked_at=pg_catalog.now(),revoked_by=%s,revoke_reason='Provider administration access revoked by operator' WHERE user_id=%s AND revoked_at IS NULL RETURNING user_id",
+                (actor_id, user_id),
             )
             if _row(cur) is None:
                 raise RegistryNotFound("Active provider administrator was not found")
             conn.execute(
-                "UPDATE identity.ai_provider_admin_step_up SET revoked_at=pg_catalog.now() WHERE user_id=%s AND revoked_at IS NULL",
+                "UPDATE identity.platform_admin_step_up SET revoked_at=pg_catalog.now() WHERE user_id=%s AND revoked_at IS NULL",
                 (user_id,),
             )
-            conn.execute(
-                """UPDATE identity.ai_provider_admin_mfa SET secret_ref=NULL,pending_secret_ref=NULL,
-                     enabled_at=NULL,last_totp_counter=-1,recovery_hashes=ARRAY[]::BYTEA[],
-                     version=version+1,updated_at=pg_catalog.now() WHERE user_id=%s""", (user_id,)
-            )
+            conn.execute("INSERT INTO identity.ai_provider_admin_grant_events(actor_user_id,target_user_id,action,reason) VALUES(%s,%s,'revoked','Provider administration access revoked by operator')", (actor_id,user_id))
             self._audit(conn, actor_id, "admin_revoked", "admin", str(user_id), "success", {})
 
-    def begin_mfa_enrollment(self, user_id: UUID, *, pending_secret_ref: str) -> None:
-        self._validate_secret_ref(pending_secret_ref)
-        with self._connect() as conn:
-            if conn.execute(
-                "SELECT 1 FROM identity.ai_provider_admin_grants WHERE user_id=%s AND revoked_at IS NULL",
-                (user_id,),
-            ).fetchone() is None:
-                raise RegistryRejected("Provider administrator grant is required")
-            conn.execute(
-                """UPDATE identity.ai_provider_admin_mfa SET pending_secret_ref=%s,version=version+1,
-                     updated_at=pg_catalog.now() WHERE user_id=%s""", (pending_secret_ref, user_id)
-            )
-
-    def activate_mfa(self, user_id: UUID, *, recovery_hashes: Sequence[bytes]) -> None:
-        if not 8 <= len(recovery_hashes) <= 20 or any(len(value) != 32 for value in recovery_hashes):
-            raise RegistryRejected("Recovery verifier set is invalid")
-        with self._connect() as conn:
-            cur = conn.execute(
-                """UPDATE identity.ai_provider_admin_mfa SET secret_ref=pending_secret_ref,
-                       pending_secret_ref=NULL,enabled_at=pg_catalog.now(),last_totp_counter=-1,
-                       recovery_hashes=%s,version=version+1,updated_at=pg_catalog.now()
-                   WHERE user_id=%s AND pending_secret_ref IS NOT NULL RETURNING user_id""",
-                (list(recovery_hashes), user_id),
-            )
-            if _row(cur) is None:
-                raise RegistryRejected("MFA enrollment is not pending")
-
-    def consume_recovery_hash(self, user_id: UUID, verifier_hash: bytes) -> bool:
-        if len(verifier_hash) != 32:
-            return False
-        with self._connect() as conn:
-            cur = conn.execute(
-                """UPDATE identity.ai_provider_admin_mfa SET recovery_hashes=array_remove(recovery_hashes,%s),
-                       version=version+1,updated_at=pg_catalog.now()
-                   WHERE user_id=%s AND enabled_at IS NOT NULL AND %s=ANY(recovery_hashes)
-                   RETURNING user_id""", (verifier_hash, user_id, verifier_hash)
-            )
-            return _row(cur) is not None
-
-    def replace_recovery_hashes(self, user_id: UUID, *, recovery_hashes: Sequence[bytes]) -> None:
-        if not 8 <= len(recovery_hashes) <= 20 or any(len(value) != 32 for value in recovery_hashes):
-            raise RegistryRejected("Recovery verifier set is invalid")
-        with self._connect() as conn:
-            cur = conn.execute(
-                """UPDATE identity.ai_provider_admin_mfa SET recovery_hashes=%s,version=version+1,
-                       updated_at=pg_catalog.now() WHERE user_id=%s AND enabled_at IS NOT NULL
-                   RETURNING user_id""", (list(recovery_hashes), user_id)
-            )
-            if _row(cur) is None:
-                raise RegistryRejected("Enabled provider-admin MFA is required")
-
-    def consume_recovery_and_step_up(
-        self, user_id: UUID, session_id: UUID, verifier_hash: bytes, *,
-        verified_at: datetime, expires_at: datetime,
-    ) -> bool:
-        """Atomically consume one recovery verifier and step up this session.
-
-        Recovery use does not advance or bypass the TOTP replay counter. The
-        recovery credential itself is single-use and can grant only a bounded
-        session-bound step-up after the operator has separately approved the
-        recovery policy.
-        """
-        now = datetime.now(UTC)
-        if len(verifier_hash) != 32 or verified_at.tzinfo is None or expires_at.tzinfo is None:
-            return False
-        if verified_at > now or not now < expires_at <= now + timedelta(minutes=15):
-            return False
-        with self._connect() as conn:
-            cur = conn.execute(
-                """UPDATE identity.ai_provider_admin_mfa m
-                   SET recovery_hashes=array_remove(m.recovery_hashes,%s),version=version+1,
-                       updated_at=pg_catalog.now()
-                   FROM identity.ai_provider_admin_grants g
-                   WHERE m.user_id=%s AND m.user_id=g.user_id AND m.enabled_at IS NOT NULL
-                     AND g.revoked_at IS NULL AND %s=ANY(m.recovery_hashes)
-                   RETURNING m.user_id""", (verifier_hash, user_id, verifier_hash)
-            )
-            if _row(cur) is None:
-                return False
-            conn.execute(
-                """INSERT INTO identity.ai_provider_admin_step_up(user_id,session_id,verified_at,expires_at)
-                   VALUES (%s,%s,%s,%s) ON CONFLICT(user_id,session_id) DO UPDATE SET
-                     verified_at=EXCLUDED.verified_at,expires_at=EXCLUDED.expires_at,revoked_at=NULL""",
-                (user_id, session_id, verified_at, expires_at),
-            )
-            self._audit(conn, user_id, "admin_recovery_step_up", "session", str(session_id), "success", {})
-            return True
-
-    def record_step_up(self, user_id: UUID, session_id: UUID, *, totp_counter: int,
-                       verified_at: datetime, expires_at: datetime) -> None:
-        now = datetime.now(UTC)
-        if type(totp_counter) is not int or verified_at.tzinfo is None or expires_at.tzinfo is None:
-            raise RegistryRejected("Invalid step-up proof")
-        if not now < expires_at <= now + timedelta(minutes=15) or verified_at > now:
-            raise RegistryRejected("Step-up expiry is outside the allowed window")
-        with self._connect() as conn:
-            cur = conn.execute(
-                """UPDATE identity.ai_provider_admin_mfa SET last_totp_counter=%s,updated_at=pg_catalog.now()
-                   WHERE user_id=%s AND enabled_at IS NOT NULL AND last_totp_counter < %s
-                     AND EXISTS (SELECT 1 FROM identity.ai_provider_admin_grants g
-                                 WHERE g.user_id=%s AND g.revoked_at IS NULL)
-                   RETURNING user_id""", (totp_counter, user_id, totp_counter, user_id)
-            )
-            if _row(cur) is None:
-                raise RegistryRejected("TOTP step-up is invalid, replayed, or unauthorized")
-            conn.execute(
-                """INSERT INTO identity.ai_provider_admin_step_up(user_id,session_id,verified_at,expires_at)
-                   VALUES (%s,%s,%s,%s) ON CONFLICT(user_id,session_id) DO UPDATE SET
-                     verified_at=EXCLUDED.verified_at,expires_at=EXCLUDED.expires_at,revoked_at=NULL""",
-                (user_id, session_id, verified_at, expires_at),
-            )
+    # MFA enrollment, recovery and step-up are owned by the single platform
+    # MFA service in /api/v1/admin/mfa. Provider administration consumes only
+    # its short-lived session-bound authorization state.
 
     def has_fresh_step_up(self, user_id: UUID, session_id: UUID, *, now: datetime | None = None) -> bool:
         point = now or datetime.now(UTC)
         with self._connect() as conn:
             return conn.execute(
-                """SELECT 1 FROM identity.ai_provider_admin_step_up s
-                   JOIN identity.ai_provider_admin_grants g USING(user_id)
-                   JOIN identity.ai_provider_admin_mfa m USING(user_id)
+                """SELECT 1 FROM identity.platform_admin_step_up s
+                   JOIN identity.platform_admin_mfa m USING(user_id)
                    WHERE s.user_id=%s AND s.session_id=%s AND s.revoked_at IS NULL
-                     AND s.expires_at>%s AND g.revoked_at IS NULL AND m.enabled_at IS NOT NULL""",
-                (user_id, session_id, point),
+                     AND s.expires_at>%s AND m.enabled_at IS NOT NULL
+                     AND identity.has_ai_provider_admin_capability(%s)""",
+                (user_id, session_id, point, user_id),
             ).fetchone() is not None
 
     def step_up_expires_at(self, user_id: UUID, session_id: UUID, *,
@@ -702,12 +585,12 @@ class ProviderRegistry:
         point = now or datetime.now(UTC)
         with self._connect() as conn:
             cur = conn.execute(
-                """SELECT s.expires_at FROM identity.ai_provider_admin_step_up s
-                   JOIN identity.ai_provider_admin_grants g USING(user_id)
-                   JOIN identity.ai_provider_admin_mfa m USING(user_id)
+                """SELECT s.expires_at FROM identity.platform_admin_step_up s
+                   JOIN identity.platform_admin_mfa m USING(user_id)
                    WHERE s.user_id=%s AND s.session_id=%s AND s.revoked_at IS NULL
-                     AND s.expires_at>%s AND g.revoked_at IS NULL AND m.enabled_at IS NOT NULL""",
-                (user_id, session_id, point),
+                     AND s.expires_at>%s AND m.enabled_at IS NOT NULL
+                     AND identity.has_ai_provider_admin_capability(%s)""",
+                (user_id, session_id, point, user_id),
             )
             item = cur.fetchone()
             return item["expires_at"] if item else None
@@ -715,7 +598,7 @@ class ProviderRegistry:
     def revoke_step_up(self, user_id: UUID, session_id: UUID) -> None:
         with self._connect() as conn:
             conn.execute(
-                "UPDATE identity.ai_provider_admin_step_up SET revoked_at=pg_catalog.now() WHERE user_id=%s AND session_id=%s AND revoked_at IS NULL",
+                "UPDATE identity.platform_admin_step_up SET revoked_at=pg_catalog.now() WHERE user_id=%s AND session_id=%s AND revoked_at IS NULL",
                 (user_id, session_id),
             )
 

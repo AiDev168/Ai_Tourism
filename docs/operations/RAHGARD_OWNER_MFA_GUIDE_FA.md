@@ -42,7 +42,7 @@ Remove-Item Env:RAHGARD_OPERATOR_GRANT_CONFIRM
 - `PLATFORM_ADMIN_MFA_ENCRYPTION_KEY_FILE`
 - `PLATFORM_ADMIN_RECOVERY_PEPPER_FILE`
 
-در Compose، overlay اختیاری `deploy/staging/compose.platform-admin-mfa.yaml` آن‌ها را به `/run/secrets/platform_admin_mfa_encryption_key_hex` و `/run/secrets/platform_admin_recovery_pepper` متصل می‌کند. مسیر منبع روی میزبان از `RAHGARD_SECRET_DIR` می‌آید. فایل‌ها باید از secrets manager تأییدشده render شوند، regular و غیر symlink باشند، دیگری نتواند بخواند یا بنویسد، و گروه فقط‌خواندنیِ همان user برنامه دسترسی داشته باشد. در گروه Compose محلی، uid/gid/mode bind mount ممکن است از فایل میزبان پیروی کند؛ عدد gid را از خود image با `id -g rahgard` بگیرید و فرض نکنید.
+در Compose، overlay اختیاری `deploy/staging/compose.platform-admin-mfa.yaml` دایرکتوری اختصاصی `RAHGARD_ADMIN_SECRET_DIR` را فقط‌خواندنی به `/run/rahgard-admin-secrets` متصل می‌کند. آن directory فقط secretهای admin را نگه دارد، `0700` و owner آن UID برنامه (10001 در image فعلی) باشد. فایل‌ها regular، بدون symlink و mode `0400` یا `0600` هستند تا validator بتواند دسترسی را بررسی کند.
 
 هر دو فایل را **فقط از مسیر secret manager** بسازید؛ مقدارها را در shell argv، خروجی ترمینال، history، فایل `.env`، log، CI یا issue ننویسید. پس از بررسی file ownership/mode و `docker compose ... config --quiet`، restart فقط در پنجرهٔ تغییر مجاز انجام شود. سپس health check غیرحساس فقط وضعیت `configured/disabled` را از `Settings` نشان دهد؛ مقدار یا طول secret چاپ نشود. در این task فایل‌های live ساخته/چرخانده نشدند و overlay روی VPS اجرا نشد.
 

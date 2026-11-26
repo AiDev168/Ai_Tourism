@@ -55,7 +55,13 @@ def _connection(settings: Settings):
 
 
 def _runtime(settings: Settings) -> tuple[bytes, bytes]:
-    if (settings.app_env.lower() not in {"staging", "production"} or not settings.auth_enabled
+    environment = settings.app_env.lower()
+    local_mfa_allowed = (
+        environment == "local_pilot" and settings.auth_local_owner_enabled
+        and settings.app_host in {"127.0.0.1", "::1", "localhost"}
+        and settings.auth_allowed_origins.strip() in {"https://localhost", "https://127.0.0.1"}
+    )
+    if ((environment not in {"staging", "production"} and not local_mfa_allowed) or not settings.auth_enabled
             or not settings.auth_cookie_secure or settings.auth_rate_limit_secret is None
             or settings.platform_admin_mfa_encryption_key_hex is None
             or settings.platform_admin_recovery_pepper is None):
@@ -72,6 +78,9 @@ def _runtime(settings: Settings) -> tuple[bytes, bytes]:
 
 def _actor(cur, user: AuthenticatedUser) -> None:
     cur.execute("SELECT set_config('app.actor_id',%s,true)", (str(user.user_id),))
+    # Provider administration is an extra scope for an existing platform
+    # administrator. MFA remains governed solely by the established Owner /
+    # reviewer capability, RLS policies and audit function.
     allowed = cur.execute(
         "SELECT identity.has_platform_admin_capability(%s) AS allowed", (user.user_id,)
     ).fetchone()["allowed"]
@@ -122,8 +131,15 @@ def _step_up_sql(cur, user: AuthenticatedUser, now: datetime) -> datetime:
 
 def platform_mfa_status(settings: Settings, user: AuthenticatedUser) -> dict[str, object]:
     """Return only the caller's MFA state; missing migration/config fails closed."""
+    environment = settings.app_env.lower()
+    local_mfa_allowed = (
+        environment == "local_pilot" and settings.auth_local_owner_enabled
+        and settings.app_host in {"127.0.0.1", "::1", "localhost"}
+        and settings.auth_allowed_origins.strip() in {"https://localhost", "https://127.0.0.1"}
+    )
     configured = bool(
-        settings.auth_enabled and settings.auth_cookie_secure
+        (environment in {"staging", "production"} or local_mfa_allowed)
+        and settings.auth_enabled and settings.auth_cookie_secure
         and settings.platform_admin_mfa_encryption_key_hex is not None
         and settings.platform_admin_recovery_pepper is not None
     )
@@ -162,7 +178,7 @@ def enroll(
     key, _pepper = _runtime(settings)
     now = datetime.now(UTC)
     _consume_attempt(settings, user, now)
-    secret, _uri, encoded = enrollment_material(user.user_id)
+    secret, uri, encoded = enrollment_material(user.user_id)
     encrypted = encrypt_totp_secret(secret, key, user.user_id)
     try:
         with _connection(settings) as conn, conn.transaction(), conn.cursor() as cur:
@@ -182,7 +198,7 @@ def enroll(
         raise
     except psycopg.Error:
         raise HTTPException(status_code=503, detail="platform_admin_mfa_unavailable") from None
-    return {"secret": encoded}
+    return {"secret": encoded, "otpauth_uri": uri}
 
 
 @router.post("/verify")

@@ -18,11 +18,12 @@ from app.modules.integrations.chat_adapter import ChatReply, ChatRequest
 from app.modules.provider_admin.providers import OpenAiCompatibleProviderAdapter
 from app.modules.provider_admin.registry import ProviderRegistry
 from app.modules.provider_admin.vault import DpapiSecretVault
+from app.modules.provider_admin.server_vault import AesGcmSecretVault
 
 
 def provider_registry(settings: Settings) -> ProviderRegistry:
     def connect():
-        return psycopg.connect(
+        connection = psycopg.connect(
             host=settings.database_host,
             port=settings.database_port,
             dbname=settings.database_name,
@@ -32,6 +33,13 @@ def provider_registry(settings: Settings) -> ProviderRegistry:
             application_name="rahgard-ai-provider-runtime",
             row_factory=dict_row,
         )
+        # The server-side assistant is a trusted application runtime, not a
+        # human administrator. The migration grants this marked connection
+        # read access to the active validated route and write access only to
+        # bounded usage telemetry. It does not grant provider configuration
+        # mutations through this context.
+        connection.execute("SELECT set_config('app.provider_runtime','true',true)")
+        return connection
 
     return ProviderRegistry(connect)
 
@@ -44,11 +52,17 @@ def make_admin_capability_gateway(settings: Settings, capability: AiCapability):
     """Build the requested provider-neutral route; each call rereads its active revision."""
     if settings.ai_provider_vault_dir is None:
         raise AiCapabilityUnavailable()
+    vault = (
+        AesGcmSecretVault(settings.ai_provider_vault_dir, settings.ai_provider_vault_key_file)
+        if settings.app_env.lower() in {"staging", "production"}
+        and settings.ai_provider_vault_key_file is not None
+        else DpapiSecretVault(settings.ai_provider_vault_dir)
+    )
     return AiProviderGateway(
         capability,
         AdminManagedCapabilityAdapter(
             provider_registry(settings),
-            DpapiSecretVault(settings.ai_provider_vault_dir),
+            vault,
             capability,
         ),
     )
@@ -60,7 +74,7 @@ class AdminManagedCapabilityAdapter:
     def __init__(
         self,
         registry: ProviderRegistry,
-        vault: DpapiSecretVault,
+        vault: DpapiSecretVault | AesGcmSecretVault,
         capability: AiCapability = AiCapability.CHAT,
         *,
         adapter_factory=None,
@@ -177,6 +191,6 @@ class AdminManagedChatAdapter(AdminManagedCapabilityAdapter):
     """Backwards-compatible Chat runtime class."""
 
     def __init__(
-        self, registry: ProviderRegistry, vault: DpapiSecretVault, *, adapter_factory=None
+        self, registry: ProviderRegistry, vault: DpapiSecretVault | AesGcmSecretVault, *, adapter_factory=None
     ):
         super().__init__(registry, vault, AiCapability.CHAT, adapter_factory=adapter_factory)

@@ -1,7 +1,7 @@
 """Initialize only a brand-new Issue 27 Owner Demo PostgreSQL volume.
 
 This intentionally supports the production-shaped runtime ledger (0000-0013,
-0016-0026; migrations 0014/0015 are excluded). It never reconnects/retries a
+0016-0027; migrations 0014/0015 are excluded). It never reconnects/retries a
 partially initialized database. Every migration checksum is recorded from the
 checked-in SQL bytes.
 """
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -29,7 +30,25 @@ def docker(args: list[str], *, data: bytes | None = None, env: dict[str, str] | 
     result = subprocess.run(["docker", *args], input=data, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, env={**os.environ, **(env or {})})
     if result.returncode:
-        raise SystemExit(f"BLOCKED: isolated database command failed ({args[0]})")
+        stderr = result.stderr.decode("utf-8", errors="replace")
+        state = re.search(r"ERROR:\s+([0-9A-Z]{5}):", stderr)
+        suffix = f" sqlstate={state.group(1)}" if state else ""
+        safe_error = re.search(
+            r"ERROR:\s*(?:[0-9A-Z]{5}:\s*)?(permission denied for (?:schema|table|relation|function) [A-Za-z0-9_.]+|must be owner of (?:table|function|schema) [A-Za-z0-9_.]+|role \"[A-Za-z0-9_-]+\" does not exist|function [A-Za-z0-9_.() ,]+ does not exist)",
+            stderr,
+            flags=re.IGNORECASE,
+        )
+        if safe_error:
+            suffix += f" reason={safe_error.group(1)}"
+        else:
+            client_error = re.search(
+                r"(?:psql:\s*error:|Error response from daemon:)[^\r\n]{1,160}",
+                stderr,
+                flags=re.IGNORECASE,
+            )
+            if client_error:
+                suffix += " client=" + client_error.group(0)
+        raise SystemExit(f"BLOCKED: isolated database command failed ({args[0]}){suffix}")
     return result.stdout
 
 
@@ -41,10 +60,10 @@ def psql(sql: bytes | str, *, tcp: bool = False, role: str = "ai_tourism_owner",
         command.extend(["-e", f"{key}={value}"])
     command.append(CONTAINER)
     if tcp:
-        script = 'export PGPASSWORD="$(cat /run/secrets/pg_owner_password)"; exec psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+        script = 'export PGPASSWORD="$(cat /run/secrets/pg_owner_password)"; exec psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -h 127.0.0.1 -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
         command.extend(["sh", "-lc", script])
     else:
-        command.extend(["psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", role, "-d", DATABASE])
+        command.extend(["psql", "-X", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose", "-U", role, "-d", DATABASE])
     content = sql.encode() if isinstance(sql, str) else sql
     docker(command, data=b"\\getenv marker RAHGARD_PILOT_DATABASE_MARKER\n" + content)
 
@@ -84,9 +103,11 @@ def main() -> None:
     bootstrap_prefix = b"\\getenv app_password RAHGARD_APP_DB_PASSWORD\n\\set app_user ai_tourism_app\n"
     # The secret is read inside the isolated container; it is never a Docker CLI
     # argument or host process output.
+    print("APPLY: bootstrap roles", flush=True)
     docker(["exec", "-i", CONTAINER, "sh", "-lc",
-            'export RAHGARD_APP_DB_PASSWORD="$(cat /run/secrets/app_db_password)"; exec psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'],
+            'export RAHGARD_APP_DB_PASSWORD="$(cat /run/secrets/app_db_password)"; exec psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -U "$POSTGRES_USER" -d "$POSTGRES_DB"'],
            data=bootstrap_prefix + bootstrap.read_bytes())
+    print("APPLY: 0000 legacy baseline", flush=True)
     psql(legacy.read_bytes())
     legacy_hash = sha(legacy)
     psql(f"INSERT INTO system.schema_migrations(migration_id,sha256) VALUES ('0000_legacy_tourism_points_baseline','{legacy_hash}');")
@@ -107,6 +128,7 @@ def main() -> None:
     ]
     hashes: dict[str, str] = {}
     for mid, filename in base:
+        print(f"APPLY: {mid}", flush=True)
         path = sql_dir / filename
         content = path.read_bytes()
         if mid == "0004_app_role_grants":
@@ -121,6 +143,7 @@ def main() -> None:
             raise SystemExit(f"BLOCKED: base migration checksum failed ({mid})")
         hashes[mid] = digest
 
+    print("APPLY: local pilot marker and migration roles", flush=True)
     psql("""
 CREATE TABLE public.rahgard_private_pilot_marker(marker_value text PRIMARY KEY CHECK(marker_value ~ '^[a-fA-F0-9]{48}$'));
 REVOKE ALL ON public.rahgard_private_pilot_marker FROM PUBLIC;
@@ -130,7 +153,7 @@ GRANT SELECT ON public.rahgard_private_pilot_marker TO ai_tourism_app;
 GRANT USAGE ON SCHEMA system TO ai_tourism_app;
 GRANT SELECT ON system.schema_migrations TO ai_tourism_app;
 CREATE ROLE rahgard_pilot_geo_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
-CREATE ROLE rahgard_pilot_ddl_owner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+CREATE ROLE rahgard_pilot_ddl_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 GRANT rahgard_pilot_geo_executor TO rahgard_pilot_ddl_owner;
 GRANT USAGE ON SCHEMA identity,knowledge,operations,system,public TO rahgard_pilot_ddl_owner;
 GRANT CREATE ON SCHEMA identity,operations TO rahgard_pilot_ddl_owner;
@@ -149,6 +172,7 @@ GRANT UPDATE(status,updated_at) ON knowledge.destinations TO rahgard_pilot_geo_e
     geo = pilot / "013_private_pilot_geo_audit.sql"
     h12 = hashes["0012_task5_published_claim_evidence"]
     h13 = sha(geo)
+    print("APPLY: 0013_private_pilot_geo_audit", flush=True)
     psql(b"SET ROLE rahgard_pilot_ddl_owner;\n\\set migration_hash " + h13.encode() + b"\n" + geo.read_bytes() + b"\nRESET ROLE;",
          tcp=True, role="ai_tourism_owner", extra_env={"RAHGARD_PILOT_MIGRATION_0012_SHA256": h12})
     hashes["0013_private_pilot_geo_audit"] = h13
@@ -167,8 +191,10 @@ GRANT UPDATE(status,updated_at) ON knowledge.destinations TO rahgard_pilot_geo_e
         ("0024_partner_review_audit_actions", "024_partner_review_audit_actions.sql", {"0023": None}),
         ("0025_owner_control_center", "025_owner_control_center.sql", {"0024": None}),
         ("0026_platform_reviewer_mfa", "026_platform_reviewer_mfa.sql", {"0024": None, "0025": None}),
+        ("0027_server_ai_provider_admin", "027_server_ai_provider_admin.sql", {"0024": None, "0025": None, "0026": None}),
     ]
     for mid, filename, deps in chain:
+        print(f"APPLY: {mid}", flush=True)
         path = pilot / filename
         current = mid[:4]
         prior = {key: (hashes[next(k for k in hashes if k.startswith(key))] if val is None else val)
@@ -176,18 +202,49 @@ GRANT UPDATE(status,updated_at) ON knowledge.destinations TO rahgard_pilot_geo_e
         h = sha(path)
         env = {f"RAHGARD_PILOT_MIGRATION_{key}_SHA256": val for key, val in prior.items()}
         env[f"RAHGARD_PILOT_MIGRATION_{current}_SHA256"] = h
-        psql(b"\\set migration_hash " + h.encode() + b"\n" + path.read_bytes(), tcp=True, extra_env=env)
+        if mid == "0027_server_ai_provider_admin":
+            # Migration 0027 deliberately rejects a superuser/role with
+            # BYPASSRLS. Apply it under the dedicated non-login DDL owner.
+            # These narrowly scoped privileges let its SECURITY DEFINER
+            # functions reuse the shared MFA records; the app role receives
+            # none of these grants.
+            psql("""
+GRANT USAGE ON SCHEMA system TO rahgard_pilot_ddl_owner;
+GRANT USAGE ON SCHEMA partner TO rahgard_pilot_ddl_owner;
+GRANT USAGE ON SCHEMA public TO rahgard_pilot_ddl_owner;
+GRANT SELECT,INSERT ON system.schema_migrations TO rahgard_pilot_ddl_owner;
+GRANT SELECT ON public.rahgard_private_pilot_marker TO rahgard_pilot_ddl_owner;
+GRANT SELECT (user_id,enabled_at) ON identity.platform_admin_mfa TO rahgard_pilot_ddl_owner;
+GRANT SELECT (user_id,session_id,revoked_at,expires_at) ON identity.platform_admin_step_up TO rahgard_pilot_ddl_owner;
+GRANT EXECUTE ON FUNCTION identity.has_platform_admin_capability(UUID),partner.current_actor_id() TO rahgard_pilot_ddl_owner;
+""", tcp=True)
+            try:
+                psql(b"SET ROLE rahgard_pilot_ddl_owner;\n\\set migration_hash " + h.encode() + b"\n" + path.read_bytes() + b"\nRESET ROLE;",
+                     tcp=True, extra_env=env)
+            finally:
+                # Keep only table/function privileges required by the
+                # migration-owned SECURITY DEFINER functions. The temporary
+                # schema-ledger write access is always removed, even on SQL
+                # failure.
+                psql("""
+REVOKE INSERT,SELECT ON system.schema_migrations FROM rahgard_pilot_ddl_owner;
+REVOKE USAGE ON SCHEMA system FROM rahgard_pilot_ddl_owner;
+REVOKE SELECT ON public.rahgard_private_pilot_marker FROM rahgard_pilot_ddl_owner;
+REVOKE USAGE ON SCHEMA public FROM rahgard_pilot_ddl_owner;
+""", tcp=True)
+        else:
+            psql(b"\\set migration_hash " + h.encode() + b"\n" + path.read_bytes(), tcp=True, extra_env=env)
         if scalar(f"SELECT sha256 FROM system.schema_migrations WHERE migration_id='{mid}';") != h:
             raise SystemExit(f"BLOCKED: migration checksum failed ({mid})")
         hashes[mid] = h
 
     count = scalar("SELECT count(*) FROM system.schema_migrations")
     latest = scalar("SELECT max(migration_id) FROM system.schema_migrations")
-    if count != "25" or latest != "0026_platform_reviewer_mfa":
-        raise SystemExit("BLOCKED: runtime migration ledger differs from expected 25-row chain")
+    if count != "26" or latest != "0027_server_ai_provider_admin":
+        raise SystemExit("BLOCKED: runtime migration ledger differs from expected 26-row chain")
     if scalar("SELECT count(*) FROM knowledge.production_destinations") != "0":
         raise SystemExit("BLOCKED: unexpected published destination in clean owner demo")
-    print("PASS: isolated demo schema initialized; migrations=25; latest=0026; published destinations=0")
+    print("PASS: isolated demo schema initialized; migrations=26; latest=0027; published destinations=0")
 
 
 if __name__ == "__main__":

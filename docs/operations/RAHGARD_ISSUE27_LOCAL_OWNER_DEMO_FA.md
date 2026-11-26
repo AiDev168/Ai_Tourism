@@ -4,7 +4,7 @@
 
 این راهنما برای دموی محلی Issue 27 روی Windows 11 است. PostgreSQL آن از VPS، پایگاه اشتراکی محلی و پایلوت قبلی جداست. داده در volume اختصاصی `rahgard_issue27_pg_<شناسه>` باقی می‌ماند. این اجرا فقط روی loopback گوش می‌دهد و هیچ پورت عمومی ندارد.
 
-در این دمو، ثبت‌نام ایمیل محلی فعال است؛ تحویل SMS، مدل Chat، RAG و مدیریت provider خاموش‌اند. کد TOTP واقعی و MFA مدیریتی در کد برنامه موجود است، اما اعتبارسنجی SMS/Chat زنده انجام نمی‌شود. هیچ credential زنده‌ای استفاده نشده است. ورود Owner/Reviewer هنوز باید دستی تکمیل شود؛ اجرای URL یا تست خودکار به‌تنهایی پذیرش دستی Owner نیست.
+در این دمو، ثبت‌نام ایمیل محلی فعال است؛ تحویل SMS، Chat و RAG خاموش‌اند. پنل مدیریت AI Provider سمت سرور در runtime محلی فعال است، ولی تا grant مستقل، TOTP و پیکربندی پروفایل، برای استفاده آماده نیست. MFA از مسیر مشترک Owner و با TOTP واقعی کار می‌کند. هیچ credential زنده یا فراخوانی پولی استفاده نشده است. ورود Owner و پذیرش دستی هنوز باید تکمیل شود.
 
 ## پیش‌نیاز
 
@@ -67,7 +67,7 @@ URLهای واقعی:
 - در Owner Control Center، نامزد/منبع تستی را بررسی و اقدام مجاز را ثبت کنید. هیچ محتوای تستی یا مقصد مصنوعی به live منتقل نمی‌شود.
 - در workspace مسافر، درخواست سفر را ثبت، پاسخ/برنامهٔ موقت را ویرایش و ذخیره کنید. پس از logout/login و نیز پس از `Stop` و `Start` باید رکورد محلی باقی بماند. Chat در این اجرا خاموش است؛ پاسخ شبیه‌سازی‌شده را مدل زنده تلقی نکنید.
 
-وضعیت فعلی اندازه‌گیری‌شده: HTTPS health و SPA در `/admin` و `/partners` کد 200 می‌دهند؛ ledger دمو 25 ردیف تا `0026_platform_reviewer_mfa` دارد. شمارش فعلی DB: یک user مصنوعی، یک trip، یک conversation، صفر organization، صفر destination منتشرشده و صفر platform grant. این مقادیر برای نمایش جداسازی‌اند؛ هیچ user مدیریتی یا شرکت واقعی آماده نشده است. مالک باید ورود و workflow را خودش به‌صورت تعاملی تأیید کند.
+وضعیت نمونهٔ قبلی در `%LOCALAPPDATA%\Rahgard\Issue27OwnerDemo`: آخرین شمارش ثبت‌شده 1 user، 1 trip، 1 conversation و 0 organization بود. نمونهٔ پذیرش جداگانه در `%LOCALAPPDATA%\Rahgard\Issue27OwnerAcceptance` روی volume مستقل و پورت loopback جدا اجرا شده است؛ در آن هیچ account مدیریتی یا شرکت provision نشده است.
 
 ## داده و حریم خصوصی
 
@@ -82,3 +82,26 @@ URLهای واقعی:
 - طرح کاتالوگ 0026 از DB محلی ثبت شده است؛ مرجع زندهٔ تاریخی جداست و کامل/تأیید معماری نیست.
 - بازیابی archive و مهاجرت 0024–0026 در clone محلی قبلاً با موفقیت انجام شده و در [شواهد R4](../evidence/issue27/R4-restore-migrations-2026-11-25.json) آمده است؛ آن شواهد شامل راه‌اندازی کامل image/API و ورود apex نیست.
 - یک VM/سرور Ubuntu مستقل برای relocation مجاز و در دسترس نبود؛ portability کامل، image CI، off-host restore و live Owner login تأیید نشده‌اند.
+
+## پذیرش محلی مستقل روی volume جدا
+
+نسخهٔ اصلی در `%LOCALAPPDATA%\Rahgard\Issue27OwnerDemo` حفظ می‌شود. نمونهٔ پذیرش جداگانه در `%LOCALAPPDATA%\Rahgard\Issue27OwnerAcceptance` قرار دارد و از PostgreSQL volume مستقل استفاده می‌کند. اجرای تأییدشده:
+
+```powershell
+& .\engineering\pilot\issue27-local-demo\Rahgard-OwnerDemo.ps1 -Action Start -DataRoot (Join-Path $env:LOCALAPPDATA 'Rahgard\Issue27OwnerAcceptance') -WebPort 18443 -ApiPort 18801 -DatabasePort 19543 -OpenBrowser
+& .\engineering\pilot\issue27-local-demo\Rahgard-OwnerDemo.ps1 -Action Status -DataRoot (Join-Path $env:LOCALAPPDATA 'Rahgard\Issue27OwnerAcceptance') -WebPort 18443 -ApiPort 18801 -DatabasePort 19543
+& .\engineering\pilot\issue27-local-demo\Rahgard-OwnerDemo.ps1 -Action Stop -DataRoot (Join-Path $env:LOCALAPPDATA 'Rahgard\Issue27OwnerAcceptance') -WebPort 18443 -ApiPort 18801 -DatabasePort 19543
+```
+
+نشانی‌ها: `https://localhost:18443/admin`، `https://localhost:18443/partners` و `https://localhost:18443/`. دو حساب محلی مستقل را در خود برنامه بسازید؛ ثبت‌نام عادی هیچ مجوز مدیریتی نمی‌دهد. پس از آن، اپراتور از terminal محلی، helper محدود را برای grant آغازین اجرا می‌کند. ایمیل‌ها فقط در prompt محلی وارد می‌شوند و گذرواژه در command line یا history قرار نمی‌گیرد:
+
+```powershell
+$env:RAHGARD_DEMO_ROOT = Join-Path $env:LOCALAPPDATA 'Rahgard\Issue27OwnerAcceptance'
+$env:RAHGARD_DEMO_DATABASE_PORT = '19543'
+uv run --project . python .\engineering\pilot\issue27-local-demo\provision_capability.py
+Remove-Item Env:\RAHGARD_DEMO_ROOT,Env:\RAHGARD_DEMO_DATABASE_PORT
+```
+
+bootstrap `admin_overview_read` فقط وقتی مجاز است که هیچ مدیر فعالی وجود نداشته باشد؛ حساب اپراتور مستقل سپس جداگانه provision می‌شود. Owner خودش TOTP را در authenticator ثبت می‌کند. seed و recovery code یک‌بار نمایش داده می‌شوند؛ آن‌ها را در چت، issue یا screenshot قرار ندهید. Owner باید صفحات admin/partners، ذخیره و بازگشایی شرکت/service، بررسی مستقل و traveler save/reopen را دستی مرور کند. تا انجام این مرور انسانی، پذیرش Owner کامل محسوب نمی‌شود.
+
+در این دمو، ثبت‌نام ایمیل محلی فعال است؛ تحویل SMS، Chat و RAG خاموش‌اند. پنل مدیریت AI Provider سمت سرور در runtime محلی فعال است، ولی تا grant مستقل، TOTP و پیکربندی پروفایل، برای استفاده آماده نیست. MFA از مسیر مشترک Owner و با TOTP واقعی کار می‌کند. هیچ credential زنده یا فراخوانی پولی استفاده نشده است. ورود Owner و پذیرش دستی هنوز باید تکمیل شود.

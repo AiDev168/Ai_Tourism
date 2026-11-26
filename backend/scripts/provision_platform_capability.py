@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_024 = ROOT / "engineering/pilot/sql/024_partner_review_audit_actions.sql"
 MIGRATION_025 = ROOT / "engineering/pilot/sql/025_owner_control_center.sql"
 MIGRATION_026 = ROOT / "engineering/pilot/sql/026_platform_reviewer_mfa.sql"
+MIGRATION_027 = ROOT / "engineering/pilot/sql/027_server_ai_provider_admin.sql"
 CAPABILITIES = {
     "organization_review": "partner",
     "service_review": "partner",
@@ -29,6 +30,7 @@ CAPABILITIES = {
     "candidate_review": "catalogue",
     "source_review": "catalogue",
     "catalogue_publish": "catalogue",
+    "ai_provider_admin": "provider",
 }
 DATABASE_NAME = "rahgard_pilot_vps_staging"
 APP_ROLE = "ai_tourism_app"
@@ -63,12 +65,14 @@ def _verify(conn, marker: str) -> tuple[str, str]:
                       (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0024_partner_review_audit_actions') AS m24,
                       (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0025_owner_control_center') AS m25,
                       (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0026_platform_reviewer_mfa') AS m26,
+                      (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0027_server_ai_provider_admin') AS m27,
                       (SELECT count(*) FROM system.schema_migrations) AS migration_count,
                       (SELECT max(migration_id) FROM system.schema_migrations) AS latest_migration"""
         ).fetchone()
     expected_024 = hashlib.sha256(MIGRATION_024.read_bytes()).hexdigest()
     expected_025 = hashlib.sha256(MIGRATION_025.read_bytes()).hexdigest()
     expected_026 = hashlib.sha256(MIGRATION_026.read_bytes()).hexdigest()
+    expected_027 = hashlib.sha256(MIGRATION_027.read_bytes()).hexdigest()
     if state["database_name"] != DATABASE_NAME:
         raise ProvisioningError("database_name_mismatch")
     if not 170000 <= state["version_num"] < 180000 or state["server_port"] == 55433:
@@ -81,7 +85,9 @@ def _verify(conn, marker: str) -> tuple[str, str]:
             or (state["m25"] or "").strip() != expected_025
             or (state["m26"] or "").strip() != expected_026):
         raise ProvisioningError("migration_checksum_mismatch")
-    if state["migration_count"] not in (25, 27) or state["latest_migration"] != "0026_platform_reviewer_mfa":
+    if (state["m27"] or "").strip() != expected_027:
+        raise ProvisioningError("migration_checksum_mismatch")
+    if state["migration_count"] not in (26, 28) or state["latest_migration"] != "0027_server_ai_provider_admin":
         raise ProvisioningError("migration_ledger_mismatch")
     return str(state["database_name"]), str(state["database_role"])
 
@@ -100,6 +106,7 @@ def run(args: argparse.Namespace, *, environ: dict[str, str] | None = None) -> s
     if len(args.reason.strip()) < 10 or len(args.reason) > 1000:
         raise ProvisioningError("reason_invalid")
     domain = CAPABILITIES[args.capability]
+    wanted_active = args.action == "grant"
     with psycopg.connect(dsn, row_factory=dict_row, connect_timeout=5) as conn:
         database, _role = _verify(conn, marker)
         with conn.cursor() as cur:
@@ -119,36 +126,73 @@ def run(args: argparse.Namespace, *, environ: dict[str, str] | None = None) -> s
             if not cur.execute("SELECT EXISTS(SELECT 1 FROM identity.users WHERE user_id=%s) AS ok",
                                 (args.operator_user,)).fetchone()["ok"]:
                 raise ProvisioningError("operator_identity_not_found")
+            if domain == "provider" and wanted_active and not cur.execute(
+                    "SELECT identity.has_platform_admin_capability(%s) AS ok", (args.target_user,)
+            ).fetchone()["ok"]:
+                raise ProvisioningError("provider_admin_requires_platform_capability")
             if domain == "partner":
                 cur.execute(
                     "SELECT EXISTS(SELECT 1 FROM partner.platform_grants WHERE user_id=%s AND capability=%s AND revoked_at IS NULL) AS active",
                     (args.target_user, args.capability),
                 )
-            else:
+            elif domain == "catalogue":
                 cur.execute(
                     "SELECT EXISTS(SELECT 1 FROM identity.catalogue_review_grants WHERE user_id=%s AND capability=%s AND revoked_at IS NULL) AS active",
                     (args.target_user, args.capability),
                 )
+            else:
+                cur.execute(
+                    "SELECT EXISTS(SELECT 1 FROM identity.ai_provider_admin_grants WHERE user_id=%s AND revoked_at IS NULL) AS active",
+                    (args.target_user,),
+                )
             active = bool(cur.fetchone()["active"])
-            wanted_active = args.action == "grant"
             if active == wanted_active:
                 return f"NO_CHANGE action={args.action} capability={args.capability} database={database}"
             if not args.apply:
                 return f"DRY_RUN action={args.action} capability={args.capability} database={database}"
             if env.get("RAHGARD_OPERATOR_GRANT_CONFIRM") != "APPLY_APPROVED_PLATFORM_GRANT":
                 raise ProvisioningError("explicit_operator_confirmation_missing")
-            grant_table = "partner.platform_grants" if domain == "partner" else "identity.catalogue_review_grants"
             if wanted_active:
-                cur.execute(
-                    f"INSERT INTO {grant_table}(user_id,capability,granted_by,reason) VALUES (%s,%s,%s,%s)",
-                    (args.target_user, args.capability, args.operator_user, args.reason.strip()),
-                )
+                if domain == "provider":
+                    cur.execute(
+                        """INSERT INTO identity.ai_provider_admin_grants
+                             (user_id,granted_by,grant_reason)
+                           VALUES (%s,%s,%s)
+                           ON CONFLICT(user_id) DO UPDATE SET granted_at=now(),granted_by=EXCLUDED.granted_by,
+                             grant_reason=EXCLUDED.grant_reason,revoked_at=NULL,revoked_by=NULL,revoke_reason=NULL""",
+                        (args.target_user,args.operator_user,args.reason.strip()),
+                    )
+                    cur.execute(
+                        """INSERT INTO identity.ai_provider_admin_grant_events
+                             (actor_user_id,target_user_id,action,reason) VALUES(%s,%s,'granted',%s)""",
+                        (args.operator_user,args.target_user,args.reason.strip()),
+                    )
+                else:
+                    grant_table = "partner.platform_grants" if domain == "partner" else "identity.catalogue_review_grants"
+                    cur.execute(
+                        f"INSERT INTO {grant_table}(user_id,capability,granted_by,reason) VALUES (%s,%s,%s,%s)",
+                        (args.target_user, args.capability, args.operator_user, args.reason.strip()),
+                    )
                 event = "granted"
             else:
-                cur.execute(
-                    f"UPDATE {grant_table} SET revoked_at=now() WHERE user_id=%s AND capability=%s AND revoked_at IS NULL",
-                    (args.target_user, args.capability),
-                )
+                if domain == "provider":
+                    cur.execute(
+                        """UPDATE identity.ai_provider_admin_grants SET revoked_at=now(),revoked_by=%s,revoke_reason=%s
+                           WHERE user_id=%s AND revoked_at IS NULL""",
+                        (args.operator_user,args.reason.strip(),args.target_user),
+                    )
+                    cur.execute(
+                        """INSERT INTO identity.ai_provider_admin_grant_events
+                             (actor_user_id,target_user_id,action,reason) VALUES(%s,%s,'revoked',%s)""",
+                        (args.operator_user,args.target_user,args.reason.strip()),
+                    )
+                    cur.execute("UPDATE identity.platform_admin_step_up SET revoked_at=now() WHERE user_id=%s AND revoked_at IS NULL", (args.target_user,))
+                else:
+                    grant_table = "partner.platform_grants" if domain == "partner" else "identity.catalogue_review_grants"
+                    cur.execute(
+                        f"UPDATE {grant_table} SET revoked_at=now() WHERE user_id=%s AND capability=%s AND revoked_at IS NULL",
+                        (args.target_user, args.capability),
+                    )
                 event = "revoked"
                 remaining_partner = cur.execute(
                     "SELECT EXISTS(SELECT 1 FROM partner.platform_grants WHERE user_id=%s AND revoked_at IS NULL) AS ok",
@@ -158,17 +202,22 @@ def run(args: argparse.Namespace, *, environ: dict[str, str] | None = None) -> s
                     "SELECT EXISTS(SELECT 1 FROM identity.catalogue_review_grants WHERE user_id=%s AND revoked_at IS NULL) AS ok",
                     (args.target_user,),
                 ).fetchone()["ok"]
-                if not remaining_partner and not remaining_catalogue:
+                remaining_provider = cur.execute(
+                    "SELECT EXISTS(SELECT 1 FROM identity.ai_provider_admin_grants WHERE user_id=%s AND revoked_at IS NULL) AS ok",
+                    (args.target_user,),
+                ).fetchone()["ok"]
+                if not remaining_partner and not remaining_catalogue and not remaining_provider:
                     # Revoke encrypted MFA material and all dependent
                     # session-bound step-ups when the final platform grant is
                     # removed. The grant event remains in the audit ledger.
                     cur.execute("DELETE FROM identity.platform_admin_mfa WHERE user_id=%s", (args.target_user,))
-            cur.execute(
-                """INSERT INTO partner.platform_grant_events
-                   (grant_domain,target_user_id,capability,action,actor_user_id,reason)
-                   VALUES (%s,%s,%s,%s,%s,%s)""",
-                (domain, args.target_user, args.capability, event, args.operator_user, args.reason.strip()),
-            )
+            if domain != "provider":
+                cur.execute(
+                    """INSERT INTO partner.platform_grant_events
+                       (grant_domain,target_user_id,capability,action,actor_user_id,reason)
+                       VALUES (%s,%s,%s,%s,%s,%s)""",
+                    (domain, args.target_user, args.capability, event, args.operator_user, args.reason.strip()),
+                )
         return f"APPLIED action={event} capability={args.capability} database={database}"
 
 

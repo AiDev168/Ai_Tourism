@@ -34,7 +34,7 @@ def _settings(**overrides) -> Settings:
 def _private_file(path: Path, value: str) -> Path:
     path.write_text(value + "\n", encoding="utf-8")
     if path.stat().st_mode & 0o777:
-        path.chmod(0o640)
+        path.chmod(0o600)
     return path
 
 
@@ -56,7 +56,29 @@ def test_platform_mfa_file_permissions_and_path_are_fail_closed(tmp_path):
         pytest.skip("POSIX mode-bit validation is exercised only on Linux")
     key_file = _private_file(tmp_path / "key", KEY)
     pepper_file = _private_file(tmp_path / "pepper", PEPPER)
+    key_file.chmod(0o640)
+    with pytest.raises(ValueError, match="secret file is unavailable or unsafe"):
+        _settings(
+            platform_admin_mfa_encryption_key_file=key_file,
+            platform_admin_recovery_pepper_file=pepper_file,
+        )
+    key_file.chmod(0o600)
     pepper_file.chmod(0o644)
+    with pytest.raises(ValueError, match="secret file is unavailable or unsafe"):
+        _settings(
+            platform_admin_mfa_encryption_key_file=key_file,
+            platform_admin_recovery_pepper_file=pepper_file,
+        )
+
+
+def test_platform_mfa_secret_parent_directory_must_be_private(tmp_path):
+    if os.name == "nt":
+        pytest.skip("POSIX mode-bit validation is exercised only on Linux")
+    secret_dir = tmp_path / "shared-secrets"
+    secret_dir.mkdir(mode=0o700)
+    key_file = _private_file(secret_dir / "key", KEY)
+    pepper_file = _private_file(secret_dir / "pepper", PEPPER)
+    secret_dir.chmod(0o750)
     with pytest.raises(ValueError, match="secret file is unavailable or unsafe"):
         _settings(
             platform_admin_mfa_encryption_key_file=key_file,

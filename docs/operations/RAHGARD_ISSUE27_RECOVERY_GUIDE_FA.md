@@ -66,21 +66,22 @@ Frontend **۲۰۸ آزمون موفق** و build/typecheck/PWA build نیز مو
 - `PLATFORM_ADMIN_RECOVERY_PEPPER`: حداقل ۳۲ بایت UTF-8.
 - `AUTH_RATE_LIMIT_SECRET`, HTTPS امن، `AUTH_ENABLED=true` و APP_ENV staging/production نیز لازم‌اند؛ موجودبودن این دو MFA key به‌تنهایی مسیر auth را فعال نمی‌کند.
 
-در Compose از `deploy/staging/compose.platform-admin-mfa.yaml` فقط پس از آن استفاده شود که مدیر رازها دو فایل را مستقیماً در `RAHGARD_SECRET_DIR` تولید کرده باشد. کلید از argv، shell history، `.env` عمومی، GitHub Actions یا log عبور نکند. فایل‌ها باید regular، غیر symlink، بدون دسترسی دیگران و فقط برای گروه برنامه قابل‌خواندن باشند (در لینوکس mode حداکثر `0640` و بدون group-write؛ group عددی را با `id -g rahgard` در همان image اندازه بگیرید، آن را حدس نزنید). در مخزن فقط path غیرحساس `/run/secrets/...` تنظیم شده است. برنامه در شروع، فایل‌ها را می‌خواند و تنها `SecretStr` در حافظه نگه می‌دارد؛ health check فقط configured/disabled گزارش می‌کند.
+در Compose از `deploy/staging/compose.platform-admin-mfa.yaml` فقط پس از آن استفاده شود که secret manager دایرکتوری اختصاصی `RAHGARD_ADMIN_SECRET_DIR` را آماده کرده باشد. این دایرکتوری فقط دو فایل MFA را نگه می‌دارد، mode آن `0700` و owner آن UID برنامه (10001 در image فعلی) است؛ فایل‌ها regular، بدون symlink و mode `0400` یا `0600` هستند. Overlay کل دایرکتوری را فقط‌خواندنی bind می‌کند تا هم permission واقعی فایل و هم parent خصوصی بمانند. هیچ secret از argv، shell history، `.env` عمومی، GitHub Actions یا log عبور نمی‌کند.
 
 نمونهٔ اعتبارسنجی بی‌مقدار (باید قبل از restart در terminal محافظت‌شده اجرا شود):
 
 ```bash
 docker compose --env-file /opt/rahgard-staging/.env \
   -f /opt/rahgard-staging/current/deploy/staging/compose.yaml \
-  -f /opt/rahgard-staging/current/deploy/staging/compose.platform-admin-mfa.yaml config --quiet
+  -f /opt/rahgard-staging/current/deploy/staging/compose.platform-admin-mfa.yaml \
+  config --quiet
 docker compose --env-file /opt/rahgard-staging/.env \
   -f /opt/rahgard-staging/current/deploy/staging/compose.yaml \
   -f /opt/rahgard-staging/current/deploy/staging/compose.platform-admin-mfa.yaml \
   exec -T api python -c 'from app.core.config import get_settings; s=get_settings(); print("platform_mfa=" + ("configured" if s.platform_admin_mfa_encryption_key_hex and s.platform_admin_recovery_pepper else "disabled"))'
 ```
 
-فرمان دوم فقط بعد از restart کنترل‌شدهٔ API معنی دارد؛ هیچ‌یک در این ماموریت روی VPS اجرا نشد. جایگزینی file/secret و restart، rotation کلید، grant بازبین، Owner enrollment و migration live هرکدام نیازمند هماهنگی عملیات و تأیید مستقل هستند. یک Owner با `admin_overview_read` از ابزار اپراتوری جداگانه provision می‌شود؛ reviewer نیز capability محدود خودش را می‌گیرد. خودثبت‌نام admin، default owner، universal token و auto-promotion وجود ندارد. Owner بعد از login همان `/admin` را باز می‌کند، TOTP را enroll می‌کند، recovery codes را یک‌بار در vault امن نگه می‌دارد، سپس step-up پنج‌دقیقه‌ای و محدود به همان session می‌گیرد. UI AI-provider admin روی VPS غیرفعال می‌ماند.
+فرمان دوم فقط پس از restart کنترل‌شدهٔ API معنی دارد؛ هیچ‌یک در این ماموریت روی VPS اجرا نشد. جایگزینی فایل و restart، rotation کلید، grant بازبین، Owner enrollment و migration live هرکدام نیازمند هماهنگی عملیات و تأیید مستقل هستند. یک Owner با `admin_overview_read` از ابزار اپراتوری جداگانه provision می‌شود؛ reviewer نیز capability محدود خودش را می‌گیرد. خودثبت‌نام admin، default owner، universal token و auto-promotion وجود ندارد. Owner بعد از login همان `/admin` را باز می‌کند، TOTP را enroll می‌کند، recovery codes را یک‌بار در vault امن نگه می‌دارد، سپس step-up پنج‌دقیقه‌ای و محدود به همان session می‌گیرد. مدیریت AI Provider فقط پس از migration 0027، overlay/keyring امن، grant مستقل و validation مجاز است؛ وضعیت آن روی VPS در این کار تغییر یا فعال نشده است.
 
 ## چه چیزی هنوز portability کامل نیست
 

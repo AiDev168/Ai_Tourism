@@ -1,0 +1,24 @@
+name: ${RAHGARD_COMPOSE_PROJECT:-rahgard-staging}
+
+# Explicit operator opt-in. The flag defaults off; adding this overlay alone
+# does not create an administrator grant or activate any provider route.
+services:
+  api:
+    environment:
+      AI_PROVIDER_ADMIN_ENABLED: ${RAHGARD_PROVIDER_ADMIN_ENABLED:-false}
+      AI_PROVIDER_VAULT_DIR: /var/lib/rahgard/provider-vault
+      AI_PROVIDER_VAULT_KEY_FILE: /run/rahgard-provider-keyring/ai_provider_vault_keyring.json
+    # Requires compose.platform-admin-mfa.yaml, which mounts the private
+    # dedicated admin secret directory and configures the shared TOTP keys.
+    volumes:
+      - provider_vault:/var/lib/rahgard/provider-vault
+      - type: bind
+        source: ${RAHGARD_PROVIDER_KEYRING_DIR:?Set the dedicated provider keyring directory}
+        target: /run/rahgard-provider-keyring
+        read_only: true
+        bind:
+          create_host_path: false
+
+volumes:
+  provider_vault:
+    name: ${RAHGARD_PROVIDER_VAULT_VOLUME:-rahgard_provider_vault}
