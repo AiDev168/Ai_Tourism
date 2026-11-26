@@ -1,0 +1,24 @@
+﻿{
+    "verified_at":  "2026-11-26T06:47:45.763Z",
+    "environment":  "isolated_loopback_demo",
+    "release_sha":  "661b7c4046d35f8bcb991511afc4a80da9e87718",
+    "database_migrations":  26,
+    "api_restarted_before_test":  true,
+    "login_http":  200,
+    "route_after_restart":  {
+                                "active":  true,
+                                "model_id":  "qwen3-8b-abliterated",
+                                "revision_matches_selected":  true
+                            },
+    "conversation_before_http":  200,
+    "assistant_turn_http":  200,
+    "request_id":  "f4605165-f710-44c5-9c92-c3f072f4191f",
+    "extraction_path":  "llm",
+    "conversation_after_http":  200,
+    "assistant_messages_before":  2,
+    "assistant_messages_after":  3,
+    "reopened_assistant_messages":  3,
+    "private_record_ids_omitted":  true,
+    "latest_migration":  "0027_server_ai_provider_admin",
+    "provider_invocation_latency_ms":  4828
+}
