@@ -1,0 +1,115 @@
+{
+  "evidence_version": "rahgard-issue27-local-acceptance-v1",
+  "verified_at_utc": "2026-11-26T09:06:25Z",
+  "scope": "loopback-only Windows pilots; no VPS or public production access",
+  "source": {
+    "branch": "feat/rahgard-unified-travel-v2",
+    "checkout_sha": "44a1fad8d96e86fa9fee3e2f3f5e2785232cb524",
+    "origin_branch_sha": "44a1fad8d96e86fa9fee3e2f3f5e2785232cb524",
+    "worktree_was_clean_before_evidence": true
+  },
+  "owner_demo": {
+    "url": "https://localhost:18443/admin",
+    "runtime_release_sha": "661b7c4046d35f8bcb991511afc4a80da9e87718",
+    "database": {
+      "engine_major": 17,
+      "migration_rows": 26,
+      "latest_migration": "0027_server_ai_provider_admin"
+    },
+    "admin_capability_present": true,
+    "ai_provider_admin_grant_present": true,
+    "owner_mfa_enabled_at_observation": false,
+    "health_http": 200,
+    "unauthenticated_admin_capabilities_http": 401,
+    "active_chat_route": {
+      "provider_kind": "lm_studio",
+      "model_id": "qwen3-8b-abliterated",
+      "latest_validation": "valid"
+    },
+    "actual_authenticated_traveler_turn": {
+      "login_http": 200,
+      "assistant_status_http": 200,
+      "assistant_turn_http": 200,
+      "extraction_path": "llm",
+      "conversation_readback_http": 200,
+      "persisted_trip_count_for_test_account": 1,
+      "persisted_conversation_count_for_test_account": 1,
+      "persisted_assistant_message_count": 1,
+      "chat_usage_24h_before": {"calls": 8, "successes": 3},
+      "chat_usage_24h_after": {"calls": 9, "successes": 4},
+      "latest_success_latency_ms": 16336,
+      "message_provider_model_tags_present": false,
+      "semantic_field_states": {
+        "origin": "known_from_llm",
+        "destination": "missing_from_llm",
+        "duration": "missing_from_llm",
+        "traveler_count": "missing_from_llm",
+        "budget": "missing_from_llm",
+        "interests": "missing_from_llm"
+      },
+      "acceptance": "real inference and persistence passed; complete semantic extraction failed"
+    },
+    "provider_profile_switch_step_up": "not exercised; Owner MFA enrollment is not enabled"
+  },
+  "isolated_qa": {
+    "url": "https://localhost:18483",
+    "runtime_release_sha": "44a1fad8d96e86fa9fee3e2f3f5e2785232cb524",
+    "database": {
+      "engine_major": 17,
+      "migration_rows": 26,
+      "latest_migration": "0027_server_ai_provider_admin",
+      "trips": 2,
+      "conversations": 2,
+      "messages": 5,
+      "provisional_itineraries": 1,
+      "five_day_provisional_unverified_itineraries": 1,
+      "published_destinations": 0,
+      "organizations": 2,
+      "services": 1,
+      "schedules": 4,
+      "offers": 4,
+      "prices": 4,
+      "availability_snapshots": 1
+    },
+    "traveler": {
+      "authenticated_persian_request_and_trip_save_reopen": "previously passed on this isolated runtime using deterministic fallback",
+      "itinerary_state": "provisional_unverified",
+      "company_eligibility": 0
+    },
+    "company_reviewer": {
+      "company_login_http": 200,
+      "verification_case_submission_http": 201,
+      "reviewer_login_http": 200,
+      "mfa_enroll_http": 200,
+      "mfa_verify_http": 200,
+      "session_step_up_active": true,
+      "review_queue_http": 200,
+      "decision_http": 200,
+      "decision": "needs_information",
+      "reason": "QA-only evidence reference was not independently verifiable",
+      "independent_reviewer_check": "reviewer differs from submitter",
+      "recovery_codes": "10 generated and stored only in a current-user DPAPI-protected local file; values omitted"
+    },
+    "tenant_isolation": {
+      "foreign_workspace_get_http": 200,
+      "foreign_workspace_rows_returned": 0,
+      "foreign_service_create_http": 403,
+      "service_count_after_denied_write": 1
+    }
+  },
+  "security_and_privacy": {
+    "passwords_seeds_recovery_codes_cookies_and_user_message_content_included": false,
+    "screenshots_included": false,
+    "live_database_or_vps_modified": false,
+    "live_deployment_performed": false,
+    "sms_or_rag_enabled": false
+  },
+  "remaining_acceptance_gaps": [
+    "Owner must use the DPAPI-stored local password and complete MFA in the dedicated Owner browser; Owner MFA was not enabled at the observation point.",
+    "Authenticated Owner AI Provider profile activation, rollback, and next-turn inference were not tested because Owner MFA/step-up is pending.",
+    "The actual LM Studio turn was invoked and persisted but returned only origin as a known semantic field; the requested destination, duration, traveler count, budget, and interests remained unknown.",
+    "The isolated cross-tenant read returned an empty RLS-filtered workspace with HTTP 200 rather than 403/404; no rows were exposed. The cross-tenant write was denied with HTTP 403.",
+    "A full portable application backup/restore including provider vault and MFA custody, and independent Ubuntu relocation, remain unverified.",
+    "No live VPS verification, production deployment, or three-environment SHA parity is claimed."
+  ]
+}
