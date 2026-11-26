@@ -117,8 +117,12 @@ key are never included. `inspect-portable.sh` authenticates the outer bundle,
 checks member paths/types and checksums, and validates the provider archive.
 `restore-portable-runtime.sh` restores only to a new isolated runtime directory
 and newly named restore-test volume. `restore-portable-app-check.sh` starts the
-archived API against an isolated PostgreSQL restore twice with those same
-runtime mounts, verifying startup persistence but not invoking a live model.
+archived API and Web images against an isolated PostgreSQL restore, restarts
+both, and verifies the PWA shell, immutable hashed assets, manifest, service
+worker, and Web-to-API proxy. The check runs without published ports and uses a
+restore-only Nginx config that points to API loopback in the shared isolated
+network namespace. It verifies startup/runtime compatibility; it does not
+invoke a live model or prove an independent-server relocation.
 
 - `RAHGARD_PLATFORM_ADMIN_MFA_ENABLED=true` requires the two owner MFA files.
 - `RAHGARD_PROVIDER_ADMIN_ENABLED=true` additionally requires
