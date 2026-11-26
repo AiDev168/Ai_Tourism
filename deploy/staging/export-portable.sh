@@ -10,7 +10,7 @@ if [[ "${1:-}" != "--cutover-frozen" || $# -ne 1 ]]; then
   echo 'Stop writes, create state/WRITE_FREEZE, and stop this Compose project api/web first.' >&2
   exit 2
 fi
-env_file="$root/.env.v2"
+env_file="$root/.env"
 test -s "$env_file"
 [[ -f "$root/secrets/backup_encryption_passphrase" && ! -L "$root/secrets/backup_encryption_passphrase" && -s "$root/secrets/backup_encryption_passphrase" && "$(stat -c '%a' "$root/secrets/backup_encryption_passphrase")" == 600 ]] || {
   echo 'Encryption passphrase must be a regular non-symlink file.' >&2; exit 2;
@@ -56,7 +56,26 @@ release_dir="$root/releases/$sha"
 [[ -d "$release_dir" && -f "$release_dir/RELEASE_COMMIT" && "$(cat "$release_dir/RELEASE_COMMIT")" == "$sha" ]] || {
   echo 'V2 runtime env and immutable release directory differ; refusing stale current/RELEASE_COMMIT fallback.' >&2; exit 2;
 }
-compose=(docker compose --project-name "$compose_project" --env-file "$env_file" -f "$release_dir/deploy/staging/compose.yaml")
+source "$release_dir/deploy/staging/compose-runtime.sh"
+compose=()
+rahgard_compose_init "$env_file" "$release_dir" compose
+readarray -t overlay_settings < <(python3 "$release_dir/scripts/ops/rahgard_runtime_compose.py" \
+  --env-file "$env_file" --release "$release_dir" --format settings)
+mapfile -t overlay_values < <(python3 - "${overlay_settings[0]}" <<'PY'
+import json,sys
+x=json.loads(sys.argv[1])
+print(str(x['mfa_enabled']).lower())
+print(str(x['provider_admin_enabled']).lower())
+print(x['provider_vault_volume'])
+print(x.get('provider_keyring_dir') or '')
+print(x.get('admin_secret_dir') or '')
+PY
+)
+mfa_enabled=${overlay_values[0]}
+provider_enabled=${overlay_values[1]}
+provider_volume=${overlay_values[2]}
+provider_keyring_dir=${overlay_values[3]}
+admin_secret_dir=${overlay_values[4]}
 db_owner=ai_tourism_owner
 db_name=rahgard_pilot_vps_staging
 running=$("${compose[@]}" ps --status running --services)
@@ -146,7 +165,7 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 python3 "$script_dir/verify-portable-images.py" "$tmp/runtime-images.tar" "$identity_file" "$sha"
 mv "$identity_file" "$tmp/runtime-image-identities.tsv"
 
-# Only operational secrets required by the current Compose contract are copied.
+# Only operational secrets required by the enabled Compose contract are copied.
 # Backup and portable-integrity keys are deliberately excluded.
 required_secrets=(pg_owner_password app_db_password geo_authorizer_password geo_publisher_password auth_otp_hmac_secret auth_csrf_secret auth_rate_limit_secret internal_chat_token sms_ir_production_api_key)
 api_container=$("${compose[@]}" ps -a -q api)
@@ -168,19 +187,48 @@ entries=containers[0]["Config"].get("Env",[])
 for entry in entries:
     if "=" in entry:
         key,value=entry.split("=",1); values.setdefault(key,[]).append(value)
-expected={"APP_ENV":"staging","STAGING_PUBLIC_HOST":"hinaa.ir","AUTH_ALLOWED_ORIGINS":"https://hinaa.ir","AUTH_COOKIE_SECURE":"true","AUTH_LOCAL_OWNER_ENABLED":"false","AUTH_SMS_ADAPTER":"disabled","AI_PROVIDER_ADMIN_ENABLED":"false","TOURISM_RAG_ENABLED":"false"}
+expected={"APP_ENV":"staging","STAGING_PUBLIC_HOST":"hinaa.ir","AUTH_ALLOWED_ORIGINS":"https://hinaa.ir","AUTH_COOKIE_SECURE":"true","AUTH_LOCAL_OWNER_ENABLED":"false","AUTH_SMS_ADAPTER":"disabled","AI_PROVIDER_ADMIN_ENABLED":sys.argv[2],"TOURISM_RAG_ENABLED":"false"}
 if any(values.get(k)!=[v] for k,v in expected.items()): raise SystemExit(1)
 flags=tuple(sum(entry.startswith(k+"=") for entry in entries) for k in ("PLATFORM_ADMIN_MFA_ENCRYPTION_KEY_FILE","PLATFORM_ADMIN_RECOVERY_PEPPER_FILE"))
 if flags not in {(0,0),(1,1)}: raise SystemExit(1)
-if flags==(1,1) and (values.get("PLATFORM_ADMIN_MFA_ENCRYPTION_KEY_FILE") != ["/run/secrets/platform_admin_mfa_encryption_key_hex"] or values.get("PLATFORM_ADMIN_RECOVERY_PEPPER_FILE") != ["/run/secrets/platform_admin_recovery_pepper"]): raise SystemExit(1)
+if (flags==(1,1)) != (sys.argv[1] == "true"): raise SystemExit(1)
+if flags==(1,1) and (values.get("PLATFORM_ADMIN_MFA_ENCRYPTION_KEY_FILE") != ["/run/rahgard-admin-secrets/platform_admin_mfa_encryption_key_hex"] or values.get("PLATFORM_ADMIN_RECOVERY_PEPPER_FILE") != ["/run/rahgard-admin-secrets/platform_admin_recovery_pepper"]): raise SystemExit(1)
 print("mfa_enabled" if flags==(1,1) else "mfa_disabled")
-' > "$tmp/platform-mfa-status.txt"; then
+' "$mfa_enabled" "$provider_enabled" > "$tmp/platform-mfa-status.txt"; then
   echo 'Active V2 API host/auth/security settings do not match the canonical hardened contract.' >&2; exit 2
 fi
-if [[ "$(cat "$tmp/platform-mfa-status.txt")" == mfa_enabled ]]; then
-  required_secrets+=(platform_admin_mfa_encryption_key_hex platform_admin_recovery_pepper)
+if ! docker inspect "$api_container" | python3 -c '
+import json,sys
+c=json.load(sys.stdin)[0]
+env={}
+for entry in c.get("Config",{}).get("Env",[]):
+ if "=" in entry:
+  k,v=entry.split("=",1); env.setdefault(k,[]).append(v)
+expected_mfa=sys.argv[1] == "true"
+expected_enabled=sys.argv[3] == "true"
+expected_volume=sys.argv[4]
+mounts=[m for m in c.get("Mounts",[]) if m.get("Destination")=="/var/lib/rahgard/provider-vault"]
+keyring=[m for m in c.get("Mounts",[]) if m.get("Destination")=="/run/rahgard-provider-keyring"]
+admin=[m for m in c.get("Mounts",[]) if m.get("Destination")=="/run/rahgard-admin-secrets"]
+if expected_mfa:
+ if len(admin)!=1 or admin[0].get("Type")!="bind" or admin[0].get("Source")!=sys.argv[2] or admin[0].get("RW") is not False: raise SystemExit(1)
+else:
+ if admin: raise SystemExit(1)
+if env.get("AI_PROVIDER_ADMIN_ENABLED") != ["true" if expected_enabled else "false"]: raise SystemExit(1)
+if expected_enabled:
+ if len(mounts)!=1 or mounts[0].get("Type")!="volume" or mounts[0].get("Name")!=expected_volume: raise SystemExit(1)
+ if len(keyring)!=1 or keyring[0].get("Type")!="bind" or keyring[0].get("Source")!=sys.argv[4] or keyring[0].get("Destination")!="/run/rahgard-provider-keyring" or keyring[0].get("RW") is not False: raise SystemExit(1)
+else:
+ if mounts or keyring: raise SystemExit(1)
+' "$mfa_enabled" "$admin_secret_dir" "$provider_enabled" "$provider_volume" "$provider_keyring_dir"; then
+  echo 'Provider vault/keyring mounts do not match the enabled runtime contract.' >&2; exit 2
 fi
+if [[ "$(cat "$tmp/platform-mfa-status.txt")" == mfa_enabled ]]; then
+  [[ -d "$admin_secret_dir" && ! -L "$admin_secret_dir" && "$(stat -c '%a' "$admin_secret_dir")" == 700 ]] || { echo 'MFA secret directory is unsafe or unavailable.' >&2; exit 2; }
+fi
+printf '%s\n' "$provider_enabled" > "$tmp/provider-admin-status.txt"
 cp -- "$tmp/platform-mfa-status.txt" "$tmp/private/state/platform-mfa-status"
+cp -- "$tmp/provider-admin-status.txt" "$tmp/private/state/provider-admin-status"
 if docker ps --format '{{.Image}}' | grep -q '^rahgard-api:'; then
   echo 'A Rahgard API writer remains running during portability export.' >&2; exit 2
 fi
@@ -205,6 +253,40 @@ done
 for name in "${required_secrets[@]}"; do
   install -m 0600 -- "$secret_dir/$name" "$tmp/private/secrets/$name"
 done
+if [[ "$mfa_enabled" == true ]]; then
+  for name in platform_admin_mfa_encryption_key_hex platform_admin_recovery_pepper; do
+    file="$admin_secret_dir/$name"
+    [[ -f "$file" && ! -L "$file" && -s "$file" && "$(stat -c '%a' "$file")" =~ ^(400|600)$ ]] || {
+      echo "MFA runtime secret is unavailable or unsafe: $name" >&2; exit 2;
+    }
+    install -m 0600 -- "$file" "$tmp/private/secrets/$name"
+  done
+fi
+if [[ "$provider_enabled" == true ]]; then
+  [[ -d "$provider_keyring_dir" && ! -L "$provider_keyring_dir" && "$(stat -c '%a' "$provider_keyring_dir")" == 700 ]] || {
+    echo 'Provider keyring directory is unsafe or unavailable.' >&2; exit 2;
+  }
+  keyring="$provider_keyring_dir/ai_provider_vault_keyring.json"
+  [[ -f "$keyring" && ! -L "$keyring" && -s "$keyring" && "$(stat -c '%a' "$keyring")" =~ ^(400|600)$ ]] || {
+    echo 'Provider keyring file is unavailable or unsafe.' >&2; exit 2;
+  }
+  install -d -m 0700 "$tmp/private/provider-keyring"
+  install -m 0600 -- "$keyring" "$tmp/private/provider-keyring/ai_provider_vault_keyring.json"
+  docker volume inspect "$provider_volume" >/dev/null
+  docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+    --cap-drop ALL --security-opt no-new-privileges:true \
+    --mount "type=volume,src=$provider_volume,dst=/source,readonly" \
+    --entrypoint tar "$db_image" -C /source -cf - . > "$tmp/private/provider-vault.tar"
+  test -s "$tmp/private/provider-vault.tar"
+  python3 - "$tmp/private/provider-vault.tar" <<'PY'
+import sys,tarfile
+with tarfile.open(sys.argv[1], "r:") as archive:
+ for member in archive.getmembers():
+  name=member.name.removeprefix("./").rstrip("/")
+  if name and (name.startswith("/") or ".." in name.split("/") or "\\" in name): raise SystemExit("unsafe provider vault archive path")
+  if not (member.isdir() or member.isreg()) or member.issym() or member.islnk() or member.mode & 0o6000: raise SystemExit("unsafe provider vault archive member type/mode")
+PY
+fi
 
 "${compose[@]}" exec -T db pg_dump -U "$db_owner" -d "$db_name" -Fc > "$tmp/database.dump"
 test -s "$tmp/database.dump"

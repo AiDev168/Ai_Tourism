@@ -10,7 +10,7 @@ from pathlib import Path
 BASE_NUMBERS = (*range(14), *range(16, 22))
 TARGET_NUMBERS = (22, 23)
 CURRENT_BASE_NUMBERS = (*range(14), *range(16, 24))
-CURRENT_TARGET_NUMBERS = (24, 25, 26)
+CURRENT_TARGET_NUMBERS = (24, 25, 26, 27)
 REPO = Path(__file__).resolve().parents[2]
 
 
@@ -40,7 +40,7 @@ def migration_blobs(sha: str) -> dict[int, tuple[str, bytes]]:
 
 
 def current_migration_blobs(sha: str) -> dict[int, tuple[str, bytes]]:
-    """Exact production-current 0023 baseline plus proposed 0024–0026."""
+    """Exact production-current 0023 baseline plus proposed 0024–0027."""
     return _migration_blobs(sha, (*CURRENT_BASE_NUMBERS[1:], *CURRENT_TARGET_NUMBERS))
 
 

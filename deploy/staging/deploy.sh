@@ -15,11 +15,12 @@ state="$root/state"
   echo 'The isolated database is not initialized; deploy will not initialize or recreate it.' >&2; exit 2;
 }
 previous=""; previous_sha=""; previous_compose=(); db_id=""
+source "$release/deploy/staging/compose-runtime.sh"
 if [[ -L "$root/current" ]]; then
   previous=$(readlink -f "$root/current")
   previous_sha=$(cat "$previous/RELEASE_COMMIT")
   [[ "$previous_sha" =~ ^[0-9a-f]{40}$ ]]
-  previous_compose=(docker compose --env-file "$root/.env" -f "$previous/deploy/staging/compose.yaml")
+  rahgard_compose_init "$root/.env" "$previous" previous_compose
   db_id=$("${previous_compose[@]}" ps -q db)
   [[ -n "$db_id" && "$(docker inspect -f '{{.State.Running}}' "$db_id")" == true ]]
   [[ "$(docker inspect -f '{{.State.Health.Status}}' "$db_id")" == healthy ]]
@@ -46,7 +47,8 @@ set_release_sha() {
   fi
   chmod 0600 "$root/.env"
 }
-compose=(docker compose --env-file "$root/.env" -f "$release/deploy/staging/compose.yaml")
+compose=()
+rahgard_compose_init "$root/.env" "$release" compose
 next="$root/.current-$sha"
 rollback() {
   local status=$?

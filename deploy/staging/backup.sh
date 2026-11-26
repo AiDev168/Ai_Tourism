@@ -11,7 +11,10 @@ test -s "$root/secrets/portable_bundle_hmac_key" || {
 [[ -f "$root/secrets/portable_bundle_hmac_key" && ! -L "$root/secrets/portable_bundle_hmac_key" ]] || {
   echo 'Portable HMAC key must be a regular non-symlink file.' >&2; exit 2;
 }
-compose=(docker compose --env-file "$root/.env" -f "$root/current/deploy/staging/compose.yaml")
+current=$(readlink -f "$root/current")
+source "$current/deploy/staging/compose-runtime.sh"
+compose=()
+rahgard_compose_init "$root/.env" "$current" compose
 db_owner=ai_tourism_owner
 db_name=rahgard_pilot_vps_staging
 stamp=$(date -u +%Y%m%dT%H%M%SZ)

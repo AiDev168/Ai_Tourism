@@ -8,8 +8,9 @@ if [[ "$root" != /opt/rahgard-staging ]]; then
   exit 2
 fi
 sudo install -d -o "$user" -g "$user" -m 0700 "$root" "$root/secrets" "$root/state" \
-  "$root/backups" "$root/releases"
-install -d -m 0700 "$root/secrets" "$root/state" "$root/backups" "$root/releases"
+  "$root/backups" "$root/releases" "$root/admin-secrets" "$root/provider-keyring"
+install -d -m 0700 "$root/secrets" "$root/state" "$root/backups" "$root/releases" \
+  "$root/admin-secrets" "$root/provider-keyring"
 if [[ -e "$root/.env" && ( ! -f "$root/.env" || -L "$root/.env" ) ]]; then
   echo 'Deployment config is not a regular non-symlink file; preserving it.' >&2; exit 2
 fi

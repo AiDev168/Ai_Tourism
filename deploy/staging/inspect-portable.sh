@@ -75,9 +75,9 @@ def safe_name(name):
 
 def allowed(name, is_dir):
     n = name.rstrip("/")
-    if n in {"private", "private/secrets", "private/state", "release"}:
+    if n in {"private", "private/secrets", "private/state", "private/provider-keyring", "release"}:
         return is_dir
-    if n in {"MANIFEST.sha256", "database.dump", "database.migration-ledger.tsv", "database.critical-counts.tsv", "runtime-images.tar", "runtime-image-identities.tsv", "private/host.env", "private/state/WRITE_FREEZE", "release/RELEASE_COMMIT"}:
+    if n in {"MANIFEST.sha256", "database.dump", "database.migration-ledger.tsv", "database.critical-counts.tsv", "runtime-images.tar", "runtime-image-identities.tsv", "private/host.env", "private/state/WRITE_FREEZE", "private/state/platform-mfa-status", "private/state/provider-admin-status", "private/provider-vault.tar", "private/provider-keyring/ai_provider_vault_keyring.json", "release/RELEASE_COMMIT"}:
         return not is_dir
     if n.startswith("private/secrets/"):
         return not is_dir and n.removeprefix("private/secrets/") in allowed_secrets
@@ -112,7 +112,7 @@ with tarfile.open(archive_path, mode="r:") as tf:
             dirs.add(name.rstrip("/"))
         else:
             regular[name] = m
-    required = {"MANIFEST.sha256", "database.dump", "database.migration-ledger.tsv", "database.critical-counts.tsv", "runtime-images.tar", "runtime-image-identities.tsv", "private/host.env", "private/state/WRITE_FREEZE", "release/RELEASE_COMMIT"}
+    required = {"MANIFEST.sha256", "database.dump", "database.migration-ledger.tsv", "database.critical-counts.tsv", "runtime-images.tar", "runtime-image-identities.tsv", "private/host.env", "private/state/WRITE_FREEZE", "private/state/platform-mfa-status", "private/state/provider-admin-status", "release/RELEASE_COMMIT"}
     required_secrets = {
         "pg_owner_password", "app_db_password", "geo_authorizer_password",
         "geo_publisher_password", "auth_otp_hmac_secret", "auth_csrf_secret",
@@ -124,12 +124,28 @@ with tarfile.open(archive_path, mode="r:") as tf:
     mfa_secrets = {"platform_admin_mfa_encryption_key_hex", "platform_admin_recovery_pepper"}
     if bundled_secrets not in (required_secrets, required_secrets | mfa_secrets):
         raise SystemExit("Runtime secret allowlist mismatch.")
-    if "private/state/platform-mfa-status" not in regular:
-        raise SystemExit("Portable MFA configuration state is missing.")
     with open(os.path.join(root, "private/state/platform-mfa-status"), encoding="ascii") as f:
         mfa_status = f.read().strip()
     if mfa_status not in {"mfa_enabled", "mfa_disabled"} or (mfa_status == "mfa_enabled") != (bundled_secrets == (required_secrets | mfa_secrets)):
         raise SystemExit("Portable MFA state and protected file allowlist disagree.")
+    with open(os.path.join(root, "private/state/provider-admin-status"), encoding="ascii") as f:
+        provider_status = f.read().strip()
+    provider_files = {"private/provider-keyring/ai_provider_vault_keyring.json", "private/provider-vault.tar"}
+    present_provider_files = provider_files.intersection(regular)
+    if provider_status not in {"true", "false"} or (provider_status == "true" and present_provider_files != provider_files) or (provider_status == "false" and present_provider_files):
+        raise SystemExit("Portable provider-admin state and encrypted vault/keyring files disagree.")
+    if provider_status == "true" and mfa_status != "mfa_enabled":
+        raise SystemExit("Provider administration portable state lacks its required MFA overlay.")
+    if provider_status == "true":
+        with tarfile.open(os.path.join(root, "private/provider-vault.tar"), mode="r:") as vault:
+            seen_vault = set()
+            for member in vault.getmembers():
+                name = member.name.removeprefix("./").rstrip("/")
+                if name and (name.startswith("/") or "\\" in name or ".." in name.split("/")):
+                    raise SystemExit("Unsafe provider-vault archive path.")
+                if name in seen_vault or not (member.isdir() or member.isreg()) or member.issym() or member.islnk() or member.mode & 0o6000:
+                    raise SystemExit("Unsafe provider-vault archive member.")
+                seen_vault.add(name)
     for name in regular:
         parts = name.split("/")
         for i in range(1, len(parts)):

@@ -92,6 +92,42 @@ or logs.
 
 ## Operations
 
+### Optional Owner MFA and server provider administration overlays
+
+The shared `compose-runtime.sh` selector is used by deploy, status, stop,
+rollback, backup, restore, and portable export. It reads the same protected
+`/opt/rahgard-staging/.env` file; it never sources that file as shell code.
+`RAHGARD_PLATFORM_ADMIN_MFA_ENABLED` and
+`RAHGARD_PROVIDER_ADMIN_ENABLED` default to `false`. Provider administration
+is rejected unless MFA is enabled. Before enabling an overlay, provision the
+exact files through the protected operator channel in the private directories
+named by `RAHGARD_ADMIN_SECRET_DIR` and
+`RAHGARD_PROVIDER_KEYRING_DIR`. The selector validates directory/file types,
+POSIX permissions, required file presence, duplicate switches, and provider
+volume naming before invoking Compose. It adds the same overlay set to deploy,
+rollback and lifecycle operations, avoiding a base-only restart that silently
+drops the vault or MFA mounts.
+
+For a portable export, stop only the application writers after a verified
+write freeze, then use `export-portable.sh`. When the provider overlay is
+enabled, the encrypted archive includes the keyring and an archive of the
+named provider-vault volume (ciphertext only); when MFA is enabled, it includes
+the two MFA key files. The backup encryption passphrase and independent HMAC
+key are never included. `inspect-portable.sh` authenticates the outer bundle,
+checks member paths/types and checksums, and validates the provider archive.
+`restore-portable-runtime.sh` restores only to a new isolated runtime directory
+and newly named restore-test volume. `restore-portable-app-check.sh` starts the
+archived API against an isolated PostgreSQL restore twice with those same
+runtime mounts, verifying startup persistence but not invoking a live model.
+
+- `RAHGARD_PLATFORM_ADMIN_MFA_ENABLED=true` requires the two owner MFA files.
+- `RAHGARD_PROVIDER_ADMIN_ENABLED=true` additionally requires
+  `RAHGARD_PROVIDER_KEYRING_DIR`, `RAHGARD_PROVIDER_VAULT_VOLUME`, and an
+  independently maintained encrypted vault volume.
+- Live MFA/keyring provisioning, model credentials, reviewer grants, live DDL,
+  and production deployment are separate operations requiring their own
+  authorization; Compose flags alone grant no admin identity.
+
 - `status.sh` reports container state and migration count; it prints no secret.
 - `stop.sh` stops services without deleting the persistent volume.
 - `deploy.sh <sha>` updates application code from a previously verified release;

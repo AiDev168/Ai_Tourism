@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -211,3 +214,85 @@ def test_admin_managed_gateway_reads_new_active_chat_revision_on_next_turn():
     assert one.reply == "first"
     assert two.reply == "second"
     assert selected == ["first", "second"]
+
+
+def test_admin_managed_chat_switches_real_loopback_http_endpoint_on_next_turn():
+    """Exercise the provider-neutral runtime through real bounded HTTP requests.
+
+    This is a controlled local protocol fixture, not evidence of live model
+    inference. It verifies the runtime's active-revision lookup selects the
+    configured endpoint/model for each traveler invocation.
+    """
+    received = {"a": [], "b": []}
+
+    def make_server(label):
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", "0"))
+                body = json.loads(self.rfile.read(length))
+                received[label].append((self.path, body.get("model")))
+                content = json.dumps({
+                    "reply": label,
+                    "requirements": {},
+                    "requirement_evidence": {},
+                    "clarification": None,
+                }, ensure_ascii=False)
+                response = json.dumps({
+                    "choices": [{
+                        "finish_reason": "stop",
+                        "message": {"content": content},
+                    }]
+                }).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+
+            def log_message(self, *_args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server, thread
+
+    server_a, thread_a = make_server("a")
+    server_b, thread_b = make_server("b")
+    try:
+        revision_a, revision_b = uuid4(), uuid4()
+
+        def snapshot(revision, label, server):
+            return SimpleNamespace(
+                revision_id=revision,
+                generation=1,
+                secret_ref=None,
+                config={
+                    "provider_kind": "lm_studio",
+                    "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                    "timeout_seconds": 3,
+                    "concurrency_limit": 1,
+                    "capabilities": {"chat": {"model_id": f"model-{label}", "max_tokens": 20}},
+                },
+            )
+
+        active = snapshot(revision_a, "a", server_a)
+        registry = _Registry(active, snapshots={
+            revision_a: active,
+            revision_b: snapshot(revision_b, "b", server_b),
+        })
+        runtime = AdminManagedChatAdapter(registry, _Vault())
+
+        first = asyncio.run(runtime.invoke(ChatRequest(locale="fa-IR", text="turn one")))
+        registry.active = registry.snapshots[revision_b]
+        second = asyncio.run(runtime.invoke(ChatRequest(locale="fa-IR", text="turn two")))
+
+        assert (first.reply, second.reply) == ("a", "b")
+        assert received["a"] == [("/v1/chat/completions", "model-a")]
+        assert received["b"] == [("/v1/chat/completions", "model-b")]
+        assert [event["outcome"] for event in registry.usage] == ["success", "success"]
+    finally:
+        for server, thread in ((server_a, thread_a), (server_b, thread_b)):
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()

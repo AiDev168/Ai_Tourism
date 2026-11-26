@@ -6,9 +6,12 @@ db_name=rahgard_pilot_vps_staging
 test -s "$root/.env"
 current=$(readlink -f "$root/current" 2>/dev/null || true)
 echo "Current release: ${current##*/}"
-docker compose --env-file "$root/.env" -f "$root/current/deploy/staging/compose.yaml" ps
+source "$current/deploy/staging/compose-runtime.sh"
+compose=()
+rahgard_compose_init "$root/.env" "$current" compose
+"${compose[@]}" ps
 if [[ -f "$root/state/database-initialization-complete" ]]; then
-  docker compose --env-file "$root/.env" -f "$root/current/deploy/staging/compose.yaml" exec -T db \
+  "${compose[@]}" exec -T db \
     psql -X -q -A -t -U "$db_owner" -d "$db_name" \
     -c "SELECT 'migrations='||count(*) FROM system.schema_migrations;"
 else

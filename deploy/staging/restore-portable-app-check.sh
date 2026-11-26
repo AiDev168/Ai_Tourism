@@ -51,15 +51,52 @@ source_image="rahgard-api:${release_sha}"
 source_web_image="rahgard-web:${release_sha}"
 app_name="rahgard-restore-api-${run_suffix}"
 secret_volume="rahgard-restore-secrets-${run_suffix}"
+admin_volume="rahgard-restore-admin-${run_suffix}"
+keyring_volume="rahgard-restore-keyring-${run_suffix}"
+runtime_dir="${TMPDIR:-/tmp}/rahgard-restore-runtime-${run_suffix}"
+[[ -f "$bundle_dir/private/state/platform-mfa-status" && ! -L "$bundle_dir/private/state/platform-mfa-status" \
+   && -f "$bundle_dir/private/state/provider-admin-status" && ! -L "$bundle_dir/private/state/provider-admin-status" ]] || {
+  echo 'Portable protected runtime state is missing or unsafe.' >&2; exit 2;
+}
+mfa_status=$(cat "$bundle_dir/private/state/platform-mfa-status")
+provider_status=$(cat "$bundle_dir/private/state/provider-admin-status")
+[[ "$mfa_status" == mfa_enabled || "$mfa_status" == mfa_disabled ]] || { echo 'Invalid archived MFA state.' >&2; exit 2; }
+[[ "$provider_status" == true || "$provider_status" == false ]] || { echo 'Invalid archived provider-admin state.' >&2; exit 2; }
+provider_volume="rahgard_restore_provider_${run_suffix}"
+provider_target=none
+if [[ "$provider_status" == true ]]; then provider_target="$provider_volume"; fi
 [[ "$app_name" =~ ^rahgard-restore-api-[0-9a-f]{8}-[0-9]+$ \
-   && "$secret_volume" =~ ^rahgard-restore-secrets-[0-9a-f]{8}-[0-9]+$ ]] || exit 2
+   && "$secret_volume" =~ ^rahgard-restore-secrets-[0-9a-f]{8}-[0-9]+$ \
+   && "$admin_volume" =~ ^rahgard-restore-admin-[0-9a-f]{8}-[0-9]+$ \
+   && "$keyring_volume" =~ ^rahgard-restore-keyring-[0-9a-f]{8}-[0-9]+$ \
+   && "$provider_volume" =~ ^rahgard_restore_provider_[0-9a-f]{8}-[0-9]+$ ]] || exit 2
 running=$(docker ps -aq --filter "name=^/${app_name}$")
 [[ -z "$running" ]] || { echo 'Restore-check container name already exists; refusing reuse.' >&2; exit 2; }
-volume_exists=$(docker volume ls -q --filter "name=^${secret_volume}$")
-[[ -z "$volume_exists" ]] || { echo 'Restore-check secret volume already exists; refusing reuse.' >&2; exit 2; }
+for volume in "$secret_volume" "$admin_volume" "$keyring_volume"; do
+  [[ -z "$(docker volume ls -q --filter "name=^${volume}$")" ]] || {
+    echo 'Restore-check runtime volume already exists; refusing reuse.' >&2; exit 2;
+  }
+done
+if [[ "$provider_status" == true ]]; then
+  [[ -z "$(docker volume ls -q --filter "name=^${provider_volume}$")" ]] || {
+    echo 'Restore-check provider vault volume already exists; refusing reuse.' >&2; exit 2;
+  }
+fi
+created_secret_volume=false
+created_admin_volume=false
+created_keyring_volume=false
+created_provider_volume=false
+created_app_container=false
 cleanup() {
-  docker rm -f "$app_name" >/dev/null 2>&1 || true
-  docker volume rm "$secret_volume" >/dev/null 2>&1 || true
+  if [[ "$created_app_container" == true ]]; then
+    container_label=$(docker inspect --format '{{index .Config.Labels "rahgard.restore.target"}}' "$app_name" 2>/dev/null || true)
+    [[ "$container_label" != isolated ]] || docker rm -f "$app_name" >/dev/null 2>&1 || true
+  fi
+  [[ "$created_secret_volume" != true ]] || docker volume rm "$secret_volume" >/dev/null 2>&1 || true
+  [[ "$created_admin_volume" != true ]] || docker volume rm "$admin_volume" >/dev/null 2>&1 || true
+  [[ "$created_keyring_volume" != true ]] || docker volume rm "$keyring_volume" >/dev/null 2>&1 || true
+  [[ "$created_provider_volume" != true ]] || docker volume rm "$provider_volume" >/dev/null 2>&1 || true
+  [[ ! -d "$runtime_dir" ]] || rm -rf -- "$runtime_dir"
 }
 trap cleanup EXIT
 expected_api_id=$(awk -F'|' -v tag="$source_image" '$1==tag {print $2}' "$bundle_dir/runtime-image-identities.tsv")
@@ -84,7 +121,8 @@ for pair in "$source_image|$expected_api_id" "$source_web_image|$expected_web_id
 done
 image="$source_image"
 printf 'Using verified portable API/Web image IDs for immutable release %s.\n' "$release_sha"
-docker volume create "$secret_volume" >/dev/null
+docker volume create --label rahgard.restore.target=isolated --label rahgard.environment=restore-test "$secret_volume" >/dev/null
+created_secret_volume=true
 app_uid=$(docker run --rm --entrypoint sh "$image" -c 'id -u rahgard')
 app_gid=$(docker run --rm --entrypoint sh "$image" -c 'id -g rahgard')
 [[ "$app_uid" =~ ^[0-9]+$ && "$app_gid" =~ ^[0-9]+$ ]] || { echo 'Cannot resolve application runtime UID/GID.' >&2; exit 2; }
@@ -93,19 +131,68 @@ docker run --rm --user 0 \
   --mount "type=volume,src=$secret_volume,dst=/target" \
   --entrypoint sh "$image" -ceu "cp -a /source/. /target/; chmod 0440 /target/*; chown -R $app_uid:$app_gid /target"
 
+if [[ -e "$runtime_dir" ]]; then echo 'Restore runtime target already exists; refusing reuse.' >&2; exit 2; fi
+runtime_restore="$bundle_dir/release/deploy/staging/restore-portable-runtime.sh"
+[[ -f "$runtime_restore" && ! -L "$runtime_restore" ]] || { echo 'Portable release is missing the runtime overlay restore verifier.' >&2; exit 2; }
+bash "$runtime_restore" "$bundle_dir" "$runtime_dir" "$provider_target" "$provider_target"
+if [[ "$provider_status" == true ]]; then created_provider_volume=true; fi
+if [[ "$mfa_status" == mfa_enabled ]]; then
+  [[ -z "$(docker volume ls -q --filter "name=^${admin_volume}$")" ]] || { echo 'Restore MFA volume name already exists.' >&2; exit 2; }
+  docker volume create --label rahgard.restore.target=isolated --label rahgard.environment=restore-test "$admin_volume" >/dev/null
+  created_admin_volume=true
+  docker run --rm --user 0 --network none \
+    --mount "type=bind,src=$runtime_dir/admin-secrets,dst=/source,readonly" \
+    --mount "type=volume,src=$admin_volume,dst=/target" \
+    --entrypoint sh "$image" -ceu "cp /source/platform_admin_mfa_encryption_key_hex /target/; cp /source/platform_admin_recovery_pepper /target/; chmod 0400 /target/*; chown -R $app_uid:$app_gid /target"
+fi
+if [[ "$provider_status" == true ]]; then
+  [[ -z "$(docker volume ls -q --filter "name=^${keyring_volume}$")" ]] || { echo 'Restore provider-keyring volume name already exists.' >&2; exit 2; }
+  docker volume create --label rahgard.restore.target=isolated --label rahgard.environment=restore-test "$keyring_volume" >/dev/null
+  created_keyring_volume=true
+  docker run --rm --user 0 --network none \
+    --mount "type=bind,src=$runtime_dir/provider-keyring,dst=/source,readonly" \
+    --mount "type=volume,src=$keyring_volume,dst=/target" \
+    --entrypoint sh "$image" -ceu "cp /source/ai_provider_vault_keyring.json /target/; chmod 0400 /target/ai_provider_vault_keyring.json; chown -R $app_uid:$app_gid /target"
+fi
+for volume in "$secret_volume" "$admin_volume" "$keyring_volume"; do
+  if [[ "$volume" == "$secret_volume" || ( "$volume" == "$admin_volume" && "$mfa_status" == mfa_enabled ) || ( "$volume" == "$keyring_volume" && "$provider_status" == true ) ]]; then
+    labels=$(docker volume inspect --format '{{index .Labels "rahgard.restore.target"}}|{{index .Labels "rahgard.environment"}}' "$volume")
+    [[ "$labels" == 'isolated|restore-test' ]] || { echo 'A restored runtime volume lacks isolated restore-test labels.' >&2; exit 2; }
+  fi
+done
+
 # Keep credential files mounted read-only. The application entrypoint consumes
 # them server-side and never returns them or places them in request logs.
+api_mounts=(--mount "type=volume,src=$secret_volume,dst=/run/secrets,readonly")
+api_env=(-e APP_ENV=staging -e APP_HOST=0.0.0.0 -e APP_PORT=8000 -e LOG_LEVEL=WARNING \
+  -e DATABASE_HOST=127.0.0.1 -e DATABASE_PORT=5432 -e DATABASE_NAME="$target_db" \
+  -e DATABASE_USER=ai_tourism_app -e DATABASE_CONNECT_TIMEOUT_SECONDS=3 \
+  -e AUTH_ENABLED=true -e AUTH_SMS_ADAPTER=disabled -e AUTH_LOCAL_OWNER_ENABLED=false \
+  -e STAGING_AUTH_ENABLED=false -e STAGING_PUBLIC_HOST=restore.invalid \
+  -e AUTH_ALLOWED_ORIGINS=https://restore.invalid -e AUTH_COOKIE_SECURE=true \
+  -e INTERNAL_CHAT_ENABLED=false -e TOURISM_RAG_ENABLED=false \
+  -e AI_PROVIDER_ADMIN_ENABLED="$provider_status")
+if [[ "$mfa_status" == mfa_enabled ]]; then
+  api_mounts+=(--mount "type=volume,src=$admin_volume,dst=/run/rahgard-admin-secrets,readonly")
+  api_env+=(-e PLATFORM_ADMIN_MFA_ENCRYPTION_KEY_FILE=/run/rahgard-admin-secrets/platform_admin_mfa_encryption_key_hex \
+    -e PLATFORM_ADMIN_RECOVERY_PEPPER_FILE=/run/rahgard-admin-secrets/platform_admin_recovery_pepper)
+fi
+if [[ "$provider_status" == true ]]; then
+  api_mounts+=(--mount "type=volume,src=$provider_volume,dst=/var/lib/rahgard/provider-vault,readonly" \
+    --mount "type=volume,src=$keyring_volume,dst=/run/rahgard-provider-keyring,readonly")
+  api_env+=(-e AI_PROVIDER_VAULT_DIR=/var/lib/rahgard/provider-vault \
+    -e AI_PROVIDER_VAULT_KEY_FILE=/run/rahgard-provider-keyring/ai_provider_vault_keyring.json)
+fi
+start_and_check_api() {
 docker run -d --name "$app_name" --rm \
+  --label rahgard.restore.target=isolated --label rahgard.environment=restore-test \
   --network "container:$target_container" \
   --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m \
   --security-opt no-new-privileges:true --cap-drop ALL \
-  --mount "type=volume,src=$secret_volume,dst=/run/secrets,readonly" \
-  -e APP_ENV=test -e APP_HOST=0.0.0.0 -e APP_PORT=8000 -e LOG_LEVEL=WARNING \
-  -e DATABASE_HOST=127.0.0.1 -e DATABASE_PORT=5432 -e DATABASE_NAME="$target_db" \
-  -e DATABASE_USER=ai_tourism_app -e DATABASE_CONNECT_TIMEOUT_SECONDS=3 \
-  -e AUTH_ENABLED=false -e AUTH_SMS_ADAPTER=disabled -e AUTH_LOCAL_OWNER_ENABLED=false \
-  -e STAGING_AUTH_ENABLED=false -e AUTH_COOKIE_SECURE=true \
-  -e INTERNAL_CHAT_ENABLED=false -e TOURISM_RAG_ENABLED=false "$image" >/dev/null
+  "${api_mounts[@]}" "${api_env[@]}" "$image" >/dev/null
+created_app_container=true
+app_labels=$(docker inspect --format '{{index .Config.Labels "rahgard.restore.target"}}|{{index .Config.Labels "rahgard.environment"}}' "$app_name")
+[[ "$app_labels" == 'isolated|restore-test' ]] || { echo 'Restored API container lacks isolated restore-test labels.' >&2; exit 2; }
 
 ready=false
 for _ in $(seq 1 30); do
@@ -113,13 +200,14 @@ for _ in $(seq 1 30); do
     ready=true; break
   fi
   if [[ $(docker inspect -f '{{.State.Running}}' "$app_name" 2>/dev/null || true) != true ]]; then
-    docker logs "$app_name" >&2
-    echo 'Restored API process exited; inspect the redacted startup logs above.' >&2
+    echo 'Restored API process exited; startup diagnostics were intentionally not emitted.' >&2
     exit 3
   fi
   sleep 1
 done
-[[ "$ready" == true ]] || { docker logs "$app_name" >&2; echo 'Restored API did not become ready.' >&2; exit 3; }
+[[ "$ready" == true ]] || { echo 'Restored API did not become ready; startup diagnostics were intentionally not emitted.' >&2; exit 3; }
+}
+start_and_check_api
 api_count=$(docker exec "$app_name" python -c '
 import json,urllib.request
 with urllib.request.urlopen("http://127.0.0.1:8000/api/v1/catalog/destinations",timeout=5) as r:
@@ -127,6 +215,8 @@ with urllib.request.urlopen("http://127.0.0.1:8000/api/v1/catalog/destinations",
 print(payload["count"])
 ')
 [[ "$api_count" == "$source_count" ]] || { echo 'Restored API catalogue count differs from restored DB view.' >&2; exit 3; }
-printf 'PASS: archived API release=%s starts and passes /health/ready against isolated PostgreSQL 17.\n' "$release_sha"
+docker stop "$app_name" >/dev/null
+start_and_check_api
+printf 'PASS: archived API release=%s starts twice with restored MFA/provider overlays and passes /health/ready against isolated PostgreSQL 17.\n' "$release_sha"
 printf 'PASS: authenticated catalogue endpoint returns %s approved destinations; no host ports were published.\n' "$api_count"
 printf 'Imported immutable image tags remain cached; verify the outer bundle checksum before any later use.\n'

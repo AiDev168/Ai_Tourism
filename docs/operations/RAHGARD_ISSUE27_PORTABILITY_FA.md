@@ -72,4 +72,18 @@ Workflowهای image build و quality باید روی SHA نهایی اجرا و
 
 ### Migration 0027 provider-admin portability scope (isolated rehearsal only)
 
-Migration `0027_server_ai_provider_admin` adds server-side capability and registry support. It has not been applied on the VPS; the last observed live ledger ended at 0023. The opt-in overlays are `deploy/staging/compose.platform-admin-mfa.yaml` and `deploy/staging/compose.server-provider-admin.yaml`. MFA files are read from the dedicated `RAHGARD_ADMIN_SECRET_DIR` at `/run/rahgard-admin-secrets/...`. The separate provider keyring is mounted from `RAHGARD_PROVIDER_KEYRING_DIR` at `/run/rahgard-provider-keyring/ai_provider_vault_keyring.json`; ciphertext is held in `RAHGARD_PROVIDER_VAULT_VOLUME`. These mounts are not yet integrated into `export-portable.sh` or the live backup manifest. Therefore the portability package does not yet include this feature, and these overlays must not be activated on a server until export, restore, deploy, and rollback cover these paths with the same release.
+Migration `0027_server_ai_provider_admin` adds server-side capability and registry support. The opt-in overlays are `deploy/staging/compose.platform-admin-mfa.yaml` and `deploy/staging/compose.server-provider-admin.yaml`. MFA files are read from the dedicated `RAHGARD_ADMIN_SECRET_DIR` at `/run/rahgard-admin-secrets/...`. The separate provider keyring is mounted from `RAHGARD_PROVIDER_KEYRING_DIR` at `/run/rahgard-provider-keyring/ai_provider_vault_keyring.json`; encrypted provider credentials are held in `RAHGARD_PROVIDER_VAULT_VOLUME`.
+
+The runtime Compose selector reads `/opt/rahgard-staging/.env` (the same file used by deploy/status/backup/restore) and adds the MFA and provider overlays only when their explicit switches are true. Provider administration requires the MFA overlay; the selector rejects duplicate switches, unsafe secret directories, missing protected files and invalid provider volume names before Compose runs.
+
+The authenticated portable bundle includes the protected MFA files only when the API container is mounted with the exact MFA overlay. It includes the provider keyring plus a checksum-covered archive of the named encrypted-ciphertext vault volume only when the API container has the matching provider overlay mounts. Backup encryption and HMAC keys remain separate and are never archived. The inspector validates provider archive paths and member types before extraction.
+
+After authenticated bundle inspection, restore these overlays only to a new isolated target:
+
+```sh
+bash deploy/staging/restore-portable-runtime.sh \
+  <verified-dir> <new-private-runtime-dir> \
+  <new-provider-volume-or-none> <same-volume-name>
+```
+
+The script refuses existing destinations and volumes. The portable app check calls this restore helper, starts the exact API image with the restored MFA/provider files and provider vault volume, stops it, and starts it again before checking readiness. It does not publish a port or connect to the live database. This proves encrypted keyring/vault and MFA file availability across local container recreation; it does not prove the live provider endpoint is reachable or invoke a model.

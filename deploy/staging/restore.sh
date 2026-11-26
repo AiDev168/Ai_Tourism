@@ -43,7 +43,10 @@ trap 'rm -f -- "$tmp"' EXIT
 openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
   -pass file:"$root/secrets/backup_encryption_passphrase" -in "$file" -out "$tmp"
 pg_restore --list "$tmp" >/dev/null
-compose=(docker compose --env-file "$root/.env" -f "$root/current/deploy/staging/compose.yaml")
+current=$(readlink -f "$root/current")
+source "$current/deploy/staging/compose-runtime.sh"
+compose=()
+rahgard_compose_init "$root/.env" "$current" compose
 "$root/current/deploy/staging/backup.sh"
 "${compose[@]}" stop web api
 "${compose[@]}" exec -T db pg_restore --clean --if-exists --no-owner --role="$db_owner" \

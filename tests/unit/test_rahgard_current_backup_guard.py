@@ -42,6 +42,7 @@ def test_current_0023_snapshot_matches_exact_historical_ledger_and_pending_sql()
         "0024_partner_review_audit_actions",
         "0025_owner_control_center",
         "0026_platform_reviewer_mfa",
+        "0027_server_ai_provider_admin",
     ]
     assert all(len(item["sha256"]) == 64 for item in report["pending"])
 
@@ -160,6 +161,23 @@ def test_guard_input_rendering_changes_only_declared_placeholders():
     assert rendered == b"SELECT '" + b"a" * 32 + b"', '" + b"b" * 64 + b"';\n"
     with pytest.raises(ValueError, match="Missing guarded migration input"):
         render_guard_inputs(sql, {})
+
+
+def test_0027_provider_migration_guard_requires_all_prior_and_current_hashes():
+    source = (ROOT / "engineering/pilot/sql/027_server_ai_provider_admin.sql").read_bytes()
+    values = {
+        "RAHGARD_PILOT_DATABASE_MARKER": "a" * 32,
+        "RAHGARD_PILOT_MIGRATION_0024_SHA256": "b" * 64,
+        "RAHGARD_PILOT_MIGRATION_0025_SHA256": "c" * 64,
+        "RAHGARD_PILOT_MIGRATION_0026_SHA256": "d" * 64,
+        "RAHGARD_PILOT_MIGRATION_0027_SHA256": "e" * 64,
+    }
+    rendered = render_guard_inputs(source, values)
+    assert b"\\getenv " not in rendered
+    assert b"RAHGARD_PILOT_MIGRATION_0027_SHA256" not in rendered
+    with pytest.raises(ValueError, match="Missing guarded migration input"):
+        render_guard_inputs(source, {key: value for key, value in values.items()
+                                     if key != "RAHGARD_PILOT_MIGRATION_0027_SHA256"})
 
 
 def test_catalog_comparison_allows_only_additive_constraints_indexes_and_foreign_keys():

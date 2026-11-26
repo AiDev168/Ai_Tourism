@@ -10,11 +10,16 @@ confirm="${2:-}"
 release="$root/releases/$sha"
 test -s "$release/RELEASE_COMMIT" && test "$(cat "$release/RELEASE_COMMIT")" = "$sha"
 old=$(readlink -f "$root/current")
+source "$old/deploy/staging/compose-runtime.sh"
+compose=()
+rahgard_compose_init "$root/.env" "$release" compose
+old_compose=()
+rahgard_compose_init "$root/.env" "$old" old_compose
 ln -s "$release" "$root/.current-rollback"
 mv -Tf "$root/.current-rollback" "$root/current"
-if ! docker compose --env-file "$root/.env" -f "$release/deploy/staging/compose.yaml" up -d --no-build; then
+if ! "${compose[@]}" up -d --no-build; then
   ln -s "$old" "$root/.current-rollback"; mv -Tf "$root/.current-rollback" "$root/current"
-  docker compose --env-file "$root/.env" -f "$old/deploy/staging/compose.yaml" up -d --no-build || true
+  "${old_compose[@]}" up -d --no-build || true
   exit 1
 fi
 echo "Application rolled back to $sha; database was not modified."

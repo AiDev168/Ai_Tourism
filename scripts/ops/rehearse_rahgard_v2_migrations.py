@@ -200,7 +200,7 @@ def catalog_security_snapshot(container: str) -> dict[str, list[str]]:
         "extensions": rows("extensions", """SELECT e.extname||'|'||e.extversion||'|'||n.nspname
           FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace ORDER BY 1"""),
         "roles": rows("roles", """SELECT rolname||'|'||rolcanlogin||'|'||rolsuper||'|'||rolcreaterole||'|'||rolcreatedb||'|'||rolreplication||'|'||rolbypassrls
-          FROM pg_roles WHERE rolname IN ('ai_tourism_owner','ai_tourism_app','rahgard_pilot_geo_executor','rahgard_pilot_geo_migrator') ORDER BY 1"""),
+          FROM pg_roles WHERE rolname IN ('ai_tourism_owner','ai_tourism_app','rahgard_pilot_geo_executor','rahgard_pilot_geo_migrator','rahgard_pilot_ddl_owner') ORDER BY 1"""),
         "application_grants": rows("application_grants", """SELECT table_schema||'.'||table_name||'|'||privilege_type||'|'||is_grantable
           FROM information_schema.role_table_grants WHERE grantee='ai_tourism_app'
           UNION ALL SELECT table_schema||'.'||table_name||'.'||column_name||'|'||privilege_type||'|'||is_grantable
@@ -404,6 +404,16 @@ def rehearse(args: argparse.Namespace) -> dict:
         require(len(base) == len(base_numbers) and ledger(container) == base, "Restore ledger differs from observed VPS")
         before = counts(container)
         accounts_before = account_fingerprints(container)
+        # Migration 0027 deliberately rejects a superuser. The actual local
+        # deployment path uses this dedicated non-login DDL role; reconstruct
+        # only the narrow privileges needed to apply the isolated rehearsal.
+        sql(container, """
+            CREATE ROLE rahgard_pilot_ddl_owner NOLOGIN NOSUPERUSER NOCREATEDB
+                NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+            GRANT CREATE ON DATABASE rahgard_pilot_vps_staging TO rahgard_pilot_ddl_owner;
+            GRANT USAGE,CREATE ON SCHEMA identity TO rahgard_pilot_ddl_owner;
+            GRANT REFERENCES ON identity.users TO rahgard_pilot_ddl_owner;
+        """)
         catalog_before = catalog_security_snapshot(container)
         live = manifest["vps"]["database"]["aggregate_counts"]
         for table, field in (
@@ -423,6 +433,7 @@ def rehearse(args: argparse.Namespace) -> dict:
             "RAHGARD_PILOT_MIGRATION_0024_SHA256": recorded_hashes["0024_partner_review_audit_actions"],
             "RAHGARD_PILOT_MIGRATION_0025_SHA256": recorded_hashes["0025_owner_control_center"],
             "RAHGARD_PILOT_MIGRATION_0026_SHA256": recorded_hashes["0026_platform_reviewer_mfa"],
+            "RAHGARD_PILOT_MIGRATION_0027_SHA256": recorded_hashes["0027_server_ai_provider_admin"],
         }
         elapsed = {}
         for position, number in enumerate(target_numbers):
@@ -455,10 +466,45 @@ def rehearse(args: argparse.Namespace) -> dict:
                 require(all(value == "t" for value in probe),
                         "0025 source guard predicate failed: " + ", ".join(
                             f"guard_{i}" for i, value in enumerate(probe) if value != "t"))
-            run(
-                "docker", "exec", "-i",
-                container, "sh", "-ec", cmd, data=source_for_psql,
-            )
+            if number == 27:
+                sql(container, """
+                    GRANT USAGE ON SCHEMA system,partner,public TO rahgard_pilot_ddl_owner;
+                    GRANT SELECT,INSERT ON system.schema_migrations TO rahgard_pilot_ddl_owner;
+                    GRANT SELECT ON public.rahgard_private_pilot_marker TO rahgard_pilot_ddl_owner;
+                    GRANT SELECT (user_id,enabled_at) ON identity.platform_admin_mfa TO rahgard_pilot_ddl_owner;
+                    GRANT SELECT (user_id,session_id,revoked_at,expires_at)
+                        ON identity.platform_admin_step_up TO rahgard_pilot_ddl_owner;
+                    GRANT EXECUTE ON FUNCTION identity.has_platform_admin_capability(uuid),
+                        partner.current_actor_id() TO rahgard_pilot_ddl_owner;
+                """)
+                probe_cmd = "exec psql -XqAt -F '|' -v ON_ERROR_STOP=1 -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""
+                probe = run(
+                    "docker", "exec", "-i", container, "sh", "-ec", probe_cmd,
+                    data=b"SET ROLE rahgard_pilot_ddl_owner;\n"
+                    + migration_guard_probe(source_for_psql),
+                ).decode().strip().split("|")
+                require(len(probe) > 0, "0027 source guard returned no predicates")
+                failures = [f"guard_{i}" for i, value in enumerate(probe) if value != "t"]
+                require(not failures, "0027 source guard predicate failed: " + ", ".join(failures))
+            try:
+                migration_input = source_for_psql
+                if number == 27:
+                    migration_input = b"SET ROLE rahgard_pilot_ddl_owner;\n" + source_for_psql + b"\nRESET ROLE;\n"
+                run(
+                    "docker", "exec", "-i",
+                    container, "sh", "-ec", cmd, data=migration_input,
+                )
+            except RuntimeError as error:
+                # Add the migration identity, while preserving the sanitizer
+                # which intentionally omits raw PostgreSQL stderr/row data.
+                raise RuntimeError(f"{identity} application failed: {error}") from None
+            finally:
+                if number == 27:
+                    sql(container, """
+                        REVOKE INSERT,SELECT ON system.schema_migrations FROM rahgard_pilot_ddl_owner;
+                        REVOKE SELECT ON public.rahgard_private_pilot_marker FROM rahgard_pilot_ddl_owner;
+                        REVOKE USAGE ON SCHEMA system,public FROM rahgard_pilot_ddl_owner;
+                    """)
             elapsed[identity] = round(time.monotonic() - phase_start, 3)
             base.append(f"{identity}|{current_hash}")
             require(ledger(container) == base, f"Ledger differs after {identity}")
@@ -488,8 +534,8 @@ def rehearse(args: argparse.Namespace) -> dict:
         if current_0023:
             require(sql(container, """
                 SELECT
-                  (SELECT count(*)=25 FROM system.schema_migrations)
-                  AND (SELECT max(migration_id)='0026_platform_reviewer_mfa' FROM system.schema_migrations)
+                  (SELECT count(*)=26 FROM system.schema_migrations)
+                  AND (SELECT max(migration_id)='0027_server_ai_provider_admin' FROM system.schema_migrations)
                   AND (SELECT bool_and(relrowsecurity) FROM pg_class WHERE oid IN (
                     'identity.platform_admin_mfa'::regclass,
                     'identity.platform_admin_step_up'::regclass,
@@ -510,6 +556,32 @@ def rehearse(args: argparse.Namespace) -> dict:
                   AND (SELECT count(*)=0 FROM identity.platform_admin_step_up)
                   AND (SELECT count(*)=0 FROM identity.platform_admin_mfa_events)
             """) == "t", "0024-0026 ledger, reviewer privileges, audit or MFA RLS assertions failed")
+            require(sql(container, """
+                SELECT
+                  (SELECT count(*)=7 AND bool_and(relrowsecurity) FROM pg_class WHERE oid IN (
+                    'ai_provider.profiles'::regclass, 'ai_provider.revisions'::regclass,
+                    'ai_provider.revision_validations'::regclass, 'ai_provider.active_routes'::regclass,
+                    'ai_provider.fallback_policy'::regclass, 'ai_provider.audit_events'::regclass,
+                    'ai_provider.usage_events'::regclass))
+                  AND (SELECT count(*)=2 AND bool_and(relrowsecurity) FROM pg_class WHERE oid IN (
+                    'identity.ai_provider_admin_grants'::regclass,
+                    'identity.ai_provider_admin_grant_events'::regclass))
+                  AND NOT has_table_privilege('ai_tourism_app','ai_provider.profiles','DELETE')
+                  AND NOT has_table_privilege('ai_tourism_app','ai_provider.audit_events','UPDATE')
+                  AND NOT has_table_privilege('ai_tourism_app','identity.ai_provider_admin_grants','SELECT')
+                  AND NOT has_table_privilege('ai_tourism_app','identity.ai_provider_admin_grant_events','SELECT')
+                  AND (SELECT count(*)=4 FROM ai_provider.active_routes WHERE revision_id IS NULL)
+                  AND (SELECT count(*)=4 FROM ai_provider.fallback_policy WHERE enabled=FALSE)
+                  AND (SELECT count(*)=0 FROM ai_provider.profiles)
+                  AND (SELECT count(*)=0 FROM ai_provider.revisions)
+                  AND (SELECT count(*)=0 FROM ai_provider.revision_validations)
+                  AND (SELECT count(*)=0 FROM ai_provider.audit_events)
+                  AND (SELECT count(*)=0 FROM identity.ai_provider_admin_grants)
+                  AND (SELECT count(*)=0 FROM identity.ai_provider_admin_grant_events)
+                  AND (SELECT count(*)=0 FROM ai_provider.usage_events)
+                  AND (SELECT bool_and(NOT rolsuper AND NOT rolbypassrls AND NOT rolcanlogin)
+                       FROM pg_roles WHERE rolname='rahgard_pilot_ddl_owner')
+            """) == "t", "0027 provider RLS, least-privilege, or empty bootstrap-state assertions failed")
         api_checks = {}
         for image in args.runtime_image:
             api_checks[image] = check_api(container, image, label, before["knowledge.production_destinations"])
