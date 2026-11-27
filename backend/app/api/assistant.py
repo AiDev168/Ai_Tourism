@@ -281,13 +281,7 @@ def _normalize_evidence(value: str) -> str:
 
 def _interest_source_span(text: str, phrases: list[str]) -> tuple[int, str] | None:
     """Locate model-selected interest phrases in the original traveler text."""
-    characters: list[str] = []
-    indexes: list[int] = []
-    for index, char in enumerate(text):
-        normalized = _normalize_evidence(char)
-        characters.extend(normalized)
-        indexes.extend([index] * len(normalized))
-    normalized_text = ''.join(characters)
+    normalized_text, indexes = _normalized_evidence_map(text)
     spans = []
     for phrase in phrases:
         normalized = _normalize_evidence(phrase)
@@ -300,6 +294,39 @@ def _interest_source_span(text: str, phrases: list[str]) -> tuple[int, str] | No
     start = min(left for left, _ in spans)
     end = max(right for _, right in spans)
     return (start, text[start:end]) if end - start <= 200 else None
+
+
+def _normalized_evidence_map(text: str) -> tuple[str, list[int]]:
+    """Map normalized evidence code points back to offsets in the original text."""
+    characters: list[str] = []
+    indexes: list[int] = []
+    for index, char in enumerate(text):
+        normalized = _normalize_evidence(char)
+        characters.extend(normalized)
+        indexes.extend([index] * len(normalized))
+    return ''.join(characters), indexes
+
+
+def _evidence_span(text: str, quote: str) -> tuple[int, int, str] | None:
+    """Resolve a model quote despite harmless Persian/Arabic spelling or ZWNJ differences.
+
+    Validation uses normalized text, while the persisted evidence span always
+    points into and returns the untouched original traveler message.
+    """
+    if not isinstance(quote, str) or not quote or len(quote) > 200:
+        return None
+    normalized = _normalize_evidence(quote)
+    if len(normalized) < 2:
+        return None
+    normalized_text, indexes = _normalized_evidence_map(text)
+    start = normalized_text.find(normalized)
+    if start < 0:
+        return None
+    original_start = indexes[start]
+    original_end = indexes[start + len(normalized) - 1] + 1
+    if original_end - original_start > 200:
+        return None
+    return original_start, original_end, text[original_start:original_end]
 
 
 def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: dict[str, str],
@@ -331,15 +358,15 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
         if (field_name not in {'destination', 'origin'} or not isinstance(options, list)
                 or not 2 <= len(options) <= 5 or not isinstance(quote, str)):
             continue
-        start = text.find(quote)
-        if (start < 0 or not quote or any(not isinstance(option, str) or not option.strip()
-                or _normalize_evidence(option.strip()) not in _normalize_evidence(quote)
+        span = _evidence_span(text, quote)
+        if (span is None or any(not isinstance(option, str) or not option.strip()
+                or _normalize_evidence(option.strip()) not in _normalize_evidence(span[2])
                 for option in options)):
             continue
         try:
             fields[field_name] = RequirementValue(
                 status='ambiguous', candidates=[option.strip() for option in options],
-                evidence_span=EvidenceSpan(start=start, end=start + len(quote), text=quote), source='llm',
+                evidence_span=EvidenceSpan(start=span[0], end=span[1], text=span[2]), source='llm',
             ).model_dump()
         except Exception:
             continue
@@ -348,20 +375,22 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
         raw_value, quote = hints.get(key), evidence.get(key)
         if raw_value is None or not isinstance(quote, str) or len(quote) > 200:
             continue
-        start = text.find(quote)
+        span = _evidence_span(text, quote)
+        start = span[0] if span is not None else -1
+        source_quote = span[2] if span is not None else quote
         interests = []
         if key == 'interest' and isinstance(raw_value, str) and raw_value.strip():
             interests = [raw_value.strip()]
-            if start < 0 or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(quote):
+            if start < 0 or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(source_quote):
                 interests = [item.strip() for item in re.split(r'[,،;؛]|\s+و\s+', raw_value) if item.strip()]
                 interest_span = _interest_source_span(text, interests) if interests else None
                 if interest_span is not None:
-                    start, quote = interest_span
+                    start, source_quote = interest_span
         if start < 0:
             continue
         current = getattr(profile.fields, field_name)
         parsed_quote = interpret_trip_requirements(
-            quote, locale, traveler_timezone=traveler_timezone,
+            source_quote, locale, traveler_timezone=traveler_timezone,
             traveler_reference_date=traveler_reference_date,
         )
         quoted_field_name = {'traveler_count': 'travelers', 'budget_text': 'budget',
@@ -372,21 +401,24 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
         value = quoted_field.value if quoted_field and quoted_field.status == 'known' else None
         if key in {'destination', 'origin'}:
             if (not isinstance(raw_value, str) or not raw_value.strip()
-                    or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(quote)):
+                    or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(source_quote)):
                 continue
             value = raw_value.strip()
         elif key in {'duration_days', 'traveler_count'}:
             maximum = 365 if key == 'duration_days' else 50
             if (type(raw_value) is not int or not 1 <= raw_value <= maximum
-                    or not _explicit_integer_evidence(quote, raw_value, key)):
+                    or not _explicit_integer_evidence(source_quote, raw_value, key)):
                 continue
             # A provider may not turn a relative departure offset into the
             # requested stay length. A separate explicit duration hint in the
             # same current turn makes the intended distinction unambiguous.
             relative = hints.get('relative_start_date')
             relative_quote = evidence.get('relative_start_date')
+            relative_span = (_evidence_span(text, relative_quote)
+                             if isinstance(relative_quote, str) else None)
             if (key == 'duration_days' and type(relative) is int
-                    and isinstance(relative_quote, str) and relative_quote in quote
+                    and relative_span is not None
+                    and _normalize_evidence(relative_span[2]) in _normalize_evidence(source_quote)
                     and raw_value == relative and not _explicit_correction_context(quote)
                     and not any(marker in quote.casefold() for marker in (
                         'trip for', 'stay for', 'duration', 'for ', 'به مدت', 'برای', 'اقامت',
@@ -395,7 +427,7 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
             value = raw_value
         elif key == 'budget_text':
             if (not isinstance(raw_value, str) or not raw_value.strip()
-                    or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(quote)
+                    or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(source_quote)
                     ):
                 continue
             # LLM intent classification selects the quoted budget. This strict
@@ -406,29 +438,32 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
             if value is None:
                 continue
         elif key == 'interest':
-            if not interests or any(_normalize_evidence(item) not in _normalize_evidence(quote) for item in interests):
+            if not interests or any(
+                _normalize_evidence(item) not in _normalize_evidence(source_quote) for item in interests
+            ):
                 continue
             value = list(dict.fromkeys(interests))
         elif key == 'soft_preference':
             if (not isinstance(raw_value, str) or not raw_value.strip()
-                    or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(quote)):
+                    or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(source_quote)):
                 continue
-            if (not _explicit_soft_preference(quote) or quoted_field is None
+            if (not _explicit_soft_preference(source_quote) or quoted_field is None
                     or quoted_field.status != 'known'):
                 continue
             value = list(dict.fromkeys([*(current.value or []), *(quoted_field.value or [])]))
         elif key in {'travel_difficulty', 'weather_preference', 'local_cuisine'}:
             if (not isinstance(raw_value, str) or not raw_value.strip()
-                    or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(quote)):
+                    or _normalize_evidence(raw_value.strip()) not in _normalize_evidence(source_quote)):
                 continue
             value = list(dict.fromkeys([*(current.value or []), raw_value.strip()]))
         elif key in {'hard_constraint', 'accessibility'}:
-            if not isinstance(raw_value, str) or raw_value.strip() != quote.strip():
+            if (not isinstance(raw_value, str)
+                    or _normalize_evidence(raw_value.strip()) != _normalize_evidence(source_quote.strip())):
                 continue
             value = list(dict.fromkeys([*(current.value or []), raw_value.strip()]))
         elif key == 'relative_start_date':
             if (type(raw_value) is not int or not 0 <= raw_value <= 365
-                    or not _has_relative_date_cue(quote)):
+                    or not _has_relative_date_cue(source_quote)):
                 continue
             anchor = (traveler_reference_date + timedelta(days=raw_value)
                       if traveler_reference_date is not None else None)
@@ -448,7 +483,7 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
         try:
             fields[field_name] = RequirementValue(
                 status='known', value=value,
-                evidence_span=EvidenceSpan(start=start, end=start + len(quote), text=quote),
+                evidence_span=EvidenceSpan(start=start, end=start + len(source_quote), text=source_quote),
                 source='llm',
             ).model_dump()
         except Exception:
@@ -458,10 +493,11 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
     if 'travel_start' in hints and 'travel_end' in hints:
         start_quote, end_quote = evidence.get('travel_start'), evidence.get('travel_end')
         start_value, end_value = hints['travel_start'], hints['travel_end']
-        if (isinstance(start_quote, str) and isinstance(end_quote, str)
-                and start_quote in text and end_quote in text
+        start_span = _evidence_span(text, start_quote) if isinstance(start_quote, str) else None
+        end_span = _evidence_span(text, end_quote) if isinstance(end_quote, str) else None
+        if (start_span is not None and end_span is not None
                 and isinstance(start_value, str) and isinstance(end_value, str)
-                and start_value in start_quote and end_value in end_quote
+                and start_value in start_span[2] and end_value in end_span[2]
                 and re.fullmatch(r"\d{4}-\d{2}-\d{2}", start_value)
                 and re.fullmatch(r"\d{4}-\d{2}-\d{2}", end_value)):
             try:
@@ -470,8 +506,8 @@ def _candidate_profile(text: str, locale: str, hints: dict[str, Any], evidence: 
                 pass
             else:
                 if parsed_start <= parsed_end:
-                    left = min(text.index(start_quote), text.index(end_quote))
-                    right = max(text.index(start_quote) + len(start_quote), text.index(end_quote) + len(end_quote))
+                    left = min(start_span[0], end_span[0])
+                    right = max(start_span[1], end_span[1])
                     fields['travel_dates'] = RequirementValue(
                         status='known', value={'start': parsed_start, 'end': parsed_end},
                         evidence_span=EvidenceSpan(start=left, end=right, text=text[left:right]), source='llm',

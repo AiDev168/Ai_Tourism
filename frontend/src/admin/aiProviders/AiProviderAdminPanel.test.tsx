@@ -40,6 +40,29 @@ describe('AI provider admin panel', () => {
     expect(host.querySelector('input[autocomplete="one-time-code"]')).not.toBeNull();
   });
 
+  it('attributes protected usage evidence to the active profile, model, and revision', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/me')) return Promise.resolve(json({ admin: true, mfa_enrolled: true, step_up_expires_at: '2099-01-01T00:00:00Z', provisioned: true }));
+      if (url.endsWith('/profiles')) return Promise.resolve(json({ profiles: [] }));
+      if (url.endsWith('/routes')) return Promise.resolve(json({ routes: [] }));
+      if (url.endsWith('/revisions')) return Promise.resolve(json({ revisions: [] }));
+      if (url.endsWith('/audit')) return Promise.resolve(json({ events: [] }));
+      if (url.endsWith('/fallback')) return Promise.resolve(json({ policies: [] }));
+      if (url.endsWith('/usage')) return Promise.resolve(json({ usage: [{
+        capability: 'chat', revision_id: '12345678abcd', profile_name: 'Local test route',
+        model_id: 'loaded-chat-model', calls: 2, successes: 2, failures: 0,
+        latency_ms_avg: 42, period_start: '2026-11-27T10:00:00Z',
+      }] }));
+      return Promise.resolve(json({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => { root.render(<AiProviderAdminPanel locale="en-US" csrfToken="csrf" />); }); await settle();
+    expect(host.textContent).toContain('Local test route');
+    expect(host.textContent).toContain('loaded-chat-model');
+    expect(host.textContent).toContain('12345678');
+    expect(host.textContent).toContain('2/2');
+  });
+
   it('keeps the granted admin and enrollment UI when an optional usage read fails', async () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url.endsWith('/me')) return Promise.resolve(json({ admin: true, mfa_enrolled: false, step_up_expires_at: null, provisioned: true }));

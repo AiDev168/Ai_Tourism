@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.config import Settings
 from app.modules.integrations.ai_gateway import AiCapability, AiCapabilityUnavailable, AiProviderGateway
+from app.modules.trip.requirements_interpretation import parse_explicit_budget_text
 
 logger = logging.getLogger("ai_tourism.chat_adapter")
 
@@ -133,10 +134,12 @@ class ChatReply(BaseModel):
             if (isinstance(item, str) and 0 < len(item.strip()) <= limit
                     and "\\" not in item
                     and not any(ord(char) < 32 or ord(char) == 127 for char in item)):
-                if key != "budget_text" or (
-                    re.search(r"\d", item)
-                    and re.search(r"\u062a\u0648\u0645\u0627\u0646|\u062a\u0648\u0645\u0646(?:\u0647)?|\u0631\u06cc\u0627\u0644|\u0631\u064a\u0627\u0644|toman|rial|IRR|USD|\u062f\u0644\u0627\u0631|\u062f\u0648\u0644\u0627\u0631|AED|\u062f\u0631\u0647\u0645", item, re.I)
-                ):
+                # The model classifies whether this phrase is a budget. The
+                # deterministic parser validates only the explicit amount,
+                # scale, and optional currency, including Persian number words.
+                # Unknown currency remains unknown instead of dropping a known
+                # amount from the traveler profile.
+                if key != "budget_text" or parse_explicit_budget_text(item.strip()) is not None:
                     hints[key] = item.strip()
         start, end = value.get("travel_start"), value.get("travel_end")
         if (isinstance(start, str) and isinstance(end, str)

@@ -369,6 +369,62 @@ def test_assistant_candidate_uses_trip_contract_and_only_accepts_exact_source_sp
     assert candidate.fields.destination.evidence_span.text == 'شیراز'
 
 
+def test_llm_evidence_maps_persian_spacing_and_arabic_letter_variants_to_original_offsets():
+    text = 'از مشهد می\u200cخواهم به شیراز بروم'
+    # The provider preserved the same words but normalized ZWNJ/spacing and
+    # Arabic yeh. Candidate evidence must still point into the original input.
+    quote = 'از مشهد می خواهم به شيراز بروم'
+    candidate = _candidate_profile(
+        text, 'fa-IR', {'origin': 'مشهد', 'destination': 'شيراز'},
+        {'origin': quote, 'destination': quote}, model_only=True,
+    )
+    assert candidate.fields.origin.value == 'مشهد'
+    assert candidate.fields.destination.value == 'شيراز'
+    for field_name in ('origin', 'destination'):
+        evidence = getattr(candidate.fields, field_name).evidence_span
+        assert text[evidence.start:evidence.end] == evidence.text
+        assert evidence.text == text
+
+
+def test_normalized_llm_quotes_validate_persian_number_words_and_keep_original_offsets():
+    text = (
+        "\u067e\u0646\u062c \u0646\u0641\u0631 \u0647\u0633\u062a\u06cc\u0645\u060c "
+        "\u0628\u0631\u0627\u06cc \u067e\u0646\u062c \u0631\u0648\u0632 "
+        "\u0628\u0631\u0627\u06cc \u0628\u0627\u0632\u062f\u06cc\u062f \u0627\u0632 "
+        "\u062c\u0627\u0647\u0627\u06cc \u062a\u0627\u0631\u06cc\u062e\u06cc"
+    )
+    # Simulate an OpenAI-compatible model which normalizes Persian Yeh to
+    # Arabic Yeh and removes a ZWNJ from the user-entered budget/context.
+    traveler_quote = (
+        "\u067e\u0646\u062c \u0646\u0641\u0631 \u0647\u0633\u062a\u064a\u0645"
+    )
+    duration_quote = "\u0628\u0631\u0627\u06cc \u067e\u0646\u062c \u0631\u0648\u0632"
+    candidate = _candidate_profile(
+        text, 'fa-IR', {'traveler_count': 5, 'duration_days': 5},
+        {'traveler_count': traveler_quote, 'duration_days': duration_quote},
+        model_only=True,
+    )
+    assert candidate.fields.travelers.value == 5
+    assert candidate.fields.duration_days.value == 5
+    assert candidate.fields.travelers.source == candidate.fields.duration_days.source == 'llm'
+    for field_name in ('travelers', 'duration_days'):
+        evidence = getattr(candidate.fields, field_name).evidence_span
+        assert text[evidence.start:evidence.end] == evidence.text
+
+
+def test_model_date_evidence_accepts_normalized_quote_and_records_original_span():
+    text = "We will travel from 2027-03-01 to 2027-03-04."
+    candidate = _candidate_profile(
+        text, 'en-US',
+        {'travel_start': '2027-03-01', 'travel_end': '2027-03-04'},
+        {'travel_start': 'from 2027-03-01', 'travel_end': 'to 2027-03-04'},
+        model_only=True,
+    )
+    assert candidate.fields.travel_dates.status == 'known'
+    evidence = candidate.fields.travel_dates.evidence_span
+    assert text[evidence.start:evidence.end] == evidence.text
+
+
 @pytest.mark.parametrize("text", [
     "\u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc\u062e\u0648\u0627\u0645 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632",
     "\u0645\u06cc\u200c\u062e\u0648\u0627\u0645 \u0627\u0632 \u0645\u0634\u0647\u062f \u0631\u0627\u0647\u06cc \u0634\u06cc\u0631\u0627\u0632 \u0628\u0634\u0645",

@@ -789,10 +789,15 @@ def usage(
     events = registry.list_usage()
     grouped = {}
     for event in events:
+        revision_id = str(event["revision_id"]) if event.get("revision_id") is not None else None
+        key = (event["capability"], revision_id)
         entry = grouped.setdefault(
-            event["capability"],
+            key,
             {
                 "capability": event["capability"],
+                "revision_id": revision_id,
+                "profile_name": event.get("profile_name"),
+                "model_id": event.get("model_id"),
                 "calls": 0,
                 "successes": 0,
                 "failures": 0,

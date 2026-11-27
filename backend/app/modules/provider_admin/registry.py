@@ -483,8 +483,14 @@ class ProviderRegistry:
             raise RegistryRejected("Invalid usage page size")
         with self._connect() as conn:
             cur = conn.execute(
-                """SELECT capability,revision_id,outcome,latency_ms,input_units,output_units,occurred_at
-                   FROM ai_provider.usage_events ORDER BY occurred_at DESC LIMIT %s""", (limit,)
+                """SELECT u.capability,u.revision_id,u.outcome,u.latency_ms,
+                          u.input_units,u.output_units,u.occurred_at,
+                          p.name AS profile_name,
+                          r.config #>> ARRAY['capabilities',u.capability,'model_id'] AS model_id
+                   FROM ai_provider.usage_events u
+                   LEFT JOIN ai_provider.revisions r ON r.revision_id=u.revision_id
+                   LEFT JOIN ai_provider.profiles p ON p.profile_id=r.profile_id
+                   ORDER BY u.occurred_at DESC LIMIT %s""", (limit,)
             )
             result = []
             while (item := _row(cur)) is not None:

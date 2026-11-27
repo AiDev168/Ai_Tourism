@@ -42,6 +42,15 @@ def test_gateway_validates_chat_and_treats_input_as_data():
     assert "all explicitly stated interests" in calls[0]["messages"][0]["content"]
 
 
+@pytest.mark.parametrize("budget", ["۵ میلیون تومان", "30 million Toman", "10 million"])
+def test_chat_reply_preserves_explicit_budget_words_and_unknown_currency(budget):
+    reply = ChatReply.model_validate({
+        "reply": "Please confirm the budget currency if needed.",
+        "requirements": {"budget_text": budget},
+    })
+    assert reply.requirements["budget_text"] == budget
+
+
 @pytest.mark.parametrize("discovered_model,expected", [("test-model", True), ("another-model", False)])
 def test_chat_readiness_only_requests_model_metadata(discovered_model, expected):
     def handler(request):

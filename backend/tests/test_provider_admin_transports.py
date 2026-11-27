@@ -109,11 +109,19 @@ def test_chat_turn_uses_selected_model_and_maps_untrusted_output():
     body = json.loads(seen["body"])
     assert body["messages"][-1] == {"role": "user", "content": request_text}
     assert body["response_format"]["type"] == "json_schema"
-    requirement_schema = body["response_format"]["json_schema"]["schema"]["properties"]["requirements"]
+    json_schema = body["response_format"]["json_schema"]
+    assert json_schema["strict"] is True
+    requirement_schema = json_schema["schema"]["properties"]["requirements"]
     assert {"origin", "destination", "duration_days", "traveler_count"}.issubset(
         requirement_schema["properties"]
     )
-    assert "exact supporting quotes" in body["messages"][0]["content"]
+    assert set(requirement_schema["required"]) == set(requirement_schema["properties"])
+    assert requirement_schema["properties"]["duration_days"]["type"] == ["integer", "null"]
+    assert set(json_schema["schema"]["required"]) == set(json_schema["schema"]["properties"])
+    assert body["temperature"] == 0
+    assert "exact shortest source phrase copied from the current message" in body["messages"][0]["content"]
+    assert "day after tomorrow" in body["messages"][0]["content"]
+    assert "origin is where the traveler starts" in body["messages"][0]["content"]
 
 
 def test_lm_studio_structured_contract_accepts_only_named_traveler_fields():
@@ -137,7 +145,7 @@ def test_lm_studio_structured_contract_accepts_only_named_traveler_fields():
     request_text = "\u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc \u062e\u0648\u0627\u0645 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632"
     result = asyncio.run(provider.invoke(ChatRequest(locale="fa-IR", text=request_text)))
     assert result.requirements == {"origin": "\u0645\u0634\u0647\u062f", "destination": "\u0634\u06cc\u0631\u0627\u0632"}
-    assert "strict" not in seen["body"]["response_format"]["json_schema"]
+    assert seen["body"]["response_format"]["json_schema"]["strict"] is True
     assert seen["body"]["messages"][-1]["content"] == request_text
 
 

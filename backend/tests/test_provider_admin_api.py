@@ -50,6 +50,18 @@ class FakeRegistry:
     def list_revisions(self, _profile_id):
         return []
 
+    def list_usage(self):
+        return [
+            {"capability": "chat", "revision_id": self.revision_id,
+             "profile_name": "Local LM Studio", "model_id": "test-model",
+             "outcome": "success", "latency_ms": 42,
+             "occurred_at": datetime.now(UTC)},
+            {"capability": "chat", "revision_id": self.revision_id,
+             "profile_name": "Local LM Studio", "model_id": "test-model",
+             "outcome": "unavailable", "latency_ms": 21,
+             "occurred_at": datetime.now(UTC)},
+        ]
+
     def capability_validation(self, *_args, **_kwargs):
         return None
 
@@ -163,6 +175,18 @@ def test_profile_read_contains_no_vault_reference_or_secret(monkeypatch):
     assert "opaque-secret-reference" not in response.text
     assert "api_key" not in response.text
     assert body["profiles"][0]["base_url"] == "http://127.0.0.1:1234/v1"
+
+
+def test_admin_usage_is_attributed_to_capability_profile_model_and_revision(monkeypatch):
+    client, registry = _client(monkeypatch)
+    response = client.get("/api/v1/admin/ai-providers/usage")
+    assert response.status_code == 200
+    assert response.json()["usage"] == [{
+        "capability": "chat", "revision_id": str(registry.revision_id),
+        "profile_name": "Local LM Studio", "model_id": "test-model", "calls": 2,
+        "successes": 1, "failures": 1, "latency_ms_avg": 32,
+        "period_start": response.json()["usage"][0]["period_start"],
+    }]
 
 
 def test_fallback_read_reports_disabled_default_without_secret_data(monkeypatch):

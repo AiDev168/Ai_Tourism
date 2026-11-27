@@ -79,6 +79,24 @@ _CHAT_REQUIREMENT_FIELDS = {
     "local_cuisine": "string",
 }
 
+_TRAVELER_CHAT_SYSTEM_PROMPT = """
+You are Rahgard's structured travel-intake assistant. Read the LATEST user message carefully and return the required JSON object.
+Use only facts explicitly stated in that latest message. Conversation history and reviewed profile are context only; never copy an old value as if it were stated now. Never invent dates, locations, duration, currency, preferences, or safety facts. Use null for every absent or uncertain field and an empty array for ambiguous_requirements unless the current wording genuinely supports multiple explicit locations.
+
+For every non-null requirement, requirement_evidence for the same key MUST contain the exact shortest source phrase copied from the current message. Do not translate, normalize, paraphrase, or combine separate spans. If you cannot quote a phrase exactly, return null for that requirement. `reply` and `clarification` must use the requested locale.
+
+Field meanings:
+- origin is where the traveler starts; destination is where they intend to visit. In Persian/Arabic/English route wording equivalent to "from X ... go/travel to Y", use X as origin and Y as destination, even if the destination follows a future-tense verb.
+- duration_days is length of stay. A phrase such as "for five days" / "برای پنج روز" is duration.
+- relative_start_date is departure timing as an integer offset from the supplied traveler-local reference date: today=0, tomorrow=1, day after tomorrow=2, three days from now=3. Quote only the relative departure phrase. Never interpret this as duration or an end date.
+- traveler_count is the explicit number of people traveling, not a nearby budget or duration number.
+- budget_text is the exact phrase that states an amount and scale. Currency may be omitted; do not infer it. Persian number words/digits are valid.
+- interest, soft_preference, hard_constraint, accessibility, travel_difficulty, weather_preference, and local_cuisine are separate categories. Preserve safety/access needs and prohibitions as hard constraints, never soft preferences. Each non-null value must be supported by its own exact phrase.
+- travel_start and travel_end are a pair of explicit Gregorian ISO dates only. Do not convert Jalali dates or infer an end date from duration.
+
+Preserve all explicit facts in the message, including facts embedded in conversational or informal phrasing. If a correction is stated in the latest message, extract the corrected value and quote the correction phrase. Ask a concise clarification only for genuinely missing or ambiguous information. Any itinerary must contain only proposed stop names, use role=model_proposed, and be marked provisional_unverified; never claim hours, prices, accessibility, routes, or other unverified facts.
+""".strip()
+
 
 def _lm_studio_chat_response_format() -> dict[str, object]:
     """Return an explicit LM Studio JSON Schema for the traveler contract.
@@ -89,10 +107,16 @@ def _lm_studio_chat_response_format() -> dict[str, object]:
     503. Values remain untrusted suggestions and pass the existing evidence
     and domain validation after parsing.
     """
+    # Strict structured output must require a decision for every field. A
+    # merely optional object schema allows an empty `requirements` object even
+    # when the current message contains an explicit trip request. Nullable
+    # values make absence explicit without asking the model to invent facts.
     requirement_properties = {
-        name: {"type": kind} for name, kind in _CHAT_REQUIREMENT_FIELDS.items()
+        name: {"type": [kind, "null"]} for name, kind in _CHAT_REQUIREMENT_FIELDS.items()
     }
-    evidence_properties = {name: {"type": "string"} for name in _CHAT_REQUIREMENT_FIELDS}
+    evidence_properties = {
+        name: {"type": ["string", "null"]} for name in _CHAT_REQUIREMENT_FIELDS
+    }
     nullable_itinerary = {
         "type": "object",
         "properties": {
@@ -131,19 +155,22 @@ def _lm_studio_chat_response_format() -> dict[str, object]:
             "requirements": {
                 "type": "object",
                 "properties": requirement_properties,
+                "required": list(_CHAT_REQUIREMENT_FIELDS),
                 "additionalProperties": False,
             },
             "requirement_evidence": {
                 "type": "object",
                 "properties": evidence_properties,
+                "required": list(_CHAT_REQUIREMENT_FIELDS),
                 "additionalProperties": False,
             },
             "ambiguous_requirements": {
                 "type": "object",
                 "properties": {
-                    "origin": {"type": "array", "items": {"type": "string"}},
-                    "destination": {"type": "array", "items": {"type": "string"}},
+                    "origin": {"type": ["array", "null"], "items": {"type": "string"}},
+                    "destination": {"type": ["array", "null"], "items": {"type": "string"}},
                 },
+                "required": ["origin", "destination"],
                 "additionalProperties": False,
             },
             "clarification": {"type": ["string", "null"]},
@@ -151,12 +178,15 @@ def _lm_studio_chat_response_format() -> dict[str, object]:
                 "anyOf": [nullable_itinerary, {"type": "null"}],
             },
         },
-        "required": ["reply", "requirements", "requirement_evidence"],
+        "required": [
+            "reply", "requirements", "requirement_evidence", "ambiguous_requirements",
+            "clarification", "provisional_itinerary",
+        ],
         "additionalProperties": False,
     }
     return {
         "type": "json_schema",
-        "json_schema": {"name": "rahgard_traveler_turn", "schema": schema},
+        "json_schema": {"name": "rahgard_traveler_turn", "strict": True, "schema": schema},
     }
 
 
@@ -450,18 +480,7 @@ class OpenAiCompatibleProviderAdapter:
         raise AiCapabilityUnavailable()
 
     async def _invoke_chat(self, request: ChatRequest) -> ChatReply:
-        system_prompt = (
-            "Extract the traveler facts stated in the latest message and answer briefly. "
-            f"Use locale {request.locale}. Return a concise reply, requirements, and exact supporting quotes. "
-            "Field meanings: origin=departure place; destination=visited place; duration_days=length of stay; "
-            "traveler_count=people traveling; budget_text=exact amount with only the currency stated; "
-            "relative_start_date=departure offset from the traveler-local reference date (tomorrow is 1, "
-            "day after tomorrow is 2, and this is not trip duration); interest and other preference fields "
-            "are explicit traveler preferences. Include only supported fields and quote the exact substring. "
-            "Do not infer missing facts. Profile context is not evidence and never overrides this message. "
-            "Requirements are untrusted suggestions for review. Any proposed itinerary contains stop names "
-            "only and must be marked provisional_unverified/model_proposed."
-        )
+        system_prompt = f"{_TRAVELER_CHAT_SYSTEM_PROMPT}\nRequested locale: {request.locale}."
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend({"role": item.role, "content": item.content} for item in request.history)
         context = {
@@ -476,6 +495,7 @@ class OpenAiCompatibleProviderAdapter:
         body: dict[str, object] = {
             "model": self.config.model_id,
             "max_tokens": self.config.max_tokens,
+            "temperature": 0,
             "messages": messages,
             "stream": False,
         }
