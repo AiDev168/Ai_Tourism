@@ -292,23 +292,45 @@ function Stop-Demo {
     $tracked = Get-Content -LiteralPath $ProcessesFile -Raw | ConvertFrom-Json
     foreach ($item in $tracked) {
       $port = if ($item.Port) { [int]$item.Port } elseif ($item.Name -eq 'api') { 8801 } else { 443 }
+      $scriptPath = [IO.Path]::GetFullPath([string]$item.Script)
+      $launcher = Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$item.Pid)" -ErrorAction SilentlyContinue
+      if (-not $launcher -or
+          $launcher.CommandLine -notlike "*$scriptPath*" -or
+          $launcher.CommandLine -notlike "*$DataRoot*" -or
+          $launcher.ExecutablePath -ne $item.Executable) {
+        throw "Refusing to stop $($item.Name): its recorded launcher identity no longer matches."
+      }
+      $launcherStart = (Get-Process -Id $item.Pid -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o')
+      if ($launcherStart -ne $item.StartUtc) { throw "Refusing to stop $($item.Name): launcher start time changed." }
       $listen = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue | Select-Object -First 1
       if ($listen) {
         $listener = Get-CimInstance Win32_Process -Filter "ProcessId=$($listen.OwningProcess)" -ErrorAction SilentlyContinue
-        if (-not $listener -or $listener.CommandLine -notlike "*$($item.Script)*") { throw "Refusing to stop unrelated process on port $port." }
-        if ($item.Name -eq 'api' -and $listener.CommandLine -notlike "*$DataRoot*") { throw 'Refusing API listener because its demo data-root identity differs.' }
+        if (-not $listener -or
+            $listener.CommandLine -notlike "*$scriptPath*" -or
+            $listener.ExecutablePath -ne $item.Executable) {
+          throw "Refusing to stop unrelated process on port $port."
+        }
+        $listenerStart = (Get-Process -Id $listener.ProcessId -ErrorAction Stop).StartTime.ToUniversalTime()
+        if ($listenerStart -lt (Get-Process -Id $item.Pid -ErrorAction Stop).StartTime.ToUniversalTime()) {
+          throw "Refusing to stop process on port ${port}: it predates the recorded launcher."
+        }
         Stop-Process -Id $listener.ProcessId -Force
       }
       # The original launcher PID is also stopped only when it still names the
       # exact script and start time recorded by this run.
-      $launcher = Get-CimInstance Win32_Process -Filter "ProcessId=$($item.Pid)" -ErrorAction SilentlyContinue
-      if ($launcher) {
-        if ($launcher.CommandLine -notlike "*$($item.Script)*") { throw "Refusing changed launcher PID $($item.Pid)." }
-        $start = (Get-Process -Id $item.Pid).StartTime.ToUniversalTime().ToString('o')
-        if ($start -eq $item.StartUtc) { Stop-Process -Id $item.Pid -Force }
-      }
+      Stop-Process -Id $item.Pid -Force
     }
     Remove-Item -LiteralPath $ProcessesFile
+  }
+  $dbId = (& docker compose --project-name $Project --env-file $Config -f $BaseCompose -f $Overlay -f $MfaOverlay ps -q db 2>$null | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0 -or $dbId -notmatch '^[a-f0-9]{64}$') { throw 'Refusing to stop database: task-owned container identity is unavailable.' }
+  $dbMeta = @(& docker inspect $dbId | ConvertFrom-Json)[0]
+  if ($LASTEXITCODE -ne 0 -or
+      $dbMeta.Config.Labels.'com.docker.compose.project' -ne $Project -or
+      $dbMeta.Config.Labels.'com.docker.compose.service' -ne 'db' -or
+      $dbMeta.Config.Image -ne 'rahgard-postgres:17-postgis36-vector087' -or
+      -not ($dbMeta.Mounts | Where-Object { $_.Destination -eq '/var/lib/postgresql/data' -and $_.Type -eq 'volume' -and $_.Name -eq $Volume })) {
+    throw 'Refusing to stop database: PostgreSQL image or persistent volume identity differs.'
   }
   Compose @('stop','db')
   Write-Host "Stopped task-owned local processes and demo database. Persistent volume $Volume was preserved."
