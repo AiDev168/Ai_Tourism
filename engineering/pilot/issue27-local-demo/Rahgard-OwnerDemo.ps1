@@ -291,17 +291,20 @@ function Stop-Demo {
   if (Test-Path $ProcessesFile) {
     $tracked = Get-Content -LiteralPath $ProcessesFile -Raw | ConvertFrom-Json
     foreach ($item in $tracked) {
-      $port = if ($item.Port) { [int]$item.Port } elseif ($item.Name -eq 'api') { 8801 } else { 443 }
+      $port = if ($item.Name -eq 'api') { $ApiPort } elseif ($item.Name -eq 'web') { $WebPort } else { throw 'Unknown managed local process type.' }
+      if ($item.Port -and [int]$item.Port -ne $port) { throw "Refusing to stop $($item.Name): recorded port differs from the requested demo port." }
       $scriptPath = [IO.Path]::GetFullPath([string]$item.Script)
       $launcher = Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$item.Pid)" -ErrorAction SilentlyContinue
-      if (-not $launcher -or
-          $launcher.CommandLine -notlike "*$scriptPath*" -or
-          $launcher.CommandLine -notlike "*$DataRoot*" -or
-          $launcher.ExecutablePath -ne $item.Executable) {
-        throw "Refusing to stop $($item.Name): its recorded launcher identity no longer matches."
+      $recordedStart = [DateTime]::Parse([string]$item.StartUtc).ToUniversalTime()
+      if ($launcher) {
+        $launcherStartTime = (Get-Process -Id $item.Pid -ErrorAction Stop).StartTime.ToUniversalTime()
+        if ($launcher.CommandLine -notlike "*$scriptPath*" -or
+            $launcher.ExecutablePath -ne $item.Executable -or
+            $launcherStartTime -ne $recordedStart -or
+            ($item.Name -eq 'api' -and $launcher.CommandLine -notlike "*$DataRoot*")) {
+          throw "Refusing to stop $($item.Name): its recorded launcher identity no longer matches."
+        }
       }
-      $launcherStart = (Get-Process -Id $item.Pid -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o')
-      if ($launcherStart -ne $item.StartUtc) { throw "Refusing to stop $($item.Name): launcher start time changed." }
       $listen = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue | Select-Object -First 1
       if ($listen) {
         $listener = Get-CimInstance Win32_Process -Filter "ProcessId=$($listen.OwningProcess)" -ErrorAction SilentlyContinue
@@ -311,14 +314,15 @@ function Stop-Demo {
           throw "Refusing to stop unrelated process on port $port."
         }
         $listenerStart = (Get-Process -Id $listener.ProcessId -ErrorAction Stop).StartTime.ToUniversalTime()
-        if ($listenerStart -lt (Get-Process -Id $item.Pid -ErrorAction Stop).StartTime.ToUniversalTime()) {
+        if ($listenerStart -lt $recordedStart) {
           throw "Refusing to stop process on port ${port}: it predates the recorded launcher."
         }
         Stop-Process -Id $listener.ProcessId -Force
       }
-      # The original launcher PID is also stopped only when it still names the
-      # exact script and start time recorded by this run.
-      Stop-Process -Id $item.Pid -Force
+      # A missing launcher may be an orphaned Python listener from the same
+      # recorded run. It is stopped only after exact script, executable, port,
+      # and process-start checks above identify that listener.
+      if ($launcher) { Stop-Process -Id $item.Pid -Force }
     }
     Remove-Item -LiteralPath $ProcessesFile
   }
