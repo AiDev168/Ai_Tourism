@@ -151,6 +151,108 @@ def test_lm_studio_structured_contract_accepts_only_named_traveler_fields():
     assert seen["body"]["messages"][-1]["content"] == request_text
 
 
+@pytest.mark.parametrize("day_count", [1, 3, 5, 15])
+def test_lm_studio_itinerary_uses_compact_exact_day_schema_and_confirmed_context(day_count):
+    seen = {}
+    itinerary = {
+        "status": "provisional_unverified",
+        "days": [{
+            "day_number": number,
+            "stops": [{"name": f"Suggested place {number}", "role": "model_proposed"}],
+        } for number in range(1, day_count + 1)],
+    }
+
+    async def respond(request):
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop",
+            "message": {"content": json.dumps({
+                "reply": "Unverified draft.",
+                "provisional_itinerary": itinerary,
+            })},
+        }]})
+
+    provider = OpenAiCompatibleChatAdapter(config(), transport=httpx.MockTransport(respond))
+    result = asyncio.run(provider.invoke(ChatRequest(
+        locale="en-US",
+        text="Do not send this client-generated profile summary to the planner.",
+        history=[{"role": "user", "content": "Old contradictory request"}],
+        reviewed_profile='{"destinations":["Shiraz"],"duration_days":5}',
+        provisional_itinerary_days=day_count,
+    )))
+    assert result.provisional_itinerary is not None
+    assert len(result.provisional_itinerary.days) == day_count
+    body = seen["body"]
+    assert body["max_tokens"] == 800
+    assert body["response_format"]["json_schema"]["name"] == "rahgard_provisional_itinerary"
+    schema = body["response_format"]["json_schema"]["schema"]["properties"]["provisional_itinerary"]["properties"]["days"]
+    assert schema["minItems"] == schema["maxItems"] == day_count
+    assert len(body["messages"]) == 3
+    assert all("Old contradictory request" not in message["content"] for message in body["messages"])
+    assert all("client-generated profile summary" not in message["content"] for message in body["messages"])
+    context = json.loads(body["messages"][1]["content"].removeprefix("Context only: "))
+    reviewed = json.loads(context["reviewed_profile"])
+    assert reviewed["destinations"] == ["Shiraz"]
+    assert reviewed["duration_days"] == 5
+
+
+def test_provider_chat_text_limit_matches_structured_parser_eight_kibibyte_limit():
+    content = json.dumps({"reply": "ok", "requirements": {}}) + (" " * 4500)
+    parsed = OpenAiCompatibleProviderAdapter._chat_text({"choices": [{
+        "finish_reason": "stop",
+        "message": {"content": content},
+    }]})
+    assert len(parsed) > 4000
+    assert len(parsed) <= 8192
+
+
+def test_lm_studio_uses_the_bounded_local_inference_timeout_ceiling():
+    seen = {}
+
+    async def respond(request):
+        seen["timeouts"] = request.extensions["timeout"]
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop",
+            "message": {"content": '{"reply":"ok","requirements":{}}'},
+        }]})
+
+    provider = OpenAiCompatibleProviderAdapter(
+        ChatProviderConfig(
+            provider_kind="lm_studio",
+            base_url="http://127.0.0.1:1234/v1",
+            model_id="local-model",
+            timeout_seconds=20,
+        ),
+        transport=httpx.MockTransport(respond),
+    )
+    asyncio.run(provider.invoke(ChatRequest(locale="en-US", text="Plan a trip")))
+    assert seen["timeouts"] == {"connect": 60.0, "read": 60.0, "write": 60.0, "pool": 60.0}
+
+
+def test_remote_provider_keeps_its_explicit_timeout():
+    seen = {}
+
+    async def respond(request):
+        seen["timeouts"] = request.extensions["timeout"]
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "stop",
+            "message": {"content": '{"reply":"ok","requirements":{}}'},
+        }]})
+
+    provider = OpenAiCompatibleProviderAdapter(
+        ChatProviderConfig(
+            provider_kind="openai_compatible",
+            base_url="https://api.gapgpt.app/v1",
+            model_id="remote-model",
+            api_key=SecretStr("test-key"),
+            timeout_seconds=20,
+        ),
+        transport=httpx.MockTransport(respond),
+    )
+    asyncio.run(provider.invoke(ChatRequest(locale="en-US", text="Plan a trip")))
+    assert seen["timeouts"] == {"connect": 20.0, "read": 20.0, "write": 20.0, "pool": 20.0}
+
+
 def test_non_lm_studio_openai_compatible_provider_does_not_receive_local_schema_mode():
     seen = {}
 

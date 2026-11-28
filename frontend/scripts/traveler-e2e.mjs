@@ -1300,6 +1300,87 @@ async function runNationalCatalogueAcceptance(browser, api, audit, artifactRoot)
     partnerUiMatrix = await captureReleaseThemeMatrix(page, artifactRoot, 'company');
     milestone('selected-company consent, private request inbox, and same-trip revision verified');
 
+    // Exercise the company's authenticated response workflow against the
+    // same real FastAPI/PostgreSQL share. The response is tied to the newest
+    // immutable traveler-approved revision; the company cannot edit the trip.
+    const responseShareId = shared.shares[0]?.share_id;
+    if (!responseShareId) throw new Error('company_response_share_identity_missing');
+    const responsePath = `/api/v1/partners/organizations/${organization}/requests/${responseShareId}/responses`;
+    const companyRevisionHistory = await requestBrowserJson(page,
+      `/api/v1/partners/organizations/${organization}/requests/${responseShareId}/revisions`,
+      'GET', undefined, undefined, trace);
+    const latestCompanyRevision = [...companyRevisionHistory.items]
+      .sort((a, b) => b.revision_number - a.revision_number)[0];
+    if (!latestCompanyRevision?.revision_id || latestCompanyRevision.event_kind !== 'request_revised') {
+      throw new Error('company_response_latest_shared_revision_missing');
+    }
+    const companyAcceptance = await requestBrowserJson(page, responsePath, 'POST', currentIdentity.csrfToken, {
+      client_request_id: randomUUID(), revision_id: latestCompanyRevision.revision_id,
+      response_kind: 'accepted_as_requested', message: 'Isolated acceptance: request can be supported as submitted.',
+    }, trace);
+    const companyCounterOffer = await requestBrowserJson(page, responsePath, 'POST', currentIdentity.csrfToken, {
+      client_request_id: randomUUID(), revision_id: latestCompanyRevision.revision_id,
+      response_kind: 'counter_offer', message: 'Isolated acceptance: alternate price and date range.',
+      proposed_price_toman: 27_000_000, proposed_start_date: '2026-12-05',
+      proposed_end_date: '2026-12-08', proposed_schedule_notes: 'Proposed adjusted departure sequence.',
+    }, trace);
+    if (companyAcceptance.delivery_channel !== 'authenticated_traveler_inbox'
+      || companyAcceptance.response?.response_kind !== 'accepted_as_requested'
+      || companyCounterOffer.response?.response_kind !== 'counter_offer'
+      || companyAcceptance.response?.traveler_decision !== 'pending'
+      || companyCounterOffer.response?.traveler_decision !== 'pending') {
+      throw new Error('company_response_acceptance_or_counteroffer_not_created');
+    }
+    const companyResponseHistory = await requestBrowserJson(page, responsePath, 'GET', undefined, undefined, trace);
+    if (!companyResponseHistory.items.some(item => item.response_id === companyAcceptance.response.response_id)
+      || !companyResponseHistory.items.some(item => item.response_id === companyCounterOffer.response.response_id)) {
+      throw new Error('company_response_history_not_persisted');
+    }
+
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentPhone = travelerPhone;
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, travelerPhone);
+    const tripBeforeCompanyDecision = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}`, 'GET', undefined, undefined, trace);
+    const travelerCompanyResponses = await requestBrowserJson(page,
+      `/api/v1/partners/trips/${trip.trip_id}/company-responses`, 'GET', undefined, undefined, trace);
+    if (!travelerCompanyResponses.items.some(item => item.response_id === companyAcceptance.response.response_id)
+      || !travelerCompanyResponses.items.some(item => item.response_id === companyCounterOffer.response.response_id)) {
+      throw new Error('traveler_company_response_inbox_missing_company_replies');
+    }
+    const counterDecision = await requestBrowserJson(page,
+      `/api/v1/partners/trips/${trip.trip_id}/company-responses/${companyCounterOffer.response.response_id}/decision`,
+      'POST', currentIdentity.csrfToken, { decision: 'accepted' }, trace);
+    if (counterDecision.traveler_decision !== 'accepted') {
+      throw new Error('traveler_company_counteroffer_decision_failed');
+    }
+    const tripAfterCompanyDecision = await requestBrowserJson(page, `/api/v1/trips/${trip.trip_id}`, 'GET', undefined, undefined, trace);
+    if (tripBeforeCompanyDecision.version !== tripAfterCompanyDecision.version
+      || JSON.stringify(tripBeforeCompanyDecision.confirmed_requirements)
+        !== JSON.stringify(tripAfterCompanyDecision.confirmed_requirements)) {
+      throw new Error('company_decision_mutated_authoritative_traveler_trip');
+    }
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, travelerPhone);
+    const travelerResponsesAfterRelogin = await requestBrowserJson(page,
+      `/api/v1/partners/trips/${trip.trip_id}/company-responses`, 'GET', undefined, undefined, trace);
+    if (travelerResponsesAfterRelogin.items.find(item => item.response_id === companyCounterOffer.response.response_id)
+      ?.traveler_decision !== 'accepted') {
+      throw new Error('traveler_company_decision_not_persisted_after_reauthentication');
+    }
+    await page.locator('.auth-signed-in button').first().click();
+    await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
+    currentIdentity = await signIn(page, api.controlPort, api.controlToken, companyPhone);
+    const companyResponsesAfterRelogin = await requestBrowserJson(page, responsePath, 'GET', undefined, undefined, trace);
+    if (companyResponsesAfterRelogin.items.find(item => item.response_id === companyCounterOffer.response.response_id)
+      ?.traveler_decision !== 'accepted') {
+      throw new Error('company_response_decision_not_visible_after_reauthentication');
+    }
+    partnerSummary.responses = { acceptedAsRequested: true, counterOffer: true,
+      travelerAcceptedCounterOffer: true, persistedForCompanyAndTraveler: true, travelerTripUnchanged: true };
+    milestone('company acceptance and counteroffer persisted; traveler decision reopened after authentication');
+
     await page.locator('.auth-signed-in button').first().click();
     await page.locator('.auth-entry > button').first().waitFor({ state: 'visible' });
     currentPhone = tenantTwoPhone;

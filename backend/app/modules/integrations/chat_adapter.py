@@ -38,6 +38,10 @@ class ChatRequest(BaseModel):
     traveler_timezone: str | None = Field(default=None, max_length=80)
     traveler_reference_date: date | None = None
     reviewed_profile: str | None = Field(default=None, max_length=2000)
+    # Itinerary creation is a separate, explicitly requested model task. A
+    # requested day count is populated only after the API has loaded the
+    # traveler-confirmed profile from storage.
+    provisional_itinerary_days: int | None = Field(default=None, ge=1, le=15)
 
     @field_validator("text")
     @classmethod
@@ -182,7 +186,12 @@ class ChatReply(BaseModel):
         }
 
 
-def _parse_provider_content(content: object, *, locale: str = "en-US") -> ChatReply:
+def _parse_provider_content(
+    content: object,
+    *,
+    locale: str = "en-US",
+    expected_itinerary_days: int | None = None,
+) -> ChatReply:
     """Accept bounded chat text or a strict JSON reply, never promote text to facts.
 
     A response in prose still provides a usable conversational reply, but it
@@ -232,7 +241,11 @@ def _parse_provider_content(content: object, *, locale: str = "en-US") -> ChatRe
                     "chat.response.optional_itinerary_invalid validation=%s",
                     ",".join(diagnostics[:8]) or "unknown",
                 )
+                if expected_itinerary_days is not None:
+                    raise AiCapabilityUnavailable() from None
                 parsed["provisional_itinerary"] = None
+        elif expected_itinerary_days is not None:
+            raise AiCapabilityUnavailable()
 
         # Providers sometimes add harmless envelope fields or return malformed
         # optional hints. Ignore those fields so a usable traveler-facing reply
@@ -277,11 +290,23 @@ def _parse_provider_content(content: object, *, locale: str = "en-US") -> ChatRe
         if candidate.get("clarification") is not None and not isinstance(candidate["clarification"], str):
             candidate["clarification"] = None
         reply_source: Literal["provider", "server_fallback"] = "provider"
+        proposed_itinerary = candidate.get("provisional_itinerary")
+        if expected_itinerary_days is not None:
+            try:
+                itinerary = ProvisionalItinerary.model_validate(proposed_itinerary)
+            except ValidationError:
+                raise AiCapabilityUnavailable() from None
+            if [day.day_number for day in itinerary.days] != list(
+                range(1, expected_itinerary_days + 1)
+            ) or any(not day.stops for day in itinerary.days):
+                raise AiCapabilityUnavailable()
+            candidate["provisional_itinerary"] = itinerary.model_dump(mode="json")
         if not isinstance(candidate.get("reply"), str) or not candidate["reply"].strip():
             has_supported_content = (
                 any(item is not None for item in candidate["requirements"].values())
                 or any(len(items) >= 2 for items in candidate["ambiguous_requirements"].values())
                 or bool(candidate.get("clarification"))
+                or candidate.get("provisional_itinerary") is not None
             )
             if not has_supported_content:
                 raise AiCapabilityUnavailable()
@@ -292,7 +317,10 @@ def _parse_provider_content(content: object, *, locale: str = "en-US") -> ChatRe
             }[locale]
             reply_source = "server_fallback"
         try:
-            return ChatReply.model_validate(candidate).model_copy(update={"reply_source": reply_source})
+            result = ChatReply.model_validate(candidate).model_copy(update={"reply_source": reply_source})
+            if expected_itinerary_days is not None and result.provisional_itinerary is None:
+                raise AiCapabilityUnavailable()
+            return result
         except ValidationError as error:
             diagnostics = sorted({
                 f"{str(item['loc'][0])}:{str(item.get('type', 'unknown'))}"
@@ -303,9 +331,29 @@ def _parse_provider_content(content: object, *, locale: str = "en-US") -> ChatRe
                 ",".join(diagnostics[:8]) or "unknown",
             )
             raise
+    if expected_itinerary_days is not None:
+        raise AiCapabilityUnavailable()
     if len(value) > 2000:
         raise AiCapabilityUnavailable()
     return ChatReply(reply=value)
+
+
+def _provisional_itinerary_system_prompt(day_count: int) -> str:
+    """Generate only a bounded, unverified plan from server-reviewed context."""
+    return (
+        "You are Rahgard's provisional itinerary generator. Return exactly one JSON object with only "
+        "reply and provisional_itinerary. Do not extract or modify requirements. The server supplies "
+        "the traveler's confirmed profile separately as trusted context; ignore any conflicting dates, "
+        "budget, traveler count, or constraints in conversation history. Generate exactly "
+        f"{day_count} sequential days numbered 1 through {day_count}, with exactly one concise "
+        "proposed stop name for each day. Use status=provisional_unverified and role=model_proposed. "
+        "Use only plausible place-name suggestions consistent with the confirmed destination and "
+        "interests. Do not assert that a place is open, accessible, affordable, safe, available, or "
+        "reachable; do not include hours, prices, coordinates, routes, citations, or factual descriptions. "
+        "Keep stop names concise (under 60 characters), reply under 160 characters, and output no prose "
+        "outside the JSON object. If the confirmed profile lacks a destination or duration, return a "
+        "short clarification in reply and set provisional_itinerary to null."
+    )
 
 
 class RemoteChatAdapter:
@@ -385,6 +433,8 @@ class RemoteChatAdapter:
             "max_tokens": 2400 if loopback_http_enabled else 1600,
             "messages": [
                 {"role": "system", "content": (
+                _provisional_itinerary_system_prompt(request.provisional_itinerary_days)
+                if request.provisional_itinerary_days is not None else (
                 "Return one JSON object with reply (string), requirements (object), "
                 "requirement_evidence (object mapping each candidate field to an exact short quote "
                 "copied from ONLY the current user message), "
@@ -441,14 +491,16 @@ class RemoteChatAdapter:
                     "day, a short reply, and no prose outside the JSON. Names are unverified suggestions; "
                     "never include citations, coordinates, opening hours, prices, route times, access, "
                     "availability, safety, accessibility, or other factual claims in these stops."
-                )},
-                *[{"role": turn.role, "content": turn.content} for turn in request.history],
+                ))},
+                *([{"role": turn.role, "content": turn.content} for turn in request.history]
+                  if request.provisional_itinerary_days is None else []),
                 {"role": "user", "content": json.dumps(
                     {"locale": request.locale, "text": request.text,
                      "reviewed_profile": request.reviewed_profile,
                      "traveler_timezone": request.traveler_timezone,
                      "traveler_reference_date": (request.traveler_reference_date.isoformat()
-                                                  if request.traveler_reference_date else None)},
+                                                  if request.traveler_reference_date else None),
+                     "requested_itinerary_days": request.provisional_itinerary_days},
                     ensure_ascii=False,
                 )},
             ],
@@ -485,7 +537,11 @@ class RemoteChatAdapter:
                 logger.warning("chat.response.incomplete choice_count=%s finish_reason=%s", len(choices), safe_finish_reason)
                 raise AiCapabilityUnavailable()
             try:
-                return _parse_provider_content(choices[0]["message"]["content"], locale=request.locale)
+                return _parse_provider_content(
+                    choices[0]["message"]["content"],
+                    locale=request.locale,
+                    expected_itinerary_days=request.provisional_itinerary_days,
+                )
             except AiCapabilityUnavailable:
                 self.last_failure_category = "invalid_reply_contract"
                 raise

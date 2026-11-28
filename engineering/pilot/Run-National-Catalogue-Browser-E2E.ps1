@@ -164,13 +164,11 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
 '@
   $publishedBase = $publishGeo | & docker exec -i -e "PGPASSWORD=$publisherPassword" -e "RAHGARD_TEST_MARKER_HASH=$markerHash" -e "RAHGARD_TEST_DECISION_HASH=$qaDecisionHash" $container psql -h 127.0.0.1 -X -q -A -t -v ON_ERROR_STOP=1 -U rahgard_pilot_geo_publisher -d $migrationTarget
   if ($LASTEXITCODE -ne 0 -or ($publishedBase | Out-String).Trim() -ne 't') { throw 'Isolated owner-approved Persepolis activation failed.' }
-  $h14File = Join-Path $ProjectRoot 'engineering/pilot/sql/014_local_owner_login.sql'
-  $h14File = Join-Path $ProjectRoot 'engineering/pilot/sql/014_local_owner_login.sql'
-  $h14Expected = (Get-FileHash -LiteralPath $h14File -Algorithm SHA256).Hash.ToLowerInvariant()
-  $h14 = Apply '014_local_owner_login' 'engineering/pilot/sql/014_local_owner_login.sql' 'rahgard_pilot_ddl_owner' $ddlPassword @{ RAHGARD_PILOT_MIGRATION_0013_SHA256=$h13; RAHGARD_PILOT_MIGRATION_0014_SHA256=$h14Expected }
-  $h15File = Join-Path $ProjectRoot 'engineering/pilot/sql/015_ai_provider_admin.sql'
-  $h15Expected = (Get-FileHash -LiteralPath $h15File -Algorithm SHA256).Hash.ToLowerInvariant()
-  $h15 = Apply '015_ai_provider_admin' 'engineering/pilot/sql/015_ai_provider_admin.sql' 'rahgard_pilot_ddl_owner' $ddlPassword @{ RAHGARD_PILOT_MIGRATION_0014_SHA256=$h14; RAHGARD_PILOT_MIGRATION_0015_SHA256=$h15Expected }
+  # Exercise the server-authoritative Owner/Provider schema branch. Migrations
+  # 0014/0015 are the separate local-owner/local-provider implementation and
+  # create the same ai_provider schema that 0027 intentionally requires to be
+  # absent. Migration 0027's guarded baseline explicitly supports the
+  # 0024-0026 chain without this pair; do not attempt to stack both designs.
   $h16File = Join-Path $ProjectRoot 'engineering/pilot/sql/016_staging_invitation_auth.sql'
   $h16Expected = (Get-FileHash -LiteralPath $h16File -Algorithm SHA256).Hash.ToLowerInvariant()
   $h16 = Apply '016_staging_invitation_auth' 'engineering/pilot/sql/016_staging_invitation_auth.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0013_SHA256=$h13; RAHGARD_PILOT_MIGRATION_0016_SHA256=$h16Expected }
@@ -183,6 +181,7 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
   $h19File = Join-Path $ProjectRoot 'engineering/pilot/sql/019_partner_workspace.sql'
   $h19Expected = (Get-FileHash -LiteralPath $h19File -Algorithm SHA256).Hash.ToLowerInvariant()
   $h19 = Apply '019_partner_workspace' 'engineering/pilot/sql/019_partner_workspace.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0018_SHA256=$h18; RAHGARD_PILOT_MIGRATION_0019_SHA256=$h19Expected }
+  Psql $migrationTarget 'GRANT USAGE ON SCHEMA partner TO rahgard_pilot_ddl_owner;' | Out-Null
   $h20File = Join-Path $ProjectRoot 'engineering/pilot/sql/020_archive_candidate_publication.sql'
   $h20Expected = (Get-FileHash -LiteralPath $h20File -Algorithm SHA256).Hash.ToLowerInvariant()
   $h20 = Apply '020_archive_candidate_publication' 'engineering/pilot/sql/020_archive_candidate_publication.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0019_SHA256=$h19; RAHGARD_PILOT_MIGRATION_0020_SHA256=$h20Expected }
@@ -214,6 +213,73 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
   $h26 = Apply '026_platform_reviewer_mfa' 'engineering/pilot/sql/026_platform_reviewer_mfa.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0024_SHA256=$h24Expected; RAHGARD_PILOT_MIGRATION_0025_SHA256=$h25Expected; RAHGARD_PILOT_MIGRATION_0026_SHA256=$h26Expected }
   $migration26Assertions = (Psql $migrationTarget "SELECT (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0026_platform_reviewer_mfa')='$h26Expected', (SELECT count(*) IN (25,27) FROM system.schema_migrations), (SELECT max(migration_id)='0026_platform_reviewer_mfa' FROM system.schema_migrations), (SELECT bool_and(relrowsecurity) FROM pg_class WHERE oid IN ('identity.platform_admin_mfa'::regclass,'identity.platform_admin_step_up'::regclass,'identity.platform_admin_mfa_events'::regclass)), has_table_privilege('ai_tourism_app','identity.platform_admin_mfa','SELECT'), has_table_privilege('ai_tourism_app','identity.platform_admin_mfa','INSERT'), has_table_privilege('ai_tourism_app','identity.platform_admin_step_up','UPDATE'), NOT has_table_privilege('ai_tourism_app','identity.platform_admin_mfa_events','SELECT'), NOT has_table_privilege('ai_tourism_app','partner.platform_grants','UPDATE'), has_function_privilege('ai_tourism_app','identity.record_platform_admin_mfa_event(text,uuid)','EXECUTE'), (SELECT prosecdef FROM pg_proc WHERE oid='identity.has_platform_admin_capability(uuid)'::regprocedure)") | Out-String
   if (($migration26Assertions -join '').Trim() -ne 't|t|t|t|t|t|t|t|t|t|t') { throw "Migration 0026 assertions failed (ledger, RLS, least privilege, operator-only grant audit, capability function): $migration26Assertions" }
+  $baselineSpecs = @(
+    @{Id='0000_legacy_tourism_points_baseline'; Path='database/tourism_points.sql'},
+    @{Id='0001_core_schema'; Path='engineering/database-prep/sql/001_core_schema.sql'},
+    @{Id='0002_synthetic_knowledge_seed'; Path='engineering/database-prep/sql/002_synthetic_knowledge_seed.sql'},
+    @{Id='0003_synthetic_e2e_seed'; Path='engineering/database-prep/sql/003_synthetic_e2e_seed.sql'},
+    @{Id='0004_app_role_grants'; Path='engineering/database-prep/sql/004_app_role_grants.sql'},
+    @{Id='0005_verified_unesco_destination_seed'; Path='engineering/database-prep/sql/005_verified_unesco_destination_seed.sql'},
+    @{Id='0006_verified_unesco_destination_seed_batch2'; Path='engineering/database-prep/sql/006_verified_unesco_destination_seed_batch2.sql'},
+    @{Id='0007_shiraz_dalahoo_wikipedia_dataset_v1'; Path='engineering/database-prep/sql/007_shiraz_dalahoo_wikipedia_dataset_v1.sql'},
+    @{Id='0008_authentication_foundation'; Path='engineering/database-prep/sql/008_authentication_foundation.sql'},
+    @{Id='0009_traveler_core'; Path='engineering/database-prep/sql/009_traveler_core.sql'},
+    @{Id='0010_task31_content_privacy_full_itinerary'; Path='engineering/database-prep/sql/010_task31_content_privacy_full_itinerary.sql'},
+    @{Id='0011_internal_chat_turns'; Path='engineering/database-prep/sql/011_internal_chat_turns.sql'},
+    @{Id='0012_task5_published_claim_evidence'; Path='engineering/database-prep/sql/012_task5_published_claim_evidence.sql'},
+    @{Id='0013_private_pilot_geo_audit'; Path='engineering/pilot/sql/013_private_pilot_geo_audit.sql'},
+    @{Id='0016_staging_invitation_auth'; Path='engineering/pilot/sql/016_staging_invitation_auth.sql'},
+    @{Id='0017_provisional_itineraries'; Path='engineering/pilot/sql/017_provisional_itineraries.sql'},
+    @{Id='0018_national_catalogue_ingestion'; Path='engineering/pilot/sql/018_national_catalogue_ingestion.sql'},
+    @{Id='0019_partner_workspace'; Path='engineering/pilot/sql/019_partner_workspace.sql'},
+    @{Id='0020_archive_candidate_publication'; Path='engineering/pilot/sql/020_archive_candidate_publication.sql'},
+    @{Id='0021_postgis_security_definer_publication'; Path='engineering/pilot/sql/021_postgis_security_definer_publication.sql'},
+    @{Id='0022_traveler_company_requests'; Path='engineering/pilot/sql/022_traveler_company_requests.sql'},
+    @{Id='0023_partner_trip_responses'; Path='engineering/pilot/sql/023_partner_trip_responses.sql'},
+    @{Id='0024_partner_review_audit_actions'; Path='engineering/pilot/sql/024_partner_review_audit_actions.sql'},
+    @{Id='0025_owner_control_center'; Path='engineering/pilot/sql/025_owner_control_center.sql'},
+    @{Id='0026_platform_reviewer_mfa'; Path='engineering/pilot/sql/026_platform_reviewer_mfa.sql'}
+  )
+  $expectedBaseline = @($baselineSpecs | ForEach-Object {
+    "$($_.Id)|$((Get-FileHash -LiteralPath (Join-Path $ProjectRoot $_.Path) -Algorithm SHA256).Hash.ToLowerInvariant())"
+  })
+  $actualBaseline = @((Psql $migrationTarget 'SELECT migration_id||''|''||sha256 FROM system.schema_migrations ORDER BY migration_id').Trim() -split "`r?`n")
+  if ($expectedBaseline.Count -ne 25 -or $actualBaseline.Count -ne 25 -or
+      (Compare-Object $expectedBaseline $actualBaseline -SyncWindow 0)) {
+    throw 'The exact 25-entry 0026 baseline ledger/checksum set did not match source; migration 0027 was not attempted.'
+  }
+  if ((Psql $migrationTarget "SELECT NOT EXISTS(SELECT 1 FROM system.schema_migrations WHERE migration_id IN ('0014_local_owner_login','0015_ai_provider_admin'))").Trim() -ne 't') {
+    throw 'Server-only baseline unexpectedly includes legacy migrations 0014/0015.'
+  }
+  $h27File = Join-Path $ProjectRoot 'engineering/pilot/sql/027_server_ai_provider_admin.sql'
+  $h27Expected = (Get-FileHash -LiteralPath $h27File -Algorithm SHA256).Hash.ToLowerInvariant()
+  $h27 = Apply '027_server_ai_provider_admin' 'engineering/pilot/sql/027_server_ai_provider_admin.sql' 'rahgard_pilot_ddl_owner' $ddlPassword @{ RAHGARD_PILOT_MIGRATION_0024_SHA256=$h24Expected; RAHGARD_PILOT_MIGRATION_0025_SHA256=$h25Expected; RAHGARD_PILOT_MIGRATION_0026_SHA256=$h26Expected; RAHGARD_PILOT_MIGRATION_0027_SHA256=$h27Expected }
+  $migration27Assertions = (Psql $migrationTarget "SELECT (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0027_server_ai_provider_admin')='$h27Expected', (SELECT count(*)=26 FROM system.schema_migrations), (SELECT max(migration_id)='0027_server_ai_provider_admin' FROM system.schema_migrations), has_function_privilege('ai_tourism_app','identity.has_ai_provider_admin_capability(uuid)','EXECUTE'), has_function_privilege('ai_tourism_app','identity.has_ai_provider_admin_step_up()','EXECUTE'), NOT has_table_privilege('ai_tourism_app','identity.ai_provider_admin_grants','UPDATE')") | Out-String
+  if (($migration27Assertions -join '').Trim() -ne 't|t|t|t|t|t') { throw "Migration 0027 assertions failed (server-only ledger, capability functions, or least privilege): $migration27Assertions" }
+  $h28File = Join-Path $ProjectRoot 'engineering/pilot/sql/028_server_ai_provider_actor_context.sql'
+  $h28Expected = (Get-FileHash -LiteralPath $h28File -Algorithm SHA256).Hash.ToLowerInvariant()
+  $h28 = Apply '028_server_ai_provider_actor_context' 'engineering/pilot/sql/028_server_ai_provider_actor_context.sql' 'ai_tourism_owner' $env:AUTH_TEST_DATABASE_OWNER_PASSWORD @{ RAHGARD_PILOT_MIGRATION_0027_SHA256=$h27Expected; RAHGARD_PILOT_MIGRATION_0028_SHA256=$h28Expected }
+  $migration28Assertions = (Psql $migrationTarget "SELECT (SELECT sha256 FROM system.schema_migrations WHERE migration_id='0028_server_ai_provider_actor_context')='$h28Expected', (SELECT count(*)=27 FROM system.schema_migrations), (SELECT max(migration_id)='0028_server_ai_provider_actor_context' FROM system.schema_migrations), has_function_privilege((SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE oid='identity.has_ai_provider_admin_capability(uuid)'::regprocedure),'partner.current_actor_id()','EXECUTE'), has_function_privilege((SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE oid='identity.has_ai_provider_admin_capability(uuid)'::regprocedure),'identity.has_platform_admin_capability(uuid)','EXECUTE'), has_function_privilege('ai_tourism_app','partner.current_actor_id()','EXECUTE'), NOT has_function_privilege('rahgard_pilot_geo_publisher','partner.current_actor_id()','EXECUTE'), NOT EXISTS(SELECT 1 FROM aclexplode((SELECT proacl FROM pg_proc WHERE oid='partner.current_actor_id()'::regprocedure)) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE'), NOT EXISTS(SELECT 1 FROM aclexplode((SELECT proacl FROM pg_proc WHERE oid='identity.has_platform_admin_capability(uuid)'::regprocedure)) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE')") | Out-String
+  if (($migration28Assertions -join '').Trim() -ne 't|t|t|t|t|t|t|t|t') { throw "Migration 0028 assertions failed (ledger, exact function-owner grants, or PUBLIC isolation): $migration28Assertions" }
+  # Evaluate the real admin capability query as the least-privilege app role
+  # before starting Chromium. This exposes the PostgreSQL SQLSTATE for a
+  # database permission regression that the HTTP boundary intentionally maps
+  # to a generic 503, without logging account or request content.
+  $capabilityProbe = @'
+BEGIN;
+SELECT set_config('app.actor_id','00000000-0000-0000-0000-000000000001',true);
+SELECT partner.has_platform_capability('00000000-0000-0000-0000-000000000001','organization_review'),
+       partner.has_platform_capability('00000000-0000-0000-0000-000000000001','service_review'),
+       partner.has_platform_capability('00000000-0000-0000-0000-000000000001','offer_review'),
+       partner.has_platform_capability('00000000-0000-0000-0000-000000000001','admin_overview_read'),
+       identity.has_catalogue_review_capability('00000000-0000-0000-0000-000000000001','candidate_review'),
+       identity.has_catalogue_review_capability('00000000-0000-0000-0000-000000000001','source_review'),
+       identity.has_catalogue_review_capability('00000000-0000-0000-0000-000000000001','catalogue_publish'),
+       identity.has_ai_provider_admin_capability('00000000-0000-0000-0000-000000000001');
+ROLLBACK;
+'@
+  $capabilityProbe | & docker exec -i -e "PGPASSWORD=$env:AUTH_TEST_DATABASE_PASSWORD" $container psql -h 127.0.0.1 -X -q -A -t -v ON_ERROR_STOP=1 -U ai_tourism_app -d $migrationTarget
+  if ($LASTEXITCODE -ne 0) { throw 'Least-privilege admin capability query failed before browser; inspect sanitized PostgreSQL SQLSTATE above.' }
   $migrationCount = (Psql $migrationTarget 'SELECT count(*) FROM system.schema_migrations').Trim()
   $testDb = $env:AUTH_TEST_DATABASE_NAME
   Psql 'postgres' "ALTER DATABASE $migrationTarget RENAME TO $testDb;" | Out-Null
@@ -236,13 +302,13 @@ SELECT operations.apply_private_geo_approval('unesco-persepolis-v1', :'decision_
   try { node scripts/traveler-e2e.mjs; if ($LASTEXITCODE -ne 0) { throw 'National-catalogue browser acceptance failed.' } }
   finally { Pop-Location }
   if ($ChatProvider -eq 'simulated') {
-    Write-Host "PASS: full app migrations 0013-0026 (ledger rows=$migrationCount) and authenticated national-catalogue Chromium journey completed in isolated PG17." -ForegroundColor Green
+    Write-Host "PASS: full app migrations 0013-0028 without legacy 0014/0015 (ledger rows=$migrationCount) and authenticated national-catalogue Chromium journey completed in isolated PG17." -ForegroundColor Green
   }
   elseif ($ChatProvider -eq 'forced_outage') {
-    Write-Host "PASS: production Chat adapter failure and deterministic fallback were exercised through authenticated Chromium/FastAPI on disposable PG17 with migrations through 0026 (ledger rows=$migrationCount)." -ForegroundColor Green
+    Write-Host "PASS: production Chat adapter failure and deterministic fallback were exercised through authenticated Chromium/FastAPI on disposable PG17 through 0028 (without legacy 0014/0015; ledger rows=$migrationCount)." -ForegroundColor Green
   }
   else {
-    Write-Host "PASS: authenticated real-provider Chromium journey via $ChatProvider completed on disposable PG17 (ledger rows=$migrationCount); no persistent database or VPS was used." -ForegroundColor Green
+    Write-Host "PASS: authenticated real-provider Chromium journey via $ChatProvider completed on disposable PG17 through migration 0028 (without legacy 0014/0015; ledger rows=$migrationCount); no persistent database or VPS was used." -ForegroundColor Green
   }
 }
 finally {

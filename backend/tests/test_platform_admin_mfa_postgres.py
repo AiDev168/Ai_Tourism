@@ -65,7 +65,11 @@ def _identity():
         ).fetchone()
     if (state["db"] != database or state["role"] != user or not 170000 <= state["pg"] < 180000
             or state["marker_count"] != 1 or not hmac.compare_digest(state["marker"] or "", marker)
-            or state["latest"] != "0026_platform_reviewer_mfa"):
+            or state["latest"] not in {
+                "0026_platform_reviewer_mfa",
+                "0027_server_ai_provider_admin",
+                "0028_server_ai_provider_actor_context",
+            }):
         pytest.fail("disposable_database_identity_or_migration_guard_rejected")
     return base, app_password, owner_password
 

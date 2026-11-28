@@ -423,6 +423,41 @@ def test_provisional_itinerary_is_bounded_and_bad_optional_proposal_does_not_dro
         assert reply.provisional_itinerary.days[0].stops[0].role == "model_proposed"
 
 
+@pytest.mark.parametrize("day_count", [1, 3, 5, 15])
+def test_requested_provisional_itinerary_requires_complete_sequential_days(day_count):
+    content = json.dumps({
+        "reply": "This draft is unverified.",
+        "provisional_itinerary": {
+            "status": "provisional_unverified",
+            "days": [{
+                "day_number": number,
+                "stops": [{"name": f"Suggested place {number}", "role": "model_proposed"}],
+            } for number in range(1, day_count + 1)],
+        },
+    })
+    result = _parse_provider_content(content, expected_itinerary_days=day_count)
+    assert result.provisional_itinerary is not None
+    assert [day.day_number for day in result.provisional_itinerary.days] == list(
+        range(1, day_count + 1)
+    )
+
+
+def test_requested_provisional_itinerary_rejects_missing_days_and_prose():
+    content = json.dumps({
+        "reply": "Here is an incomplete draft.",
+        "provisional_itinerary": {
+            "status": "provisional_unverified",
+            "days": [{"day_number": 1, "stops": [
+                {"name": "Suggested place", "role": "model_proposed"},
+            ]}],
+        },
+    })
+    with pytest.raises(AiCapabilityUnavailable):
+        _parse_provider_content(content, expected_itinerary_days=3)
+    with pytest.raises(AiCapabilityUnavailable):
+        _parse_provider_content("A prose itinerary", expected_itinerary_days=1)
+
+
 def test_provider_budget_hint_accepts_persian_colloquial_toman_suffix():
     budget = "\u06f3\u06f0 \u0645\u06cc\u0644\u06cc\u0648\u0646 \u062a\u0648\u0645\u0646\u0647"
     quote = "\u0628\u0648\u062f\u062c\u0647\u200c\u0645\u0648\u0646 " + budget

@@ -19,7 +19,12 @@ import httpcore
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, StrictStr, field_validator
 
 from app.modules.integrations.ai_gateway import AiCapabilityUnavailable
-from app.modules.integrations.chat_adapter import ChatReply, ChatRequest, _parse_provider_content
+from app.modules.integrations.chat_adapter import (
+    ChatReply,
+    ChatRequest,
+    _parse_provider_content,
+    _provisional_itinerary_system_prompt,
+)
 
 CAPABILITIES = frozenset({"chat", "vision", "embedding", "reranking"})
 TEST_MAX_OUTPUT_TOKENS = 64
@@ -187,6 +192,58 @@ def _lm_studio_chat_response_format() -> dict[str, object]:
     return {
         "type": "json_schema",
         "json_schema": {"name": "rahgard_traveler_turn", "strict": True, "schema": schema},
+    }
+
+
+def _lm_studio_itinerary_response_format(day_count: int) -> dict[str, object]:
+    """Use a compact output schema for itinerary generation, separate from intake."""
+    day_numbers = list(range(1, day_count + 1))
+    schema = {
+        "type": "object",
+        "properties": {
+            "reply": {"type": "string", "maxLength": 160},
+            "provisional_itinerary": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string", "enum": ["provisional_unverified"]},
+                    "days": {
+                        "type": "array",
+                        "minItems": day_count,
+                        "maxItems": day_count,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "day_number": {"type": "integer", "enum": day_numbers},
+                                "stops": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "maxItems": 1,
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {"type": "string", "minLength": 1, "maxLength": 60},
+                                            "role": {"type": "string", "enum": ["model_proposed"]},
+                                        },
+                                        "required": ["name", "role"],
+                                        "additionalProperties": False,
+                                    },
+                                },
+                            },
+                            "required": ["day_number", "stops"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                "required": ["status", "days"],
+                "additionalProperties": False,
+            },
+        },
+        "required": ["reply", "provisional_itinerary"],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "json_schema",
+        "json_schema": {"name": "rahgard_provisional_itinerary", "strict": True, "schema": schema},
     }
 
 
@@ -480,9 +537,15 @@ class OpenAiCompatibleProviderAdapter:
         raise AiCapabilityUnavailable()
 
     async def _invoke_chat(self, request: ChatRequest) -> ChatReply:
-        system_prompt = f"{_TRAVELER_CHAT_SYSTEM_PROMPT}\nRequested locale: {request.locale}."
+        itinerary_days = request.provisional_itinerary_days
+        system_prompt = (
+            _provisional_itinerary_system_prompt(itinerary_days)
+            if itinerary_days is not None
+            else f"{_TRAVELER_CHAT_SYSTEM_PROMPT}\nRequested locale: {request.locale}."
+        )
         messages = [{"role": "system", "content": system_prompt}]
-        messages.extend({"role": item.role, "content": item.content} for item in request.history)
+        if itinerary_days is None:
+            messages.extend({"role": item.role, "content": item.content} for item in request.history)
         context = {
             "traveler_timezone": request.traveler_timezone,
             "traveler_reference_date": (
@@ -491,23 +554,40 @@ class OpenAiCompatibleProviderAdapter:
             "reviewed_profile": request.reviewed_profile,
         }
         messages.append({"role": "system", "content": "Context only: " + json.dumps(context, ensure_ascii=False)})
-        messages.append({"role": "user", "content": request.text})
+        if itinerary_days is None:
+            messages.append({"role": "user", "content": request.text})
+        else:
+            messages.append({
+                "role": "user",
+                "content": json.dumps({
+                    "locale": request.locale,
+                    "requested_day_count": itinerary_days,
+                }, ensure_ascii=False),
+            })
         body: dict[str, object] = {
             "model": self.config.model_id,
-            "max_tokens": self.config.max_tokens,
+            "max_tokens": min(self.config.max_tokens, 4096),
             "temperature": 0,
             "messages": messages,
             "stream": False,
         }
         if self.config.provider_kind == "lm_studio":
-            body["response_format"] = _lm_studio_chat_response_format()
+            body["response_format"] = (
+                _lm_studio_itinerary_response_format(request.provisional_itinerary_days)
+                if request.provisional_itinerary_days is not None
+                else _lm_studio_chat_response_format()
+            )
         stage = "request"
         try:
             response_body = await self._post_json("/chat/completions", body)
             stage = "provider_response_validation"
             content = self._chat_text(response_body)
             stage = "traveler_reply_validation"
-            return _parse_provider_content(content, locale=request.locale)
+            return _parse_provider_content(
+                content,
+                locale=request.locale,
+                expected_itinerary_days=request.provisional_itinerary_days,
+            )
         except Exception as error:
             logger.warning(
                 "provider.chat_unavailable provider_kind=%s stage=%s error_type=%s",
@@ -681,14 +761,25 @@ class OpenAiCompatibleProviderAdapter:
         if self.config.provider_kind == "openai_compatible" and transport is None:
             addresses = await asyncio.to_thread(_resolve_public_gapgpt_addresses, "api.gapgpt.app")
             transport = _pinned_gapgpt_transport(addresses)
+        # A local model can take longer than a hosted endpoint while emitting
+        # the strict structured intake contract. LM Studio URLs are validated
+        # as numeric loopback only, and the provider profile itself is already
+        # capped at 60 seconds; use that existing hard ceiling rather than
+        # turning a normal local generation into a premature 503 at the
+        # default 30-second profile timeout. Remote providers continue to use
+        # their explicitly configured timeout unchanged.
+        request_timeout = (
+            60 if self.config.provider_kind == "lm_studio"
+            else self.config.timeout_seconds
+        )
         try:
             async with httpx.AsyncClient(
-                timeout=httpx.Timeout(self.config.timeout_seconds),
+                timeout=httpx.Timeout(request_timeout),
                 follow_redirects=False,
                 trust_env=False,
                 transport=transport,
             ) as client:
-                async with asyncio.timeout(self.config.timeout_seconds + 2):
+                async with asyncio.timeout(request_timeout + 2):
                     async with client.stream(
                         method, url, headers=self._headers(), json=json
                     ) as response:
@@ -715,7 +806,9 @@ class OpenAiCompatibleProviderAdapter:
             if choice.get("finish_reason") != "stop":
                 raise ValueError
             text = choice["message"]["content"]
-            if not isinstance(text, str) or not 1 <= len(text) <= 4000:
+            # Structured itinerary replies can exceed the ordinary short-chat
+            # size. Keep this aligned with the parser's 8 KiB contract.
+            if not isinstance(text, str) or not 1 <= len(text) <= 8192:
                 raise ValueError
             return text
         except Exception:

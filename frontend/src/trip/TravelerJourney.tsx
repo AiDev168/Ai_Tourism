@@ -1044,7 +1044,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
     finally { setBusy(false); }
   };
 
-  const askAssistant = async (overrideContent?: string) => {
+  const askAssistant = async (overrideContent?: string, provisionalDays?: number) => {
     if (!session || !activeConversation || !activeTrip || !online) return;
     // When the status endpoint already reports no usable model, do not
     // reserve or charge an AI turn. Use existing local parsing instead.
@@ -1064,6 +1064,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
         content,
         idempotency_key: newIdempotencyKey(),
         expected_version: activeConversation.version,
+        ...(provisionalDays === undefined ? {} : { provisional_itinerary_days: provisionalDays }),
       });
       setActiveConversation(result.conversation);
       setActiveTrip(result.trip);
@@ -1863,6 +1864,14 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
               <button id="generate-provisional-itinerary" className="primary" type="button" disabled={busy || !online || !assistantConfigured}
                 onClick={() => {
                   const duration = requestedTripDays ?? Number(durationText);
+                  if (!Number.isInteger(duration) || duration < 1 || duration > 15) {
+                    setError(locale === 'fa-IR'
+                      ? 'برای ساخت برنامهٔ پیشنهادی، مدت سفر باید بین ۱ تا ۱۵ روز مشخص شده باشد.'
+                      : locale === 'ar'
+                        ? 'لإنشاء مسودة، يجب تحديد مدة من يوم إلى 15 يوماً.'
+                        : 'Set a trip duration from 1 to 15 days to generate a draft.');
+                    return;
+                  }
                   const summary = [
                     destinationNames.filter(Boolean).join('، '),
                     Number.isInteger(duration) && duration > 0 ? String(duration) : '',
@@ -1874,7 +1883,7 @@ export function TravelerJourney({ locale, session, online, requirements, autoSta
                     : locale === 'ar'
                       ? `أنشئ مسودة رحلة يومية في provisional_itinerary لهذه التفاصيل المؤكدة (${summary}). أسماء الأماكن اقتراحات غير موثقة؛ لا تخترع المواعيد أو الأسعار أو الطرق أو معلومات السلامة.`
                       : `Create a day-by-day provisional_itinerary for this confirmed trip profile (${summary}). Suggested place names are unverified. Do not invent hours, prices, routes or safety facts.`;
-                  void askAssistant(instruction);
+                  void askAssistant(instruction, duration);
                 }}>{locale === 'fa-IR' ? 'دریافت برنامهٔ پیشنهادی از هوش مصنوعی' : locale === 'ar' ? 'إنشاء خطة أولية بالذكاء الاصطناعي' : 'Generate preliminary AI itinerary'}</button>
               <button className="secondary" type="button" disabled={busy || !online || !dayCountValid}
                 onClick={() => void saveProvisionalDraft()}>{locale === 'fa-IR' ? 'ساخت برنامهٔ خالی برای ویرایش دستی' : locale === 'ar' ? 'إنشاء خطة فارغة للتحرير اليدوي' : 'Create an editable blank itinerary'}</button>

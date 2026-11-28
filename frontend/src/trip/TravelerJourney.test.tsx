@@ -293,7 +293,9 @@ describe('persisted traveler journey', () => {
     expect(blankPlan).toBeTruthy();
     await act(async () => { aiPlan.click(); }); await settle();
     const assistantCall = fetchMock.mock.calls.filter(call => String(call[0]).endsWith('/assistant-turns')).at(-1)!;
-    expect(JSON.parse(String(assistantCall[1]?.body)).content).toContain('provisional_itinerary');
+    const generationRequest = JSON.parse(String(assistantCall[1]?.body));
+    expect(generationRequest.content).toContain('provisional_itinerary');
+    expect(generationRequest.provisional_itinerary_days).toBe(3);
     expect(host.textContent).toContain('assistant replied without a day-by-day draft');
 
     await act(async () => { blankPlan.click(); }); await settle();

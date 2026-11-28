@@ -377,6 +377,7 @@ export const travelerApi = {
     content: string;
     idempotency_key: string;
     expected_version: number;
+    provisional_itinerary_days?: number;
     extracted_requirements?: TripRequirements;
     existing_user_message_id?: string;
   }) => request<{

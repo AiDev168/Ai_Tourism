@@ -219,6 +219,85 @@ def test_model_provisional_itinerary_is_returned_and_replayed_without_provider_r
         c.app.dependency_overrides.clear()
 
 
+@pytest.mark.parametrize("day_count", [1, 3, 5, 15])
+def test_provisional_generation_uses_confirmed_profile_and_exact_day_count(day_count):
+    c, repo, gateway = client()
+    traveler = c.app.dependency_overrides[get_traveler_repository]()
+    original_trip = traveler.trip
+    saved_profile = interpret_trip_requirements(
+        "A trip to Shiraz", "en-US",
+    ).model_dump(mode="json")
+
+    def confirmed_trip(user_id, trip_id):
+        value = original_trip(user_id, trip_id)
+        value["confirmed_requirements"] = {
+            "confirmation_source": "traveler_reviewed",
+            "destinations": ["Shiraz"],
+            "duration_days": day_count,
+            "traveler_count": 5,
+            "budget": {"raw": "30 million Toman"},
+        }
+        value["extracted_requirements"] = {"requirements_v1": saved_profile}
+        return value
+
+    traveler.trip = confirmed_trip
+    plan = {
+        "status": "provisional_unverified",
+        "days": [{
+            "day_number": number,
+            "stops": [{"name": f"Suggested stop {number}", "role": "model_proposed"}],
+        } for number in range(1, day_count + 1)],
+    }
+
+    async def response(request):
+        gateway.calls.append(request)
+        return ChatReply(reply="Unverified draft.", provisional_itinerary=plan)
+
+    gateway.invoke = response
+    original_result = repo.result
+
+    def result(**kwargs):
+        value = original_result(**kwargs)
+        value["metadata"]["provisional_itinerary"] = repo.finished.get("provisional_itinerary")
+        return value
+
+    repo.result = result
+    try:
+        result = c.post(
+            f"/api/v1/conversations/{CONV}/assistant-turns",
+            json=body() | {
+                "content": "client-supplied summary is not authoritative",
+                "provisional_itinerary_days": day_count,
+            },
+        )
+        assert result.status_code == 200, result.text
+        assert result.json()["provisional_itinerary"] == plan
+        assert gateway.calls[0].provisional_itinerary_days == day_count
+        assert gateway.calls[0].history == []
+        assert gateway.calls[0].text == "Generate a provisional itinerary from the confirmed profile."
+        assert '"destinations": ["Shiraz"]' in gateway.calls[0].reviewed_profile
+        assert f'"duration_days": {day_count}' in gateway.calls[0].reviewed_profile
+        # Planning returns the saved requirements snapshot, not a new extraction.
+        assert result.json()["candidate_requirements"]["original_text"] == saved_profile["original_text"]
+    finally:
+        c.app.dependency_overrides.clear()
+
+
+def test_provisional_generation_is_blocked_without_matching_reviewed_profile():
+    c, repo, gateway = client()
+    try:
+        result = c.post(
+            f"/api/v1/conversations/{CONV}/assistant-turns",
+            json=body() | {"provisional_itinerary_days": 3},
+        )
+        assert result.status_code == 409
+        assert result.json()["error"]["code"] == "trip_profile_not_ready_for_itinerary"
+        assert repo.calls == 0
+        assert gateway.calls == []
+    finally:
+        c.app.dependency_overrides.clear()
+
+
 def test_assistant_turn_exposes_llm_extraction_path_and_typed_current_turn_evidence():
     c, repo, gateway = client()
     text = "\u0627\u0632 \u0645\u0634\u0647\u062f \u0645\u06cc\u062e\u0648\u0627\u0645 \u0628\u0631\u0645 \u0634\u06cc\u0631\u0627\u0632"

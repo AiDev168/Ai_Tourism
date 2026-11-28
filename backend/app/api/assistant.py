@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 from starlette.concurrency import run_in_threadpool
 
 from app.api.auth import require_authenticated_csrf
@@ -47,6 +47,7 @@ class AssistantTurnRequest(BaseModel):
     content: str = Field(min_length=1, max_length=1200)
     idempotency_key: str = Field(min_length=8, max_length=128, pattern=r'^[A-Za-z0-9._:-]+$')
     expected_version: int = Field(ge=1)
+    provisional_itinerary_days: StrictInt | None = Field(default=None, ge=1, le=15)
     extracted_requirements: dict[str, Any] | None = None
     existing_user_message_id: UUID | None = None
 
@@ -565,6 +566,22 @@ async def assistant_turn(
     if (not settings.internal_chat_enabled and not settings.ai_provider_admin_enabled) or settings.app_env.lower() not in {'development', 'test', 'local_pilot', 'staging'}:
         logger.warning('assistant.turn.failed phase=configuration error_type=ChatDisabled')
         return _error(503, 'assistant_unavailable')
+    confirmed_trip = None
+    if body.provisional_itinerary_days is not None:
+        try:
+            confirmed_trip = await run_in_threadpool(
+                traveler.trip, principal.user_id, body.trip_id,
+            )
+        except Exception:
+            return _error(503, 'assistant_unavailable')
+        confirmed = confirmed_trip.get('confirmed_requirements', {}) if confirmed_trip else {}
+        duration = confirmed.get('duration_days') if isinstance(confirmed, dict) else None
+        destinations = confirmed.get('destinations') if isinstance(confirmed, dict) else None
+        if (not isinstance(confirmed, dict)
+                or confirmed.get('confirmation_source') != 'traveler_reviewed'
+                or duration != body.provisional_itinerary_days
+                or not isinstance(destinations, list) or not destinations):
+            return _error(409, 'trip_profile_not_ready_for_itinerary')
     try:
         reservation = await run_in_threadpool(
             repository.reserve,
@@ -662,19 +679,40 @@ async def assistant_turn(
                     )
                 except (TypeError, ValueError, OverflowError):
                     traveler_reference_date = None
+            itinerary_days = body.provisional_itinerary_days
             reply = await gateway.invoke(ChatRequest(
-                locale=locale, text=body.content, history=history,
+                locale=locale,
+                text=(
+                    'Generate a provisional itinerary from the confirmed profile.'
+                    if itinerary_days is not None else body.content
+                ),
+                history=history if itinerary_days is None else [],
                 traveler_timezone=traveler_timezone if isinstance(traveler_timezone, str) else None,
                 traveler_reference_date=traveler_reference_date,
                 reviewed_profile=_reviewed_profile_context(trip_context),
+                provisional_itinerary_days=itinerary_days,
             ))
-            candidate_profile = _candidate_profile(
-                body.content, locale, reply.requirements, reply.requirement_evidence,
-                reply.ambiguous_requirements,
-                traveler_timezone=traveler_timezone if isinstance(traveler_timezone, str) else None,
-                traveler_reference_date=traveler_reference_date,
-                model_only=True,
-            )
+            if itinerary_days is not None and isinstance(extracted, dict):
+                try:
+                    # Planning does not re-extract or overwrite requirements.
+                    # Return the existing persisted requirements snapshot as the
+                    # turn's context, while planning itself uses the confirmed
+                    # profile supplied by the server above.
+                    candidate_profile = TripRequirementsV1.model_validate(
+                        extracted.get('requirements_v1')
+                    )
+                except Exception:
+                    candidate_profile = _candidate_profile(
+                        body.content, locale, {}, {}, {}, model_only=True,
+                    )
+            else:
+                candidate_profile = _candidate_profile(
+                    body.content, locale, reply.requirements, reply.requirement_evidence,
+                    reply.ambiguous_requirements,
+                    traveler_timezone=traveler_timezone if isinstance(traveler_timezone, str) else None,
+                    traveler_reference_date=traveler_reference_date,
+                    model_only=True,
+                )
             await run_in_threadpool(
                 repository.complete, user_id=principal.user_id,
                 turn_id=reservation.turn_id, reply=reply.reply,
