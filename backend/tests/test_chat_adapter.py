@@ -455,6 +455,27 @@ def test_provider_envelope_noise_and_invalid_optional_hints_do_not_discard_reply
     assert reply.ambiguous_requirements == {}
     assert reply.clarification is None
 
+
+def test_empty_provider_reply_keeps_valid_llm_hints_with_explicit_localized_reply_source():
+    reply = _parse_provider_content(json.dumps({
+        "reply": "",
+        "requirements": {"destination": "Shiraz"},
+        "requirement_evidence": {"destination": "Shiraz"},
+        "clarification": None,
+    }), locale="fa-IR")
+    assert reply.requirements == {"destination": "Shiraz"}
+    assert reply.reply_source == "server_fallback"
+    assert reply.reply.startswith("برداشت اولیه آماده است.")
+    assert "reply_source" not in reply.model_dump()
+
+
+def test_empty_provider_reply_without_valid_structured_content_remains_unavailable():
+    with pytest.raises(AiCapabilityUnavailable):
+        _parse_provider_content(json.dumps({
+            "reply": "", "requirements": {}, "requirement_evidence": {},
+            "clarification": None,
+        }), locale="en-US")
+
 @pytest.mark.parametrize("unsafe_origin", ["bad\ncity", "bad\\ncity", "bad\\tcity"])
 def test_real_control_chars_and_escaped_backslashes_do_not_enter_candidate(unsafe_origin):
     def handler(request):

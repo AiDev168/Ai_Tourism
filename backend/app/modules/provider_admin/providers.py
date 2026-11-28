@@ -88,10 +88,10 @@ For every non-null requirement, requirement_evidence for the same key MUST conta
 Field meanings:
 - origin is where the traveler starts; destination is where they intend to visit. In Persian/Arabic/English route wording equivalent to "from X ... go/travel to Y", use X as origin and Y as destination, even if the destination follows a future-tense verb.
 - duration_days is length of stay. A phrase such as "for five days" / "برای پنج روز" is duration.
-- relative_start_date is departure timing as an integer offset from the supplied traveler-local reference date: today=0, tomorrow=1, day after tomorrow=2, three days from now=3. Quote only the relative departure phrase. Never interpret this as duration or an end date.
+- relative_start_date is departure timing as an integer offset from the supplied traveler-local reference date: امروز=0, فردا=1, پس‌فردا/پس فردا=2, سه روز دیگر/دیگه=3. English equivalents are today=0, tomorrow=1, day after tomorrow=2, three days from now=3. In particular, «از پس‌فردا» means offset 2. Quote only the relative departure phrase. Never interpret this as duration or an end date.
 - traveler_count is the explicit number of people traveling, not a nearby budget or duration number.
 - budget_text is the exact phrase that states an amount and scale. Currency may be omitted; do not infer it. Persian number words/digits are valid.
-- interest, soft_preference, hard_constraint, accessibility, travel_difficulty, weather_preference, and local_cuisine are separate categories. Preserve safety/access needs and prohibitions as hard constraints, never soft preferences. Each non-null value must be supported by its own exact phrase.
+- interest, soft_preference, hard_constraint, accessibility, travel_difficulty, weather_preference, and local_cuisine are separate categories. Preserve safety/access needs and prohibitions as hard constraints, never soft preferences. Each non-null value must be supported by its own exact phrase. For `interest`, preserve every explicitly requested interest in the same exact source span, including conjunctions; e.g. «جاهای تاریخی و باغ‌ها» must not be shortened to only «جاهای تاریخی».
 - travel_start and travel_end are a pair of explicit Gregorian ISO dates only. Do not convert Jalali dates or infer an end date from duration.
 
 Preserve all explicit facts in the message, including facts embedded in conversational or informal phrasing. If a correction is stated in the latest message, extract the corrected value and quote the correction phrase. Ask a concise clarification only for genuinely missing or ambiguous information. Any itinerary must contain only proposed stop names, use role=model_proposed, and be marked provisional_unverified; never claim hours, prices, accessibility, routes, or other unverified facts.
@@ -507,7 +507,7 @@ class OpenAiCompatibleProviderAdapter:
             stage = "provider_response_validation"
             content = self._chat_text(response_body)
             stage = "traveler_reply_validation"
-            return _parse_provider_content(content)
+            return _parse_provider_content(content, locale=request.locale)
         except Exception as error:
             logger.warning(
                 "provider.chat_unavailable provider_kind=%s stage=%s error_type=%s",

@@ -97,6 +97,9 @@ class ProvisionalItinerary(BaseModel):
 class ChatReply(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
     reply: str = Field(min_length=1, max_length=2000)
+    # Excluded from public serialization; records when the server had to fill
+    # an empty provider reply while retaining independently validated hints.
+    reply_source: Literal["provider", "server_fallback"] = Field(default="provider", exclude=True)
     # Candidate data remains untrusted and requires explicit user review.
     requirements: dict[str, str | int | None] = Field(default_factory=dict, max_length=20)
     # Exact source quotations are checked against the current traveler turn
@@ -179,7 +182,7 @@ class ChatReply(BaseModel):
         }
 
 
-def _parse_provider_content(content: object) -> ChatReply:
+def _parse_provider_content(content: object, *, locale: str = "en-US") -> ChatReply:
     """Accept bounded chat text or a strict JSON reply, never promote text to facts.
 
     A response in prose still provides a usable conversational reply, but it
@@ -212,8 +215,14 @@ def _parse_provider_content(content: object) -> ChatReply:
                 # its independently validated requirement extraction. Record
                 # only schema field names so the integration is diagnosable
                 # without logging traveler text or provider output.
-                fields = sorted({str(item["loc"][0]) for item in error.errors() if item.get("loc")})
-                logger.warning("chat.response.optional_itinerary_invalid fields=%s", ",".join(fields[:8]) or "unknown")
+                diagnostics = sorted({
+                    f"{str(item['loc'][0])}:{str(item.get('type', 'unknown'))}"
+                    for item in error.errors() if item.get("loc")
+                })
+                logger.warning(
+                    "chat.response.optional_itinerary_invalid validation=%s",
+                    ",".join(diagnostics[:8]) or "unknown",
+                )
                 parsed["provisional_itinerary"] = None
 
         # Providers sometimes add harmless envelope fields or return malformed
@@ -258,11 +267,32 @@ def _parse_provider_content(content: object) -> ChatReply:
             }
         if candidate.get("clarification") is not None and not isinstance(candidate["clarification"], str):
             candidate["clarification"] = None
+        reply_source: Literal["provider", "server_fallback"] = "provider"
+        if not isinstance(candidate.get("reply"), str) or not candidate["reply"].strip():
+            has_supported_content = (
+                any(item is not None for item in candidate["requirements"].values())
+                or any(len(items) >= 2 for items in candidate["ambiguous_requirements"].values())
+                or bool(candidate.get("clarification"))
+            )
+            if not has_supported_content:
+                raise AiCapabilityUnavailable()
+            candidate["reply"] = {
+                "fa-IR": "برداشت اولیه آماده است. جزئیات نمایش‌داده‌شده را بررسی کنید و موارد ناقص را در پیام بعدی بفرستید.",
+                "ar": "أعددتُ قراءة أولية لطلبك. راجع التفاصيل المعروضة وأرسل المعلومات الناقصة في رسالتك التالية.",
+                "en-US": "I prepared an initial reading of your request. Review the details and send any missing information in your next message.",
+            }[locale]
+            reply_source = "server_fallback"
         try:
-            return ChatReply.model_validate(candidate)
+            return ChatReply.model_validate(candidate).model_copy(update={"reply_source": reply_source})
         except ValidationError as error:
-            fields = sorted({str(item["loc"][0]) for item in error.errors() if item.get("loc")})
-            logger.warning("chat.response.invalid fields=%s", ",".join(fields[:8]) or "unknown")
+            diagnostics = sorted({
+                f"{str(item['loc'][0])}:{str(item.get('type', 'unknown'))}"
+                for item in error.errors() if item.get("loc")
+            })
+            logger.warning(
+                "chat.response.invalid validation=%s",
+                ",".join(diagnostics[:8]) or "unknown",
+            )
             raise
     if len(value) > 2000:
         raise AiCapabilityUnavailable()
@@ -446,7 +476,7 @@ class RemoteChatAdapter:
                 logger.warning("chat.response.incomplete choice_count=%s finish_reason=%s", len(choices), safe_finish_reason)
                 raise AiCapabilityUnavailable()
             try:
-                return _parse_provider_content(choices[0]["message"]["content"])
+                return _parse_provider_content(choices[0]["message"]["content"], locale=request.locale)
             except AiCapabilityUnavailable:
                 self.last_failure_category = "invalid_reply_contract"
                 raise

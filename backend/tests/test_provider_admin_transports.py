@@ -121,6 +121,8 @@ def test_chat_turn_uses_selected_model_and_maps_untrusted_output():
     assert body["temperature"] == 0
     assert "exact shortest source phrase copied from the current message" in body["messages"][0]["content"]
     assert "day after tomorrow" in body["messages"][0]["content"]
+    assert "پس‌فردا/پس فردا=2" in body["messages"][0]["content"]
+    assert "must not be shortened to only" in body["messages"][0]["content"]
     assert "origin is where the traveler starts" in body["messages"][0]["content"]
 
 
