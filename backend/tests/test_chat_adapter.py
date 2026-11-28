@@ -476,6 +476,15 @@ def test_empty_provider_reply_without_valid_structured_content_remains_unavailab
             "clarification": None,
         }), locale="en-US")
 
+
+def test_malformed_provider_json_is_diagnosed_without_logging_its_content(caplog):
+    private_marker = "traveler-private-plan-text"
+    with pytest.raises(AiCapabilityUnavailable):
+        _parse_provider_content('{"reply":"' + private_marker)
+    assert "chat.response.json_invalid" in caplog.text
+    assert "offset=" in caplog.text and "length=" in caplog.text
+    assert private_marker not in caplog.text
+
 @pytest.mark.parametrize("unsafe_origin", ["bad\ncity", "bad\\ncity", "bad\\tcity"])
 def test_real_control_chars_and_escaped_backslashes_do_not_enter_candidate(unsafe_origin):
     def handler(request):

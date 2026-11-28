@@ -180,6 +180,18 @@ def test_provider_failure_is_safe_and_not_a_successful_connection():
         asyncio.run(adapter.invoke(ChatRequest(locale="fa-IR", text="سلام")))
 
 
+def test_provider_chat_does_not_parse_token_truncated_content_as_a_complete_reply():
+    async def respond(_request):
+        return httpx.Response(200, json={"choices": [{
+            "finish_reason": "length",
+            "message": {"content": '{"reply":"partial'},
+        }]})
+
+    adapter = OpenAiCompatibleChatAdapter(config(), transport=httpx.MockTransport(respond))
+    with pytest.raises(AiCapabilityUnavailable):
+        asyncio.run(adapter.invoke(ChatRequest(locale="en-US", text="Create a plan")))
+
+
 def test_rejected_provider_key_is_distinct_without_exposing_upstream_body():
     async def respond(_request):
         return httpx.Response(401, text="credential secret-detail")

@@ -709,7 +709,10 @@ class OpenAiCompatibleProviderAdapter:
             if not isinstance(choices, list) or len(choices) != 1:
                 raise ValueError
             choice = choices[0]
-            if choice.get("finish_reason") not in {"stop", "length"}:
+            # A token-limit finish may contain plausible partial text but can
+            # never satisfy the structured contract. Do not parse it as a
+            # complete assistant turn or trigger an implicit retry.
+            if choice.get("finish_reason") != "stop":
                 raise ValueError
             text = choice["message"]["content"]
             if not isinstance(text, str) or not 1 <= len(text) <= 4000:

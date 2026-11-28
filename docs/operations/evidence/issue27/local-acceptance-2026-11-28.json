@@ -1,0 +1,66 @@
+{
+  "schema": "rahgard-issue27-local-acceptance-v1",
+  "observed_at": "2026-11-28",
+  "environment": {
+    "kind": "isolated Windows OwnerAcceptance pilot",
+    "origin": "https://localhost:18443",
+    "database": "dedicated local PostgreSQL pilot",
+    "live_vps_accessed": false,
+    "live_database_modified": false,
+    "running_source_sha": "7adbcebef9e7ea08e70d5b388b4225b3b8b50c3f"
+  },
+  "traveler": {
+    "authenticated_browser_login_http": 200,
+    "conversation_create_http": 201,
+    "assistant_turn_http": 200,
+    "extraction_path": "llm",
+    "field_provenance": "llm",
+    "controlled_reference_date": "2026-11-15",
+    "checks": {
+      "origin_mashhad": true,
+      "destination_shiraz": true,
+      "departure_offset_two_days": true,
+      "start_date_2026_11_17": true,
+      "duration_five_days": true,
+      "traveler_count_five": true,
+      "budget_30_million_toman": true,
+      "historical_places_and_gardens": true,
+      "persisted_conversation_readback": true
+    },
+    "itinerary": {
+      "catalogue_recommendation_http": 201,
+      "catalogue_result": "empty",
+      "ai_provisional_generation_http": 503,
+      "ai_generation_failure": "provider returned malformed structured JSON; response was rejected",
+      "manual_provisional_creation_http": 201,
+      "edit_http": 200,
+      "fresh_authenticated_reopen": true,
+      "five_days_and_traveler_edit_persisted": true,
+      "unverified_status_visible": true
+    }
+  },
+  "provider_admin": {
+    "qa_admin_login_http": 200,
+    "totp_step_up_http": 200,
+    "provider_panel_read_routes_http": 200,
+    "secondary_profile": "meta-llama-3.1-8b-instruct",
+    "model_discovery_http": 200,
+    "model_discovered": true,
+    "bounded_real_inference_http": 200,
+    "actual_inference_passed": true,
+    "inference_status": "inference_passed",
+    "latency_ms": 1839,
+    "runtime_chat_route_switch": "not demonstrated",
+    "active_chat_profile_after_attempt": "qwen3-8b-abliterated",
+    "active_route_changed": false,
+    "provider_secrets_or_account_identifiers_included": false
+  },
+  "scope_gaps": [
+    "The authenticated Owner's personal login/MFA completion remains Owner-operated.",
+    "The attempt to switch the active chat route through the admin UI stopped at a UI wait condition before any route mutation; the original route remains active.",
+    "AI-generated provisional itinerary JSON remains malformed for the tested request; the application exposed and persisted the manual unverified draft instead.",
+    "A positive company verification, sharing, response and traveler-decision workflow was not completed in this run.",
+    "Full application Docker recovery with provider vault, keyring and MFA material, immutable release artifacts, and independent Ubuntu relocation were not demonstrated.",
+    "Remote TaHa1_VL inference was not attempted because no authorized development token was available in the local environment."
+  ]
+}

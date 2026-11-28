@@ -204,7 +204,16 @@ def _parse_provider_content(content: object, *, locale: str = "en-US") -> ChatRe
     # A malformed JSON object must not be misclassified as natural-language
     # advice. Never surface truncated provider control data as a chat answer.
     if value.startswith(("{", "[")):
-        parsed = json.loads(value)
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as error:
+            # Provider output is untrusted and may echo traveler details.
+            # Record only parser coordinates and bounded length, never content.
+            logger.warning(
+                "chat.response.json_invalid line=%s column=%s offset=%s length=%s",
+                error.lineno, error.colno, error.pos, len(value),
+            )
+            raise AiCapabilityUnavailable() from None
         if not isinstance(parsed, dict):
             raise AiCapabilityUnavailable()
         if "provisional_itinerary" in parsed:
